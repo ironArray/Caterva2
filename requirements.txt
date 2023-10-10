@@ -1,0 +1,6 @@
+fastapi_websocket_pubsub
+uvicorn
+watchfiles
+
+# Client
+httpx
