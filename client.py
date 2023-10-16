@@ -1,38 +1,42 @@
 import argparse
 import asyncio
+#import signal
 
 # Requirements
 from fastapi_websocket_pubsub import PubSubClient
-import httpx
 
 
 HOST = 'localhost:8000'
+name = None
 
-async def main(sub):
-    client = PubSubClient()
+async def handle_event(data, topic):
+    print(f'{topic=} {data=}')
 
-    async def on_event(data, topic):
-        print(f'{topic=} {data=}')
-        #asyncio.create_task(client.disconnect())
+async def on_connect(client, channel):
+    if name:
+        await client.publish(['register'], {'name': name}, sync=False)
 
-    for topic in sub:
-        print('Subscribe to', topic)
-        client.subscribe(topic, on_event)
-
+async def main(sub, name):
+    client = PubSubClient(on_connect=[on_connect])
     client.start_client(f'ws://{HOST}/pubsub')
+
+    # Subscribe to topics
+    for topic in sub:
+        client.subscribe(topic, handle_event)
+
+    # Must wait before publishing
+    #await client.wait_until_ready()
     await client.wait_until_done()
 
 
 if __name__ == '__main__':
+    # Arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--sub', action='append')
+    parser.add_argument('-s', '--sub', action='append', default=[])
+    parser.add_argument('-n', '--name')
     args = parser.parse_args()
+    name = args.name
 
-    if args.sub:
-        asyncio.run(main(args.sub))
-    else:
-        print('List of resources...')
-        response = httpx.get(f'http://{HOST}/')
-        response.raise_for_status()
-        json = response.json()
-        print(json)
+    # Run
+    coroutine = main(args.sub, args.name)
+    asyncio.run(coroutine)

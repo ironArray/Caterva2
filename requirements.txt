@@ -3,4 +3,4 @@ uvicorn
 watchfiles
 
 # Client
-httpx
+#httpx
