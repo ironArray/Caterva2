@@ -1,6 +1,4 @@
 fastapi_websocket_pubsub
+httpx
 uvicorn
 watchfiles
-
-# Client
-#httpx

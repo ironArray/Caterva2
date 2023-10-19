@@ -1,14 +1,19 @@
+PYTHON=./venv/bin/python
+
 install:
 	python -m venv venv
 	./venv/bin/pip install -U pip
 	./venv/bin/pip install -r requirements.txt
 	mkdir -p data
 
-server:
-	./venv/bin/uvicorn server:app --reload
+bro:
+	${PYTHON} src/bro.py
 
-foo:
-	./venv/bin/python client.py --name=foo --sub=new
+pub:
+	${PYTHON} src/pub.py foo data
 
-bar:
-	./venv/bin/python client.py --name=bar --sub=new
+sub:
+	${PYTHON} src/sub.py
+
+cli:
+	${PYTHON} src/cli.py

@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-#import signal
 
 # Requirements
 from fastapi_websocket_pubsub import PubSubClient
+import uvicorn
 
 
 HOST = 'localhost:8000'
@@ -40,3 +40,6 @@ if __name__ == '__main__':
     # Run
     coroutine = main(args.sub, args.name)
     asyncio.run(coroutine)
+
+if __name__ == '__main__':
+    uvicorn.run('bro:app', reload=True)
