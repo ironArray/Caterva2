@@ -1,22 +1,43 @@
 import argparse
 import asyncio
+import contextlib
 from pathlib import Path
 
 # Requirements
 from fastapi import FastAPI
 from fastapi_websocket_pubsub import PubSubClient
+import httpx
 import uvicorn
 from watchfiles import Change, awatch
 
 
 # Configuration
 broker = None
+listen = None
 client = None
 name = None
 root = None
 
+async def on_connect(client, channel):
+    data = {'name': name, 'listen': listen}
+    await client.publish(['register'], data, sync=False)
 
-app = FastAPI()
+async def on_disconnect(channel):
+    data = {'name': name, 'listen': listen}
+    await client.publish(['unregister'], data, sync=False)
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    #client = PubSubClient(on_connect=[on_connect])
+    client = PubSubClient()
+    client.start_client(f'ws://{broker}/pubsub')
+    #async with asyncio.timeout(5):
+    await client.wait_until_ready() # wait before publishing
+
+    asyncio.create_task(main(client))
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 def read_root():
@@ -28,10 +49,6 @@ def read_item(name: str):
     stat = file.stat()
     keys = ['mtime', 'size']
     return {key: getattr(stat, f'st_{key}') for key in keys}
-
-async def on_connect(client, channel):
-    if name:
-        await client.publish(['register'], {'name': name}, sync=False)
 
 async def main(client):
     # Watch directory for changes
@@ -50,14 +67,6 @@ async def main(client):
                     data = {'change': 'deleted', 'path': path}
                     await client.publish([name], data=data)
 
-@app.on_event("startup")
-async def startup_event():
-    client = PubSubClient(on_connect=[on_connect])
-    client.start_client(f'ws://{broker}/pubsub')
-    await client.wait_until_ready() # wait before publishing
-
-    asyncio.create_task(main(client))
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -69,10 +78,18 @@ if __name__ == '__main__':
 
     # Configuration is global
     broker = args.broker
+    listen = args.listen
     name = args.name
     root = Path(args.root)
 
+    # Register
+    data = {'name': name, 'listen': listen}
+    response = httpx.post(f'http://{broker}/publishers', json=data)
+    response.raise_for_status()
+    json = response.json()
+    print(json)
+
     # Run
-    host, port = args.listen.split(':')
+    host, port = listen.split(':')
     port = int(port)
     uvicorn.run(app, host=host, port=port)

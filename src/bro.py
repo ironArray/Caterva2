@@ -4,44 +4,35 @@ import argparse
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
 from fastapi_websocket_pubsub import PubSubEndpoint
+from pydantic import BaseModel
 import uvicorn
 
 
+class Publisher(BaseModel):
+    name: str
+    listen: str
+
 publishers = {}
 
+# Rest interface
 app = FastAPI()
 
-@app.get("/publishers")
-def read_publishers():
-    keys = publishers.keys()
-    return list(keys)
+@app.get('/publishers')
+def get_publishers():
+    values = publishers.values()
+    return list(values)
 
+@app.post('/publishers')
+async def post_publishers(publisher: Publisher):
+    publishers[publisher.name] = publisher
+    await endpoint.publish(['new'], publisher)
+    return publisher
 
 # Pub/Sub interface
-async def on_connect(channel):
-    print('CON', channel.id)
-    publishers[channel.id] = None
-
-async def on_disconnect(channel):
-    print('DIS', channel.id)
-    del publishers[channel.id]
-
 router = APIRouter()
-endpoint = PubSubEndpoint(
-    on_connect=[on_connect],
-    on_disconnect=[on_disconnect],
-)
+endpoint = PubSubEndpoint()
 endpoint.register_route(router)
 app.include_router(router)
-
-async def on_register(subscription, data):
-    print(f'REG {subscription} {data=}') # Debug
-    name = data['name']
-    publishers[name] = None
-
-@app.on_event("startup")
-async def startup_event():
-    await endpoint.subscribe(['register'], on_register)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
