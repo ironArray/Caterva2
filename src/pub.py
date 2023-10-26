@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import contextlib
 import logging
@@ -10,6 +9,8 @@ from fastapi_websocket_pubsub import PubSubClient
 import httpx
 import uvicorn
 from watchfiles import Change, awatch
+
+import utils
 
 
 logger = logging.getLogger(__name__)
@@ -60,23 +61,11 @@ async def main(client):
             logger.info(f'PUBLISH {topic} {data}')
             await client.publish([topic], data=data)
 
-def socket(string):
-    host, port = string.split(':')
-    port = int(port)
-    return (host, port)
-
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--broker', default='localhost:8000')
-    parser.add_argument('--http', default='localhost:8001', type=socket)
-    parser.add_argument('--loglevel', default='warning')
+    parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
     parser.add_argument('name')
     parser.add_argument('root', default='data')
-    args = parser.parse_args()
-
-    # Logging
-    loglevel = args.loglevel.upper()
-    logging.basicConfig(level=loglevel)
+    args = utils.run_parser(parser)
 
     # Global configuration
     broker = args.broker

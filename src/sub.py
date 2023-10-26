@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import contextlib
 import logging
@@ -8,7 +7,12 @@ from fastapi import FastAPI
 from fastapi_websocket_pubsub import PubSubClient
 import uvicorn
 
+import utils
 
+
+logger = logging.getLogger(__name__)
+
+# Configuration
 broker = None
 client = None
 topics = None
@@ -33,23 +37,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-def socket(string):
-    host, port = string.split(':')
-    port = int(port)
-    return (host, port)
-
 if __name__ == '__main__':
-    # Arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--broker', default='localhost:8000')
-    parser.add_argument('--http', default='localhost:8002', type=socket)
-    parser.add_argument('--loglevel', default='warning')
+    parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
     parser.add_argument('topics', action='append', default=[])
-    args = parser.parse_args()
-
-    # Logging
-    loglevel = args.loglevel.upper()
-    logging.basicConfig(level=loglevel)
+    args = utils.run_parser(parser)
 
     # Global configuration
     broker = args.broker

@@ -1,4 +1,3 @@
-import argparse
 import logging
 
 # Requirements
@@ -7,6 +6,8 @@ from fastapi.routing import APIRouter
 from fastapi_websocket_pubsub import PubSubEndpoint
 from pydantic import BaseModel
 import uvicorn
+
+import utils
 
 
 logger = logging.getLogger(__name__)
@@ -38,20 +39,9 @@ endpoint = PubSubEndpoint()
 endpoint.register_route(router)
 app.include_router(router)
 
-def socket(string):
-    host, port = string.split(':')
-    port = int(port)
-    return (host, port)
-
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--http', default='localhost:8000', type=socket)
-    parser.add_argument('--loglevel', default='warning')
-    args = parser.parse_args()
-
-    # Logging
-    loglevel = args.loglevel.upper()
-    logging.basicConfig(level=loglevel)
+    parser = utils.get_parser(http='localhost:8000')
+    args = utils.run_parser(parser)
 
     # Run
     host, port = args.http
