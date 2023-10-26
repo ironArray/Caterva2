@@ -14,6 +14,3 @@ pub:
 
 sub:
 	${PYTHON} src/sub.py foo/a #--loglevel=INFO
-
-cli:
-	${PYTHON} src/cli.py

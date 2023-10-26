@@ -1,6 +1,9 @@
 import argparse
 import logging
 
+# Requirements
+import httpx
+
 
 def socket(string):
     host, port = string.split(':')
@@ -24,3 +27,15 @@ def run_parser(parser):
     logging.basicConfig(level=loglevel)
 
     return args
+
+def post(url, json):
+    response = httpx.post(url, json=json)
+    response.raise_for_status()
+    json = response.json()
+    return json
+
+def get(url):
+    response = httpx.get(url)
+    response.raise_for_status()
+    json = response.json()
+    return json

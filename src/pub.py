@@ -6,7 +6,6 @@ from pathlib import Path
 # Requirements
 from fastapi import FastAPI
 from fastapi_websocket_pubsub import PubSubClient
-import httpx
 import uvicorn
 from watchfiles import Change, awatch
 
@@ -20,14 +19,6 @@ broker = None
 client = None
 name = None
 root = None
-
-def post(url, json):
-    logger.info(f'POST {url} {json}')
-    response = httpx.post(url, json=json)
-    response.raise_for_status()
-    json = response.json()
-    logger.info(f'Response {json}')
-    return json
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -76,7 +67,7 @@ if __name__ == '__main__':
     # Register
     host, port = args.http
     data = {'name': name, 'http': f'{host}:{port}'}
-    post(f'http://{broker}/publishers', json=data)
+    utils.post(f'http://{broker}/publishers', json=data)
 
     # Run
     host, port = args.http
