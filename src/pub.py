@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import contextlib
+import logging
 from pathlib import Path
 
 # Requirements
@@ -11,25 +12,24 @@ import uvicorn
 from watchfiles import Change, awatch
 
 
+logger = logging.getLogger(__name__)
+
 # Configuration
 broker = None
-listen = None
 client = None
 name = None
 root = None
 
-async def on_connect(client, channel):
-    data = {'name': name, 'listen': listen}
-    await client.publish(['register'], data, sync=False)
-
-async def on_disconnect(channel):
-    data = {'name': name, 'listen': listen}
-    await client.publish(['unregister'], data, sync=False)
+def post(url, json):
+    logger.info(f'POST {url} {json}')
+    response = httpx.post(url, json=json)
+    response.raise_for_status()
+    json = response.json()
+    logger.info(f'Response {json}')
+    return json
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    #client = PubSubClient(on_connect=[on_connect])
-    client = PubSubClient()
     client.start_client(f'ws://{broker}/pubsub')
     #async with asyncio.timeout(5):
     await client.wait_until_ready() # wait before publishing
@@ -54,42 +54,41 @@ async def main(client):
     # Watch directory for changes
     async for changes in awatch(root):
         for change, path in changes:
-            path = Path(path)
-            name = path.name
-            match change:
-                case Change.added:
-                    data = {'change': 'added', 'path': path}
-                    await client.publish(['new'], data=data)
-                case Change.modified:
-                    data = {'change': 'modified', 'path': path}
-                    await client.publish([name], data=data)
-                case Change.deleted:
-                    data = {'change': 'deleted', 'path': path}
-                    await client.publish([name], data=data)
+            path = Path(path).relative_to(root)
+            topic = name if change == Change.added else f'{name}/{path}'
+            data = {'change': change.name}
+            logger.info(f'PUBLISH {topic} {data}')
+            await client.publish([topic], data=data)
 
+def socket(string):
+    host, port = string.split(':')
+    port = int(port)
+    return (host, port)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--broker', default='localhost:8000')
-    parser.add_argument('-l', '--listen', default='localhost:8001')
+    parser.add_argument('--broker', default='localhost:8000')
+    parser.add_argument('--http', default='localhost:8001', type=socket)
+    parser.add_argument('--loglevel', default='warning')
     parser.add_argument('name')
     parser.add_argument('root', default='data')
     args = parser.parse_args()
 
-    # Configuration is global
+    # Logging
+    loglevel = args.loglevel.upper()
+    logging.basicConfig(level=loglevel)
+
+    # Global configuration
     broker = args.broker
-    listen = args.listen
+    client = PubSubClient()
     name = args.name
-    root = Path(args.root)
+    root = Path(args.root).resolve()
 
     # Register
-    data = {'name': name, 'listen': listen}
-    response = httpx.post(f'http://{broker}/publishers', json=data)
-    response.raise_for_status()
-    json = response.json()
-    print(json)
+    host, port = args.http
+    data = {'name': name, 'http': f'{host}:{port}'}
+    post(f'http://{broker}/publishers', json=data)
 
     # Run
-    host, port = listen.split(':')
-    port = int(port)
+    host, port = args.http
     uvicorn.run(app, host=host, port=port)

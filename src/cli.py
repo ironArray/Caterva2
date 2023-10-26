@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 # Requirements
 import httpx
@@ -13,9 +14,13 @@ async def handle_event(data, topic):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--sub', action='append', default=[])
-    parser.add_argument('-n', '--name')
+    parser.add_argument('--sub', action='append', default=[])
+    parser.add_argument('--name')
     args = parser.parse_args()
+
+    # Logging
+    loglevel = args.loglevel.upper()
+    logging.basicConfig(level=loglevel)
 
     # List
     print('List of resources...')

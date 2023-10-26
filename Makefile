@@ -7,13 +7,13 @@ install:
 	mkdir -p data
 
 bro:
-	${PYTHON} src/bro.py
+	${PYTHON} src/bro.py #--loglevel=INFO
 
 pub:
-	${PYTHON} src/pub.py foo data
+	${PYTHON} src/pub.py foo data #--loglevel=INFO
 
 sub:
-	${PYTHON} src/sub.py
+	${PYTHON} src/sub.py foo/a #--loglevel=INFO
 
 cli:
 	${PYTHON} src/cli.py
