@@ -28,14 +28,12 @@ def run_parser(parser):
 
     return args
 
-def post(url, json):
-    response = httpx.post(url, json=json)
-    response.raise_for_status()
-    json = response.json()
-    return json
-
 def get(url):
     response = httpx.get(url)
     response.raise_for_status()
-    json = response.json()
-    return json
+    return response.json()
+
+def post(url, json):
+    response = httpx.post(url, json=json)
+    response.raise_for_status()
+    return response.json()

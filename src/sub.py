@@ -1,36 +1,42 @@
-import logging
-
 # Requirements
 from fastapi import FastAPI
 from fastapi_websocket_pubsub import PubSubClient
 import uvicorn
 
+# Project
 import utils
 
 
-logger = logging.getLogger(__name__)
-
 # Configuration
 broker = None
-topics = None
+
+# State
+topics = {}
 
 app = FastAPI()
 
 async def handle_event(data, topic):
     print(f'RECEIVED {topic=} {data=}')
 
-@app.get('/topics')
-async def get_topics():
-    return topics.keys()
+@app.get('/api/list')
+async def app_list():
+    return list(topics.keys())
 
-@app.post('/topics')
-async def post_topics(add: list[str]):
+@app.post('/api/follow')
+async def app_follow(add: list[str]):
     for topic in add:
         if topic not in topics:
             client = PubSubClient()
             client.start_client(f'ws://{broker}/pubsub')
             client.subscribe(topic, handle_event)
             topics[topic] = client
+
+@app.post('/api/unfollow')
+async def app_unfollow(delete: list[str]):
+    for topic in delete:
+        client = topics.pop(topic, None)
+        if client is not None:
+            await client.disconnect()
 
 
 if __name__ == '__main__':
@@ -39,7 +45,6 @@ if __name__ == '__main__':
 
     # Global configuration
     broker = args.broker
-    topics = {}
 
     # Run
     host, port = args.http
