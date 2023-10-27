@@ -22,7 +22,7 @@ publishers = {}
 app = FastAPI()
 
 @app.get('/publishers')
-def get_publishers():
+async def get_publishers():
     values = publishers.values()
     return list(values)
 

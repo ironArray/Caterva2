@@ -32,11 +32,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
-def read_root():
+async def read_root():
     return (x.name for x in root.iterdir())
 
 @app.get("/{name}")
-def read_item(name: str):
+async def read_item(name: str):
     file = root / name
     stat = file.stat()
     keys = ['mtime', 'size']

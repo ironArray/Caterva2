@@ -13,4 +13,4 @@ pub:
 	${PYTHON} src/pub.py foo data #--loglevel=INFO
 
 sub:
-	${PYTHON} src/sub.py foo/a #--loglevel=INFO
+	${PYTHON} src/sub.py #--loglevel=INFO
