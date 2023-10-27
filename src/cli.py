@@ -13,6 +13,10 @@ def unfollow_cmd(args):
     json = utils.post(f'http://{args.host}/api/unfollow', args.topics)
     print(json)
 
+def download_cmd(args):
+    data = utils.get(f'http://{args.host}/api/{args.topic}/download')
+    print(data)
+
 if __name__ == '__main__':
     parser = utils.get_parser()
     parser.add_argument('--host', default='localhost:8002')
@@ -31,6 +35,11 @@ if __name__ == '__main__':
     subparser = subparsers.add_parser('unfollow')
     subparser.add_argument('topics', action='append', default=[])
     subparser.set_defaults(func=unfollow_cmd)
+
+    # Download
+    subparser = subparsers.add_parser('download')
+    subparser.add_argument('topic')
+    subparser.set_defaults(func=download_cmd)
 
     # Go
     args = utils.run_parser(parser)

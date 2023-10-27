@@ -1,5 +1,6 @@
 # Requirements
 from fastapi import FastAPI
+from fastapi import responses
 from fastapi_websocket_pubsub import PubSubClient
 import uvicorn
 
@@ -11,6 +12,7 @@ import utils
 broker = None
 
 # State
+sources = {}
 topics = {}
 
 app = FastAPI()
@@ -24,19 +26,30 @@ async def app_list():
 
 @app.post('/api/follow')
 async def app_follow(add: list[str]):
-    for topic in add:
-        if topic not in topics:
+    for name in add:
+        if name not in topics:
+            # Subscribe
             client = PubSubClient()
             client.start_client(f'ws://{broker}/pubsub')
-            client.subscribe(topic, handle_event)
-            topics[topic] = client
+            client.subscribe(name, handle_event)
+            topics[name] = client
+            # Get port
+            src = name.split('/')[0]
+            host = utils.get(f'http://{broker}/api/info/{src}')
+            sources[src] = host
 
 @app.post('/api/unfollow')
 async def app_unfollow(delete: list[str]):
-    for topic in delete:
-        client = topics.pop(topic, None)
+    for name in delete:
+        client = topics.pop(name, None)
         if client is not None:
             await client.disconnect()
+
+@app.get("/api/{src}/{name}/download")
+async def app_download(src: str, name: str, response_class=responses.PlainTextResponse):
+    host = sources[src]
+    data = utils.get(f'http://{host}/api/{name}/download')
+    return data
 
 
 if __name__ == '__main__':

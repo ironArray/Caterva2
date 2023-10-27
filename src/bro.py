@@ -21,16 +21,20 @@ publishers = {}
 # Rest interface
 app = FastAPI()
 
-@app.get('/publishers')
-async def get_publishers():
+@app.get('/api/list')
+async def app_list():
     values = publishers.values()
     return list(values)
 
-@app.post('/publishers')
-async def post_publishers(publisher: Publisher):
+@app.get('/api/info/{name}')
+async def app_info(name: str):
+    return publishers[name].http
+
+@app.post('/api/register')
+async def app_register(publisher: Publisher):
     publishers[publisher.name] = publisher
     await endpoint.publish(['new'], publisher)
-    logger.info(f'New publisher {publisher.name}')
+    logger.info(f'New publisher {publisher.name} {publisher.http}')
     return publisher
 
 # Pub/Sub interface
