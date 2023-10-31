@@ -1,0 +1,45 @@
+###############################################################################
+# PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern
+#
+# Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
+# https://www.blosc.org
+# License: GNU Affero General Public License v3.0
+# See LICENSE.txt for details about copyright and rights to use.
+###############################################################################
+
+[project]
+name = "bpubsub"
+version = "0.1.0"
+readme = "README.md"
+authors = [
+    {name = "Blosc Development Team", email = "contact@blosc.org"},
+]
+description = "PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern"
+keywords = ["pubsub", "blosc2"]
+license = {text = "GNU Affero General Public License version 3"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C",
+    "Programming Language :: C++",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Unix",
+]
+dependencies = [
+    "blosc2",
+    "fastapi_websocket_pubsub",
+    "httpx",
+    "uvicorn",
+    "watchfiles",
+]
+
+[tool.setuptools]
+platforms = [ "any" ]
+
+[tool.scikit-build]
+wheel.py-api = "py3"
