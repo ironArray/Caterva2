@@ -1,3 +1,12 @@
+##############################################################################
+# PubSub for Blosc2 - Access Blosc2 (and others) format via a Pub/Sub protocol
+#
+# Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
+# https://www.blosc.org
+# License: GNU Affero General Public License v3.0
+# See LICENSE.txt for details about copyright and rights to use.
+##############################################################################
+
 import utils
 
 
@@ -31,7 +40,7 @@ if __name__ == '__main__':
     subparser.add_argument('topics', action='append', default=[])
     subparser.set_defaults(func=follow_cmd)
 
-    # Follow
+    # Unfollow
     subparser = subparsers.add_parser('unfollow')
     subparser.add_argument('topics', action='append', default=[])
     subparser.set_defaults(func=unfollow_cmd)

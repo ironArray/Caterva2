@@ -1,3 +1,12 @@
+##############################################################################
+# PubSub for Blosc2 - Access Blosc2 (and others) format via a Pub/Sub protocol
+#
+# Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
+# https://www.blosc.org
+# License: GNU Affero General Public License v3.0
+# See LICENSE.txt for details about copyright and rights to use.
+##############################################################################
+
 import logging
 
 # Requirements
