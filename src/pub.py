@@ -31,12 +31,25 @@ root = None
 client = None
 
 async def main(client):
+    data = {}
+    for path in root.iterdir():
+        path = Path(path).relative_to(root)
+        data[f'{name}/{path}'] = {}
+
+    if data:
+        await client.publish(['@new'], data=data)
+
     # Watch directory for changes
     async for changes in awatch(root):
         for change, path in changes:
             path = Path(path).relative_to(root)
-            topic = name if change == Change.added else f'{name}/{path}'
-            data = {'change': change.name}
+            dataset = f'{name}/{path}'
+            if change == Change.added:
+                topic = '@new'
+                data = {dataset: {}}
+            else:
+                topic = dataset
+                data = {'change': change.name}
             await client.publish([topic], data=data)
 
 @contextlib.asynccontextmanager
@@ -82,7 +95,7 @@ if __name__ == '__main__':
     # Register
     host, port = args.http
     data = {'name': name, 'http': f'{host}:{port}'}
-    utils.post(f'http://{broker}/api/register', json=data)
+    utils.post(f'http://{broker}/api/publishers', json=data)
 
     # Run
     host, port = args.http

@@ -3,6 +3,7 @@ import logging
 
 # Requirements
 import httpx
+import pydantic
 
 
 def socket(string):
@@ -28,12 +29,18 @@ def run_parser(parser):
 
     return args
 
-def get(url):
-    response = httpx.get(url)
+def get(url, params=None, model=None):
+    response = httpx.get(url, params=params)
     response.raise_for_status()
-    return response.json()
+    json = response.json()
+    return json if model is None else model(**json)
 
 def post(url, json):
     response = httpx.post(url, json=json)
     response.raise_for_status()
     return response.json()
+
+
+class Publisher(pydantic.BaseModel):
+    name: str
+    http: str

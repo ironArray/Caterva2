@@ -7,43 +7,47 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import logging
+import contextlib
 
 # Requirements
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
 from fastapi_websocket_pubsub import PubSubEndpoint
-from pydantic import BaseModel
 import uvicorn
 
 import utils
 
 
-logger = logging.getLogger(__name__)
-
-class Publisher(BaseModel):
-    name: str
-    http: str
-
-publishers = {}
+publishers = {} # name: <Publisher>
+datasets = {}   # name/path: {}
 
 # Rest interface
-app = FastAPI()
+async def handle_new(subscription, data):
+    datasets.update(data)
 
-@app.get('/api/list')
-async def app_list():
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    await endpoint.subscribe(['@new'], handle_new)
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get('/api/datasets')
+async def get_datasets():
+    return datasets
+
+@app.get('/api/publishers')
+async def get_publishers():
     values = publishers.values()
     return list(values)
 
-@app.get('/api/info/{name}')
-async def app_info(name: str):
-    return publishers[name].http
+@app.get('/api/publishers/{name}')
+async def get_publisher(name: str):
+    return publishers[name].model_dump()
 
-@app.post('/api/register')
-async def app_register(publisher: Publisher):
+@app.post('/api/publishers')
+async def post_publishers(publisher: utils.Publisher):
     publishers[publisher.name] = publisher
-    await endpoint.publish(['new'], publisher)
-    logger.info(f'New publisher {publisher.name} {publisher.http}')
     return publisher
 
 # Pub/Sub interface

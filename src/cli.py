@@ -11,7 +11,10 @@ import utils
 
 
 def list_cmd(args):
-    json = utils.get(f'http://{args.host}/api/list')
+    params = {}
+    if args.all:
+        params['all'] = True
+    json = utils.get(f'http://{args.host}/api/list', params=params)
     print(json)
 
 def follow_cmd(args):
@@ -33,6 +36,7 @@ if __name__ == '__main__':
 
     # List
     subparser = subparsers.add_parser('list')
+    subparser.add_argument('-a', '--all', action='store_true')
     subparser.set_defaults(func=list_cmd)
 
     # Follow
