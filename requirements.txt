@@ -1,3 +1,4 @@
+blosc2
 fastapi_websocket_pubsub
 httpx
 uvicorn
