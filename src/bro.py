@@ -23,6 +23,7 @@ datasets = {}   # name/path: {}
 
 # Rest interface
 async def handle_new(subscription, data):
+    print('NEW', data)
     datasets.update(data)
 
 @contextlib.asynccontextmanager

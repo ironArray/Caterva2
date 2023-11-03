@@ -26,31 +26,56 @@ import utils
 broker = None
 name = None
 root = None
+nworkers = 1
 
 # State
 client = None
 
-async def main(client):
-    data = {}
-    for path in root.iterdir():
-        path = Path(path).relative_to(root)
-        data[f'{name}/{path}'] = {}
 
-    if data:
-        await client.publish(['@new'], data=data)
+async def worker(queue):
+    while True:
+        path, change = await queue.get()
+        subpath = Path(path).relative_to(root)
+        dataset = f'{name}/{subpath}'
+
+        if change == Change.added:
+            metadata = utils.read_metadata(str(path))
+            metadata = metadata.model_dump()
+            topic = '@new'
+            data = {dataset: metadata}
+        else:
+            topic = dataset
+            data = {'change': change.name}
+
+        await client.publish([topic], data=data)
+        queue.task_done()
+
+
+async def main(client):
+    queue = asyncio.Queue()
+
+    # Start workers
+    tasks = []
+    for i in range(nworkers):
+        task = asyncio.create_task(worker(queue))
+        tasks.append(task)
+
+    # Notify the broker about available datasets
+    for path in root.iterdir():
+        queue.put_nowait((path, Change.added))
 
     # Watch directory for changes
     async for changes in awatch(root):
         for change, path in changes:
-            path = Path(path).relative_to(root)
-            dataset = f'{name}/{path}'
-            if change == Change.added:
-                topic = '@new'
-                data = {dataset: {}}
-            else:
-                topic = dataset
-                data = {'change': change.name}
-            await client.publish([topic], data=data)
+            queue.put_nowait((path, change))
+
+    # Cancel worker tasks
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    print('MAIN EXIT')
+
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):

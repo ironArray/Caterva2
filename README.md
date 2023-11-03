@@ -36,7 +36,7 @@ python src/cli.py list
 ['foo']
 ```
 
-We can see how the client has subscribed successfully, and ``foo`` appear listed in the subscriptions.
+We can see how the client has subscribed successfully, and ``foo`` appears listed in the subscriptions.
 
 Finally, let's download the text file that has been published:
 
