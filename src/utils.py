@@ -9,6 +9,19 @@ import httpx
 import pydantic
 
 
+def get_model_from_obj(obj, model_class, **kwargs):
+    data = kwargs.copy()
+    for key, info in model_class.model_fields.items():
+        if key not in data:
+            value = getattr(obj, key)
+            if info.annotation is str:
+                value = str(value)
+
+            data[key] = value
+
+    return model_class(**data)
+
+
 def read_metadata(path):
     array = blosc2.open(path)
 
@@ -19,14 +32,8 @@ def read_metadata(path):
 #   print(dict(array.schunk.vlmeta))
 #   print()
 
-    keys = SChunk.model_fields.keys()
-    data = {k: getattr(array.schunk, k) for k in keys}
-    schunk = SChunk(**data)
-
-    exclude = {'schunk'}
-    keys = Metadata.model_fields.keys()
-    data = {k: getattr(array, k) for k in keys if k not in exclude}
-    return Metadata(schunk=schunk, **data)
+    schunk = get_model_from_obj(array.schunk, SChunk)
+    return get_model_from_obj(array, Metadata, schunk=schunk)
 
 
 #
@@ -54,6 +61,7 @@ class SChunk(pydantic.BaseModel):
 
 
 class Metadata(pydantic.BaseModel):
+    dtype: str
     ndim: int
     shape: list[int]
     ext_shape: list[int]

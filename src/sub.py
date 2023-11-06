@@ -9,10 +9,12 @@
 
 import contextlib
 import logging
+from pathlib import Path
 
 # Requirements
-from fastapi import FastAPI
-from fastapi import responses
+import blosc2
+from fastapi import FastAPI, responses
+import numpy as np
 import uvicorn
 
 # Project
@@ -20,10 +22,11 @@ import utils
 from utils import Publisher
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
+cache = None
 
 # State
 publishers = {} # name: <Publisher>
@@ -45,13 +48,14 @@ async def updated_dataset(data, topic):
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize datasets from the broker
     global datasets
     datasets = utils.get(f'http://{broker}/api/datasets')
-
+    # Follow the @new channel to know when a new dataset is added
     client = utils.start_client(f'ws://{broker}/pubsub')
     client.subscribe('@new', new_dataset)
+
     yield
-    print('LIFESPAN DONE')
     await utils.disconnect_client(client)
 
 app = FastAPI(lifespan=lifespan)
@@ -65,13 +69,19 @@ async def app_list(all: bool = False):
 async def app_follow(add: list[str]):
     for name in add:
         if name not in subscribed:
+            # Initialize
+            dataset = datasets[name]
+            metadata = utils.Metadata(**dataset)
+            dtype = getattr(np, metadata.dtype)
+            array = blosc2.uninit(metadata.shape, dtype)
+            # TODO Save array to cache/
             # Subscribe
             client = utils.start_client(f'ws://{broker}/pubsub')
             client.subscribe(name, updated_dataset)
             subscribed[name] = client
             # Get port
             src = name.split('/')[0]
-            publishers[src] = utils.get(f'http://{broker}/api/info/{src}', model=Publisher)
+            publishers[src] = utils.get(f'http://{broker}/api/publishers/{src}', model=Publisher)
 
 @app.post('/api/unfollow')
 async def app_unfollow(delete: list[str]):
@@ -92,6 +102,10 @@ if __name__ == '__main__':
 
     # Global configuration
     broker = args.broker
+
+    # Create cache directory
+    cache = Path('cache').resolve()
+    cache.mkdir(exist_ok=True)
 
     # Run
     host, port = args.http
