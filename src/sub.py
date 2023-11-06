@@ -8,17 +8,19 @@
 ###############################################################################
 
 import contextlib
+import logging
 
 # Requirements
 from fastapi import FastAPI
 from fastapi import responses
-from fastapi_websocket_pubsub import PubSubClient
 import uvicorn
 
 # Project
 import utils
 from utils import Publisher
 
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 broker = None
@@ -29,27 +31,30 @@ datasets = None # name/path: {}
 subscribed = {} # name/path: <PubSubClient>
 
 
-def start_client():
-    client = PubSubClient()
-    client.start_client(f'ws://{broker}/pubsub')
-    return client
-
-async def handle_new(data, topic):
+async def new_dataset(data, topic):
+    logger.info(f'NEW dataset {topic} {data=}')
     datasets.update(data)
+
+async def updated_dataset(data, topic):
+    logger.info(f'Updated dataset {topic} {data=}')
+
+
+#
+# API
+#
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     global datasets
     datasets = utils.get(f'http://{broker}/api/datasets')
 
-    client = start_client()
-    client.subscribe('@new', handle_new)
+    client = utils.start_client(f'ws://{broker}/pubsub')
+    client.subscribe('@new', new_dataset)
     yield
+    print('LIFESPAN DONE')
+    await utils.disconnect_client(client)
 
 app = FastAPI(lifespan=lifespan)
-
-async def handle_event(data, topic):
-    print(f'RECEIVED {topic=} {data=}')
 
 @app.get('/api/list')
 async def app_list(all: bool = False):
@@ -61,20 +66,18 @@ async def app_follow(add: list[str]):
     for name in add:
         if name not in subscribed:
             # Subscribe
-            client = start_client()
-            client.subscribe(name, handle_event)
+            client = utils.start_client(f'ws://{broker}/pubsub')
+            client.subscribe(name, updated_dataset)
             subscribed[name] = client
             # Get port
             src = name.split('/')[0]
             publishers[src] = utils.get(f'http://{broker}/api/info/{src}', model=Publisher)
 
-
 @app.post('/api/unfollow')
 async def app_unfollow(delete: list[str]):
     for name in delete:
         client = subscribed.pop(name, None)
-        if client is not None:
-            await client.disconnect()
+        await utils.disconnect_client(client)
 
 @app.get("/api/{src}/{name}/download")
 async def app_download(src: str, name: str, response_class=responses.PlainTextResponse):

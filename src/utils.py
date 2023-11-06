@@ -1,11 +1,37 @@
 import argparse
+import asyncio
 import logging
 
 # Requirements
 import blosc2
+import fastapi_websocket_pubsub
 import httpx
 import pydantic
 
+
+def read_metadata(path):
+    array = blosc2.open(path)
+
+#   print(f'{array.schunk.cparams=}')
+#   print(f'{array.schunk.dparams=}')
+#   print(f'{array.schunk.meta=}')
+#   print(f'{array.schunk.vlmeta=}')
+#   print(dict(array.schunk.vlmeta))
+#   print()
+
+    keys = SChunk.model_fields.keys()
+    data = {k: getattr(array.schunk, k) for k in keys}
+    schunk = SChunk(**data)
+
+    exclude = {'schunk'}
+    keys = Metadata.model_fields.keys()
+    data = {k: getattr(array, k) for k in keys if k not in exclude}
+    return Metadata(schunk=schunk, **data)
+
+
+#
+# Models (pydantic)
+#
 
 # https://www.blosc.org/python-blosc2/reference/ndarray_api.html#attributes
 # https://www.blosc.org/python-blosc2/reference/schunk_api.html#attributes
@@ -45,27 +71,26 @@ class Publisher(pydantic.BaseModel):
     http: str
 
 
-def read_metadata(path):
-    array = blosc2.open(path)
+#
+# Pub/Sub helpers
+#
 
-#   print(f'{array.schunk.cparams=}')
-#   print(f'{array.schunk.dparams=}')
-#   print(f'{array.schunk.meta=}')
-#   print(f'{array.schunk.vlmeta=}')
-#   print(dict(array.schunk.vlmeta))
-#   print()
+def start_client(url):
+    client = fastapi_websocket_pubsub.PubSubClient()
+    client.start_client(url)
+    return client
 
-    keys = SChunk.model_fields.keys()
-    data = {k: getattr(array.schunk, k) for k in keys}
-    schunk = SChunk(**data)
-
-    exclude = {'schunk'}
-    keys = Metadata.model_fields.keys()
-    data = {k: getattr(array, k) for k in keys if k not in exclude}
-    return Metadata(schunk=schunk, **data)
+async def disconnect_client(client, timeout=5):
+    if client is not None:
+        # If the broker is down client.disconnect hangs, wo we wrap it in a timeout
+        async with asyncio.timeout(timeout):
+            await client.disconnect()
 
 
-def socket(string):
+#
+# Command line helpers
+#
+def socket_type(string):
     host, port = string.split(':')
     port = int(port)
     return (host, port)
@@ -76,7 +101,7 @@ def get_parser(broker=None, http=None):
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:
-        parser.add_argument('--http', default=http, type=socket)
+        parser.add_argument('--http', default=http, type=socket_type)
     return parser
 
 def run_parser(parser):
@@ -88,6 +113,10 @@ def run_parser(parser):
 
     return args
 
+
+#
+# HTTP helpers
+#
 def get(url, params=None, model=None):
     response = httpx.get(url, params=params)
     response.raise_for_status()

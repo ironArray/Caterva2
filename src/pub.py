@@ -14,7 +14,6 @@ from pathlib import Path
 # Requirements
 from fastapi import FastAPI
 from fastapi import responses
-from fastapi_websocket_pubsub import PubSubClient
 import uvicorn
 from watchfiles import Change, awatch
 
@@ -79,12 +78,13 @@ async def main(client):
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    client.start_client(f'ws://{broker}/pubsub')
-    #async with asyncio.timeout(5):
+    global client
+    client = utils.start_client(f'ws://{broker}/pubsub')
     await client.wait_until_ready() # wait before publishing
 
     asyncio.create_task(main(client))
     yield
+    await utils.disconnect_client(client)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -113,7 +113,6 @@ if __name__ == '__main__':
 
     # Global configuration
     broker = args.broker
-    client = PubSubClient()
     name = args.name
     root = Path(args.root).resolve()
 
