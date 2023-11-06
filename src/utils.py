@@ -6,7 +6,9 @@ import logging
 import blosc2
 import fastapi_websocket_pubsub
 import httpx
-import pydantic
+
+# Project
+import models
 
 
 def get_model_from_obj(obj, model_class, **kwargs):
@@ -32,52 +34,13 @@ def read_metadata(path):
 #   print(dict(array.schunk.vlmeta))
 #   print()
 
-    schunk = get_model_from_obj(array.schunk, SChunk)
-    return get_model_from_obj(array, Metadata, schunk=schunk)
+    schunk = get_model_from_obj(array.schunk, models.SChunk)
+    return get_model_from_obj(array, models.Metadata, schunk=schunk)
 
 
 #
 # Models (pydantic)
 #
-
-# https://www.blosc.org/python-blosc2/reference/ndarray_api.html#attributes
-# https://www.blosc.org/python-blosc2/reference/schunk_api.html#attributes
-# https://www.blosc.org/python-blosc2/reference/autofiles/schunk/attributes/vlmeta.html#schunk-vlmeta
-
-class SChunk(pydantic.BaseModel):
-    blocksize: int
-    cbytes: int
-    chunkshape: int
-    chunksize: int
-    contiguous: bool
-#   cparams
-    cratio: float
-#   dparams
-#   meta
-    nbytes: int
-    typesize: int
-    urlpath: str
-#   vlmeta
-
-
-class Metadata(pydantic.BaseModel):
-    dtype: str
-    ndim: int
-    shape: list[int]
-    ext_shape: list[int]
-    chunks: list[int]
-    ext_chunks: list[int]
-    blocks: list[int]
-    blocksize: int
-    chunksize: int
-    schunk: SChunk
-    size: int
-
-
-class Publisher(pydantic.BaseModel):
-    name: str
-    http: str
-
 
 #
 # Pub/Sub helpers

@@ -12,8 +12,8 @@ import contextlib
 from pathlib import Path
 
 # Requirements
-from fastapi import FastAPI
-from fastapi import responses
+import blosc2
+from fastapi import FastAPI, responses
 import uvicorn
 from watchfiles import Change, awatch
 
@@ -72,7 +72,6 @@ async def main(client):
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
-
     print('MAIN EXIT')
 
 
@@ -99,11 +98,19 @@ async def app_metadata(name: str):
     keys = ['mtime', 'size']
     return {key: getattr(stat, f'st_{key}') for key in keys}
 
+
+async def download(filepath):
+    array = blosc2.open(str(filepath))
+    schunk = array.schunk
+    for i in range(schunk.nchunks):
+        chunk = schunk.get_chunk(i)
+        print('CHUNK', type(chunk), len(chunk), chunk[:10])
+        yield chunk
+
 @app.get("/api/{name}/download")
-async def app_download(name: str, response_class=responses.PlainTextResponse):
+async def app_download(name: str):
     filepath = root / name
-    with filepath.open() as file:
-        return file.read()
+    return responses.StreamingResponse(download(filepath))
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')

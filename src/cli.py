@@ -18,15 +18,15 @@ def list_cmd(args):
     print(json)
 
 def follow_cmd(args):
-    json = utils.post(f'http://{args.host}/api/follow', args.topics)
+    json = utils.post(f'http://{args.host}/api/follow', args.datasets)
     print(json)
 
 def unfollow_cmd(args):
-    json = utils.post(f'http://{args.host}/api/unfollow', args.topics)
+    json = utils.post(f'http://{args.host}/api/unfollow', args.datasets)
     print(json)
 
 def download_cmd(args):
-    data = utils.get(f'http://{args.host}/api/{args.topic}/download')
+    data = utils.post(f'http://{args.host}/api/download', args.datasets)
     print(data)
 
 if __name__ == '__main__':
@@ -41,17 +41,17 @@ if __name__ == '__main__':
 
     # Follow
     subparser = subparsers.add_parser('follow')
-    subparser.add_argument('topics', action='append', default=[])
+    subparser.add_argument('datasets', action='append', default=[])
     subparser.set_defaults(func=follow_cmd)
 
     # Unfollow
     subparser = subparsers.add_parser('unfollow')
-    subparser.add_argument('topics', action='append', default=[])
+    subparser.add_argument('datasets', action='append', default=[])
     subparser.set_defaults(func=unfollow_cmd)
 
     # Download
     subparser = subparsers.add_parser('download')
-    subparser.add_argument('topic')
+    subparser.add_argument('datasets', action='append', default=[])
     subparser.set_defaults(func=download_cmd)
 
     # Go

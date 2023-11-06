@@ -12,14 +12,16 @@ import logging
 from pathlib import Path
 
 # Requirements
+import asyncio
 import blosc2
-from fastapi import FastAPI, responses
+from fastapi import FastAPI
+import httpx
 import numpy as np
 import uvicorn
 
 # Project
+import models
 import utils
-from utils import Publisher
 
 
 logger = logging.getLogger('sub')
@@ -27,11 +29,35 @@ logger = logging.getLogger('sub')
 # Configuration
 broker = None
 cache = None
+nworkers = 100
 
 # State
 publishers = {} # name: <Publisher>
 datasets = None # name/path: {}
 subscribed = {} # name/path: <PubSubClient>
+queue = asyncio.Queue()
+
+
+async def worker(queue):
+    while True:
+        path = await queue.get()
+
+        try:
+            array = blosc2.open(str(cache / path))
+            src, path = path.split('/', 1)
+            host = publishers[src].http
+            print('WORKER', host, path)
+            with httpx.stream('GET', f'http://{host}/api/{path}/download') as resp:
+                i = 0
+                for chunk in resp.iter_bytes():
+                    print(i)
+                    print('CHUNK', type(chunk), len(chunk), chunk[:10])
+                    array.append_data(chunk)
+                    i += 1
+        except Exception:
+            logger.exception('Download failed')
+
+        queue.task_done()
 
 
 async def new_dataset(data, topic):
@@ -55,23 +81,36 @@ async def lifespan(app: FastAPI):
     client = utils.start_client(f'ws://{broker}/pubsub')
     client.subscribe('@new', new_dataset)
 
+    # Start workers
+    tasks = []
+    for i in range(nworkers):
+        task = asyncio.create_task(worker(queue))
+        tasks.append(task)
+
     yield
+
+    # Disconnect from worker
     await utils.disconnect_client(client)
+
+    # Cancel worker tasks
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 app = FastAPI(lifespan=lifespan)
 
 @app.get('/api/list')
-async def app_list(all: bool = False):
+async def get_list(all: bool = False):
     keys = datasets.keys() if all else subscribed.keys()
     return list(keys)
 
 @app.post('/api/follow')
-async def app_follow(add: list[str]):
+async def post_follow(add: list[str]):
     for name in add:
         if name not in subscribed:
             # Initialize
             dataset = datasets[name]
-            metadata = utils.Metadata(**dataset)
+            metadata = models.Metadata(**dataset)
             dtype = getattr(np, metadata.dtype)
             array = blosc2.uninit(metadata.shape, dtype)
             # Save to disk
@@ -83,20 +122,20 @@ async def app_follow(add: list[str]):
             client.subscribe(name, updated_dataset)
             subscribed[name] = client
             # Get port
-            src = name.split('/')[0]
-            publishers[src] = utils.get(f'http://{broker}/api/publishers/{src}', model=Publisher)
+            src = name.split('/', 1)[0]
+            publishers[src] = utils.get(f'http://{broker}/api/publishers/{src}',
+                                        model=models.Publisher)
 
 @app.post('/api/unfollow')
-async def app_unfollow(delete: list[str]):
+async def post_unfollow(delete: list[str]):
     for name in delete:
         client = subscribed.pop(name, None)
         await utils.disconnect_client(client)
 
-@app.get("/api/{src}/{name}/download")
-async def app_download(src: str, name: str, response_class=responses.PlainTextResponse):
-    host = publishers[src].host
-    data = utils.get(f'http://{host}/api/{name}/download')
-    return data
+@app.post("/api/download")
+async def post_download(datasets: list[str]):
+    for dataset in datasets:
+        queue.put_nowait(dataset)
 
 
 if __name__ == '__main__':

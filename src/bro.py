@@ -15,6 +15,8 @@ from fastapi.routing import APIRouter
 from fastapi_websocket_pubsub import PubSubEndpoint
 import uvicorn
 
+# Project
+import models
 import utils
 
 
@@ -47,7 +49,7 @@ async def get_publisher(name: str):
     return publishers[name].model_dump()
 
 @app.post('/api/publishers')
-async def post_publishers(publisher: utils.Publisher):
+async def post_publishers(publisher: models.Publisher):
     publishers[publisher.name] = publisher
     return publisher
 
