@@ -23,7 +23,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
 
 
 def read_metadata(path):
-    array = blosc2.open(path)
+    array = blosc2.open(str(path))
 
 #   print(f'{array.schunk.cparams=}')
 #   print(f'{array.schunk.dparams=}')

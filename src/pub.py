@@ -38,7 +38,7 @@ async def worker(queue):
         dataset = f'{name}/{subpath}'
 
         if change == Change.added:
-            metadata = utils.read_metadata(str(path))
+            metadata = utils.read_metadata(path)
             metadata = metadata.model_dump()
             topic = '@new'
             data = {dataset: metadata}

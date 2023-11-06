@@ -74,7 +74,10 @@ async def app_follow(add: list[str]):
             metadata = utils.Metadata(**dataset)
             dtype = getattr(np, metadata.dtype)
             array = blosc2.uninit(metadata.shape, dtype)
-            # TODO Save array to cache/
+            # Save to disk
+            urlpath = cache / name
+            urlpath.parent.mkdir(exist_ok=True)
+            blosc2.save_array(array, str(urlpath))
             # Subscribe
             client = utils.start_client(f'ws://{broker}/pubsub')
             client.subscribe(name, updated_dataset)
