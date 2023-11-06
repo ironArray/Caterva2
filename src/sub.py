@@ -51,8 +51,8 @@ async def worker(queue):
                 i = 0
                 for chunk in resp.iter_bytes():
                     print(i)
-                    print('CHUNK', type(chunk), len(chunk), chunk[:10])
-                    array.append_data(chunk)
+                    print('CHUNK', len(chunk), chunk[:10])
+                    array.schunk.append_data(chunk)
                     i += 1
         except Exception:
             logger.exception('Download failed')
@@ -112,11 +112,9 @@ async def post_follow(add: list[str]):
             dataset = datasets[name]
             metadata = models.Metadata(**dataset)
             dtype = getattr(np, metadata.dtype)
-            array = blosc2.uninit(metadata.shape, dtype)
-            # Save to disk
             urlpath = cache / name
             urlpath.parent.mkdir(exist_ok=True)
-            blosc2.save_array(array, str(urlpath))
+            blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
             # Subscribe
             client = utils.start_client(f'ws://{broker}/pubsub')
             client.subscribe(name, updated_dataset)
