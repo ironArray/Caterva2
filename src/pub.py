@@ -50,7 +50,7 @@ async def worker(queue):
         queue.task_done()
 
 
-async def main(client):
+async def watchfiles():
     queue = asyncio.Queue()
 
     # Start workers
@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
     client = utils.start_client(f'ws://{broker}/pubsub')
     await client.wait_until_ready() # wait before publishing
 
-    asyncio.create_task(main(client))
+    asyncio.create_task(watchfiles())
     yield
     await utils.disconnect_client(client)
 

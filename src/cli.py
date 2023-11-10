@@ -7,6 +7,8 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import json
+
 import utils
 
 
@@ -14,16 +16,16 @@ def list_cmd(args):
     params = {}
     if args.all:
         params['all'] = True
-    json = utils.get(f'http://{args.host}/api/list', params=params)
-    print(json)
+    data = utils.get(f'http://{args.host}/api/list', params=params)
+    print(json.dumps(data))
 
 def follow_cmd(args):
-    json = utils.post(f'http://{args.host}/api/follow', args.datasets)
-    print(json)
+    data = utils.post(f'http://{args.host}/api/follow', args.datasets)
+    print(json.dumps(data))
 
 def unfollow_cmd(args):
-    json = utils.post(f'http://{args.host}/api/unfollow', args.datasets)
-    print(json)
+    data = utils.post(f'http://{args.host}/api/unfollow', args.datasets)
+    print(json.dumps(data))
 
 def download_cmd(args):
     data = utils.post(f'http://{args.host}/api/download', args.datasets)

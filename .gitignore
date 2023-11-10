@@ -3,3 +3,7 @@
 /venv/
 .*.swp
 __pycache__
+
+/tests/data/
+/tests/supervisord.log
+/tests/supervisord.pid
