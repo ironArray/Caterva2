@@ -106,12 +106,21 @@ async def app_list():
 
 
 async def download(filepath):
-    array = blosc2.open(str(filepath))
-    schunk = array.schunk
-    for i in range(schunk.nchunks):
-        chunk = schunk.get_chunk(i)
-        print('CHUNK', type(chunk), len(chunk), chunk[:10])
-        yield chunk
+    suffix = filepath.suffix
+    if suffix == '.b2nd':
+        array = blosc2.open(str(filepath))
+        schunk = array.schunk
+        for i in range(schunk.nchunks):
+            chunk = schunk.get_chunk(i)
+            yield chunk
+    else:
+        chunksize = 1024
+        with open(filepath, 'rb') as file:
+            data = file.read(chunksize)
+            while data:
+                yield data
+                data = file.read(chunksize)
+
 
 @app.get("/api/download/{name:path}")
 async def app_download(name: str):

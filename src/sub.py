@@ -42,19 +42,29 @@ queue = asyncio.Queue()
 
 async def worker(queue):
     while True:
-        path = await queue.get()
+        name = await queue.get()
         with utils.log_exception(logger, 'Download failed'):
-            array = blosc2.open(str(cache / path))
-            src, path = path.split('/', 1)
-            host = publishers[src].http
-            print('WORKER', host, path)
-            with httpx.stream('GET', f'http://{host}/api/download/{path}') as resp:
-                i = 0
-                for chunk in resp.iter_bytes():
-                    print(i)
-                    print('CHUNK', len(chunk), chunk[:10])
-                    array.schunk.append_data(chunk)
-                    i += 1
+            urlpath = cache / name
+            urlpath.parent.mkdir(exist_ok=True, parents=True)
+
+            suffix = urlpath.suffix
+            if suffix == '.b2nd':
+                array = blosc2.open(str(urlpath))
+                append = lambda chunk: array.schunk.append_data(chunk)
+                close = lambda: None
+            else:
+                file = urlpath.open('wb')
+                append = lambda chunk: file.write(chunk)
+                close = lambda: file.close()
+
+            try:
+                src, name = name.split('/', 1)
+                host = publishers[src].http
+                with httpx.stream('GET', f'http://{host}/api/download/{name}') as resp:
+                    for chunk in resp.iter_bytes():
+                        append(chunk)
+            finally:
+                close()
 
         queue.task_done()
 
@@ -118,11 +128,13 @@ def follow(datasets_list: list[str]):
         # Initialize the dataset in the filesystem (cache)
         urlpath = cache / name
         if not urlpath.exists():
-            dataset = datasets[name]
-            metadata = models.Metadata(**dataset)
-            dtype = getattr(np, metadata.dtype)
-            urlpath.parent.mkdir(exist_ok=True, parents=True)
-            blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
+            suffix = urlpath.suffix
+            if suffix == '.b2nd':
+                dataset = datasets[name]
+                metadata = models.Metadata(**dataset)
+                dtype = getattr(np, metadata.dtype)
+                urlpath.parent.mkdir(exist_ok=True, parents=True)
+                blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
 
         # Subscribe to changes in the dataset
         if name not in subscribed:

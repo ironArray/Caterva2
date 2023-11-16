@@ -22,10 +22,15 @@ import models
 
 
 def get_model_from_obj(obj, model_class, **kwargs):
+    if type(obj) is dict:
+        getter = lambda o, k: o[k]
+    else:
+        getter = getattr
+
     data = kwargs.copy()
     for key, info in model_class.model_fields.items():
         if key not in data:
-            value = getattr(obj, key)
+            value = getter(obj, key)
             if info.annotation is str:
                 value = str(value)
 
@@ -48,9 +53,13 @@ def read_metadata(path):
         schunk = get_model_from_obj(array.schunk, models.SChunk)
         return get_model_from_obj(array, models.Metadata, schunk=schunk)
     elif suffix == '.b2frame':
-        raise NotImplementedError('.b2frame files not yet supported')
+        schunk = blosc2.open(str(path))
+        return get_model_from_obj(schunk, models.SChunk)
     else:
-        raise NotImplementedError(f'{suffix} files not yet supported')
+        stat = path.stat()
+        keys = ['mtime', 'size']
+        data = {key: getattr(stat, f'st_{key}') for key in keys}
+        return get_model_from_obj(data, models.File)
 
 
 #

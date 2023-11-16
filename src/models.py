@@ -40,6 +40,11 @@ class Metadata(pydantic.BaseModel):
     size: int
 
 
+class File(pydantic.BaseModel):
+    mtime: float
+    size: int
+
+
 class Publisher(pydantic.BaseModel):
     name: str
     http: str
