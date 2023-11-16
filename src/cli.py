@@ -13,14 +13,15 @@ import utils
 
 
 def list_cmd(args):
-    params = {}
-    if args.all:
-        params['all'] = True
-    data = utils.get(f'http://{args.host}/api/list', params=params)
+    data = utils.get(f'http://{args.host}/api/list')
     print(json.dumps(data))
 
 def follow_cmd(args):
     data = utils.post(f'http://{args.host}/api/follow', args.datasets)
+    print(json.dumps(data))
+
+def following_cmd(args):
+    data = utils.get(f'http://{args.host}/api/following')
     print(json.dumps(data))
 
 def unfollow_cmd(args):
@@ -37,22 +38,31 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers(required=True)
 
     # List
-    subparser = subparsers.add_parser('list')
+    help = 'List the datasets available in the network'
+    subparser = subparsers.add_parser('list', help=help)
     subparser.add_argument('-a', '--all', action='store_true')
     subparser.set_defaults(func=list_cmd)
 
     # Follow
-    subparser = subparsers.add_parser('follow')
+    help = 'Follow changes to the given dataset'
+    subparser = subparsers.add_parser('follow', help=help)
     subparser.add_argument('datasets', action='append', default=[])
     subparser.set_defaults(func=follow_cmd)
 
+    # Following
+    help = 'List the datasets being followed by the subscriber'
+    subparser = subparsers.add_parser('following', help=help)
+    subparser.set_defaults(func=following_cmd)
+
     # Unfollow
-    subparser = subparsers.add_parser('unfollow')
+    help = 'Stop following changes to the given dataset'
+    subparser = subparsers.add_parser('unfollow', help=help)
     subparser.add_argument('datasets', action='append', default=[])
     subparser.set_defaults(func=unfollow_cmd)
 
     # Download
-    subparser = subparsers.add_parser('download')
+    help = 'Tell the subscriber to download the given dataset'
+    subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('datasets', action='append', default=[])
     subparser.set_defaults(func=download_cmd)
 

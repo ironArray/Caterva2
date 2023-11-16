@@ -54,7 +54,7 @@ Finally, we can use a python script (called `cli.py`) that talks to the subscrib
 It can list all the available datasets:
 
 ```bash
-python src/cli.py list -a
+python src/cli.py list
 ```
 
 ```
@@ -65,7 +65,7 @@ Ask the subscriber to follow changes in a dataset:
 
 ```bash
 python src/cli.py follow foo/precip.b2nd
-python src/cli.py list
+python src/cli.py following
 ```
 
 ```

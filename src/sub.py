@@ -8,8 +8,9 @@
 ###############################################################################
 
 import contextlib
+import json
 import logging
-from pathlib import Path
+import pathlib
 
 # Requirements
 import asyncio
@@ -31,12 +32,13 @@ broker = None
 cache = None
 nworkers = 100
 
-# State
+# World view, propagated through the broker, with information from the publihsers
 publishers = {} # name: <Publisher>
 datasets = None # name/path: {}
-subscribed = {} # name/path: <PubSubClient>
-queue = asyncio.Queue()
 
+subscribed = {} # name/path: <PubSubClient>
+
+queue = asyncio.Queue()
 
 async def worker(queue):
     while True:
@@ -67,9 +69,86 @@ async def new_dataset(data, topic):
 async def updated_dataset(data, topic):
     logger.info(f'Updated dataset {topic} {data=}')
 
+#
+# The "database" is used to persist the subscriber state, so it survives restarts
+#
+
+database = None
+
+class Database:
+
+    def __init__(self, path):
+        self.path = path
+
+        if path.exists():
+            self.load()
+        else:
+            self.init()
+
+    def init(self):
+        self.data = {
+            'following': [], # List of datasets we are subscribed to
+        }
+        self.save()
+
+    def load(self):
+        with self.path.open() as file:
+            self.data = json.load(file)
+
+    def save(self):
+        with self.path.open('w') as file:
+            json.dump(self.data, file)
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
 
 #
-# API
+# Internal API
+#
+
+def follow(datasets_list: list[str]):
+    errors = {}
+
+    for name in datasets_list:
+        if name not in datasets:
+            errors[name] = 'This dataset does not exist in the network'
+            continue
+
+        # Initialize the dataset in the filesystem (cache)
+        urlpath = cache / name
+        if not urlpath.exists():
+            dataset = datasets[name]
+            metadata = models.Metadata(**dataset)
+            dtype = getattr(np, metadata.dtype)
+            urlpath.parent.mkdir(exist_ok=True)
+            blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
+
+        # Subscribe to changes in the dataset
+        if name not in subscribed:
+            client = utils.start_client(f'ws://{broker}/pubsub')
+            client.subscribe(name, updated_dataset)
+            subscribed[name] = client
+
+        following = database['following']
+        if name not in following:
+            following.append(name)
+            database.save()
+
+        # Get the publisher hostname and port for later downloading
+        src = name.split('/', 1)[0]
+        if src not in publishers:
+            url = f'http://{broker}/api/publishers/{src}'
+            publishers[src] = utils.get(url, model=models.Publisher)
+
+    return errors
+
+
+#
+# HTTP API
 #
 
 @contextlib.asynccontextmanager
@@ -80,6 +159,9 @@ async def lifespan(app: FastAPI):
     # Follow the @new channel to know when a new dataset is added
     client = utils.start_client(f'ws://{broker}/pubsub')
     client.subscribe('@new', new_dataset)
+
+    # Resume following
+    follow(database['following'])
 
     # Start workers
     tasks = []
@@ -100,29 +182,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 @app.get('/api/list')
-async def get_list(all: bool = False):
-    keys = datasets.keys() if all else subscribed.keys()
-    return list(keys)
+async def get_list():
+    return list(datasets.keys())
 
 @app.post('/api/follow')
 async def post_follow(add: list[str]):
-    for name in add:
-        if name not in subscribed:
-            # Initialize
-            dataset = datasets[name]
-            metadata = models.Metadata(**dataset)
-            dtype = getattr(np, metadata.dtype)
-            urlpath = cache / name
-            urlpath.parent.mkdir(exist_ok=True)
-            blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
-            # Subscribe
-            client = utils.start_client(f'ws://{broker}/pubsub')
-            client.subscribe(name, updated_dataset)
-            subscribed[name] = client
-            # Get port
-            src = name.split('/', 1)[0]
-            publishers[src] = utils.get(f'http://{broker}/api/publishers/{src}',
-                                        model=models.Publisher)
+    return follow(add)
+
+@app.get('/api/following')
+async def get_following():
+    return database['following']
 
 @app.post('/api/unfollow')
 async def post_unfollow(delete: list[str]):
@@ -136,6 +205,10 @@ async def post_download(datasets: list[str]):
         queue.put_nowait(dataset)
 
 
+#
+# Command line interface
+#
+
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
     args = utils.run_parser(parser)
@@ -144,8 +217,11 @@ if __name__ == '__main__':
     broker = args.broker
 
     # Create cache directory
-    cache = Path('cache').resolve()
+    cache = pathlib.Path('cache').resolve()
     cache.mkdir(exist_ok=True)
+
+    # Open or create database file
+    database = Database(cache / 'db.json')
 
     # Run
     host, port = args.http
