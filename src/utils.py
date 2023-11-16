@@ -9,6 +9,7 @@
 
 import argparse
 import asyncio
+import contextlib
 import logging
 
 # Requirements
@@ -34,22 +35,34 @@ def get_model_from_obj(obj, model_class, **kwargs):
 
 
 def read_metadata(path):
-    array = blosc2.open(str(path))
+    suffix = path.suffix
+    if suffix == '.b2nd':
+        array = blosc2.open(str(path))
+        #print(f'{array.schunk.cparams=}')
+        #print(f'{array.schunk.dparams=}')
+        #print(f'{array.schunk.meta=}')
+        #print(f'{array.schunk.vlmeta=}')
+        #print(dict(array.schunk.vlmeta))
+        #print()
 
-#   print(f'{array.schunk.cparams=}')
-#   print(f'{array.schunk.dparams=}')
-#   print(f'{array.schunk.meta=}')
-#   print(f'{array.schunk.vlmeta=}')
-#   print(dict(array.schunk.vlmeta))
-#   print()
-
-    schunk = get_model_from_obj(array.schunk, models.SChunk)
-    return get_model_from_obj(array, models.Metadata, schunk=schunk)
+        schunk = get_model_from_obj(array.schunk, models.SChunk)
+        return get_model_from_obj(array, models.Metadata, schunk=schunk)
+    elif suffix == '.b2frame':
+        raise NotImplementedError('.b2frame files not yet supported')
+    else:
+        raise NotImplementedError(f'{suffix} files not yet supported')
 
 
 #
-# Models (pydantic)
+# Context managers
 #
+
+@contextlib.contextmanager
+def log_exception(logger, message):
+    try:
+        yield
+    except Exception:
+        logger.exception(message)
 
 #
 # Pub/Sub helpers

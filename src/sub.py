@@ -43,21 +43,18 @@ queue = asyncio.Queue()
 async def worker(queue):
     while True:
         path = await queue.get()
-
-        try:
+        with utils.log_exception(logger, 'Download failed'):
             array = blosc2.open(str(cache / path))
             src, path = path.split('/', 1)
             host = publishers[src].http
             print('WORKER', host, path)
-            with httpx.stream('GET', f'http://{host}/api/{path}/download') as resp:
+            with httpx.stream('GET', f'http://{host}/api/download/{path}') as resp:
                 i = 0
                 for chunk in resp.iter_bytes():
                     print(i)
                     print('CHUNK', len(chunk), chunk[:10])
                     array.schunk.append_data(chunk)
                     i += 1
-        except Exception:
-            logger.exception('Download failed')
 
         queue.task_done()
 
@@ -124,7 +121,7 @@ def follow(datasets_list: list[str]):
             dataset = datasets[name]
             metadata = models.Metadata(**dataset)
             dtype = getattr(np, metadata.dtype)
-            urlpath.parent.mkdir(exist_ok=True)
+            urlpath.parent.mkdir(exist_ok=True, parents=True)
             blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
 
         # Subscribe to changes in the dataset

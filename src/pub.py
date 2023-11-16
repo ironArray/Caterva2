@@ -9,6 +9,7 @@
 
 import asyncio
 import contextlib
+import logging
 from pathlib import Path
 
 # Requirements
@@ -20,6 +21,8 @@ from watchfiles import Change, awatch
 # Project
 import utils
 
+
+logger = logging.getLogger('pub')
 
 # Configuration
 broker = None
@@ -34,19 +37,22 @@ client = None
 async def worker(queue):
     while True:
         path, change = await queue.get()
-        subpath = Path(path).relative_to(root)
-        dataset = f'{name}/{subpath}'
+        with utils.log_exception(logger, 'Publication failed'):
+            subpath = Path(path).relative_to(root)
+            dataset = f'{name}/{subpath}'
 
-        if change == Change.added:
-            metadata = utils.read_metadata(path)
-            metadata = metadata.model_dump()
-            topic = '@new'
-            data = {dataset: metadata}
-        else:
-            topic = dataset
-            data = {'change': change.name}
+            if change == Change.added:
+                if path.is_file():
+                    metadata = utils.read_metadata(path)
+                    metadata = metadata.model_dump()
+                    topic = '@new'
+                    data = {dataset: metadata}
+                    await client.publish([topic], data=data)
+            else:
+                topic = dataset
+                data = {'change': change.name}
+                await client.publish([topic], data=data)
 
-        await client.publish([topic], data=data)
         queue.task_done()
 
 
@@ -60,7 +66,7 @@ async def watchfiles():
         tasks.append(task)
 
     # Notify the broker about available datasets
-    for path in root.iterdir():
+    for path in root.glob('**/*'):
         queue.put_nowait((path, Change.added))
 
     # Watch directory for changes
@@ -91,12 +97,12 @@ app = FastAPI(lifespan=lifespan)
 async def app_list():
     return (x.name for x in root.iterdir())
 
-@app.get("/api/{name}/metadata")
-async def app_metadata(name: str):
-    filepath = root / name
-    stat = filepath.stat()
-    keys = ['mtime', 'size']
-    return {key: getattr(stat, f'st_{key}') for key in keys}
+#@app.get("/api/metadata/{name:path}")
+#async def app_metadata(name: str):
+#    filepath = root / name
+#    stat = filepath.stat()
+#    keys = ['mtime', 'size']
+#    return {key: getattr(stat, f'st_{key}') for key in keys}
 
 
 async def download(filepath):
@@ -107,7 +113,7 @@ async def download(filepath):
         print('CHUNK', type(chunk), len(chunk), chunk[:10])
         yield chunk
 
-@app.get("/api/{name}/download")
+@app.get("/api/download/{name:path}")
 async def app_download(name: str):
     filepath = root / name
     return responses.StreamingResponse(download(filepath))
