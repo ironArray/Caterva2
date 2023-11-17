@@ -24,6 +24,7 @@ class SChunk(pydantic.BaseModel):
     typesize: int
     urlpath: str
 #   vlmeta
+    nchunks: int
 
 
 class Metadata(pydantic.BaseModel):

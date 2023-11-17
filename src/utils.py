@@ -14,6 +14,7 @@ import logging
 
 # Requirements
 import blosc2
+import fastapi
 import fastapi_websocket_pubsub
 import httpx
 
@@ -117,7 +118,7 @@ def run_parser(parser):
 
 
 #
-# HTTP helpers
+# HTTP client helpers
 #
 def get(url, params=None, model=None):
     response = httpx.get(url, params=params)
@@ -129,3 +130,10 @@ def post(url, json):
     response = httpx.post(url, json=json)
     response.raise_for_status()
     return response.json()
+
+
+#
+# HTTP server helpers
+#
+def raise_bad_request(detail):
+    raise fastapi.HTTPException(status_code=400, detail=detail)

@@ -94,38 +94,41 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
-async def app_list():
+async def get_list():
     return (x.name for x in root.iterdir())
 
-#@app.get("/api/metadata/{name:path}")
-#async def app_metadata(name: str):
-#    filepath = root / name
-#    stat = filepath.stat()
-#    keys = ['mtime', 'size']
-#    return {key: getattr(stat, f'st_{key}') for key in keys}
+def download_chunk(chunk):
+    # TODO Send block by block
+    yield chunk
 
-
-async def download(filepath):
-    suffix = filepath.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(str(filepath))
-        schunk = array.schunk
-        for i in range(schunk.nchunks):
-            chunk = schunk.get_chunk(i)
-            yield chunk
-    else:
-        chunksize = 1024
-        with open(filepath, 'rb') as file:
-            data = file.read(chunksize)
-            while data:
-                yield data
-                data = file.read(chunksize)
-
+def download_file(filepath):
+    with open(filepath, 'rb') as file:
+        yield from file
 
 @app.get("/api/download/{name:path}")
-async def app_download(name: str):
+async def get_download(name: str, nchunk: int = -1):
     filepath = root / name
-    return responses.StreamingResponse(download(filepath))
+
+    suffix = filepath.suffix
+    if suffix == '.b2nd':
+        if nchunk < 0:
+            utils.raise_bad_request('Chunk number required')
+        array = blosc2.open(str(filepath))
+        chunk = array.schunk.get_chunk(nchunk)
+        downloader = download_chunk(chunk)
+    elif suffix == '.b2frame':
+        if nchunk < 0:
+            utils.raise_bad_request('Chunk number required')
+        schunk = blosc2.open(str(filepath))
+        chunk = schunk.get_chunk(nchunk)
+        downloader = download_chunk(chunk)
+    else:
+        if nchunk >= 0:
+            utils.raise_bad_request('Regular files don\'t have chunks')
+
+        downloader = download_file(filepath)
+
+    return responses.StreamingResponse(downloader)
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')

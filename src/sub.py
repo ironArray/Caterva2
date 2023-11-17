@@ -40,6 +40,14 @@ subscribed = {} # name/path: <PubSubClient>
 
 queue = asyncio.Queue()
 
+def download_chunk(host, name, nchunk, schunk):
+    with httpx.stream('GET', f'http://{host}/api/download/{name}?{nchunk=}') as resp:
+        buffer = []
+        for chunk in resp.iter_bytes():
+            buffer.append(chunk)
+        chunk = b''.join(buffer)
+        schunk.insert_chunk(nchunk, chunk)
+
 async def worker(queue):
     while True:
         name = await queue.get()
@@ -47,24 +55,31 @@ async def worker(queue):
             urlpath = cache / name
             urlpath.parent.mkdir(exist_ok=True, parents=True)
 
+            dataset = datasets[name]
+            src, name = name.split('/', 1)
+            host = publishers[src].http
+
             suffix = urlpath.suffix
             if suffix == '.b2nd':
-                array = blosc2.open(str(urlpath))
-                append = lambda chunk: array.schunk.append_data(chunk)
-                close = lambda: None
-            else:
-                file = urlpath.open('wb')
-                append = lambda chunk: file.write(chunk)
-                close = lambda: file.close()
+                metadata = models.Metadata(**dataset)
+                nchunks = metadata.schunk.nchunks
 
-            try:
-                src, name = name.split('/', 1)
-                host = publishers[src].http
-                with httpx.stream('GET', f'http://{host}/api/download/{name}') as resp:
-                    for chunk in resp.iter_bytes():
-                        append(chunk)
-            finally:
-                close()
+                array = blosc2.open(str(urlpath))
+                schunk = array.schunk
+                for nchunk in range(nchunks):
+                    download_chunk(host, name, nchunk, schunk)
+            elif suffix == '.b2frame':
+                metadata = models.Schunk(**dataset)
+                nchunks = metadata.nchunks
+
+                schunk = blosc2.open(str(urlpath))
+                for nchunk in range(nchunks):
+                    download_chunk(host, name, nchunk, schunk)
+            else:
+                with urlpath.open('wb') as file:
+                    with httpx.stream('GET', f'http://{host}/api/download/{name}') as resp:
+                        for chunk in resp.iter_bytes():
+                            file.write(chunk)
 
         queue.task_done()
 
@@ -135,6 +150,9 @@ def follow(datasets_list: list[str]):
                 dtype = getattr(np, metadata.dtype)
                 urlpath.parent.mkdir(exist_ok=True, parents=True)
                 blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
+            elif suffix == '.b2frame':
+                urlpath.parent.mkdir(exist_ok=True, parents=True)
+                blosc2.open(str(urlpath), mode="w")
 
         # Subscribe to changes in the dataset
         if name not in subscribed:

@@ -14,7 +14,8 @@ import utils
 
 def list_cmd(args):
     data = utils.get(f'http://{args.host}/api/list')
-    print(json.dumps(data))
+    for dataset in data:
+        print(dataset)
 
 def follow_cmd(args):
     data = utils.post(f'http://{args.host}/api/follow', args.datasets)
@@ -22,7 +23,8 @@ def follow_cmd(args):
 
 def following_cmd(args):
     data = utils.get(f'http://{args.host}/api/following')
-    print(json.dumps(data))
+    for dataset in data:
+        print(dataset)
 
 def unfollow_cmd(args):
     data = utils.post(f'http://{args.host}/api/unfollow', args.datasets)
