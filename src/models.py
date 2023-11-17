@@ -7,8 +7,13 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import blosc2
 import pydantic
 
+
+class CParams(pydantic.BaseModel):
+    codec: blosc2.Codec
+    typesize: int
 
 class SChunk(pydantic.BaseModel):
     blocksize: int
@@ -16,7 +21,7 @@ class SChunk(pydantic.BaseModel):
     chunkshape: int
     chunksize: int
     contiguous: bool
-#   cparams
+    cparams: CParams
     cratio: float
 #   dparams
 #   meta
@@ -25,7 +30,6 @@ class SChunk(pydantic.BaseModel):
     urlpath: str
 #   vlmeta
     nchunks: int
-
 
 class Metadata(pydantic.BaseModel):
     dtype: str
@@ -40,11 +44,9 @@ class Metadata(pydantic.BaseModel):
     schunk: SChunk
     size: int
 
-
 class File(pydantic.BaseModel):
     mtime: float
     size: int
-
 
 class Publisher(pydantic.BaseModel):
     name: str

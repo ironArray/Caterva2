@@ -69,7 +69,7 @@ async def worker(queue):
                 for nchunk in range(nchunks):
                     download_chunk(host, name, nchunk, schunk)
             elif suffix == '.b2frame':
-                metadata = models.Schunk(**dataset)
+                metadata = models.SChunk(**dataset)
                 nchunks = metadata.nchunks
 
                 schunk = blosc2.open(str(urlpath))
@@ -144,15 +144,17 @@ def follow(datasets_list: list[str]):
         urlpath = cache / name
         if not urlpath.exists():
             suffix = urlpath.suffix
+            dataset = datasets[name]
             if suffix == '.b2nd':
-                dataset = datasets[name]
                 metadata = models.Metadata(**dataset)
+
                 dtype = getattr(np, metadata.dtype)
                 urlpath.parent.mkdir(exist_ok=True, parents=True)
                 blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
             elif suffix == '.b2frame':
+                metadata = models.SChunk(**dataset)
                 urlpath.parent.mkdir(exist_ok=True, parents=True)
-                blosc2.open(str(urlpath), mode="w")
+                utils.init_b2frame(urlpath, metadata)
 
         # Subscribe to changes in the dataset
         if name not in subscribed:
