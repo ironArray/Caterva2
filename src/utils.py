@@ -17,6 +17,7 @@ import blosc2
 import fastapi
 import fastapi_websocket_pubsub
 import httpx
+import numpy as np
 
 # Project
 import models
@@ -26,7 +27,13 @@ import models
 # Blosc2 related functions
 #
 
+def init_b2nd(urlpath, metadata):
+    urlpath.parent.mkdir(exist_ok=True, parents=True)
+    dtype = getattr(np, metadata.dtype)
+    blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
+
 def init_b2frame(urlpath, metadata):
+    urlpath.parent.mkdir(exist_ok=True, parents=True)
     cparams = metadata.cparams.model_dump()
     blosc2.SChunk(
         metadata.chunksize,

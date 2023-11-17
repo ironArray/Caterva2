@@ -17,7 +17,6 @@ import asyncio
 import blosc2
 from fastapi import FastAPI
 import httpx
-import numpy as np
 import uvicorn
 
 # Project
@@ -62,18 +61,23 @@ async def worker(queue):
             suffix = urlpath.suffix
             if suffix == '.b2nd':
                 metadata = models.Metadata(**dataset)
-                nchunks = metadata.schunk.nchunks
+                try:
+                    array = blosc2.open(str(urlpath))
+                except FileNotFoundError:
+                    utils.init_b2nd(urlpath, metadata)
+                    array = blosc2.open(str(urlpath))
 
-                array = blosc2.open(str(urlpath))
-                schunk = array.schunk
-                for nchunk in range(nchunks):
-                    download_chunk(host, name, nchunk, schunk)
+                for nchunk in range(metadata.schunk.nchunks):
+                    download_chunk(host, name, nchunk, array.schunk)
             elif suffix == '.b2frame':
                 metadata = models.SChunk(**dataset)
-                nchunks = metadata.nchunks
+                try:
+                    schunk = blosc2.open(str(urlpath))
+                except FileNotFoundError:
+                    utils.init_b2frame(urlpath, metadata)
+                    schunk = blosc2.open(str(urlpath))
 
-                schunk = blosc2.open(str(urlpath))
-                for nchunk in range(nchunks):
+                for nchunk in range(metadata.nchunks):
                     download_chunk(host, name, nchunk, schunk)
             else:
                 with urlpath.open('wb') as file:
@@ -147,13 +151,9 @@ def follow(datasets_list: list[str]):
             dataset = datasets[name]
             if suffix == '.b2nd':
                 metadata = models.Metadata(**dataset)
-
-                dtype = getattr(np, metadata.dtype)
-                urlpath.parent.mkdir(exist_ok=True, parents=True)
-                blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
+                utils.init_b2nd(urlpath, metadata)
             elif suffix == '.b2frame':
                 metadata = models.SChunk(**dataset)
-                urlpath.parent.mkdir(exist_ok=True, parents=True)
                 utils.init_b2frame(urlpath, metadata)
 
         # Subscribe to changes in the dataset
