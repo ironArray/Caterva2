@@ -65,11 +65,11 @@ Ask the subscriber to follow changes in a dataset:
 
 ```bash
 python src/cli.py follow foo/precip.b2nd
-python src/cli.py following
+python src/cli.py info
 ```
 
 ```
-["foo/precip.b2nd"]
+foo/precip.b2nd
 ```
 
 We can see how the client has subscribed successfully, and the dataset appears listed in

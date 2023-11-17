@@ -16,4 +16,4 @@ pub:
 	${BIN}/python src/pub.py foo data #--loglevel=INFO
 
 sub:
-	${BIN}/python src/sub.py --loglevel=INFO
+	${BIN}/python src/sub.py #--loglevel=INFO

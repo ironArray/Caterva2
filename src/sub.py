@@ -218,9 +218,23 @@ async def get_list():
 async def post_follow(add: list[str]):
     return follow(add)
 
-@app.get('/api/following')
-async def get_following():
-    return database['following']
+@app.get('/api/info')
+async def get_info():
+    info = {}
+
+    for path, relpath in utils.walk_files(cache, exclude={'db.json'}):
+        stat = path.stat()
+        info[relpath] = {'mtime': stat.st_mtime, 'follow': False}
+
+    for path in database['following']:
+        path_info = info.get(path)
+        if path_info is None:
+            info[path] = {'mtime': None, 'follow': True}
+        else:
+            info[path]['follow'] = True
+
+    return info
+
 
 @app.post('/api/unfollow')
 async def post_unfollow(delete: list[str]):

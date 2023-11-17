@@ -66,7 +66,7 @@ async def watchfiles():
         tasks.append(task)
 
     # Notify the broker about available datasets
-    for path in root.glob('**/*'):
+    for path, relpath in utils.walk_files(root):
         queue.put_nowait((path, Change.added))
 
     # Watch directory for changes

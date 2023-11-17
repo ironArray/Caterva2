@@ -9,6 +9,7 @@
 
 import json
 
+# Project
 import utils
 
 
@@ -25,14 +26,20 @@ def follow_cmd(args):
     data = utils.post(f'http://{args.host}/api/follow', args.datasets)
     print(json.dumps(data))
 
-def following_cmd(args):
-    data = utils.get(f'http://{args.host}/api/following')
+def info_cmd(args):
+    data = utils.get(f'http://{args.host}/api/info')
     if args.json:
         print(json.dumps(data))
         return
 
-    for dataset in data:
-        print(dataset)
+    for path in sorted(data.keys()):
+        info = data[path]
+        follow = info['follow']
+        mtime = info['mtime']
+        downloaded = bool(mtime)
+#       if mtime:
+#           mtime = str(datetime.datetime.fromtimestamp(mtime))
+        print(f'{path} {downloaded=} {follow=}')
 
 def unfollow_cmd(args):
     data = utils.post(f'http://{args.host}/api/unfollow', args.datasets)
@@ -61,9 +68,9 @@ if __name__ == '__main__':
 
     # Following
     help = 'List the datasets being followed by the subscriber'
-    subparser = subparsers.add_parser('following', help=help)
+    subparser = subparsers.add_parser('info', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.set_defaults(func=following_cmd)
+    subparser.set_defaults(func=info_cmd)
 
     # Unfollow
     help = 'Stop following changes to the given dataset'

@@ -23,7 +23,7 @@ import models
 
 
 #
-# Blosc2 related fucntions
+# Blosc2 related functions
 #
 
 def init_b2frame(urlpath, metadata):
@@ -35,7 +35,6 @@ def init_b2frame(urlpath, metadata):
         dparams={},
         urlpath=str(urlpath),
     )
-
 
 def get_model_from_obj(obj, model_class, **kwargs):
     if type(obj) is dict:
@@ -53,7 +52,6 @@ def get_model_from_obj(obj, model_class, **kwargs):
             data[key] = value
 
     return model_class(**data)
-
 
 def read_metadata(path):
     suffix = path.suffix
@@ -89,6 +87,21 @@ def log_exception(logger, message):
         yield
     except Exception:
         logger.exception(message)
+
+
+#
+# Filesystem helpers
+#
+
+def walk_files(root, exclude=None):
+    if exclude is None:
+        exclude = set()
+
+    for path in root.glob('**/*'):
+        if path.is_file():
+            relpath = path.relative_to(root)
+            if str(relpath) not in exclude:
+                yield path, relpath
 
 #
 # Pub/Sub helpers
