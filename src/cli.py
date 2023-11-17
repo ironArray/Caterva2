@@ -14,6 +14,10 @@ import utils
 
 def list_cmd(args):
     data = utils.get(f'http://{args.host}/api/list')
+    if args.json:
+        print(json.dumps(data))
+        return
+
     for dataset in data:
         print(dataset)
 
@@ -23,6 +27,10 @@ def follow_cmd(args):
 
 def following_cmd(args):
     data = utils.get(f'http://{args.host}/api/following')
+    if args.json:
+        print(json.dumps(data))
+        return
+
     for dataset in data:
         print(dataset)
 
@@ -42,7 +50,7 @@ if __name__ == '__main__':
     # List
     help = 'List the datasets available in the network'
     subparser = subparsers.add_parser('list', help=help)
-    subparser.add_argument('-a', '--all', action='store_true')
+    subparser.add_argument('--json', action='store_true')
     subparser.set_defaults(func=list_cmd)
 
     # Follow
@@ -54,6 +62,7 @@ if __name__ == '__main__':
     # Following
     help = 'List the datasets being followed by the subscriber'
     subparser = subparsers.add_parser('following', help=help)
+    subparser.add_argument('--json', action='store_true')
     subparser.set_defaults(func=following_cmd)
 
     # Unfollow
