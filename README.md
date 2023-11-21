@@ -1,4 +1,4 @@
-# PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern
+# PubSub for Blosc2 - On demand access to remote data repositories
 
 bpubsub is a distributed system meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into groups that are received by subscribers.
 
