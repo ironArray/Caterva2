@@ -6,19 +6,19 @@ This document describes the minimal specifications for the project.  It is meant
 
 ## Vocabulary
 
-- **Group**: A group is a collection of datasets that are published together.  It is identified by a name.
+- **RootGroup**: A group is a collection of datasets that are published together.  It is identified by a name.
 - **Dataset**: A dataset is a file that is published by the publisher.  It is identified by a path.
 
-- **Broker**: The broker is the entity that manages the communication between publishers and subscribers.  It is responsible for creating groups and adding publishers and subscribers to them.
+- **Broker**: The broker is the entity that manages the communication between publishers and subscribers.  It is also responsible for keeping a list of root groups available to subscribers.
 - **Publisher**: The publisher is the entity that makes datasets available to subscribers.  It is responsible for creating a group and adding datasets to it.
 - **Subscriber**: The subscriber is the entity that follows changes in a group and allows the download of datasets from publishers.
-- **Client**: The client is a command line interface for the user to access the datasets, it connects to a subscriber.
+- **Client**: The client is a subscriber consumer (e.g. a command line tool) for the user to access the datasets; it connects to a subscriber.
 
 ## Client commands
 
 The client must implement the following commands:
 
-- `list`: List all the available groups.
+- `list`: List all the available groups in a broker.
 - `list <group>`: List all the available datasets in a group.
 - `info <dataset>`: Get metadata about a dataset (for the specs, see below).
 - `get <dataset[slice]>`: Get the data of a dataset. `slice` is optional.
@@ -28,7 +28,7 @@ The client must implement the following commands:
 
 The client must be implemented in Python 3 (3.9 being the minimal supported version).  It must be a command line interface that connects to a subscriber and sends commands to it.  The subscriber must be running before the client is started. If the subscriber is not running, the client must print an error message and exit. The publisher *can* be running before the subscriber is started. If the publisher is not running, the subscriber will only serve its cached data. Only one publisher per group will be supported initially.
 
-When a `info` command is issued, the client must print the metadata of the dataset.  We will implement just the .b2nd files (NDArray instances in Python) for now  The metadata is a dictionary with the following fields:
+When an `info` command is issued, the client must print the metadata of the dataset.  We will implement just the `.b2nd` files (NDArray instances in Python) for now.  The metadata is a dictionary with the following fields:
 
 - `meta`: The metadata of the dataset. E.g. if the dataset `b` is an NDArray, `meta` is the next dict:
 
@@ -69,7 +69,7 @@ Out[41]: {'new_meta': 'my data'}
 
 Whenever an `info` or `get` command is issued, the subscriber must check if the dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the dataset is not in the cache, it must download it and add it to the cache.
 
-`info` commands will just download the metadata and will create `uninit` datasets in cache. In the first implementation, `get` commands will make the subscriber to download the whole data from publisher. In a next version, subscriber will download only the chunks that are not in cache.
+`info` commands will just download the metadata and will create `uninit` datasets in cache. In the first implementation, `get` commands will make the subscriber download the whole data from publisher. In a next version, subscriber will download only the chunks that are not in cache.
 
 ## Data group example
 
