@@ -8,7 +8,7 @@
 ###############################################################################
 
 [project]
-name = "bpubsub"
+name = "Caterva"
 version = "0.1.0"
 readme = "README.md"
 authors = [

@@ -1,12 +1,12 @@
-# PubSub for Blosc2 - On demand access to remote data repositories
+# Caterva - On demand access to remote Blosc2 data repositories
 
-bpubsub is a distributed system written in Python and meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into groups that are received by subscribers.
+Caterva is a distributed system written in Python and meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into groups that are received by subscribers.
 
 The goal is that subscribers/clients can access datasets on demand, and that publishers can share datasets without having to know who is going to use them.  At the same time, data cached by a subscriber can be re-shared again by another publisher. This is useful for e.g. accessing remote datasets and share them in a local network, where other subscribers/clients can be present, allowing to save communications and storage resources in work groups.
 
 Overarching this is the broker, that provides the infrastructure allowing publishers and subscribers to communicate.  Publishers and subscribers are clients of the broker, and they communicate with it using the PubSub messaging pattern.  Also, every publisher exposes a REST interface that allows subscribers/clients to access the datasets.
 
-## Components of bpubsub
+## Components of Caterva
 
 There are 4 programs:
 
@@ -103,7 +103,7 @@ pytest -v
 
 ## Use with caution
 
-Currently, this projects is just a proof of concept.  In the future, bpubsub will offer the possibility to publish, and share Blosc2 datasets (and other formats) in different group classes, and accessible from other hosts via TCP/IP and REST interfaces, and using partial caching (with different levels of granularity) when possible.
+Currently, this projects is just a proof of concept.  In the future, Caterva will offer the possibility to publish, and share Blosc2 datasets (and other formats) in different group classes, and accessible from other hosts via TCP/IP and REST interfaces, and using partial caching (with different levels of granularity) when possible.
 
 In case you are interested in this project, please contact us at contact@blosc.org.
 
