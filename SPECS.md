@@ -68,7 +68,7 @@ Out[41]: {'new_meta': 'my data'}
 
 ## Cache management details
 
-Whenever an `info` or `get` command is issued, the client must check if the dataset is already in the cache.  If it is, it must check if the dataset has changed.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the dataset is not in the cache, it must download it and add it to the cache.
+Whenever an `info` or `get` command is issued, the subscriber must check if the dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the dataset is not in the cache, it must download it and add it to the cache.
 
 `info` commands will just download the metadata and will create `uninit` datasets in cache. In the first implementation, `get` commands will make the subscriber to download the whole data from publisher. In a next version, subscriber will download only the chunks that are not in cache.
 
