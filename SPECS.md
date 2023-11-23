@@ -18,12 +18,11 @@ This document describes the minimal specifications for the project.  It is meant
 
 The client must implement the following commands:
 
-- `list`: List all the available datasets.
+- `list`: List all the available groups.
 - `list <group>`: List all the available datasets in a group.
 - `info <dataset>`: Get metadata about a dataset (for the specs, see below).
 - `get <dataset[slice]>`: Get the data of a dataset. `slice` is optional.
-- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a file.
-
+- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a file. The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
 
 ## Client implementation
 
@@ -31,7 +30,7 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 When a `info` command is issued, the client must print the metadata of the dataset.  We will implement just the .b2nd files (NDArray instances in Python) for now  The metadata is a dictionary with the following fields:
 
-- `meta`: The metadata of the dataset. E.g. if the dataset `b` is an NDArray, `meta` is the next tuple:
+- `meta`: The metadata of the dataset. E.g. if the dataset `b` is an NDArray, `meta` is the next dict:
 
 ```
 In [15]: b = blosc2.asarray(np.arange(20))
@@ -83,4 +82,3 @@ You can find an example of a data group in the `test-data` folder.  It contains 
 ## Communication failures
 
 Initially, we will not implement any communication failure handling.  If the subscriber is not running, the client will just print an error message and exit.  If the publisher is not running, the subscriber will just serve its cached data.
-
