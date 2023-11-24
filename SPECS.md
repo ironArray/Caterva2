@@ -6,27 +6,28 @@ This document describes the minimal specifications for the project.  It is meant
 
 ## Vocabulary
 
-- **RootGroup**: A group is a collection of datasets that are published together.  It is identified by a name.
+- **Root**: The root of a group of datasets that are published together.  It is identified by a name.
 - **Dataset**: A dataset is a file that is published by the publisher.  It is identified by a path.
+  E.g. `foo/bar.b2nd` is a dataset path with root `foo`.
 
-- **Broker**: The broker is the entity that manages the communication between publishers and subscribers.  It is also responsible for keeping a list of root groups available to subscribers.
-- **Publisher**: The publisher is the entity that makes datasets available to subscribers.  It is responsible for creating a group and adding datasets to it.
-- **Subscriber**: The subscriber is the entity that follows changes in a group and allows the download of datasets from publishers.
+- **Broker**: The broker is the entity that manages the communication between publishers and subscribers.  It is also responsible for keeping a list of roots available to subscribers.
+- **Publisher**: The publisher is the entity that makes datasets available to subscribers.  It is responsible for creating a root and adding datasets to it.
+- **Subscriber**: The subscriber is the entity that follows changes in a root and allows the download of datasets from publishers.
 - **Client**: The client is a subscriber consumer (e.g. a command line tool) for the user to access the datasets; it connects to a subscriber.
 
 ## Client commands
 
 The client must implement the following commands:
 
-- `list`: List all the available groups in a broker.
-- `list <group>`: List all the available datasets in a group.
+- `list`: List all the available roots in a broker.
+- `list <root>`: List all the available datasets in a root.
 - `info <dataset>`: Get metadata about a dataset (for the specs, see below).
 - `get <dataset[slice]>`: Get the data of a dataset. `slice` is optional.
 - `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a file. The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
 
 ## Client implementation
 
-The client must be implemented in Python 3 (3.9 being the minimal supported version).  It must be a command line interface that connects to a subscriber and sends commands to it.  The subscriber must be running before the client is started. If the subscriber is not running, the client must print an error message and exit. The publisher *can* be running before the subscriber is started. If the publisher is not running, the subscriber will only serve its cached data. Only one publisher per group will be supported initially.
+The client must be implemented in Python 3 (3.9 being the minimal supported version).  It must be a library with a command line interface that connects to a subscriber and sends commands to it.  The subscriber must be running before the client is started. If the subscriber is not running, the client must print an error message and exit. The publisher *can* be running before the subscriber is started. If the publisher is not running, the subscriber will only serve its cached data. Only one publisher per root will be supported initially.
 
 When an `info` command is issued, the client must print the metadata of the dataset.  We will implement just the `.b2nd` files (NDArray instances in Python) for now.  The metadata is a dictionary with the following fields:
 
@@ -71,13 +72,29 @@ Whenever an `info` or `get` command is issued, the subscriber must check if the 
 
 `info` commands will just download the metadata and will create `uninit` datasets in cache. In the first implementation, `get` commands will make the subscriber download the whole data from publisher. In a next version, subscriber will download only the chunks that are not in cache.
 
-## Data group example
+## Data repository (root) example
 
-You can find an example of a data group in the `test-data` folder.  It contains 3 (small) datasets:
+You can find an example of a data root in the `root-test` folder.  It contains 4 (small) datasets:
 
-- `ds-1d.b2nd`: A 1D array.
-- `dir1/ds-2d.b2nd`: A 2D array.
-- `dir1/ds-4d.b2nd`: A 4D array.
+- `ds-1d.b2nd`: A 1D array (int64). Constructed as:
+
+      a = np.arange(1000, dtype="int64"))
+      blosc2.asarray(a, chunks=(100,), blocks=(10,), urlpath="ds-1d.b2nd", mode="w")
+
+- `dir1/ds-2d.b2nd`: A 2D array (uint16).  Constructed as:
+
+      a = np.arange(200, dtype="uint16").reshape(10, 20)
+      blosc2.asarray(a, chunks=(5, 5), blocks=(2, 3), urlpath="dir1/ds-2d.b2nd", mode="w")
+
+- `dir1/ds-3d.b2nd`: A 3D array (float32). Constructed as:
+
+      a = np.arange(60, dtype="float32").reshape(3, 4, 5)
+      blosc2.asarray(a, chunks=(2, 3, 4), blocks=(2, 2, 2), urlpath="dir1/ds-3d.b2nd", mode="w")
+
+- `dir2/ds-4d.b2nd`: A 4D array (complex128). Constructed as:
+
+      a = np.arange(120, dtype="complex128").reshape(2, 3, 4, 5)
+      blosc2.asarray(a+a*1j, chunks=(1, 2, 3, 4), blocks=(1, 2, 2, 2), urlpath="dir2/ds-4d.b2nd", mode="w")
 
 ## Communication failures
 
