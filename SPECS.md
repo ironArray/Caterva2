@@ -72,9 +72,9 @@ Whenever an `info` or `get` command is issued, the subscriber must check if the 
 
 `info` commands will just download the metadata and will create `uninit` datasets in cache. In the first implementation, `get` commands will make the subscriber download the whole data from publisher. In a next version, subscriber will download only the chunks that are not in cache.
 
-## Data repository (root) example
+## Root data repository example
 
-You can find an example of a data root in the `root-test` folder.  It contains 4 (small) datasets:
+You can find an example of a data root in the `root-example` folder.  It contains 4 (small) datasets:
 
 - `ds-1d.b2nd`: A 1D array (int64). Constructed as:
 
