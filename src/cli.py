@@ -1,5 +1,5 @@
 ###############################################################################
-# PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern
+# Caterva - On demand access to remote Blosc2 data repositories
 #
 # Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
 # https://www.blosc.org

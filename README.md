@@ -4,7 +4,7 @@ Caterva is a distributed system written in Python and meant for sharing Blosc2 d
 
 The goal is that subscribers/clients can access datasets on demand, and that publishers can share datasets without having to know who is going to use them.  At the same time, data cached by a subscriber can be re-shared again by another publisher. This is useful for e.g. accessing remote datasets and share them in a local network, where other subscribers/clients can be present, allowing to save communications and storage resources in work groups.
 
-Overarching this is the broker, that provides the infrastructure allowing publishers and subscribers to communicate.  Publishers and subscribers are clients of the broker, and they communicate with it using the PubSub messaging pattern.  Also, every publisher exposes a REST interface that allows subscribers/clients to access the datasets.
+Overarching this is the broker, that provides the infrastructure allowing publishers and subscribers to communicate.  Publishers and subscribers are clients of the broker, and they communicate with it using the [Pub/Sub messaging pattern](https://en.wikipedia.org/wiki/Publish–subscribe_pattern).  Also, every publisher exposes a REST interface that allows subscribers/clients to access the datasets.
 
 ## Components of Caterva
 

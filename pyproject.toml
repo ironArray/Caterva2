@@ -1,5 +1,5 @@
 ###############################################################################
-# PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern
+# Caterva - On demand access to remote Blosc2 data repositories
 #
 # Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
 # https://www.blosc.org
@@ -9,18 +9,17 @@
 
 [project]
 name = "Caterva"
+requires-python = ">3.8"
 version = "0.1.0"
 readme = "README.md"
 authors = [
     {name = "Blosc Development Team", email = "contact@blosc.org"},
 ]
-description = "PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern"
+description = "Caterva - On demand access to remote Blosc2 data repositories"
 keywords = ["pubsub", "blosc2"]
 license = {text = "GNU Affero General Public License version 3"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: C",
-    "Programming Language :: C++",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",

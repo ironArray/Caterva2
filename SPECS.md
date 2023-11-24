@@ -1,4 +1,4 @@
-# Minimal specifications for the project
+# Minimal specifications
 
 ## Introduction
 

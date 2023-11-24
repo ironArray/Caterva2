@@ -1,5 +1,5 @@
 ###############################################################################
-# PubSub for Blosc2 - Access Blosc2 (and others) datasets via a Pub/Sub pattern
+# Caterva - On demand access to remote Blosc2 data repositories
 #
 # Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
 # https://www.blosc.org
@@ -85,7 +85,7 @@ async def watchfiles():
 async def lifespan(app: FastAPI):
     global client
     client = utils.start_client(f'ws://{broker}/pubsub')
-    await client.wait_until_ready() # wait before publishing
+    await client.wait_until_ready()  # wait before publishing
 
     asyncio.create_task(watchfiles())
     yield
@@ -93,17 +93,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 @app.get("/api/list")
 async def get_list():
     return (x.name for x in root.iterdir())
+
 
 def download_chunk(chunk):
     # TODO Send block by block
     yield chunk
 
+
 def download_file(filepath):
     with open(filepath, 'rb') as file:
         yield from file
+
 
 @app.get("/api/download/{name:path}")
 async def get_download(name: str, nchunk: int = -1):
@@ -129,6 +133,7 @@ async def get_download(name: str, nchunk: int = -1):
         downloader = download_file(filepath)
 
     return responses.StreamingResponse(downloader)
+
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
