@@ -24,7 +24,8 @@ The client must implement the following commands:
 - `list <root>`: List all the available datasets in a root.  Needs to be subscribed to the root.
 - `info <dataset>`: Get metadata about a dataset.
 - `get <dataset[slice]>`: Get the data of a dataset. `slice` is optional.
-- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a file. The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
+- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a local file. The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
+- `download <dataset>`: Get the *raw* data of a dataset file and save it to a file in the `downloads/` folder.
 
 ## Client implementation
 
@@ -42,13 +43,17 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 - When a `get` command is issued, the client must send a request to the subscriber to get the data of the dataset.  The subscriber will reply with the data.
 
+- When a `download` command is issued, the client must send a request to the subscriber to get the raw data of the dataset.  The subscriber will reply with the raw data and client should be responsible to store it in its local `downloads/` folder.
+
 ## Cache management details
 
 Whenever the subscriber gets a request to `subscribe` to a root, it must check if metadata (not the data itself) for all the datasets in a root is already in the cache.  If it is, it must check if the root has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the root metadata is not in the cache, it must fetch it and add it to the cache.
 
 Metadata can be fetched and consolidated as uninitialized datasets in cache by using the API described in the #metadata section below.
 
-Whenever a `get` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must download it and add it to the cache.
+There will be not an internal cache in the `subscriber`, but a folder in the filesystem.  The reason is that files in cached that are accessed frequently will be cached automatically by the OS, so no need to duplicate it (at least initially).  The folder will be called `cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
+
+Whenever a `get` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
 
 In the first implementation, `get` commands will make the subscriber download the whole data from publisher. In a next version, subscriber will download only the chunks in `[slice]` that are not in cache.
 
@@ -84,7 +89,7 @@ Out[16]:
   'filters_meta': [0, 0, 0, 0, 0, 0]}}
 ```
 
-For `.b2frame` files (SChunk instances), `meta` is a dictionary with the following fields:
+For `.b2frame`, or `.b2` for short (the latter is preferred), files (SChunk instances), `meta` is a dictionary with the following fields:
 
 ```
 In [17]: c = blosc2.SChunk(chunksize=100)
@@ -111,7 +116,7 @@ Out[19]:
   'filters_meta': [0, 0, 0, 0, 0, 0]}}
 ```
 
-- `vlmeta`: The so-called variable length metadata (aka user metadata).  This is the same for both `.b2nd` and `.b2frame` files. E.g.:
+- `vlmeta`: The so-called variable length metadata (aka user metadata).  This is the same for both `.b2nd` and `.b2` files. E.g.:
 
 ```
 In [20]: b.schunk.vlmeta['new_meta'] = "my data"
@@ -123,9 +128,9 @@ Out[21]: {'new_meta': 'my data'}
 
 You can find an example of a data root in the `root-example` folder.  It contains 4 (small) datasets:
 
-- `ds-hello.b2frame`: A SChunk containing a data buffer.  Constructed as:
+- `ds-hello.b2`: A SChunk containing a data buffer.  Constructed as:
 
-      blosc2.SChunk(chunksize=100, data=b"Hello world!"*100, urlpath="ds-hello.b2frame", mode="w")
+      blosc2.SChunk(chunksize=100, data=b"Hello world!"*100, urlpath="ds-hello.b2", mode="w")
 
 - `ds-1d.b2nd`: A 1D array (int64). Constructed as:
 
