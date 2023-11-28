@@ -1,5 +1,5 @@
 ###############################################################################
-# Caterva - On demand access to remote Blosc2 data repositories
+# Caterva2 - On demand access to remote Blosc2 data repositories
 #
 # Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
 # https://www.blosc.org
