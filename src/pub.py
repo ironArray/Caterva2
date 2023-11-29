@@ -65,9 +65,9 @@ async def watchfiles():
         task = asyncio.create_task(worker(queue))
         tasks.append(task)
 
-    # Notify the broker about available datasets
-    for path, relpath in utils.walk_files(root):
-        queue.put_nowait((path, Change.added))
+#   # Notify the broker about available datasets
+#   for path, relpath in utils.walk_files(root):
+#       queue.put_nowait((path, Change.added))
 
     # Watch directory for changes
     async for changes in awatch(root):
@@ -96,7 +96,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
-    return (x.name for x in root.iterdir())
+    return [relpath for path, relpath in utils.walk_files(root)]
 
 
 def download_chunk(chunk):
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     # Register
     host, port = args.http
     data = {'name': name, 'http': f'{host}:{port}'}
-    utils.post(f'http://{broker}/api/publishers', json=data)
+    utils.post(f'http://{broker}/api/roots', json=data)
 
     # Run
     host, port = args.http

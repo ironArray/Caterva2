@@ -48,6 +48,6 @@ class File(pydantic.BaseModel):
     mtime: float
     size: int
 
-class Publisher(pydantic.BaseModel):
+class Root(pydantic.BaseModel):
     name: str
     http: str

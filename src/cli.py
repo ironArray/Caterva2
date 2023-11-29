@@ -13,40 +13,62 @@ import json
 import utils
 
 
-def list_cmd(args):
-    data = utils.get(f'http://{args.host}/api/list')
+def cmd_roots(args):
+    data = utils.get(f'http://{args.host}/api/roots')
     if args.json:
         print(json.dumps(data))
         return
 
-    for dataset in data:
-        print(dataset)
+    for item in data:
+        print(item)
 
-def follow_cmd(args):
-    data = utils.post(f'http://{args.host}/api/follow', args.datasets)
-    print(json.dumps(data))
-
-def info_cmd(args):
-    data = utils.get(f'http://{args.host}/api/info')
+def cmd_subscribe(args):
+    data = utils.post(f'http://{args.host}/api/subscribe/{args.root}')
     if args.json:
         print(json.dumps(data))
         return
 
-    for path in sorted(data.keys()):
-        info = data[path]
-        follow = info['follow']
-        mtime = info['mtime']
-        downloaded = bool(mtime)
-#       if mtime:
-#           mtime = str(datetime.datetime.fromtimestamp(mtime))
-        print(f'{path} {downloaded=} {follow=}')
+    print(data)
 
-def unfollow_cmd(args):
-    data = utils.post(f'http://{args.host}/api/unfollow', args.datasets)
-    print(json.dumps(data))
+def cmd_list(args):
+    data = utils.get(f'http://{args.host}/api/list/{args.root}')
+    if args.json:
+        print(json.dumps(data))
+        return
 
-def download_cmd(args):
-    data = utils.post(f'http://{args.host}/api/download', args.datasets)
+    for item in data:
+        print(item)
+
+def cmd_url(args):
+    data = utils.get(f'http://{args.host}/api/url/{args.root}')
+    if args.json:
+        print(json.dumps(data))
+        return
+
+    print(data)
+
+def cmd_info(args):
+    data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
+    if args.json:
+        print(json.dumps(data))
+        return
+
+    print(data)
+
+def cmd_get(args):
+    data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
+    if args.json:
+        print(json.dumps(data))
+        return
+
+    print(data)
+
+def cmd_download(args):
+    data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
+    if args.json:
+        print(json.dumps(data))
+        return
+
     print(data)
 
 if __name__ == '__main__':
@@ -54,35 +76,53 @@ if __name__ == '__main__':
     parser.add_argument('--host', default='localhost:8002')
     subparsers = parser.add_subparsers(required=True)
 
-    # List
-    help = 'List the datasets available in the network'
+    # roots
+    help = 'List all the available roots in a broker.'
+    subparser = subparsers.add_parser('roots', help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.set_defaults(func=cmd_roots)
+
+    # subscribe
+    help = 'Request access to the datasets in a root.'
+    subparser = subparsers.add_parser('subscribe', help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.add_argument('root')
+    subparser.set_defaults(func=cmd_subscribe)
+
+    # list
+    help = 'List all the available datasets in a root. Needs to be subscribed to the root.'
     subparser = subparsers.add_parser('list', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.set_defaults(func=list_cmd)
+    subparser.add_argument('root')
+    subparser.set_defaults(func=cmd_list)
 
-    # Follow
-    help = 'Follow changes to the given dataset'
-    subparser = subparsers.add_parser('follow', help=help)
-    subparser.add_argument('datasets', action='append', default=[])
-    subparser.set_defaults(func=follow_cmd)
+    # url
+    help = 'URL for the rest API that serves the root.'
+    subparser = subparsers.add_parser('url', help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.add_argument('root')
+    subparser.set_defaults(func=cmd_url)
 
-    # Following
-    help = 'List the datasets being followed by the subscriber'
+    # info
+    help = 'Get metadata about a dataset.'
     subparser = subparsers.add_parser('info', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.set_defaults(func=info_cmd)
+    subparser.add_argument('dataset')
+    subparser.set_defaults(func=cmd_info)
 
-    # Unfollow
-    help = 'Stop following changes to the given dataset'
-    subparser = subparsers.add_parser('unfollow', help=help)
-    subparser.add_argument('datasets', action='append', default=[])
-    subparser.set_defaults(func=unfollow_cmd)
+    # get
+    help = 'Get the data of a dataset.'
+    subparser = subparsers.add_parser('get', help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.add_argument('dataset')
+    subparser.set_defaults(func=cmd_get)
 
-    # Download
-    help = 'Tell the subscriber to download the given dataset'
+    # download
+    help = 'Get the raw data of a dataset file and save it'
     subparser = subparsers.add_parser('download', help=help)
-    subparser.add_argument('datasets', action='append', default=[])
-    subparser.set_defaults(func=download_cmd)
+    subparser.add_argument('--json', action='store_true')
+    subparser.add_argument('dataset')
+    subparser.set_defaults(func=cmd_download)
 
     # Go
     args = utils.run_parser(parser)

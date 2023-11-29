@@ -32,8 +32,7 @@ cache = None
 nworkers = 100
 
 # World view, propagated through the broker, with information from the publihsers
-publishers = {} # name: <Publisher>
-datasets = None # name/path: {}
+roots = {} # name: <Root>
 
 subscribed = {} # name/path: <PubSubClient>
 
@@ -88,9 +87,10 @@ async def worker(queue):
         queue.task_done()
 
 
-async def new_dataset(data, topic):
-    logger.info(f'NEW dataset {topic} {data=}')
-    datasets.update(data)
+async def new_root(data, topic):
+    logger.info(f'NEW root {topic} {data=}')
+    root = models.Root(**data)
+    roots[root.name] = root
 
 async def updated_dataset(data, topic):
     logger.info(f'Updated dataset {topic} {data=}')
@@ -136,44 +136,45 @@ class Database:
 # Internal API
 #
 
-def follow(datasets_list: list[str]):
-    errors = {}
+def follow(name: str):
+    root = roots.get(name)
+    if root is None:
+        errors = {}
+        errors[name] = 'This dataset does not exist in the network'
+        return errors
 
-    for name in datasets_list:
-        if name not in datasets:
-            errors[name] = 'This dataset does not exist in the network'
-            continue
+    data = utils.get(f'http://{root.http}/api/list')
+    for path in data:
+        print(path)
 
-        # Initialize the dataset in the filesystem (cache)
-        urlpath = cache / name
-        if not urlpath.exists():
-            suffix = urlpath.suffix
-            dataset = datasets[name]
-            if suffix == '.b2nd':
-                metadata = models.Metadata(**dataset)
-                utils.init_b2nd(urlpath, metadata)
-            elif suffix == '.b2frame':
-                metadata = models.SChunk(**dataset)
-                utils.init_b2frame(urlpath, metadata)
+#   # Initialize the dataset in the filesystem (cache)
+#   urlpath = cache / name
+#   if not urlpath.exists():
+#       suffix = urlpath.suffix
+#       dataset = datasets[name]
+#       if suffix == '.b2nd':
+#           metadata = models.Metadata(**dataset)
+#           utils.init_b2nd(urlpath, metadata)
+#       elif suffix == '.b2frame':
+#           metadata = models.SChunk(**dataset)
+#           utils.init_b2frame(urlpath, metadata)
 
-        # Subscribe to changes in the dataset
-        if name not in subscribed:
-            client = utils.start_client(f'ws://{broker}/pubsub')
-            client.subscribe(name, updated_dataset)
-            subscribed[name] = client
+#   # Subscribe to changes in the dataset
+#   if name not in subscribed:
+#       client = utils.start_client(f'ws://{broker}/pubsub')
+#       client.subscribe(name, updated_dataset)
+#       subscribed[name] = client
 
-        following = database['following']
-        if name not in following:
-            following.append(name)
-            database.save()
+#   following = database['following']
+#   if name not in following:
+#       following.append(name)
+#       database.save()
 
-        # Get the publisher hostname and port for later downloading
-        src = name.split('/', 1)[0]
-        if src not in publishers:
-            url = f'http://{broker}/api/publishers/{src}'
-            publishers[src] = utils.get(url, model=models.Publisher)
-
-    return errors
+#   # Get the publisher hostname and port for later downloading
+#   src = name.split('/', 1)[0]
+#   if src not in publishers:
+#       url = f'http://{broker}/api/publishers/{src}'
+#       publishers[src] = utils.get(url, model=models.Root)
 
 
 #
@@ -182,15 +183,20 @@ def follow(datasets_list: list[str]):
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize datasets from the broker
-    global datasets
-    datasets = utils.get(f'http://{broker}/api/datasets')
-    # Follow the @new channel to know when a new dataset is added
+    # Initialize roots from the broker
+    data = utils.get(f'http://{broker}/api/roots')
+    for name, data in data.items():
+        root = models.Root(**data)
+        roots[root.name] = root
+
+    # Follow the @new channel to know when a new root is added
     client = utils.start_client(f'ws://{broker}/pubsub')
-    client.subscribe('@new', new_dataset)
+    client.subscribe('@new', new_root)
 
     # Resume following
-    follow(database['following'])
+    for path in cache.iterdir():
+        if path.is_dir():
+            follow(path.name)
 
     # Start workers
     tasks = []
@@ -210,14 +216,32 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-@app.get('/api/list')
-async def get_list():
-    return list(datasets.keys())
+@app.get('/api/roots')
+async def get_roots():
+    return sorted(roots)
 
-@app.post('/api/follow')
-async def post_follow(add: list[str]):
-    return follow(add)
+@app.get('/api/list/{name}')
+async def get_list(name: str):
+    root = roots.get(name)
+    if root is None:
+        utils.raise_not_found(f'{name} not known by the broker')
 
+    rootdir = cache / root.name
+    if not rootdir.exists():
+        utils.raise_not_found(f'not subscribed to {name}')
+
+    for path, relpath in utils.walk_files(rootdir):
+        yield relpath
+
+@app.post('/api/subscribe')
+async def post_subscribe(name: str):
+    root = roots.get(name)
+    if root is None:
+        utils.raise_not_found(f'{name} not known by the broker')
+
+    return follow(name)
+
+"""
 @app.get('/api/info')
 async def get_info():
     info = {}
@@ -246,6 +270,7 @@ async def post_unfollow(delete: list[str]):
 async def post_download(datasets: list[str]):
     for dataset in datasets:
         queue.put_nowait(dataset)
+"""
 
 
 #

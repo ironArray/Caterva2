@@ -7,8 +7,6 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import contextlib
-
 # Requirements
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
@@ -20,43 +18,23 @@ import models
 import utils
 
 
-publishers = {}  # name: <Publisher>
-datasets = {}    # name/path: {}
+# TODO Make this info persistent
+roots = {}  # name: <Root>
 
 
-# Rest interface
-async def handle_new(subscription, data):
-    datasets.update(data)
+app = FastAPI()
 
 
-@contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
-    await endpoint.subscribe(['@new'], handle_new)
-    yield
-
-app = FastAPI(lifespan=lifespan)
+@app.get('/api/roots')
+async def get_roots():
+    return roots
 
 
-@app.get('/api/datasets')
-async def get_datasets():
-    return datasets
-
-
-@app.get('/api/publishers')
-async def get_publishers():
-    values = publishers.values()
-    return list(values)
-
-
-@app.get('/api/publishers/{name}')
-async def get_publisher(name: str):
-    return publishers[name].model_dump()
-
-
-@app.post('/api/publishers')
-async def post_publishers(publisher: models.Publisher):
-    publishers[publisher.name] = publisher
-    return publisher
+@app.post('/api/roots')
+async def post_roots(root: models.Root):
+    roots[root.name] = root
+    await endpoint.publish(['@new'], root)
+    return root
 
 # Pub/Sub interface
 router = APIRouter()

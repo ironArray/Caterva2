@@ -173,3 +173,6 @@ def post(url, json):
 #
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
+
+def raise_not_found(detail):
+    raise fastapi.HTTPException(status_code=404, detail=detail)
