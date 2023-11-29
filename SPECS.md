@@ -25,8 +25,8 @@ The client must implement the following commands:
 - `url <root>`: URL for the rest API that serves the root.
 - `info <dataset>`: Get metadata about a dataset.
 - `get <dataset[slice]>`: Get the data of a dataset. `slice` is optional.
-- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a local file. The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
-- `download <dataset>`: Get the *raw* data of a dataset file and save it to a file in the `downloads/` folder.
+- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a local `output` file.
+- `download <dataset>`: Get the *raw* data of a dataset file and save it to a file in the `$HOME/caterva2/downloads/` folder.
 
 ## Client implementation
 
@@ -44,9 +44,9 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 - When an `info` command is issued, the client must send a request to the subscriber to get the metadata of the dataset.  The subscriber will reply with the metadata.  See below for the metadata format.
 
-- When a `get` command is issued, the client must send a request to the subscriber to get the data of the dataset.  The subscriber will reply with the data.
+- When a `get` command is issued, the client must send a request to the subscriber to get the data of the dataset.  The subscriber will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
 
-- When a `download` command is issued, the client must send a request to the subscriber to get the raw data of the dataset.  The subscriber will reply with the raw data and client should be responsible to store it in its local `downloads/` folder.
+- When a `download` command is issued, the client must send a request to the subscriber to get the raw data of the dataset.  The subscriber will reply with the raw data and client should be responsible to store it in its local `$HOME/caterva2/downloads/` folder.
 
 ## Cache management details
 
@@ -54,7 +54,7 @@ Whenever the subscriber gets a request to `subscribe` to a root, it must check i
 
 Metadata can be fetched and consolidated as uninitialized datasets in cache by using the API described in the #metadata section below.
 
-There will be not an internal cache in the `subscriber`, but a folder in the filesystem.  The reason is that files in cached that are accessed frequently will be cached automatically by the OS, so no need to duplicate it (at least initially).  The folder will be called `b2cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
+There will be not an internal cache in the `subscriber`, but a folder in the filesystem.  The reason is that files in cached that are accessed frequently will be cached automatically by the OS, so no need to duplicate it (at least initially).  The folder will be called `$HOME/caterva2/b2cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
 
 Whenever a `get` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
 
@@ -158,3 +158,7 @@ You can find an example of a data root in the `root-example` folder.  It contain
 ## Communication failures
 
 As we will be checking for the validity of the data in the cache (see above), we will be able to implement communication failure handling in a next version.  When validity cannot be checked (broker or publisher are down), the subscriber will just serve its cached data.
+
+## Data transmission
+
+Whenever possible, data should be transmitted in Blosc2 format.
