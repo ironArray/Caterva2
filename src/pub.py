@@ -98,6 +98,13 @@ app = FastAPI(lifespan=lifespan)
 async def get_list():
     return [relpath for path, relpath in utils.walk_files(root)]
 
+@app.get("/api/info/{path:path}")
+async def get_info(path):
+    try:
+        return utils.read_metadata(root / path)
+    except FileNotFoundError:
+        utils.raise_not_found()
+
 
 def download_chunk(chunk):
     # TODO Send block by block

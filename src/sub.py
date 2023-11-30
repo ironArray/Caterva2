@@ -31,7 +31,7 @@ broker = None
 cache = None
 nworkers = 100
 
-# World view, propagated through the broker, with information from the publihsers
+# List of roots in the network
 roots = {} # name: <Root>
 
 subscribed = {} # name/path: <PubSubClient>
@@ -48,39 +48,26 @@ def download_chunk(host, name, nchunk, schunk):
 
 async def worker(queue):
     while True:
-        name = await queue.get()
+        path = await queue.get()
         with utils.log_exception(logger, 'Download failed'):
-            urlpath = cache / name
+            urlpath = cache / path
             urlpath.parent.mkdir(exist_ok=True, parents=True)
 
-            dataset = datasets[name]
-            src, name = name.split('/', 1)
-            host = publishers[src].http
+            root, relpath = path.split('/', 1)
+            host = roots[root].http
 
             suffix = urlpath.suffix
             if suffix == '.b2nd':
-                metadata = models.Metadata(**dataset)
-                try:
-                    array = blosc2.open(str(urlpath))
-                except FileNotFoundError:
-                    utils.init_b2nd(urlpath, metadata)
-                    array = blosc2.open(str(urlpath))
-
-                for nchunk in range(metadata.schunk.nchunks):
-                    download_chunk(host, name, nchunk, array.schunk)
+                array = blosc2.open(str(urlpath))
+                for nchunk in range(array.schunk.nchunks):
+                    download_chunk(host, relpath, nchunk, array.schunk)
             elif suffix == '.b2frame':
-                metadata = models.SChunk(**dataset)
-                try:
-                    schunk = blosc2.open(str(urlpath))
-                except FileNotFoundError:
-                    utils.init_b2frame(urlpath, metadata)
-                    schunk = blosc2.open(str(urlpath))
-
-                for nchunk in range(metadata.nchunks):
-                    download_chunk(host, name, nchunk, schunk)
+                schunk = blosc2.open(str(urlpath))
+                for nchunk in range(schunk.nchunks):
+                    download_chunk(host, relpath, nchunk, schunk)
             else:
                 with urlpath.open('wb') as file:
-                    with httpx.stream('GET', f'http://{host}/api/download/{name}') as resp:
+                    with httpx.stream('GET', f'http://{host}/api/download/{relpath}') as resp:
                         for chunk in resp.iter_bytes():
                             file.write(chunk)
 
@@ -143,38 +130,33 @@ def follow(name: str):
         errors[name] = 'This dataset does not exist in the network'
         return errors
 
+    # Create root directory in the cache
+    rootdir = cache / name
+    if not rootdir.exists():
+        rootdir.mkdir(exist_ok=True)
+
+    # Initialize the datasets in the cache
     data = utils.get(f'http://{root.http}/api/list')
-    for path in data:
-        print(path)
+    for relpath in data:
+        metadata = utils.get(f'http://{root.http}/api/info/{relpath}')
+        abspath = rootdir / relpath
+        if not abspath.exists():
+            suffix = abspath.suffix
+            if suffix == '.b2nd':
+                metadata = models.Metadata(**metadata)
+                utils.init_b2nd(abspath, metadata)
+            elif suffix == '.b2frame':
+                metadata = models.SChunk(**metadata)
+                utils.init_b2frame(abspath, metadata)
+            else:
+                metadata = models.File(**metadata)
+                abspath.touch()
 
-#   # Initialize the dataset in the filesystem (cache)
-#   urlpath = cache / name
-#   if not urlpath.exists():
-#       suffix = urlpath.suffix
-#       dataset = datasets[name]
-#       if suffix == '.b2nd':
-#           metadata = models.Metadata(**dataset)
-#           utils.init_b2nd(urlpath, metadata)
-#       elif suffix == '.b2frame':
-#           metadata = models.SChunk(**dataset)
-#           utils.init_b2frame(urlpath, metadata)
-
-#   # Subscribe to changes in the dataset
-#   if name not in subscribed:
-#       client = utils.start_client(f'ws://{broker}/pubsub')
-#       client.subscribe(name, updated_dataset)
-#       subscribed[name] = client
-
-#   following = database['following']
-#   if name not in following:
-#       following.append(name)
-#       database.save()
-
-#   # Get the publisher hostname and port for later downloading
-#   src = name.split('/', 1)[0]
-#   if src not in publishers:
-#       url = f'http://{broker}/api/publishers/{src}'
-#       publishers[src] = utils.get(url, model=models.Root)
+    # Subscribe to changes in the dataset
+    if name not in subscribed:
+        client = utils.start_client(f'ws://{broker}/pubsub')
+        client.subscribe(name, updated_dataset)
+        subscribed[name] = client
 
 
 #
@@ -220,57 +202,39 @@ app = FastAPI(lifespan=lifespan)
 async def get_roots():
     return sorted(roots)
 
-@app.get('/api/list/{name}')
-async def get_list(name: str):
+def get_root(name):
     root = roots.get(name)
     if root is None:
         utils.raise_not_found(f'{name} not known by the broker')
+
+    return root
+
+@app.get('/api/list/{name}')
+async def get_list(name: str):
+    root = get_root(name)
 
     rootdir = cache / root.name
     if not rootdir.exists():
-        utils.raise_not_found(f'not subscribed to {name}')
+        utils.raise_not_found(f'Not subscribed to {name}')
 
-    for path, relpath in utils.walk_files(rootdir):
-        yield relpath
+    return [relpath for path, relpath in utils.walk_files(rootdir)]
 
-@app.post('/api/subscribe')
+@app.post('/api/subscribe/{name}')
 async def post_subscribe(name: str):
-    root = roots.get(name)
-    if root is None:
-        utils.raise_not_found(f'{name} not known by the broker')
-
+    get_root(name)
     return follow(name)
 
-"""
-@app.get('/api/info')
-async def get_info():
-    info = {}
-
-    for path, relpath in utils.walk_files(cache, exclude={'db.json'}):
-        stat = path.stat()
-        info[relpath] = {'mtime': stat.st_mtime, 'follow': False}
-
-    for path in database['following']:
-        path_info = info.get(path)
-        if path_info is None:
-            info[path] = {'mtime': None, 'follow': True}
-        else:
-            info[path]['follow'] = True
-
-    return info
+@app.get('/api/info/{path:path}')
+async def get_info(path: str):
+    try:
+        return utils.read_metadata(cache / path)
+    except FileNotFoundError:
+        utils.raise_not_found()
 
 
-@app.post('/api/unfollow')
-async def post_unfollow(delete: list[str]):
-    for name in delete:
-        client = subscribed.pop(name, None)
-        await utils.disconnect_client(client)
-
-@app.post("/api/download")
-async def post_download(datasets: list[str]):
-    for dataset in datasets:
-        queue.put_nowait(dataset)
-"""
+@app.get('/api/get/{path:path}')
+async def get_get(path: str):
+    queue.put_nowait(path)
 
 
 #

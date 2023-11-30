@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import pathlib
 
 # Requirements
 import blosc2
@@ -61,6 +62,9 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 def read_metadata(path):
+    if type(path) is str:
+        path = pathlib.Path(path)
+
     suffix = path.suffix
     if suffix == '.b2nd':
         array = blosc2.open(str(path))
@@ -162,7 +166,7 @@ def get(url, params=None, model=None):
     json = response.json()
     return json if model is None else model(**json)
 
-def post(url, json):
+def post(url, json=None):
     response = httpx.post(url, json=json)
     response.raise_for_status()
     return response.json()
@@ -174,5 +178,5 @@ def post(url, json):
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
 
-def raise_not_found(detail):
+def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
