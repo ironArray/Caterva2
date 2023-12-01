@@ -31,7 +31,6 @@ cache = None
 nworkers = 100
 
 # State
-roots = {}       # name: <Root>
 database = None  # <Database> instance
 clients = {}     # topic: <PubSubClient>
 
@@ -53,7 +52,7 @@ async def worker(queue):
             urlpath.parent.mkdir(exist_ok=True, parents=True)
 
             root, relpath = path.split('/', 1)
-            host = roots[root].http
+            host = database.roots[root].http
 
             suffix = urlpath.suffix
             if suffix == '.b2nd':
@@ -76,7 +75,8 @@ async def worker(queue):
 async def new_root(data, topic):
     logger.info(f'NEW root {topic} {data=}')
     root = models.Root(**data)
-    roots[root.name] = root
+    database.roots[root.name] = root
+    database.save()
 
 async def updated_dataset(data, topic):
     logger.info(f'Updated dataset {topic} {data=}')
@@ -87,13 +87,15 @@ async def updated_dataset(data, topic):
 #
 
 def follow(name: str):
-    root = roots.get(name)
+    root = database.roots.get(name)
     if root is None:
         errors = {}
         errors[name] = 'This dataset does not exist in the network'
         return errors
 
-    root.subscribed = True
+    if not root.subscribed:
+        root.subscribed = True
+        database.save()
 
     # Create root directory in the cache
     rootdir = cache / name
@@ -131,44 +133,70 @@ def follow(name: str):
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize roots from the broker
-    data = utils.get(f'http://{broker}/api/roots')
-    for name, data in data.items():
-        root = models.Root(**data)
-        roots[root.name] = root
+    try:
+        data = utils.get(f'http://{broker}/api/roots')
+    except httpx.ConnectError:
+        logger.warning('Broker not available')
+        client = None
+    else:
+        changed = False
+        # Deleted
+        for name, root in database.roots.items():
+            if name not in data:
+                if root.subscribed:
+                    pass # TODO mark the root as stale
+                else:
+                    del database.roots[name]
+                    changed = True
 
-    # Follow the @new channel to know when a new root is added
-    client = utils.start_client(f'ws://{broker}/pubsub')
-    client.subscribe('@new', new_root)
+        # New or updadted
+        for name, data in data.items():
+            root = models.Root(**data)
+            if name not in database.roots:
+                database.roots[root.name] = root
+                changed = True
+            elif database.roots[root.name].http != root.http:
+                database.roots[root.name].http = root.http
+                changed = True
 
-    # Resume following
-    for path in cache.iterdir():
-        if path.is_dir():
-            follow(path.name)
+        if changed:
+            database.save()
 
-    # Start workers
-    tasks = []
-    for i in range(nworkers):
-        task = asyncio.create_task(worker(queue))
-        tasks.append(task)
+
+        # Follow the @new channel to know when a new root is added
+        client = utils.start_client(f'ws://{broker}/pubsub')
+        client.subscribe('@new', new_root)
+
+        # Resume following
+        for path in cache.iterdir():
+            if path.is_dir():
+                follow(path.name)
+
+        # Start workers
+        tasks = []
+        for i in range(nworkers):
+            task = asyncio.create_task(worker(queue))
+            tasks.append(task)
 
     yield
 
     # Disconnect from worker
-    await utils.disconnect_client(client)
+    if client is not None:
+        await utils.disconnect_client(client)
 
-    # Cancel worker tasks
-    for task in tasks:
-        task.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
+        # Cancel worker tasks
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 app = FastAPI(lifespan=lifespan)
 
 @app.get('/api/roots')
 async def get_roots():
-    return roots
+    return database.roots
 
 def get_root(name):
-    root = roots.get(name)
+    root = database.roots.get(name)
     if root is None:
         utils.raise_not_found(f'{name} not known by the broker')
 
@@ -219,7 +247,7 @@ if __name__ == '__main__':
 
     # Init cache and database
     var = pathlib.Path('var/sub').resolve()
-    #database = utils.Database(var / 'db.json', models.Subscriber())
+    database = utils.Database(var / 'db.json', models.Broker(roots={}))
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 

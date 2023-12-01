@@ -205,7 +205,7 @@ class Database:
             self.data = self.model.model_validate(dump)
 
     def save(self):
-        dump = self.data.model_dump_json(exclude_unset=True)
+        dump = self.data.model_dump_json(exclude_none=True)
         with self.path.open('w') as file:
             file.write(dump)
 
