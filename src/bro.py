@@ -7,6 +7,8 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import pathlib
+
 # Requirements
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
@@ -18,21 +20,21 @@ import models
 import utils
 
 
-# TODO Make this info persistent
-roots = {}  # name: <Root>
+# State
+database = None
 
 
+# API
 app = FastAPI()
-
 
 @app.get('/api/roots')
 async def get_roots():
-    return roots
-
+    return database['roots']
 
 @app.post('/api/roots')
 async def post_roots(root: models.Root):
-    roots[root.name] = root
+    database['roots'][root.name] = root
+    database.save()
     await endpoint.publish(['@new'], root)
     return root
 
@@ -45,6 +47,11 @@ app.include_router(router)
 if __name__ == '__main__':
     parser = utils.get_parser(http='localhost:8000')
     args = utils.run_parser(parser)
+
+    # Init database
+    # roots = {name: <Root>}
+    var = pathlib.Path('var/broker').resolve()
+    database = utils.Database(var / 'db.json', default={'roots': {}})
 
     # Run
     host, port = args.http

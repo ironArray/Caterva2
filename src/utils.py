@@ -10,6 +10,7 @@
 import argparse
 import asyncio
 import contextlib
+import json
 import logging
 import pathlib
 
@@ -19,6 +20,7 @@ import fastapi
 import fastapi_websocket_pubsub
 import httpx
 import numpy as np
+import pydantic
 
 # Project
 import models
@@ -180,3 +182,44 @@ def raise_bad_request(detail):
 
 def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
+
+
+#
+# Facility to persist program state
+#
+
+class Database:
+
+    def __init__(self, path, default=None):
+        self.path = path
+        if path.exists():
+            self.load()
+        else:
+            path.parent.mkdir(exist_ok=True, parents=True)
+            self.data = default
+            self.save()
+
+    def load(self):
+        with self.path.open() as file:
+            self.data = json.load(file)
+
+    def save(self):
+        data = self.dump(self.data)
+        with self.path.open('w') as file:
+            json.dump(data, file)
+
+    def dump(self, data):
+        dump = {}
+        for key, value in data.items():
+            if isinstance(value, pydantic.BaseModel):
+                value = value.model_dump()
+            elif isinstance(value, dict):
+                value = self.dump(value)
+            dump[key] = value
+        return dump
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value

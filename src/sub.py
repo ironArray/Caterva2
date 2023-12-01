@@ -8,7 +8,6 @@
 ###############################################################################
 
 import contextlib
-import json
 import logging
 import pathlib
 
@@ -31,10 +30,10 @@ broker = None
 cache = None
 nworkers = 100
 
-# List of roots in the network
-roots = {} # name: <Root>
-
-subscribed = {} # name/path: <PubSubClient>
+# State
+roots = {}       # name: <Root>
+database = None  # <Database> instance
+clients = {}     # topic: <PubSubClient>
 
 queue = asyncio.Queue()
 
@@ -82,42 +81,6 @@ async def new_root(data, topic):
 async def updated_dataset(data, topic):
     logger.info(f'Updated dataset {topic} {data=}')
 
-#
-# The "database" is used to persist the subscriber state, so it survives restarts
-#
-
-database = None
-
-class Database:
-
-    def __init__(self, path):
-        self.path = path
-
-        if path.exists():
-            self.load()
-        else:
-            self.init()
-
-    def init(self):
-        self.data = {
-            'following': [], # List of datasets we are subscribed to
-        }
-        self.save()
-
-    def load(self):
-        with self.path.open() as file:
-            self.data = json.load(file)
-
-    def save(self):
-        with self.path.open('w') as file:
-            json.dump(self.data, file)
-
-    def __getitem__(self, key):
-        return self.data[key]
-
-    def __setitem__(self, key, value):
-        self.data[key] = value
-
 
 #
 # Internal API
@@ -153,10 +116,10 @@ def follow(name: str):
                 abspath.touch()
 
     # Subscribe to changes in the dataset
-    if name not in subscribed:
+    if name not in clients:
         client = utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe(name, updated_dataset)
-        subscribed[name] = client
+        clients[name] = client
 
 
 #
@@ -248,12 +211,11 @@ if __name__ == '__main__':
     # Global configuration
     broker = args.broker
 
-    # Create cache directory
-    cache = pathlib.Path('cache').resolve()
-    cache.mkdir(exist_ok=True)
-
-    # Open or create database file
-    database = Database(cache / 'db.json')
+    # Init cache and database
+    var = pathlib.Path('var/sub').resolve()
+    database = utils.Database(var / 'db.json', default={})
+    cache = var / 'cache'
+    cache.mkdir(exist_ok=True, parents=True)
 
     # Run
     host, port = args.http

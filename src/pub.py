@@ -36,63 +36,61 @@ client = None
 
 async def worker(queue):
     while True:
-        path, change = await queue.get()
+        abspath, change = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
-            subpath = Path(path).relative_to(root)
-            dataset = f'{name}/{subpath}'
-
-            if change == Change.added:
-                if path.is_file():
-                    metadata = utils.read_metadata(path)
-                    metadata = metadata.model_dump()
-                    topic = '@new'
-                    data = {dataset: metadata}
-                    await client.publish([topic], data=data)
-            else:
-                topic = dataset
-                data = {'change': change.name}
-                await client.publish([topic], data=data)
+            if abspath.is_file():
+                relpath = Path(abspath).relative_to(root)
+                metadata = utils.read_metadata(abspath)
+                metadata = metadata.model_dump()
+                data = {'change': change.name, 'path': relpath, 'metadata': metadata}
+                await client.publish(name, data=data)
 
         queue.task_done()
 
 
-async def watchfiles():
-    queue = asyncio.Queue()
-
-    # Start workers
-    tasks = []
-    for i in range(nworkers):
-        task = asyncio.create_task(worker(queue))
-        tasks.append(task)
-
-#   # Notify the broker about available datasets
-#   for path, relpath in utils.walk_files(root):
-#       queue.put_nowait((path, Change.added))
+async def watchfiles(queue):
+    # Notify the network about available datasets
+    # TODO Notify only about changes from previous run, for this purpose we need to
+    # persist state
+    for path, relpath in utils.walk_files(root):
+        queue.put_nowait((path, Change.added))
 
     # Watch directory for changes
     async for changes in awatch(root):
         for change, path in changes:
             queue.put_nowait((path, change))
+    print('THIS SHOULD BE PRINTED ON CTRL+C')
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Connect to broker
+    global client
+    client = utils.start_client(f'ws://{broker}/pubsub')
+
+    # Create queue and start workers
+    queue = asyncio.Queue()
+    tasks = []
+    for i in range(nworkers):
+        task = asyncio.create_task(worker(queue))
+        tasks.append(task)
+
+    # Watch dataset files (must wait before publishing)
+    await client.wait_until_ready()
+    asyncio.create_task(watchfiles(queue))
+
+    yield
 
     # Cancel worker tasks
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
-    print('MAIN EXIT')
 
-
-@contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
-    global client
-    client = utils.start_client(f'ws://{broker}/pubsub')
-    await client.wait_until_ready()  # wait before publishing
-
-    asyncio.create_task(watchfiles())
-    yield
+    # Disconnect from broker
     await utils.disconnect_client(client)
 
-app = FastAPI(lifespan=lifespan)
 
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
