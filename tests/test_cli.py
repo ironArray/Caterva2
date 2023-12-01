@@ -9,7 +9,10 @@ def cli(args):
     return json.loads(ret.stdout)
 
 
-def test_cli_roots():
+def test_roots():
     out = cli(['roots'])
     assert out == ['foo']
-    #assert out == ['foo/precip.b2nd', 'foo/temp.b2nd', 'foo/wind.b2nd']
+
+def test_url():
+    out = cli(['url', 'foo'])
+    assert out == 'localhost:8001'

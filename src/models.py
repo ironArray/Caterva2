@@ -54,6 +54,7 @@ class File(pydantic.BaseModel):
 class Root(pydantic.BaseModel):
     name: str
     http: str
+    subscribed: typing.Optional[bool] = None # Used only by the subscriber program
 
 class Broker(pydantic.BaseModel):
     roots: typing.Dict[str, Root]

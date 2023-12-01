@@ -93,6 +93,8 @@ def follow(name: str):
         errors[name] = 'This dataset does not exist in the network'
         return errors
 
+    root.subscribed = True
+
     # Create root directory in the cache
     rootdir = cache / name
     if not rootdir.exists():
@@ -163,7 +165,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get('/api/roots')
 async def get_roots():
-    return sorted(roots)
+    return roots
 
 def get_root(name):
     root = roots.get(name)
@@ -171,6 +173,11 @@ def get_root(name):
         utils.raise_not_found(f'{name} not known by the broker')
 
     return root
+
+@app.post('/api/subscribe/{name}')
+async def post_subscribe(name: str):
+    get_root(name)
+    return follow(name)
 
 @app.get('/api/list/{name}')
 async def get_list(name: str):
@@ -182,10 +189,9 @@ async def get_list(name: str):
 
     return [relpath for path, relpath in utils.walk_files(rootdir)]
 
-@app.post('/api/subscribe/{name}')
-async def post_subscribe(name: str):
-    get_root(name)
-    return follow(name)
+@app.get('/api/url/{name}')
+async def get_url(name: str):
+    return get_root(name).http
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str):

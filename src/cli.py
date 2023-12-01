@@ -10,6 +10,7 @@
 import json
 
 # Project
+import models
 import utils
 
 
@@ -19,8 +20,12 @@ def cmd_roots(args):
         print(json.dumps(data))
         return
 
-    for item in data:
-        print(item)
+    for name, root in data.items():
+        root = models.Root(**root)
+        if root.subscribed:
+            print(f'{name} (subscribed)')
+        else:
+            print(name)
 
 def cmd_subscribe(args):
     data = utils.post(f'http://{args.host}/api/subscribe/{args.root}')
