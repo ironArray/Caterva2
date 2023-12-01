@@ -20,7 +20,6 @@ import fastapi
 import fastapi_websocket_pubsub
 import httpx
 import numpy as np
-import pydantic
 
 # Project
 import models
@@ -190,36 +189,25 @@ def raise_not_found(detail='Not Found'):
 
 class Database:
 
-    def __init__(self, path, default=None):
+    def __init__(self, path, initial):
         self.path = path
+        self.model = initial.__class__
         if path.exists():
             self.load()
         else:
             path.parent.mkdir(exist_ok=True, parents=True)
-            self.data = default
+            self.data = initial
             self.save()
 
     def load(self):
         with self.path.open() as file:
-            self.data = json.load(file)
+            dump = json.load(file)
+            self.data = self.model.model_validate(dump)
 
     def save(self):
-        data = self.dump(self.data)
+        dump = self.data.model_dump_json()
         with self.path.open('w') as file:
-            json.dump(data, file)
+            file.write(dump)
 
-    def dump(self, data):
-        dump = {}
-        for key, value in data.items():
-            if isinstance(value, pydantic.BaseModel):
-                value = value.model_dump()
-            elif isinstance(value, dict):
-                value = self.dump(value)
-            dump[key] = value
-        return dump
-
-    def __getitem__(self, key):
-        return self.data[key]
-
-    def __setitem__(self, key, value):
-        self.data[key] = value
+    def __getattr__(self, name):
+        return getattr(self.data, name)

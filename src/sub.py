@@ -213,7 +213,7 @@ if __name__ == '__main__':
 
     # Init cache and database
     var = pathlib.Path('var/sub').resolve()
-    database = utils.Database(var / 'db.json', default={})
+    #database = utils.Database(var / 'db.json', models.Subscriber())
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 

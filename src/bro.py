@@ -29,13 +29,14 @@ app = FastAPI()
 
 @app.get('/api/roots')
 async def get_roots():
-    return database['roots']
+    return database.roots
 
 @app.post('/api/roots')
 async def post_roots(root: models.Root):
-    database['roots'][root.name] = root
+    database.roots[root.name] = root
     database.save()
     await endpoint.publish(['@new'], root)
+    print(database.data)
     return root
 
 # Pub/Sub interface
@@ -51,7 +52,8 @@ if __name__ == '__main__':
     # Init database
     # roots = {name: <Root>}
     var = pathlib.Path('var/broker').resolve()
-    database = utils.Database(var / 'db.json', default={'roots': {}})
+    database = utils.Database(var / 'db.json', models.Broker(roots={}))
+    print(database.data)
 
     # Run
     host, port = args.http

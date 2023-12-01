@@ -7,6 +7,9 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import typing
+
+# Requirements
 import blosc2
 import pydantic
 
@@ -51,3 +54,6 @@ class File(pydantic.BaseModel):
 class Root(pydantic.BaseModel):
     name: str
     http: str
+
+class Broker(pydantic.BaseModel):
+    roots: typing.Dict[str, Root]
