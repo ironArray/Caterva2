@@ -35,17 +35,23 @@ Start publishing something in another shell:
 
 ```bash
 mkdir data
-# Copy some Blosc2 files to data/
-python src/pub.py foo data
+# Copy some Blosc2 files to root-example
+python src/pub.py foo root-example
 ```
 
 We have just created a data directory shared via the group `foo`, the datasets within are
 automatically published. For the purpose of this quick start let's say there are 3
-datasets within the `data` folder:
+datasets within the `root-example` folder:
 
 ```bash
-ls data/
-precip.b2nd  temp.b2nd  wind.b2nd
+ls -R root-example/
+dir1/        dir2/        ds-1d.b2nd   ds-hello.b2
+
+root-example//dir1:
+ds-2d.b2nd  ds-3d.b2nd
+
+root-example//dir2:
+ds-4d.b2nd
 ```
 
 Now, let's create a subscriber (in yet another shell):
@@ -60,7 +66,7 @@ Finally, we can use a python script (called `cli.py`) that talks to the subscrib
 It can list all the available datasets:
 
 ```bash
-python src/cli.py list
+python src/cli.py roots
 ```
 
 ```
