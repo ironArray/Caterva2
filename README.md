@@ -30,27 +30,26 @@ Start the broker:
 python src/bro.py
 ```
 
-Start publishing something in another shell:
-
-```bash
-mkdir data
-# Copy some Blosc2 files to root-example
-python src/pub.py foo root-example
-```
-
-We have just created a data directory shared via the group `foo`, the datasets within are
-automatically published. For the purpose of this quick start let's say there are 3
-datasets within the `root-example` folder:
+For the purpose of this quick start, let's use the datasets within the `root-example` folder:
 
 ```bash
 ls -R root-example/
+```
+
+```
 dir1/        dir2/        ds-1d.b2nd   ds-hello.b2
 
-root-example//dir1:
+root-example/dir1:
 ds-2d.b2nd  ds-3d.b2nd
 
-root-example//dir2:
+root-example/dir2:
 ds-4d.b2nd
+```
+
+Start publishing `root-example` in another shell:
+
+```bash
+python src/pub.py foo root-example
 ```
 
 Now, let's create a subscriber (in yet another shell):
@@ -69,28 +68,46 @@ python src/cli.py roots
 ```
 
 ```
-["foo/precip.b2nd", "foo/temp.b2nd", "foo/wind.b2nd"]
+foo
 ```
 
-Ask the subscriber to follow changes in a dataset:
+Ask the subscriber to subscribe to changes in the `foo` root:
 
 ```bash
-python src/cli.py follow foo/precip.b2nd
-python src/cli.py info
+python src/cli.py list foo
 ```
 
 ```
-foo/precip.b2nd
+ds-hello.b2
+ds-1d.b2nd
+dir2/ds-4d.b2nd
+dir1/ds-3d.b2nd
+dir1/ds-2d.b2nd
 ```
 
-We can see how the client has subscribed successfully, and the dataset appears listed in
-the subscriptions.
+[TODO] Prefix the datasets above with the root name.
+
+We can see how the client has subscribed successfully, and the datasets appear listed in the subscriptions.
+
+Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
+
+```bash
+python src/cli.py info foo/dir2/ds-4d.b2nd
+```
+
+```
+{'dtype': 'complex128', 'ndim': 4, 'shape': [2, 3, 4, 5], 'ext_shape': [2, 3, 4, 5], 'chunks': [2, 3, 4, 5], 'ext_chunks': [2, 3, 4, 5], 'blocks': [2, 3, 4, 5], 'blocksize': 1920, 'chunksize': 1920, 'schunk': {'blocksize': 1920, 'cbytes': 0, 'chunkshape': 120, 'chunksize': 1920, 'contiguous': True, 'cparams': {'codec': 5, 'typesize': 16}, 'cratio': 0.0, 'nbytes': 1920, 'typesize': 16, 'urlpath': '/Users/faltet/blosc/Caterva2/var/sub/cache/foo/dir2/ds-4d.b2nd', 'nchunks': 1}, 'size': 1920}
+```
+
+[TODO] Use a more human-readable format for the info (via rich? https://github.com/Textualize/rich).
 
 Finally, tell the subscriber to download the dataset:
 
 ```bash
-python src/cli.py download foo/precip.b2nd
+python src/cli.py download foo/dir2/ds-4d.b2nd
 ```
+
+[TODO] Show where the dataset has been downloaded.
 
 ## Tests
 
@@ -106,10 +123,12 @@ And then the tests can be run:
 pytest -v
 ```
 
+[TODO] Currently getting a `FileNotFoundError: [Errno 2] No such file or directory: './venv/bin/python'` error (using conda here).
+
+
 ## Use with caution
 
-Currently, this projects is just a proof of concept.  In the future, Caterva2 will offer the possibility to publish, and share Blosc2 datasets (and other formats) in different group classes, and accessible from other hosts via TCP/IP and REST interfaces, and using partial caching (with different levels of granularity) when possible.
-
-In case you are interested in this project, please contact us at contact@blosc.org.
+Currently, this project is just a proof of concept.  It is not meant for production use yet.
+In case you are interested in Caterva2, please contact us at contact@blosc.org.
 
 That's all folks!
