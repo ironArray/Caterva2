@@ -3,7 +3,7 @@ import subprocess
 
 
 def cli(args):
-    args = ['./venv/bin/python', './src/cli.py'] + args + ['--json']
+    args = ['python', './src/cli.py'] + args + ['--json']
     ret = subprocess.run(args, capture_output=True, text=True)
     assert ret.returncode == 0
     return json.loads(ret.stdout)
@@ -11,7 +11,7 @@ def cli(args):
 
 def test_roots():
     out = cli(['roots'])
-    assert out == ['foo']
+    assert out == {'foo': {'name': 'foo', 'http': 'localhost:8001', 'subscribed': None}}
 
 def test_url():
     out = cli(['url', 'foo'])

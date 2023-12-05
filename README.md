@@ -91,8 +91,6 @@ dir1/ds-3d.b2nd
 dir1/ds-2d.b2nd
 ```
 
-[TODO] Prefix the datasets above with the root name.
-
 We can see how the client has subscribed successfully, and the datasets appear listed in the subscriptions.
 
 Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
@@ -104,8 +102,6 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
 ```
 {'dtype': 'complex128', 'ndim': 4, 'shape': [2, 3, 4, 5], 'ext_shape': [2, 3, 4, 5], 'chunks': [2, 3, 4, 5], 'ext_chunks': [2, 3, 4, 5], 'blocks': [2, 3, 4, 5], 'blocksize': 1920, 'chunksize': 1920, 'schunk': {'blocksize': 1920, 'cbytes': 0, 'chunkshape': 120, 'chunksize': 1920, 'contiguous': True, 'cparams': {'codec': 5, 'typesize': 16}, 'cratio': 0.0, 'nbytes': 1920, 'typesize': 16, 'urlpath': '/Users/faltet/blosc/Caterva2/var/sub/cache/foo/dir2/ds-4d.b2nd', 'nchunks': 1}, 'size': 1920}
 ```
-
-[TODO] Use a more human-readable format for the info (via rich? https://github.com/Textualize/rich).
 
 Also, get we can ask the url of a root:
 
@@ -140,8 +136,6 @@ And then the tests can be run:
 ```bash
 pytest -v
 ```
-
-[TODO] Currently getting a `FileNotFoundError: [Errno 2] No such file or directory: './venv/bin/python'` error (using conda here).
 
 
 ## Use with caution

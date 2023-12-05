@@ -8,6 +8,7 @@
 ###############################################################################
 
 import pathlib
+import typing
 
 # Requirements
 from fastapi import FastAPI
@@ -27,16 +28,15 @@ database = None
 # API
 app = FastAPI()
 
-@app.get('/api/roots')
-async def get_roots():
+@app.get('/api/roots', response_model_exclude_none=True)
+async def get_roots() -> typing.Dict[str, models.Root]:
     return database.roots
 
 @app.post('/api/roots')
-async def post_roots(root: models.Root):
+async def post_roots(root: models.Root) -> models.Root:
     database.roots[root.name] = root
     database.save()
     await endpoint.publish(['@new'], root)
-    print(database.data)
     return root
 
 # Pub/Sub interface

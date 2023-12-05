@@ -9,6 +9,9 @@
 
 import json
 
+# Requirements
+import rich
+
 # Project
 import models
 import utils
@@ -42,7 +45,7 @@ def cmd_list(args):
         return
 
     for item in data:
-        print(item)
+        print(f'{args.root}/{item}')
 
 def cmd_url(args):
     data = utils.get(f'http://{args.host}/api/url/{args.root}')
@@ -58,7 +61,7 @@ def cmd_info(args):
         print(json.dumps(data))
         return
 
-    print(data)
+    rich.print(data)
 
 def cmd_get(args):
     data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
