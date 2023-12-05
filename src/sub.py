@@ -61,10 +61,10 @@ async def worker(queue):
 
             suffix = urlpath.suffix
             if suffix == '.b2nd':
-                array = blosc2.open(str(urlpath))
+                array = blosc2.open(urlpath)
                 download_schunk(path, array.schunk)
             elif suffix == '.b2frame':
-                schunk = blosc2.open(str(urlpath))
+                schunk = blosc2.open(urlpath)
                 download_schunk(path, schunk)
             else:
                 root, relpath = path.split('/', 1)

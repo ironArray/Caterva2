@@ -32,7 +32,7 @@ import models
 def init_b2nd(urlpath, metadata):
     urlpath.parent.mkdir(exist_ok=True, parents=True)
     dtype = getattr(np, metadata.dtype)
-    blosc2.uninit(metadata.shape, dtype, urlpath=str(urlpath))
+    blosc2.uninit(metadata.shape, dtype, urlpath=urlpath)
 
 def init_b2frame(urlpath, metadata):
     urlpath.parent.mkdir(exist_ok=True, parents=True)
@@ -42,7 +42,7 @@ def init_b2frame(urlpath, metadata):
         contiguous=metadata.contiguous,
         cparams=cparams,
         dparams={},
-        urlpath=str(urlpath),
+        urlpath=urlpath,
     )
 
 def get_model_from_obj(obj, model_class, **kwargs):
@@ -71,7 +71,7 @@ def read_metadata(path):
 
     suffix = path.suffix
     if suffix == '.b2nd':
-        array = blosc2.open(str(path))
+        array = blosc2.open(path)
         #print(f'{array.schunk.dparams=}')
         #print(f'{array.schunk.meta=}')
         #print(f'{array.schunk.vlmeta=}')
@@ -82,7 +82,7 @@ def read_metadata(path):
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
         return get_model_from_obj(array, models.Metadata, schunk=schunk)
     elif suffix == '.b2frame':
-        schunk = blosc2.open(str(path))
+        schunk = blosc2.open(path)
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
     else:

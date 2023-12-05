@@ -122,13 +122,13 @@ async def get_download(name: str, nchunk: int = -1):
     if suffix == '.b2nd':
         if nchunk < 0:
             utils.raise_bad_request('Chunk number required')
-        array = blosc2.open(str(filepath))
+        array = blosc2.open(filepath)
         chunk = array.schunk.get_chunk(nchunk)
         downloader = download_chunk(chunk)
     elif suffix == '.b2frame':
         if nchunk < 0:
             utils.raise_bad_request('Chunk number required')
-        schunk = blosc2.open(str(filepath))
+        schunk = blosc2.open(filepath)
         chunk = schunk.get_chunk(nchunk)
         downloader = download_chunk(chunk)
     else:
