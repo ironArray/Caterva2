@@ -100,7 +100,31 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
 ```
 
 ```
-{'dtype': 'complex128', 'ndim': 4, 'shape': [2, 3, 4, 5], 'ext_shape': [2, 3, 4, 5], 'chunks': [2, 3, 4, 5], 'ext_chunks': [2, 3, 4, 5], 'blocks': [2, 3, 4, 5], 'blocksize': 1920, 'chunksize': 1920, 'schunk': {'blocksize': 1920, 'cbytes': 0, 'chunkshape': 120, 'chunksize': 1920, 'contiguous': True, 'cparams': {'codec': 5, 'typesize': 16}, 'cratio': 0.0, 'nbytes': 1920, 'typesize': 16, 'urlpath': '/Users/faltet/blosc/Caterva2/var/sub/cache/foo/dir2/ds-4d.b2nd', 'nchunks': 1}, 'size': 1920}
+{
+    'dtype': 'complex128',
+    'ndim': 4,
+    'shape': [2, 3, 4, 5],
+    'ext_shape': [2, 3, 4, 5],
+    'chunks': [2, 3, 4, 5],
+    'ext_chunks': [2, 3, 4, 5],
+    'blocks': [2, 3, 4, 5],
+    'blocksize': 1920,
+    'chunksize': 1920,
+    'schunk': {
+        'blocksize': 1920,
+        'cbytes': 0,
+        'chunkshape': 120,
+        'chunksize': 1920,
+        'contiguous': True,
+        'cparams': {'codec': 5, 'typesize': 16},
+        'cratio': 0.0,
+        'nbytes': 1920,
+        'typesize': 16,
+        'urlpath': '/Users/faltet/blosc/Caterva2/var/sub/cache/foo/dir2/ds-4d.b2nd',
+        'nchunks': 1
+    },
+    'size': 1920
+}
 ```
 
 Also, get we can ask the url of a root:
