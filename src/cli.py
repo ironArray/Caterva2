@@ -92,7 +92,7 @@ def cmd_get(args):
         print(json.dumps(data))
         return
 
-    print(data)
+    print(f'{data} %')
 
 @handle_errors
 def cmd_download(args):

@@ -31,26 +31,24 @@ cache = None
 nworkers = 100
 
 # State
-database = None  # <Database> instance
-clients = {}     # topic: <PubSubClient>
+database = None    # <Database> instance
+clients = {}       # topic: <PubSubClient>
+downloads = set()  # Downloads in progress
 
 queue = asyncio.Queue()
 
-def download_schunk(path, schunk):
+async def download_schunk(path, schunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
 
-    database.datasets[path] = models.Dataset(nchunks=0)
-    database.save()
+    client = httpx.AsyncClient()
     for nchunk in range(schunk.nchunks):
-        with httpx.stream('GET', f'http://{host}/api/download/{name}?{nchunk=}') as resp:
+        async with client.stream('GET', f'http://{host}/api/download/{name}?{nchunk=}') as resp:
             buffer = []
-            for chunk in resp.iter_bytes():
+            async for chunk in resp.aiter_bytes():
                 buffer.append(chunk)
             chunk = b''.join(buffer)
             schunk.update_chunk(nchunk, chunk)
-            database.datasets[path].nchunks += 1
-            database.save()
 
 async def worker(queue):
     while True:
@@ -62,10 +60,10 @@ async def worker(queue):
             suffix = urlpath.suffix
             if suffix == '.b2nd':
                 array = blosc2.open(urlpath)
-                download_schunk(path, array.schunk)
+                await download_schunk(path, array.schunk)
             elif suffix == '.b2frame':
                 schunk = blosc2.open(urlpath)
-                download_schunk(path, schunk)
+                await download_schunk(path, schunk)
             else:
                 root, relpath = path.split('/', 1)
                 host = database.roots[root].http
@@ -75,6 +73,7 @@ async def worker(queue):
                             file.write(chunk)
 
         queue.task_done()
+        downloads.remove(path)
 
 
 async def new_root(data, topic):
@@ -236,21 +235,36 @@ async def get_info(path: str):
 
 @app.get('/api/get/{path:path}')
 async def get_get(path: str) -> int:
+    # Not found
     abspath = cache / path
     try:
-        metadata = utils.read_metadata(abspath)
+        utils.read_metadata(abspath)
     except FileNotFoundError:
         utils.raise_not_found()
 
-    # Start download
-    dataset = database.datasets.get(path)
-    if dataset is None:
+    # Done
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        array = blosc2.open(abspath)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        schunk = blosc2.open(abspath)
+    else:
+        raise NotImplementedError()
+
+    total = schunk.nchunks
+    count = sum(1 for info in schunk.iterchunks_info() if info.special != blosc2.SpecialValue.UNINIT)
+    if count == total:
+        return 100
+
+    # Download
+    if path not in downloads:
+        downloads.add(path)
         queue.put_nowait(path)
         return 0
 
     # In progress
-    total = metadata.schunk.nchunks
-    return int((dataset.nchunks / total) * 100)
+    return int((count / total) * 100)
 
 
 #
@@ -266,7 +280,7 @@ if __name__ == '__main__':
 
     # Init cache and database
     var = pathlib.Path('var/sub').resolve()
-    model = models.Subscriber(roots={}, datasets={})
+    model = models.Subscriber(roots={})
     database = utils.Database(var / 'db.json', model)
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)

@@ -63,8 +63,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 def read_metadata(path):
-    if type(path) is str:
-        path = pathlib.Path(path)
+    assert isinstance(path, pathlib.Path)
 
     if not path.is_file():
         raise FileNotFoundError('File does not exist or is a directory')
