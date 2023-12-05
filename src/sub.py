@@ -48,7 +48,7 @@ def download_schunk(path, schunk):
             for chunk in resp.iter_bytes():
                 buffer.append(chunk)
             chunk = b''.join(buffer)
-            schunk.insert_chunk(nchunk, chunk)
+            schunk.update_chunk(nchunk, chunk)
             database.datasets[path].nchunks += 1
             database.save()
 
