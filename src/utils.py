@@ -66,6 +66,9 @@ def read_metadata(path):
     if type(path) is str:
         path = pathlib.Path(path)
 
+    if not path.is_file():
+        raise FileNotFoundError('File does not exist or is a directory')
+
     suffix = path.suffix
     if suffix == '.b2nd':
         array = blosc2.open(str(path))

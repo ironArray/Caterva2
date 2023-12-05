@@ -58,3 +58,10 @@ class Root(pydantic.BaseModel):
 
 class Broker(pydantic.BaseModel):
     roots: typing.Dict[str, Root]
+
+class Dataset(pydantic.BaseModel):
+    nchunks: int
+
+class Subscriber(pydantic.BaseModel):
+    roots: typing.Dict[str, Root]
+    datasets: typing.Dict[str, Dataset]

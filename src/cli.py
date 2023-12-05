@@ -10,6 +10,7 @@
 import json
 
 # Requirements
+import httpx
 import rich
 
 # Project
@@ -17,6 +18,23 @@ import models
 import utils
 
 
+
+def handle_errors(func):
+    def wrapper(*args):
+        try:
+            func(*args)
+        except httpx.HTTPStatusError as error:
+            response = error.response
+            try:
+                error = response.json()['detail']
+            except json.decoder.JSONDecodeError:
+                error = response.text
+            print('Error:', error)
+
+    return wrapper
+
+
+@handle_errors
 def cmd_roots(args):
     data = utils.get(f'http://{args.host}/api/roots')
     if args.json:
@@ -30,6 +48,7 @@ def cmd_roots(args):
         else:
             print(name)
 
+@handle_errors
 def cmd_subscribe(args):
     data = utils.post(f'http://{args.host}/api/subscribe/{args.root}')
     if args.json:
@@ -38,6 +57,7 @@ def cmd_subscribe(args):
 
     print(data)
 
+@handle_errors
 def cmd_list(args):
     data = utils.get(f'http://{args.host}/api/list/{args.root}')
     if args.json:
@@ -47,6 +67,7 @@ def cmd_list(args):
     for item in data:
         print(f'{args.root}/{item}')
 
+@handle_errors
 def cmd_url(args):
     data = utils.get(f'http://{args.host}/api/url/{args.root}')
     if args.json:
@@ -55,6 +76,7 @@ def cmd_url(args):
 
     print(data)
 
+@handle_errors
 def cmd_info(args):
     data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
     if args.json:
@@ -63,6 +85,7 @@ def cmd_info(args):
 
     rich.print(data)
 
+@handle_errors
 def cmd_get(args):
     data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
     if args.json:
@@ -71,6 +94,7 @@ def cmd_get(args):
 
     print(data)
 
+@handle_errors
 def cmd_download(args):
     data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
     if args.json:
@@ -119,14 +143,14 @@ if __name__ == '__main__':
     subparser.set_defaults(func=cmd_info)
 
     # get
-    help = 'Get the data of a dataset.'
+    help = 'Tell the subscriber to fetch a dataset'
     subparser = subparsers.add_parser('get', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset')
     subparser.set_defaults(func=cmd_get)
 
     # download
-    help = 'Get the raw data of a dataset file and save it'
+    help = 'Download a dataset and save it in the local system'
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset')

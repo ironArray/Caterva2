@@ -36,13 +36,21 @@ clients = {}     # topic: <PubSubClient>
 
 queue = asyncio.Queue()
 
-def download_chunk(host, name, nchunk, schunk):
-    with httpx.stream('GET', f'http://{host}/api/download/{name}?{nchunk=}') as resp:
-        buffer = []
-        for chunk in resp.iter_bytes():
-            buffer.append(chunk)
-        chunk = b''.join(buffer)
-        schunk.insert_chunk(nchunk, chunk)
+def download_schunk(path, schunk):
+    root, name = path.split('/', 1)
+    host = database.roots[root].http
+
+    database.datasets[path] = models.Dataset(nchunks=0)
+    database.save()
+    for nchunk in range(schunk.nchunks):
+        with httpx.stream('GET', f'http://{host}/api/download/{name}?{nchunk=}') as resp:
+            buffer = []
+            for chunk in resp.iter_bytes():
+                buffer.append(chunk)
+            chunk = b''.join(buffer)
+            schunk.insert_chunk(nchunk, chunk)
+            database.datasets[path].nchunks += 1
+            database.save()
 
 async def worker(queue):
     while True:
@@ -51,19 +59,16 @@ async def worker(queue):
             urlpath = cache / path
             urlpath.parent.mkdir(exist_ok=True, parents=True)
 
-            root, relpath = path.split('/', 1)
-            host = database.roots[root].http
-
             suffix = urlpath.suffix
             if suffix == '.b2nd':
                 array = blosc2.open(str(urlpath))
-                for nchunk in range(array.schunk.nchunks):
-                    download_chunk(host, relpath, nchunk, array.schunk)
+                download_schunk(path, array.schunk)
             elif suffix == '.b2frame':
                 schunk = blosc2.open(str(urlpath))
-                for nchunk in range(schunk.nchunks):
-                    download_chunk(host, relpath, nchunk, schunk)
+                download_schunk(path, schunk)
             else:
+                root, relpath = path.split('/', 1)
+                host = database.roots[root].http
                 with urlpath.open('wb') as file:
                     with httpx.stream('GET', f'http://{host}/api/download/{relpath}') as resp:
                         for chunk in resp.iter_bytes():
@@ -230,8 +235,22 @@ async def get_info(path: str):
 
 
 @app.get('/api/get/{path:path}')
-async def get_get(path: str):
-    queue.put_nowait(path)
+async def get_get(path: str) -> int:
+    abspath = cache / path
+    try:
+        metadata = utils.read_metadata(abspath)
+    except FileNotFoundError:
+        utils.raise_not_found()
+
+    # Start download
+    dataset = database.datasets.get(path)
+    if dataset is None:
+        queue.put_nowait(path)
+        return 0
+
+    # In progress
+    total = metadata.schunk.nchunks
+    return int((dataset.nchunks / total) * 100)
 
 
 #
@@ -247,7 +266,8 @@ if __name__ == '__main__':
 
     # Init cache and database
     var = pathlib.Path('var/sub').resolve()
-    database = utils.Database(var / 'db.json', models.Broker(roots={}))
+    model = models.Subscriber(roots={}, datasets={})
+    database = utils.Database(var / 'db.json', model)
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 
