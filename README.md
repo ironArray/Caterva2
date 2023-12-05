@@ -74,6 +74,12 @@ foo
 Ask the subscriber to subscribe to changes in the `foo` root:
 
 ```bash
+python src/cli.py subscribe foo
+```
+
+Now, one can list the datasets in the `foo` root:
+
+```bash
 python src/cli.py list foo
 ```
 
@@ -100,6 +106,18 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
 ```
 
 [TODO] Use a more human-readable format for the info (via rich? https://github.com/Textualize/rich).
+
+Also, get we can ask the url of a root:
+
+```bash
+python src/cli.py url foo
+```
+
+```
+http://localhost:8001
+```
+
+[TODO] Allow to specify a path to a dataset in the url command.
 
 Finally, tell the subscriber to download the dataset:
 
