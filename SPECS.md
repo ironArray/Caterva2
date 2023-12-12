@@ -186,3 +186,15 @@ Out[5]: True
 ```
 
 For the time being, `.b2` files can be made in one shot (i.e. a single `schunk.append_data()` call), but in a next version we should be able to compress files larger than available memory by using a chunked algorithm (i.e. reading and writing chunk-by-chunk).
+
+## Internal database
+
+There will be an internal database for publishers and subscribers for storing different metdata.  It will be a JSON file called `$(cwd)/caterva2/db.json` and it will contain the following fields (J. David: please check this):
+
+* `version`: The version of the database.
+* `roots`: A list of roots.  Each root is a dictionary with the following fields:
+  * `name`: The name of the root.
+  * `mtime`: The modification time of the root in the publisher.
+  * `datasets`: A list of datasets.  Each dataset is a dictionary with the following fields:
+    * `path`: The path of the dataset.
+    * `mtime`: The modification time of the dataset in the publisher.
