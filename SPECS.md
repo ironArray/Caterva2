@@ -160,7 +160,15 @@ You can find an example of a data root in the `root-example` folder.  It contain
 
 ## Communication failures
 
-As we will be checking for the validity of the data in the cache (see above), we will be able to implement communication failure handling in a next version.  When validity cannot be checked (broker or publisher are down), the subscriber will just serve its cached data.
+As we will be checking for the validity of the data in the cache (see above), we will be able to implement communication failure handling in a next version. For the time being, we will just assume that the communication is always successful, but we can start thinking on actions to be done when something fails.
+
+This is a list of possible actions:
+
+* When a subscriber sends a command to the publisher, it will wait for a reply.  If the reply is not received in a certain amount of time, the subscriber will just serve its cached data.  If there is no cached data, print an error message and exit.
+
+* When a client sends a command to the subscriber, it will wait for a reply.  If the reply is not received in a certain amount of time, the client will print an error message and exit.
+
+TODO: think about other situations.
 
 ## Data transmission
 
