@@ -24,9 +24,8 @@ The client must implement the following commands:
 - `list <root>`: List all the available datasets in a root.  Needs to be subscribed to the root.
 - `url <root>`: URL for the rest API that serves the root.
 - `info <dataset>`: Get metadata about a dataset.
-- `get <dataset[slice]>`: Get the data of a dataset. `slice` is optional.
-- `get <dataset[slice]> <output>`: Get the data of a dataset and save it to a local `output` file.
-- `download <dataset>`: Get the *raw* data of a dataset file and save it to a file in the `$HOME/caterva2/downloads/` folder.
+- `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
+- `download <dataset[slice]> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder. `slice` is optional.
 
 ## Client implementation
 
@@ -44,9 +43,9 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 - When an `info` command is issued, the client must send a request to the subscriber to get the metadata of the dataset.  The subscriber will reply with the metadata.  See below for the metadata format.
 
-- When a `get` command is issued, the client must send a request to the subscriber to get the data of the dataset.  The subscriber will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 and `.npy` for Numpy.
+- When a `show` command is issued, the client must send a request to the subscriber to show the data of the dataset.  The subscriber will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 NDim and `.b2frame` for Blosc2 frames.  All other extensions will be delivered as raw data (e.g. foo/path/README.txt will be shown as-is).
 
-- When a `download` command is issued, the client must send a request to the subscriber to get the raw data of the dataset.  The subscriber will reply with the raw data and client should be responsible to store it in its local `$HOME/caterva2/downloads/` folder.
+- When a `download` command is issued, the client must send a request to the subscriber to store the data of the dataset.  The subscriber will reply with the data and client should be responsible to store it in its local `<output_dir>` folder.
 
 ## Cache management details
 
@@ -54,12 +53,13 @@ Whenever the subscriber gets a request to `subscribe` to a root, it must check i
 
 Metadata can be fetched and consolidated as uninitialized datasets in cache by using the API described in the #metadata section below.
 
-There will be not an internal cache in the `subscriber`, but a folder in the filesystem.  The reason is that files in cached that are accessed frequently will be cached automatically by the OS, so no need to duplicate it (at least initially).  The folder will be called `$HOME/caterva2/b2cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
+There will be not an in-memory cache in the `subscriber`, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so no need to duplicate it (at least initially).  The folder will be called `$(cwd)/caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
 
-Whenever a `get` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
+When a publisher has to serve a data file that is not in Blosc2 format (e.g. a text file), it will be compressed locally (initially in one go with the technique shown in [section "Compressing general files"](#compressing-general-files)), and stored in `$(cwd)/caterva2/cache/`. The file will be named `$(dataset_path).b2` (e.g. `foo/bar.txt` will be stored as `foo/bar.txt.b2`).  The publisher will serve the data in cache as-is, without decompressing it. The subscriber will store the data as-is too, and the client will be responsible to decompress it (it will receive a blosc2 frame than can be opened with `blosc2.open()` and data can be retrieved using slicing).
 
-In the first implementation, `get` commands will make the subscriber download the whole data from publisher. In a next version, subscriber will download only the chunks in `[slice]` that are not in cache.
+Whenever a `show` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher; for this, it will ask the publisher for the `mtime` in the file, and compare it against the `mtime` field in the general JSON database.  If it has changed, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
 
+In the first implementation, `show` commands will make the subscriber download the whole data from publisher and store it in its cache folder. In a next version, subscriber will download only the chunks in `[slice]` that are not in cache.
 
 ## Metadata
 
@@ -92,7 +92,7 @@ Out[16]:
   'filters_meta': [0, 0, 0, 0, 0, 0]}}
 ```
 
-For `.b2frame`, or `.b2` for short (the latter is preferred), files (SChunk instances), `meta` is a dictionary with the following fields:
+For `.b2frame`, or `.b2` for short (the latter is preferred for generic files), files (SChunk instances), `meta` is a dictionary with the following fields:
 
 ```
 In [17]: c = blosc2.SChunk(chunksize=100)
@@ -119,7 +119,7 @@ Out[19]:
   'filters_meta': [0, 0, 0, 0, 0, 0]}}
 ```
 
-- `vlmeta`: The so-called variable length metadata (aka user metadata).  This is the same for both `.b2nd` and `.b2` files. E.g.:
+- `vlmeta`: The so-called variable length metadata (aka user metadata).  This is the same for both `.b2nd` and `.b2frame` files. E.g.:
 
 ```
 In [20]: b.schunk.vlmeta['new_meta'] = "my data"
@@ -131,9 +131,11 @@ Out[21]: {'new_meta': 'my data'}
 
 You can find an example of a data root in the `root-example` folder.  It contains 4 (small) datasets:
 
-- `ds-hello.b2`: A SChunk containing a data buffer.  Constructed as:
+- ``root-example/README.md``: A text file.
 
-      blosc2.SChunk(chunksize=100, data=b"Hello world!"*100, urlpath="ds-hello.b2", mode="w")
+- `ds-hello.b2frame`: A SChunk containing a data buffer.  Constructed as:
+
+      blosc2.SChunk(chunksize=100, data=b"Hello world!"*100, urlpath="ds-hello.b2frame", mode="w")
 
 - `ds-1d.b2nd`: A 1D array (int64). Constructed as:
 
@@ -161,4 +163,25 @@ As we will be checking for the validity of the data in the cache (see above), we
 
 ## Data transmission
 
-Whenever possible, data should be transmitted in Blosc2 format.
+Whenever possible, data should be transmitted in [Blosc2 frame format](https://github.com/Blosc/c-blosc2/blob/main/README_CFRAME_FORMAT.rst).
+
+## Compressing general files
+
+For compressing general files, you can use the `blosc2.compress2()` function.  E.g.:
+
+```
+In [1]: text = open("root-example/README.md", mode="rb").read()
+
+In [2]: import blosc2
+
+In [3]: schunk = blosc2.SChunk(urlpath="root-example/README.md.b2", mode="w")
+
+In [4]: schunk.append_data(text)
+Out[4]: 1
+
+In [5]: text == blosc2.open("root-example/README.md.b2")[:]
+Out[5]: True
+
+```
+
+For the time being, compression will be done in one chunk (max 2 GB), but in a next version we will be able to compress files larger than 2GB by using several chunks.
