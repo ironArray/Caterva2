@@ -202,7 +202,13 @@ There will be an internal database for publishers and subscribers for storing di
 * `version`: The version of the database.
 * `roots`: A list of roots.  Each root is a dictionary with the following fields:
   * `name`: The name of the root.
+  * `url`: The url where the root is accessible (e.g. `http://localhost:5000/foo`).
+  * `subscribed`: A boolean indicating if the root is subscribed.
   * `mtime`: The modification time of the root in the publisher.
   * `datasets`: A list of datasets.  Each dataset is a dictionary with the following fields:
     * `path`: The path of the dataset.
     * `mtime`: The modification time of the dataset in the publisher.
+    * `meta`: The metadata of the dataset.
+    * `vlmeta`: The variable length metadata of the dataset.
+
+The ``meta`` and ``vlmeta`` fields above are the same as described in the [Metadata](#metadata) section above. They are purely informational at this point, but they will be used in a next version for searching and filtering datasets ([TinyDB](https://tinydb.readthedocs.io/en/latest/) can be used for this).
