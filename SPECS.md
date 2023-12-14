@@ -168,6 +168,8 @@ This is a list of possible actions:
 
 * When a subscriber sends a command to the publisher, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the subscriber will just serve its cached data to the client.  In the latter case, if there is no cached data, it will return an error message instead.
 
+* As a particular case of the former, when the client requests data from the subscriber using `show` or `download`, the subscriber should first get and store locally all the data from the publisher needed to fulfill the client's request.  If the transfer of any piece of data fails, the subscriber should return an error message before starting the transfer of data to the client.
+
 * When a client sends a command to the subscriber, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the client will print an error message and exit.
 
 * When a subscriber needs to update its database and cache for a given root, if the communication fails or a reply from the publisher is not received in a certain amount of time, or there is some other local problem (like lack of storage space), since the update should be atomic, the temporary data should be discarded and the cached one used according to the previous points.
