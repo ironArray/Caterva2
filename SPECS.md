@@ -164,7 +164,9 @@ As we will be checking for the validity of the data in the cache (see above), we
 
 This is a list of possible actions:
 
-* When a subscriber sends a command to the publisher, it will wait for a reply.  If the reply is not received in a certain amount of time, the subscriber will just serve its cached data.  If there is no cached data, print an error message and exit.
+* When a subscriber sends a command to the publisher, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the subscriber will just serve its cached data to the client.  In the latter case, if there is no cached data, it will return an error message instead.
+
+* When a client sends a command to the subscriber, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the client will print an error message and exit.
 
 * When a client sends a command to the subscriber, it will wait for a reply.  If the reply is not received in a certain amount of time, the client will print an error message and exit.
 
