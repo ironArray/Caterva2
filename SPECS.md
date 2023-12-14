@@ -54,6 +54,8 @@ Metadata can be fetched and consolidated as uninitialized datasets in cache by u
 
 There will be not an in-memory cache in the subscriber, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so there is no need to duplicate it (at least initially).  The folder will be called `$(cwd)/caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
 
+Updates to the cache for a given root should happen in an atomic fashion.  The subscriber should get and store all new required information in a temporary location of the same device where the current database and cache are located, and only once the storage operation is complete shall it replace the old data.
+
 When a publisher has to serve a data file that is not in Blosc2 format (e.g. a text file), it will be compressed locally (initially in one go with the technique shown in [section "Compressing general files"](#compressing-general-files)), and stored in `$(cwd)/caterva2/cache/`. The file will be named `$(dataset_path).b2` (e.g. `foo/bar.txt` will be stored as `$(cwd)/caterva2/cache/foo/bar.txt.b2`).
 
 The publisher will serve the data in its own cache as-is, without decompressing it. The subscriber will store and send the data as-is too, and only the client will be responsible to decompress it (it will receive a Blosc2 frame than can be opened with `blosc2.open()` and data can be retrieved using slicing).
@@ -168,7 +170,7 @@ This is a list of possible actions:
 
 * When a client sends a command to the subscriber, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the client will print an error message and exit.
 
-* When a client sends a command to the subscriber, it will wait for a reply.  If the reply is not received in a certain amount of time, the client will print an error message and exit.
+* When a subscriber needs to update its database and cache for a given root, if the communication fails or a reply from the publisher is not received in a certain amount of time, or there is some other local problem (like lack of storage space), since the update should be atomic, the temporary data should be discarded and the cached one used according to the previous points.
 
 TODO: think about other situations.
 
