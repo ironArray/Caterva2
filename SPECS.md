@@ -21,7 +21,7 @@ The client must implement the following commands:
 - `roots`: List all the available roots in a broker.
 - `subscribe <root>`: Request access to the datasets in a root.
 - `list <root>`: List all the available datasets in a root.  Needs to be subscribed to the root.
-- `url <root>`: URL for the rest API that serves the root.
+- `url <root>`: Publisher URL for the REST API that serves the root.
 - `info <dataset>`: Get metadata about a dataset.
 - `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
 - `download <dataset[slice]> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder. `slice` is optional.
@@ -34,17 +34,17 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 - When a `roots` command is issued, the client must send a request to the subscriber to list all the available roots.  The subscriber will reply with a list of roots (if possible, with flags indicating if a root is subscribed).
 
-- When a `subscribe` command is issued, the client must send a request to the subscriber to subscribe to the given root.  The subscriber will reply with a success or failure message.  If successful, the client must store the root metadata in its local cache.
+- When a `subscribe` command is issued, the client must send a request to the subscriber to subscribe to the given root.  The subscriber will reply with a success or failure message.  If successful, the subscriber must store the root metadata in its local cache.
 
 - When a `list` command is issued, the client must send a request to the subscriber to list the datasets in the given root.  The subscriber will reply with a list of datasets.
 
-- When a `url` command is issued, the client must send a request to the subscriber to get the URL of the API rest of the root.  The subscriber will reply with the URL.
+- When a `url` command is issued, the client must send a request to the subscriber to get the URL of the REST API of the root.  The subscriber will reply with the URL.
 
 - When an `info` command is issued, the client must send a request to the subscriber to get the metadata of the given dataset.  The subscriber will reply with the [metadata](#metadata).  See below for the [metadata](#metadata) format.
 
 - When a `show` command is issued, the client must send a request to the subscriber to retrieve the data of the given dataset.  The subscriber will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 NDim and `.b2frame` for Blosc2 frames; an n-dim NumPy array and a 1-dim NumPy array will be shown respectively.  All other extensions will be delivered as a raw buffer (e.g. `foo/path/README.md` will be shown as text).
 
-- When a `download` command is issued, the client must send a request to the subscriber to retrieve the data of the dataset.  The subscriber will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`). If a slice is provided, it will store the slice of the dataset (e.g. `foo/bar.b2nd[10:20]` will be stored as `<output_dir>/foo/bar.b2nd[10:20]`). TODO: see if this format is supported on Windows.
+- When a `download` command is issued, the client must send a request to the subscriber to retrieve the data of the dataset.  The subscriber will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`). If a slice is provided, it will store the slice of the dataset (e.g. `foo/bar.b2nd[10:20]` will be stored as `<output_dir>/foo/bar[10:20].b2nd`). TODO: see if this format is supported on Windows.
 
 ## Cache management details
 
@@ -52,15 +52,15 @@ Whenever the subscriber gets a request to `subscribe` to a root, it must check i
 
 Metadata can be fetched and consolidated as uninitialized datasets in cache by using the API described in the [Metadata](#metadata) section below.
 
-There will be not an in-memory cache in the `subscriber`, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so there is no need to duplicate it (at least initially).  The folder will be called `$(cwd)/caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
+There will be not an in-memory cache in the subscriber, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so there is no need to duplicate it (at least initially).  The folder will be called `$(cwd)/caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
 
 When a publisher has to serve a data file that is not in Blosc2 format (e.g. a text file), it will be compressed locally (initially in one go with the technique shown in [section "Compressing general files"](#compressing-general-files)), and stored in `$(cwd)/caterva2/cache/`. The file will be named `$(dataset_path).b2` (e.g. `foo/bar.txt` will be stored as `$(cwd)/caterva2/cache/foo/bar.txt.b2`).
 
 The publisher will serve the data in its own cache as-is, without decompressing it. The subscriber will store and send the data as-is too, and only the client will be responsible to decompress it (it will receive a Blosc2 frame than can be opened with `blosc2.open()` and data can be retrieved using slicing).
 
-Whenever a `show` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher; for this, it will ask the publisher for the `mtime` in the dataset, and compare it against the `mtime` field in the general JSON database.  If it has changed, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
+Whenever a `show` or `download` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher; for this, it will ask the publisher for the `mtime` in the dataset, and compare it against the `mtime` field in the general JSON database.  If it has changed, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
 
-In the first implementation, `show` commands will make the subscriber download the whole data from publisher and store it in its cache folder. In a next version, subscriber will download only the chunks in `[slice]` that are not in cache.
+In the first implementation, `show` or `download` commands will make the subscriber download the whole data from publisher and store it in its cache folder. In a next version, subscriber will download only the chunks in `[slice]` that are not in cache.
 
 ## Metadata
 
@@ -202,7 +202,7 @@ There will be an internal database for publishers and subscribers for storing di
 * `version`: The version of the database.
 * `roots`: A list of roots.  Each root is a dictionary with the following fields:
   * `name`: The name of the root.
-  * `url`: The URL where the root is accessible (e.g. `http://localhost:5000/foo`).
+  * `url`: The publisher URL where the root is accessible (e.g. `http://localhost:5000/foo`).
   * `subscribed`: A boolean indicating if the root is subscribed.
   * `mtime`: The modification time of the root in the publisher.
   * `datasets`: A list of datasets.  Each dataset is a dictionary with the following fields:
