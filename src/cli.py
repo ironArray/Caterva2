@@ -18,7 +18,6 @@ import models
 import utils
 
 
-
 def handle_errors(func):
     def wrapper(*args):
         try:
@@ -86,13 +85,28 @@ def cmd_info(args):
     rich.print(data)
 
 @handle_errors
-def cmd_get(args):
-    data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
+def cmd_fetch(args):
+    data = utils.get(f'http://{args.host}/api/aget/{args.dataset}')
     if args.json:
         print(json.dumps(data))
         return
 
     print(f'{data} %')
+
+@handle_errors
+def cmd_show(args):
+    data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
+    nchunks = data['schunk']['nchunks']
+
+    client = httpx.AsyncClient()
+    for nchunk in range(nchunks):
+        url = f'http://{args.host}/api/download/{args.dataset}?{nchunk=}'
+        async with client.stream('GET', url) as resp:
+            buffer = []
+            async for chunk in resp.aiter_bytes():
+                buffer.append(chunk)
+            chunk = b''.join(buffer)
+            schunk.update_chunk(nchunk, chunk)
 
 @handle_errors
 def cmd_download(args):
@@ -142,12 +156,19 @@ if __name__ == '__main__':
     subparser.add_argument('dataset')
     subparser.set_defaults(func=cmd_info)
 
-    # get
+    # fetch
     help = 'Tell the subscriber to fetch a dataset'
-    subparser = subparsers.add_parser('get', help=help)
+    subparser = subparsers.add_parser('fetch', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset')
-    subparser.set_defaults(func=cmd_get)
+    subparser.set_defaults(func=cmd_fetch)
+
+    # show
+    help = 'Display a dataset'
+    subparser = subparsers.add_parser('show', help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.add_argument('dataset')
+    subparser.set_defaults(func=cmd_show)
 
     # download
     help = 'Download a dataset and save it in the local system'

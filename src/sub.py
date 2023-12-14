@@ -14,7 +14,7 @@ import pathlib
 # Requirements
 import asyncio
 import blosc2
-from fastapi import FastAPI
+from fastapi import FastAPI, responses
 import httpx
 import uvicorn
 
@@ -43,7 +43,8 @@ async def download_schunk(path, schunk):
 
     client = httpx.AsyncClient()
     for nchunk in range(schunk.nchunks):
-        async with client.stream('GET', f'http://{host}/api/download/{name}?{nchunk=}') as resp:
+        url = f'http://{host}/api/download/{name}?{nchunk=}'
+        async with client.stream('GET', url) as resp:
             buffer = []
             async for chunk in resp.aiter_bytes():
                 buffer.append(chunk)
@@ -265,6 +266,41 @@ async def get_get(path: str) -> int:
 
     # In progress
     return int((count / total) * 100)
+
+
+@app.get('/api/download/{path:path}')
+async def get_download(path: str, nchunk: int = -1):
+    # Not found
+    abspath = cache / path
+    try:
+        utils.read_metadata(abspath)
+    except FileNotFoundError:
+        utils.raise_not_found()
+
+    # Done
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        array = blosc2.open(abspath)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        schunk = blosc2.open(abspath)
+    else:
+        raise NotImplementedError()
+
+    # Fetch from publisher
+    if not utils.chunk_is_available(schunk, nchunk) and path not in downloads:
+        downloads.add(path)
+        queue.put_nowait(path)
+        await asyncio.sleep(2)
+
+    # Wait until the chunk is available (TODO timeout)
+    while not utils.chunk_is_available(schunk, nchunk):
+        await asyncio.sleep(1)
+
+    # Download
+    chunk = schunk.get_chunk(nchunk)
+    downloader = utils.download_chunk(chunk)
+    return responses.StreamingResponse(downloader)
 
 
 #

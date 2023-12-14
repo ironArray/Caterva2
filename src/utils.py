@@ -45,6 +45,14 @@ def init_b2frame(urlpath, metadata):
         urlpath=urlpath,
     )
 
+def chunk_is_available(schunk, nchunk):
+    flag = (schunk.get_chunk(nchunk)[31] & 0b01110000) >> 4
+    return flag != blosc2.SpecialValue.UNINIT.value
+
+def iterchunk(chunk):
+    # TODO Yield block by block
+    yield chunk
+
 def get_model_from_obj(obj, model_class, **kwargs):
     if type(obj) is dict:
         getter = lambda o, k: o[k]

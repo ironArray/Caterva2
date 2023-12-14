@@ -104,11 +104,6 @@ async def get_info(path):
         utils.raise_not_found()
 
 
-def download_chunk(chunk):
-    # TODO Send block by block
-    yield chunk
-
-
 def download_file(filepath):
     with open(filepath, 'rb') as file:
         yield from file
@@ -124,13 +119,13 @@ async def get_download(name: str, nchunk: int = -1):
             utils.raise_bad_request('Chunk number required')
         array = blosc2.open(filepath)
         chunk = array.schunk.get_chunk(nchunk)
-        downloader = download_chunk(chunk)
+        downloader = utils.iterchunk(chunk)
     elif suffix == '.b2frame':
         if nchunk < 0:
             utils.raise_bad_request('Chunk number required')
         schunk = blosc2.open(filepath)
         chunk = schunk.get_chunk(nchunk)
-        downloader = download_chunk(chunk)
+        downloader = utils.iterchunk(chunk)
     else:
         if nchunk >= 0:
             utils.raise_bad_request('Regular files don\'t have chunks')
