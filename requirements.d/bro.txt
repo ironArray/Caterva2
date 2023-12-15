@@ -1,0 +1,2 @@
+fastapi_websocket_pubsub
+uvicorn

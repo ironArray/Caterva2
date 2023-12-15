@@ -1,10 +1,4 @@
-blosc2>=2.3.2
-fastapi_websocket_pubsub
-httpx
-uvicorn
-
-# Publisher
-watchfiles
-
-# cli
-rich
+-r requirements.d/bro.txt
+-r requirements.d/pub.txt
+-r requirements.d/sub.txt
+-r requirements.d/cli.txt

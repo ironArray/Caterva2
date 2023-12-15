@@ -116,10 +116,10 @@ def follow(name: str):
             suffix = abspath.suffix
             if suffix == '.b2nd':
                 metadata = models.Metadata(**metadata)
-                utils.init_b2nd(abspath, metadata)
+                utils.init_b2nd(metadata, abspath)
             elif suffix == '.b2frame':
                 metadata = models.SChunk(**metadata)
-                utils.init_b2frame(abspath, metadata)
+                utils.init_b2frame(metadata, abspath)
             else:
                 metadata = models.File(**metadata)
                 abspath.touch()

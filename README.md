@@ -152,7 +152,7 @@ python src/cli.py download foo/dir2/ds-4d.b2nd
 To run the test suite first some more requirements must be installed:
 
 ```bash
-pip install -r requirements-test.txt
+pip install -r requirements.d/test.txt
 ```
 
 And then the tests can be run:

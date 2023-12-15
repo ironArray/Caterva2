@@ -1,0 +1,4 @@
+blosc2>=2.3.2
+fastapi_websocket_pubsub
+httpx
+uvicorn

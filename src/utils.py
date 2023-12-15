@@ -29,15 +29,17 @@ import models
 # Blosc2 related functions
 #
 
-def init_b2nd(urlpath, metadata):
-    urlpath.parent.mkdir(exist_ok=True, parents=True)
+def init_b2nd(metadata, urlpath=None):
+    if urlpath is not None:
+        urlpath.parent.mkdir(exist_ok=True, parents=True)
     dtype = getattr(np, metadata.dtype)
-    blosc2.uninit(metadata.shape, dtype, urlpath=urlpath)
+    return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath)
 
-def init_b2frame(urlpath, metadata):
-    urlpath.parent.mkdir(exist_ok=True, parents=True)
+def init_b2frame(metadata, urlpath=None):
+    if urlpath is not None:
+        urlpath.parent.mkdir(exist_ok=True, parents=True)
     cparams = metadata.cparams.model_dump()
-    blosc2.SChunk(
+    return blosc2.SChunk(
         metadata.chunksize,
         contiguous=metadata.contiguous,
         cparams=cparams,

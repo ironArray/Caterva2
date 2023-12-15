@@ -8,10 +8,12 @@
 ###############################################################################
 
 import json
+import pathlib
 
 # Requirements
 import httpx
 import rich
+import tqdm
 
 # Project
 import models
@@ -98,7 +100,19 @@ def cmd_show(args):
     data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
     nchunks = data['schunk']['nchunks']
 
-    for nchunk in range(nchunks):
+    abspath = pathlib.Path(args.dataset)
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**data)
+        array = utils.init_b2nd(metadata)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**data)
+        schunk = utils.init_b2frame(metadata)
+    else:
+        raise NotImplementedError()
+
+    for nchunk in tqdm.tqdm(range(nchunks)):
         url = f'http://{args.host}/api/download/{args.dataset}?{nchunk=}'
         with httpx.stream('GET', url) as resp:
             buffer = []
@@ -106,6 +120,13 @@ def cmd_show(args):
                 buffer.append(chunk)
             chunk = b''.join(buffer)
             schunk.update_chunk(nchunk, chunk)
+
+    if suffix == '.b2nd':
+        print(array)
+    elif suffix == '.b2frame':
+        print(schunk)
+    else:
+        raise NotImplementedError()
 
 @handle_errors
 def cmd_download(args):
