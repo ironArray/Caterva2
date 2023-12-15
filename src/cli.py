@@ -38,10 +38,12 @@ def handle_errors(func):
 def dataset_with_slice(dataset):
     match = re.match('(.*)\[(.*)\]', dataset)
     if match is None:
-        return dataset, None
+        params = {}
     else:
         dataset, slice = match.groups()
-        return dataset, {'slice': slice}
+        params = {'slice': slice}
+
+    return pathlib.Path(dataset), params
 
 def url_with_slice(url, slice):
     if slice is not None:
@@ -104,22 +106,12 @@ def cmd_info(args):
     rich.print(data)
 
 @handle_errors
-def cmd_fetch(args):
-    data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
-    if args.json:
-        print(json.dumps(data))
-        return
-
-    print(f'{data} %')
-
-@handle_errors
 def cmd_show(args):
     dataset, params = args.dataset
     data = utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
 
     # Create array/schunk in memory
-    abspath = pathlib.Path(dataset)
-    suffix = abspath.suffix
+    suffix = dataset.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**data)
         array = utils.init_b2nd(metadata)
@@ -130,21 +122,22 @@ def cmd_show(args):
     else:
         raise NotImplementedError()
 
-    # URL
-    url = f'http://{args.host}/api/download/{dataset}'
-    params = {}
-    if args.slice:
-        params['slice'] = slice
-
     # Download
-    for nchunk in tqdm.tqdm(range(schunk.nchunks)):
+    url = f'http://{args.host}/api/download/{dataset}'
+    #for nchunk in tqdm.tqdm(range(schunk.nchunks)):
+    for nchunk in range(schunk.nchunks):
         params['nchunk'] = nchunk
-        with httpx.stream('GET', url, params=params) as resp:
-            buffer = []
-            for chunk in resp.iter_bytes():
-                buffer.append(chunk)
-            chunk = b''.join(buffer)
-            schunk.update_chunk(nchunk, chunk)
+        response = httpx.get(url, params=params)
+        chunk = response.read()
+        schunk.update_chunk(nchunk, chunk)
+
+#       with httpx.stream('GET', url, params=params) as resp:
+#           buffer = []
+#           for chunk in resp.iter_bytes():
+#               print('LEN', len(buffer))
+#               buffer.append(chunk)
+#           chunk = b''.join(buffer)
+#           schunk.update_chunk(nchunk, chunk)
 
     # Display
     if suffix == '.b2nd':
@@ -158,7 +151,7 @@ def cmd_show(args):
 def cmd_download(args):
     raise NotImplementedError()
 #   dataset, params = args.dataset
-#   data = utils.get(f'http://{args.host}/api/get/{dataset}', params=params)
+#   data = utils.get(f'http://{args.host}/api/download/{dataset}', params=params)
 #   if args.json:
 #       print(json.dumps(data))
 #       return
@@ -203,13 +196,6 @@ if __name__ == '__main__':
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_info)
-
-    # fetch
-    help = 'Tell the subscriber to fetch a dataset'
-    subparser = subparsers.add_parser('fetch', help=help)
-    subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset')
-    subparser.set_defaults(func=cmd_fetch)
 
     # show
     help = 'Display a dataset'

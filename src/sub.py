@@ -37,24 +37,25 @@ downloads = set()  # Downloads in progress
 
 queue = asyncio.Queue()
 
-async def download_schunk(path, schunk):
+async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
 
     url = f'http://{host}/api/download/{name}'
+    params = {'nchunk': nchunk}
+
     client = httpx.AsyncClient()
-    for nchunk in range(schunk.nchunks):
-        params = {'nchunk': nchunk}
-        async with client.stream('GET', url, params=params) as resp:
-            buffer = []
-            async for chunk in resp.aiter_bytes():
-                buffer.append(chunk)
-            chunk = b''.join(buffer)
-            schunk.update_chunk(nchunk, chunk)
+    async with client.stream('GET', url, params=params) as resp:
+        buffer = []
+        async for chunk in resp.aiter_bytes():
+            buffer.append(chunk)
+        chunk = b''.join(buffer)
+        schunk.update_chunk(nchunk, chunk)
 
 async def worker(queue):
     while True:
-        path = await queue.get()
+        key = await queue.get()
+        path, nchunk = key
         with utils.log_exception(logger, 'Download failed'):
             urlpath = cache / path
             urlpath.parent.mkdir(exist_ok=True, parents=True)
@@ -62,10 +63,10 @@ async def worker(queue):
             suffix = urlpath.suffix
             if suffix == '.b2nd':
                 array = blosc2.open(urlpath)
-                await download_schunk(path, array.schunk)
+                await download_chunk(path, array.schunk, nchunk)
             elif suffix == '.b2frame':
                 schunk = blosc2.open(urlpath)
-                await download_schunk(path, schunk)
+                await download_chunk(path, schunk, nchunk)
             else:
                 root, relpath = path.split('/', 1)
                 host = database.roots[root].http
@@ -75,7 +76,7 @@ async def worker(queue):
                             file.write(chunk)
 
         queue.task_done()
-        downloads.remove(path)
+        downloads.remove(key)
 
 
 async def new_root(data, topic):
@@ -247,46 +248,23 @@ async def get_info(path: str, slice: str = None):
     if slice is None:
         return metadata
 
-    slice = parse_slice(slice)
+    # Reade metadata
+    slice_obj = parse_slice(slice)
     array, schunk = utils.open_b2(abspath)
     if array is not None:
-        array = array[*slice]
+        array = array[*slice_obj]
         array = blosc2.asarray(array)
-        return utils.read_metadata(array)
+        metadata = utils.read_metadata(array)
     else:
-        schunk = schunk[*slice]
+        schunk = schunk[*slice_obj]
         schunk = blosc2.asarray(schunk)
-        return utils.read_metadata(schunk)
+        metadata = utils.read_metadata(schunk)
 
-
-@app.get('/api/get/{path:path}')
-async def get_get(path: str) -> int:
-    # Not found
-    abspath = cache / path
-    try:
-        utils.read_metadata(abspath)
-    except FileNotFoundError:
-        utils.raise_not_found()
-
-    # Done
-    array, schunk = utils.open_b2(abspath)
-    total = schunk.nchunks
-    count = sum(1 for info in schunk.iterchunks_info() if info.special != blosc2.SpecialValue.UNINIT)
-    if count == total:
-        return 100
-
-    # Download
-    if path not in downloads:
-        downloads.add(path)
-        queue.put_nowait(path)
-        return 0
-
-    # In progress
-    return int((count / total) * 100)
+    return metadata
 
 
 @app.get('/api/download/{path:path}')
-async def get_download(path: str, nchunk: int = -1):
+async def get_download(path: str, nchunk: int, slice: str = None):
     # Not found
     abspath = cache / path
     try:
@@ -294,18 +272,40 @@ async def get_download(path: str, nchunk: int = -1):
     except FileNotFoundError:
         utils.raise_not_found()
 
-    # Fetch from publisher
+    # Build the list of chunks we need to download from the publisher
     array, schunk = utils.open_b2(abspath)
-    if not utils.chunk_is_available(schunk, nchunk) and path not in downloads:
-        downloads.add(path)
-        queue.put_nowait(path)
-        await asyncio.sleep(2)
+    if slice is None:
+        nchunks = [nchunk]
+    else:
+        slice_obj = parse_slice(slice)
+        nchunks = utils.get_nchunks_from_slice(array or schunk, slice_obj)
 
-    # Wait until the chunk is available (TODO timeout)
-    while not utils.chunk_is_available(schunk, nchunk):
-        await asyncio.sleep(1)
+    # Fetch the chunks
+    for n in nchunks:
+        if not utils.chunk_is_available(schunk, n):
+            key = (path, n)
+            if key not in downloads:
+                downloads.add(key)
+                queue.put_nowait(key)
 
-    # Download
+            # Wait until the chunk is available
+            while True: # TODO timeout
+                await asyncio.sleep(1)
+                array, schunk = utils.open_b2(abspath)
+                if utils.chunk_is_available(schunk, n):
+                    break
+
+    # With slice
+    if slice is not None:
+        if array is not None:
+            array = array[*slice_obj]
+            array = blosc2.asarray(array)
+            schunk = array.schunk
+        else:
+            schunk = schunk[*slice_obj]
+            schunk = blosc2.asarray(schunk)
+
+    # Stream response
     chunk = schunk.get_chunk(nchunk)
     downloader = utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
