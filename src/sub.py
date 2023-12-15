@@ -299,7 +299,7 @@ async def get_download(path: str, nchunk: int = -1):
 
     # Download
     chunk = schunk.get_chunk(nchunk)
-    downloader = utils.download_chunk(chunk)
+    downloader = utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
 
 

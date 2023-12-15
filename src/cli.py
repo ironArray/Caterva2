@@ -86,7 +86,7 @@ def cmd_info(args):
 
 @handle_errors
 def cmd_fetch(args):
-    data = utils.get(f'http://{args.host}/api/aget/{args.dataset}')
+    data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
     if args.json:
         print(json.dumps(data))
         return
@@ -98,12 +98,11 @@ def cmd_show(args):
     data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
     nchunks = data['schunk']['nchunks']
 
-    client = httpx.AsyncClient()
     for nchunk in range(nchunks):
         url = f'http://{args.host}/api/download/{args.dataset}?{nchunk=}'
-        async with client.stream('GET', url) as resp:
+        with httpx.stream('GET', url) as resp:
             buffer = []
-            async for chunk in resp.aiter_bytes():
+            for chunk in resp.iter_bytes():
                 buffer.append(chunk)
             chunk = b''.join(buffer)
             schunk.update_chunk(nchunk, chunk)
