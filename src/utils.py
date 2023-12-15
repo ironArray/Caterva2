@@ -47,6 +47,19 @@ def init_b2frame(metadata, urlpath=None):
         urlpath=urlpath,
     )
 
+def open_b2(abspath):
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        array = blosc2.open(abspath)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        array = None
+        schunk = blosc2.open(abspath)
+    else:
+        raise NotImplementedError()
+
+    return array, schunk
+
 def chunk_is_available(schunk, nchunk):
     flag = (schunk.get_chunk(nchunk)[31] & 0b01110000) >> 4
     return flag != blosc2.SpecialValue.UNINIT.value
@@ -73,6 +86,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 def read_metadata(path):
+    # blosc2.ndarray.NDArray or XXX
     assert isinstance(path, pathlib.Path)
 
     if not path.is_file():

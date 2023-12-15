@@ -227,11 +227,22 @@ async def get_url(name: str):
     return get_root(name).http
 
 @app.get('/api/info/{path:path}')
-async def get_info(path: str):
+async def get_info(path: str, slice: str = None):
+    print('INFO', path, slice)
+    abspath = cache / path
     try:
-        return utils.read_metadata(cache / path)
+        metadata = utils.read_metadata(abspath)
     except FileNotFoundError:
         utils.raise_not_found()
+
+    if slice is None:
+        return metadata
+
+    array, schunk = utils.open_b2(abspath)
+    if array is not None:
+        return utils.read_metadata(array)
+    else:
+        return utils.read_metadata(schunk)
 
 
 @app.get('/api/get/{path:path}')
@@ -244,15 +255,7 @@ async def get_get(path: str) -> int:
         utils.raise_not_found()
 
     # Done
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(abspath)
-        schunk = array.schunk
-    elif suffix == '.b2frame':
-        schunk = blosc2.open(abspath)
-    else:
-        raise NotImplementedError()
-
+    array, schunk = utils.open_b2(abspath)
     total = schunk.nchunks
     count = sum(1 for info in schunk.iterchunks_info() if info.special != blosc2.SpecialValue.UNINIT)
     if count == total:
@@ -277,17 +280,8 @@ async def get_download(path: str, nchunk: int = -1):
     except FileNotFoundError:
         utils.raise_not_found()
 
-    # Done
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(abspath)
-        schunk = array.schunk
-    elif suffix == '.b2frame':
-        schunk = blosc2.open(abspath)
-    else:
-        raise NotImplementedError()
-
     # Fetch from publisher
+    array, schunk = utils.open_b2(abspath)
     if not utils.chunk_is_available(schunk, nchunk) and path not in downloads:
         downloads.add(path)
         queue.put_nowait(path)

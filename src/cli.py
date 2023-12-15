@@ -79,7 +79,11 @@ def cmd_url(args):
 
 @handle_errors
 def cmd_info(args):
-    data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
+    url = f'http://{args.host}/api/info/{args.dataset}'
+    if args.slice:
+        url = f'{url}?slice={args.slice}'
+
+    data = utils.get(url)
     if args.json:
         print(json.dumps(data))
         return
@@ -97,9 +101,13 @@ def cmd_fetch(args):
 
 @handle_errors
 def cmd_show(args):
-    data = utils.get(f'http://{args.host}/api/info/{args.dataset}')
-    nchunks = data['schunk']['nchunks']
+    url = f'http://{args.host}/api/info/{args.dataset}'
+    if args.slice:
+        url = f'{url}?slice={args.slice}'
 
+    data = utils.get(url)
+
+    # Create array/schunk in memory
     abspath = pathlib.Path(args.dataset)
     suffix = abspath.suffix
     if suffix == '.b2nd':
@@ -112,8 +120,10 @@ def cmd_show(args):
     else:
         raise NotImplementedError()
 
-    for nchunk in tqdm.tqdm(range(nchunks)):
-        url = f'http://{args.host}/api/download/{args.dataset}?{nchunk=}'
+    for nchunk in tqdm.tqdm(range(schunk.nchunks)):
+        url = f'http://{args.host}/api/download/{args.dataset}?{nchunk=}&{slice=}'
+        if args.slice:
+            url = f'{url}&slice={args.slice}'
         with httpx.stream('GET', url) as resp:
             buffer = []
             for chunk in resp.iter_bytes():
@@ -122,9 +132,9 @@ def cmd_show(args):
             schunk.update_chunk(nchunk, chunk)
 
     if suffix == '.b2nd':
-        print(array)
+        print(array[:])
     elif suffix == '.b2frame':
-        print(schunk)
+        print(schunk[:])
     else:
         raise NotImplementedError()
 
@@ -174,6 +184,7 @@ if __name__ == '__main__':
     subparser = subparsers.add_parser('info', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset')
+    subparser.add_argument('--slice')
     subparser.set_defaults(func=cmd_info)
 
     # fetch
@@ -188,6 +199,7 @@ if __name__ == '__main__':
     subparser = subparsers.add_parser('show', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset')
+    subparser.add_argument('--slice')
     subparser.set_defaults(func=cmd_show)
 
     # download
@@ -195,6 +207,7 @@ if __name__ == '__main__':
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset')
+    subparser.add_argument('--slice')
     subparser.set_defaults(func=cmd_download)
 
     # Go
