@@ -9,6 +9,7 @@
 
 import json
 import pathlib
+import re
 
 # Requirements
 import httpx
@@ -34,6 +35,18 @@ def handle_errors(func):
 
     return wrapper
 
+def dataset_with_slice(dataset):
+    match = re.match('(.*)\[(.*)\]', dataset)
+    if match is None:
+        return dataset, None
+    else:
+        dataset, slice = match.groups()
+        return dataset, {'slice': slice}
+
+def url_with_slice(url, slice):
+    if slice is not None:
+        return f'{url}?slice={args.slice}'
+    return url
 
 @handle_errors
 def cmd_roots(args):
@@ -79,11 +92,11 @@ def cmd_url(args):
 
 @handle_errors
 def cmd_info(args):
-    url = f'http://{args.host}/api/info/{args.dataset}'
-    if args.slice:
-        url = f'{url}?slice={args.slice}'
+    # Get
+    dataset, params = args.dataset
+    data = utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
 
-    data = utils.get(url)
+    # Print
     if args.json:
         print(json.dumps(data))
         return
@@ -101,14 +114,11 @@ def cmd_fetch(args):
 
 @handle_errors
 def cmd_show(args):
-    url = f'http://{args.host}/api/info/{args.dataset}'
-    if args.slice:
-        url = f'{url}?slice={args.slice}'
-
-    data = utils.get(url)
+    dataset, params = args.dataset
+    data = utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
 
     # Create array/schunk in memory
-    abspath = pathlib.Path(args.dataset)
+    abspath = pathlib.Path(dataset)
     suffix = abspath.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**data)
@@ -120,17 +130,23 @@ def cmd_show(args):
     else:
         raise NotImplementedError()
 
+    # URL
+    url = f'http://{args.host}/api/download/{dataset}'
+    params = {}
+    if args.slice:
+        params['slice'] = slice
+
+    # Download
     for nchunk in tqdm.tqdm(range(schunk.nchunks)):
-        url = f'http://{args.host}/api/download/{args.dataset}?{nchunk=}&{slice=}'
-        if args.slice:
-            url = f'{url}&slice={args.slice}'
-        with httpx.stream('GET', url) as resp:
+        params['nchunk'] = nchunk
+        with httpx.stream('GET', url, params=params) as resp:
             buffer = []
             for chunk in resp.iter_bytes():
                 buffer.append(chunk)
             chunk = b''.join(buffer)
             schunk.update_chunk(nchunk, chunk)
 
+    # Display
     if suffix == '.b2nd':
         print(array[:])
     elif suffix == '.b2frame':
@@ -140,12 +156,14 @@ def cmd_show(args):
 
 @handle_errors
 def cmd_download(args):
-    data = utils.get(f'http://{args.host}/api/get/{args.dataset}')
-    if args.json:
-        print(json.dumps(data))
-        return
+    raise NotImplementedError()
+#   dataset, params = args.dataset
+#   data = utils.get(f'http://{args.host}/api/get/{dataset}', params=params)
+#   if args.json:
+#       print(json.dumps(data))
+#       return
 
-    print(data)
+#   print(data)
 
 if __name__ == '__main__':
     parser = utils.get_parser()
@@ -183,8 +201,7 @@ if __name__ == '__main__':
     help = 'Get metadata about a dataset.'
     subparser = subparsers.add_parser('info', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset')
-    subparser.add_argument('--slice')
+    subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_info)
 
     # fetch
@@ -198,16 +215,14 @@ if __name__ == '__main__':
     help = 'Display a dataset'
     subparser = subparsers.add_parser('show', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset')
-    subparser.add_argument('--slice')
+    subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_show)
 
     # download
     help = 'Download a dataset and save it in the local system'
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset')
-    subparser.add_argument('--slice')
+    subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_download)
 
     # Go

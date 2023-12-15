@@ -41,10 +41,11 @@ async def download_schunk(path, schunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
 
+    url = f'http://{host}/api/download/{name}'
     client = httpx.AsyncClient()
     for nchunk in range(schunk.nchunks):
-        url = f'http://{host}/api/download/{name}?{nchunk=}'
-        async with client.stream('GET', url) as resp:
+        params = {'nchunk': nchunk}
+        async with client.stream('GET', url, params=params) as resp:
             buffer = []
             async for chunk in resp.aiter_bytes():
                 buffer.append(chunk)
@@ -129,6 +130,15 @@ def follow(name: str):
         client = utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe(name, updated_dataset)
         clients[name] = client
+
+def parse_slice(string):
+    obj = []
+    for segment in string.split(','):
+        segment = [int(x) for x in segment.split(':')]
+        segment = slice(*segment)
+        obj.append(segment)
+
+    return obj
 
 
 #
@@ -228,7 +238,6 @@ async def get_url(name: str):
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str, slice: str = None):
-    print('INFO', path, slice)
     abspath = cache / path
     try:
         metadata = utils.read_metadata(abspath)
@@ -238,10 +247,15 @@ async def get_info(path: str, slice: str = None):
     if slice is None:
         return metadata
 
+    slice = parse_slice(slice)
     array, schunk = utils.open_b2(abspath)
     if array is not None:
+        array = array[*slice]
+        array = blosc2.asarray(array)
         return utils.read_metadata(array)
     else:
+        schunk = schunk[*slice]
+        schunk = blosc2.asarray(schunk)
         return utils.read_metadata(schunk)
 
 

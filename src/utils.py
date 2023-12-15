@@ -85,34 +85,37 @@ def get_model_from_obj(obj, model_class, **kwargs):
 
     return model_class(**data)
 
-def read_metadata(path):
-    # blosc2.ndarray.NDArray or XXX
-    assert isinstance(path, pathlib.Path)
+def read_metadata(obj):
+    # Open dataset
+    if isinstance(obj, pathlib.Path):
+        path = obj
+        if not path.is_file():
+            raise FileNotFoundError('File does not exist or is a directory')
 
-    if not path.is_file():
-        raise FileNotFoundError('File does not exist or is a directory')
+        suffix = path.suffix
+        if suffix == '.b2nd':
+            obj = blosc2.open(path)
+        elif suffix == '.b2frame':
+            obj = blosc2.open(path)
+        else:
+            # Special case for regular files
+            stat = path.stat()
+            keys = ['mtime', 'size']
+            data = {key: getattr(stat, f'st_{key}') for key in keys}
+            return get_model_from_obj(data, models.File)
 
-    suffix = path.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(path)
-        #print(f'{array.schunk.dparams=}')
-        #print(f'{array.schunk.meta=}')
-        #print(f'{array.schunk.vlmeta=}')
-        #print(dict(array.schunk.vlmeta))
-        #print()
-
+    # Read metadata
+    if isinstance(obj, blosc2.ndarray.NDArray):
+        array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
         return get_model_from_obj(array, models.Metadata, schunk=schunk)
-    elif suffix == '.b2frame':
-        schunk = blosc2.open(path)
+    elif isinstance(obj, blosc2.schunk.SChunk):
+        schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
     else:
-        stat = path.stat()
-        keys = ['mtime', 'size']
-        data = {key: getattr(stat, f'st_{key}') for key in keys}
-        return get_model_from_obj(data, models.File)
+        raise TypeError(f'unexpected {type(obj)}')
 
 
 #
