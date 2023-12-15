@@ -37,12 +37,12 @@ ls -R root-example/
 ```
 
 ```
-dir1/        dir2/        ds-1d.b2nd   ds-hello.b2
+README.md         dir1/             dir2/             ds-1d.b2nd        ds-hello.b2frame
 
-root-example/dir1:
+root-example//dir1:
 ds-2d.b2nd  ds-3d.b2nd
 
-root-example/dir2:
+root-example//dir2:
 ds-4d.b2nd
 ```
 
@@ -84,11 +84,12 @@ python src/cli.py list foo
 ```
 
 ```
-ds-hello.b2
-ds-1d.b2nd
-dir2/ds-4d.b2nd
-dir1/ds-3d.b2nd
-dir1/ds-2d.b2nd
+foo/ds-hello.b2frame
+foo/README.md
+foo/ds-1d.b2nd
+foo/dir2/ds-4d.b2nd
+foo/dir1/ds-3d.b2nd
+foo/dir1/ds-2d.b2nd
 ```
 
 We can see how the client has subscribed successfully, and the datasets appear listed in the subscriptions.

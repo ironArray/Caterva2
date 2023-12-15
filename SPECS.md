@@ -134,7 +134,7 @@ Out[21]: {'new_meta': 'my data'}
 
 You can find an example of a data root in the `root-example` folder.  It contains several datasets:
 
-- ``root-example/README.md``: A text file.
+- `README.md`: A text file.
 
 - `ds-hello.b2frame`: A SChunk containing a data buffer.  Constructed as:
 
