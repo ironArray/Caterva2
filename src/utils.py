@@ -201,8 +201,8 @@ def run_parser(parser):
 #
 # HTTP client helpers
 #
-def get(url, params=None, model=None):
-    response = httpx.get(url, params=params)
+def get(url, params=None, timeout=5, model=None):
+    response = httpx.get(url, params=params, timeout=timeout)
     response.raise_for_status()
     json = response.json()
     return json if model is None else model(**json)

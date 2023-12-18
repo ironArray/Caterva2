@@ -124,10 +124,9 @@ def cmd_show(args):
 
     # Download
     url = f'http://{args.host}/api/download/{dataset}'
-    #for nchunk in tqdm.tqdm(range(schunk.nchunks)):
-    for nchunk in range(schunk.nchunks):
+    for nchunk in tqdm.tqdm(range(schunk.nchunks)):
         params['nchunk'] = nchunk
-        response = httpx.get(url, params=params)
+        response = httpx.get(url, params=params, timeout=None)
         chunk = response.read()
         schunk.update_chunk(nchunk, chunk)
 
