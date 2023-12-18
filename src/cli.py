@@ -105,20 +105,20 @@ def cmd_info(args):
 
     rich.print(data)
 
-@handle_errors
-def cmd_show(args):
-    dataset, params = args.dataset
-    data = utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
+
+def __download(host, dataset, params, urlpath=None):
+    data = utils.get(f'http://{host}/api/info/{dataset}', params=params)
 
     # Create array/schunk in memory
     suffix = dataset.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**data)
-        array = utils.init_b2nd(metadata)
+        array = utils.init_b2nd(metadata, urlpath=urlpath)
         schunk = array.schunk
     elif suffix == '.b2frame':
         metadata = models.SChunk(**data)
-        schunk = utils.init_b2frame(metadata)
+        schunk = utils.init_b2frame(metadata, urlpath=urlpath)
+        array = None
     else:
         raise NotImplementedError()
 
@@ -138,7 +138,17 @@ def cmd_show(args):
 #           chunk = b''.join(buffer)
 #           schunk.update_chunk(nchunk, chunk)
 
+    return array, schunk
+
+
+@handle_errors
+def cmd_show(args):
+    # Download
+    dataset, params = args.dataset
+    array, schunk = __download(args.host, dataset, params)
+
     # Display
+    suffix = dataset.suffix
     if suffix == '.b2nd':
         print(array[:])
     elif suffix == '.b2frame':
@@ -148,14 +158,19 @@ def cmd_show(args):
 
 @handle_errors
 def cmd_download(args):
-    raise NotImplementedError()
-#   dataset, params = args.dataset
-#   data = utils.get(f'http://{args.host}/api/download/{dataset}', params=params)
-#   if args.json:
-#       print(json.dumps(data))
-#       return
+    # urlpath
+    dataset, params = args.dataset
+    output_dir = args.output_dir.resolve()
+    urlpath = output_dir / dataset
+    slice = params.get('slice')
+    if slice:
+        suffix = urlpath.suffix
+        urlpath = urlpath.with_suffix('')
+        urlpath = pathlib.Path(f'{urlpath}[{slice}]{suffix}')
 
-#   print(data)
+    # Download
+    array, schunk = __download(args.host, dataset, params, urlpath=urlpath)
+    print(f'Dataset saved to {urlpath}')
 
 if __name__ == '__main__':
     parser = utils.get_parser()
@@ -208,6 +223,7 @@ if __name__ == '__main__':
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=dataset_with_slice)
+    subparser.add_argument('output_dir', nargs='?', default='.', type=pathlib.Path)
     subparser.set_defaults(func=cmd_download)
 
     # Go

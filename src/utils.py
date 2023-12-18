@@ -32,12 +32,18 @@ import models
 def init_b2nd(metadata, urlpath=None):
     if urlpath is not None:
         urlpath.parent.mkdir(exist_ok=True, parents=True)
+    if urlpath.exists():
+        urlpath.unlink()
+
     dtype = getattr(np, metadata.dtype)
     return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath)
 
 def init_b2frame(metadata, urlpath=None):
     if urlpath is not None:
         urlpath.parent.mkdir(exist_ok=True, parents=True)
+    if urlpath.exists():
+        urlpath.unlink()
+
     cparams = metadata.cparams.model_dump()
     return blosc2.SChunk(
         metadata.chunksize,
