@@ -46,6 +46,10 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 - When a `download` command is issued, the client must send a request to the subscriber to retrieve the data of the dataset.  The subscriber will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`). If a slice is provided, it will store the slice of the dataset (e.g. `foo/bar.b2nd[10:20]` will be stored as `<output_dir>/foo/bar[10:20].b2nd`). TODO: see if this format is supported on Windows.
 
+The sequence diagram below summarizes how different messages flow between the components of the system.
+
+![Figure: Caterva2 sequence diagram](./doc/_static/caterva2-seq.svg)
+
 ## Cache management details
 
 Whenever the subscriber gets a request to `subscribe` to a root, it must check if metadata (not the data itself) for all the datasets in a root is already in the cache.  If it is, it must check if the root has changed in the publisher.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the root metadata is not in the cache, it must fetch it and add it to the cache.
