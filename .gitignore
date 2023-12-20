@@ -4,6 +4,6 @@
 .*.swp
 __pycache__
 
-/tests/data/
+/tests/data
 /tests/supervisord.log
 /tests/supervisord.pid
