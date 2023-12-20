@@ -23,11 +23,19 @@ def services():
     if purge_var and var_dir.is_dir():
         shutil.rmtree(var_dir)
     var_dir.mkdir(exist_ok=not purge_var)
-    (var_dir / 'supervisord-logs').mkdir(exist_ok=not purge_var)
 
-    popen = subprocess.Popen(['supervisord', '-c', tests_dir / 'supervisor.conf'])
+    logs_dir = var_dir / 'supervisord-logs'
+    logs_dir.mkdir(exist_ok=not purge_var)
+
+    pid_file = var_dir / 'supervisord.pid'
+
+    popen = subprocess.Popen([
+        'supervisord',
+        '-c', tests_dir / 'supervisor.conf',
+        '-q', logs_dir,
+        '-j', pid_file])
     assert popen.wait() == 0
     time.sleep(3.0)
     yield
-    pid = int((var_dir / 'supervisord.pid').read_text())
+    pid = int(pid_file.read_text())
     os.kill(pid, signal.SIGTERM)
