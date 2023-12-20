@@ -18,6 +18,7 @@ def services():
         data_dir.symlink_to('../root-example', target_is_directory=True)
 
     var_dir = tests_dir / 'var'
+    (var_dir / 'supervisord-logs').mkdir(exist_ok=True)
 
     popen = subprocess.Popen(['supervisord', '-c', tests_dir / 'supervisor.conf'])
     assert popen.wait() == 0
