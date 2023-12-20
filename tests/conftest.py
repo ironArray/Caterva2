@@ -32,6 +32,7 @@ def services():
     popen = subprocess.Popen([
         'supervisord',
         '-c', tests_dir / 'supervisor.conf',
+        '-l', var_dir / 'supervisord.log',
         '-q', logs_dir,
         '-j', pid_file])
     assert popen.wait() == 0
