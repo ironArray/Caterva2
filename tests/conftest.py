@@ -17,9 +17,11 @@ def services():
     if not data_dir.is_dir() and not data_dir.is_symlink():
         data_dir.symlink_to('../root-example', target_is_directory=True)
 
+    var_dir = tests_dir / 'var'
+
     popen = subprocess.Popen(['supervisord', '-c', tests_dir / 'supervisor.conf'])
     assert popen.wait() == 0
     time.sleep(3.0)
     yield
-    pid = int((tests_dir / 'supervisord.pid').read_text())
+    pid = int((var_dir / 'supervisord.pid').read_text())
     os.kill(pid, signal.SIGTERM)
