@@ -173,8 +173,7 @@ def start_client(url):
 async def disconnect_client(client, timeout=5):
     if client is not None:
         # If the broker is down client.disconnect hangs, wo we wrap it in a timeout
-        async with asyncio.timeout(timeout):
-            await client.disconnect()
+        await asyncio.wait_for(client.disconnect(), timeout)
 
 
 #
