@@ -18,7 +18,7 @@ There are 4 elements:
 These components have a number of requirements, which are all in the `requirements.txt`
 file, so just create a virtual environment and install:
 
-```bash
+```sh
 pip install -r requirements.txt
 ```
 
@@ -26,13 +26,13 @@ pip install -r requirements.txt
 
 Start the broker:
 
-```bash
+```sh
 python src/bro.py
 ```
 
 For the purpose of this quick start, let's use the datasets within the `root-example` folder:
 
-```bash
+```sh
 ls -R root-example/
 ```
 
@@ -48,13 +48,13 @@ ds-4d.b2nd
 
 Start publishing `root-example` in another shell:
 
-```bash
+```sh
 python src/pub.py foo root-example
 ```
 
 Now, let's create a subscriber (in yet another shell):
 
-```bash
+```sh
 python src/sub.py
 ```
 
@@ -63,7 +63,7 @@ python src/sub.py
 Finally, we can use a python script (called `cli.py`) that talks to the subscriber.
 It can list all the available datasets:
 
-```bash
+```sh
 python src/cli.py roots
 ```
 
@@ -73,13 +73,13 @@ foo
 
 Ask the subscriber to subscribe to changes in the `foo` root:
 
-```bash
+```sh
 python src/cli.py subscribe foo
 ```
 
 Now, one can list the datasets in the `foo` root:
 
-```bash
+```sh
 python src/cli.py list foo
 ```
 
@@ -96,7 +96,7 @@ We can see how the client has subscribed successfully, and the datasets appear l
 
 Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
-```bash
+```sh
 python src/cli.py info foo/dir2/ds-4d.b2nd
 ```
 
@@ -130,7 +130,7 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
 
 Also, get we can ask the url of a root:
 
-```bash
+```sh
 python src/cli.py url foo
 ```
 
@@ -142,7 +142,7 @@ http://localhost:8001
 
 Finally, tell the subscriber to download the dataset:
 
-```bash
+```sh
 python src/cli.py download foo/dir2/ds-4d.b2nd
 ```
 
@@ -152,13 +152,13 @@ python src/cli.py download foo/dir2/ds-4d.b2nd
 
 To run the test suite first some more requirements must be installed:
 
-```bash
+```sh
 pip install -r requirements.d/test.txt
 ```
 
 And then the tests can be run:
 
-```bash
+```sh
 pytest -v
 ```
 
