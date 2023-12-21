@@ -9,18 +9,16 @@ import pytest
 from pathlib import Path
 
 
+def _supervisor_cmd(prog, *args, conf=None):
+    return subprocess.check_output([prog, '-c', conf, *args])
+
+
 def supervisor_start(*args, conf=None):
-    return subprocess.check_call([
-        'supervisord',
-        '-c', conf,
-        *args])
+    return _supervisor_cmd('supervisord', *args, conf=conf)
 
 
 def supervisor_send(*args, conf=None):
-    return subprocess.check_output([
-        'supervisorctl',
-        '-c', conf,
-        *args])
+    return _supervisor_cmd('supervisorctl', *args, conf=conf)
 
 
 def wait_for_programs(start_timeout_secs, get_status):
