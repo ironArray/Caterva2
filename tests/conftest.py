@@ -24,7 +24,9 @@ def wait_for_programs(start_timeout_secs, get_status):
         if all(l.split()[1] == b'RUNNING' for l in status.splitlines()):
             break
     else:
-        raise RuntimeError("test programs failed to start on time")
+        progs = b" ".join(p for (p, s) in (l.split()[:2] for l in status.splitlines())
+                          if s != b'RUNNING').decode()
+        raise RuntimeError(f"test programs failed to start on time: {progs}")
 
 
 @pytest.fixture(scope='session')
