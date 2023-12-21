@@ -36,6 +36,12 @@ def services():
         '-q', logs_dir,
         '-j', pid_file])
     time.sleep(3.0)
-    yield
-    pid = int(pid_file.read_text())
-    os.kill(pid, signal.SIGTERM)
+    try:
+        yield
+    finally:
+        try:
+            pid = int(pid_file.read_text())
+        except:
+            pass
+        else:
+            os.kill(pid, signal.SIGTERM)
