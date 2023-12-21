@@ -29,13 +29,12 @@ def services():
 
     pid_file = var_dir / 'supervisord.pid'
 
-    popen = subprocess.Popen([
+    subprocess.check_call([
         'supervisord',
         '-c', tests_dir / 'supervisor.conf',
         '-l', var_dir / 'supervisord.log',
         '-q', logs_dir,
         '-j', pid_file])
-    assert popen.wait() == 0
     time.sleep(3.0)
     yield
     pid = int(pid_file.read_text())
