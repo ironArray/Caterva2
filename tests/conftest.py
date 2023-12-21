@@ -1,6 +1,4 @@
-import os
 import shutil
-import signal
 import subprocess
 import time
 
@@ -54,11 +52,9 @@ def services():
     logs_dir = var_dir / 'supervisord-logs'
     logs_dir.mkdir(exist_ok=not purge_var)
 
-    pid_file = var_dir / 'supervisord.pid'
-
     supervisor_start('-l', var_dir / 'supervisord.log',
                      '-q', logs_dir,
-                     '-j', pid_file,
+                     '-j', var_dir / 'supervisord.pid',
                      conf=conf_file)
 
     try:
@@ -67,8 +63,6 @@ def services():
         yield
     finally:
         try:
-            pid = int(pid_file.read_text())
+            supervisor_send('shutdown', conf=conf_file)
         except:
             pass
-        else:
-            os.kill(pid, signal.SIGTERM)
