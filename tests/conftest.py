@@ -9,11 +9,18 @@ import pytest
 from pathlib import Path
 
 
+def supervisor_send(*args, conf=None):
+    return subprocess.check_output([
+        'supervisorctl',
+        '-c', conf,
+        *args])
+
 
 @pytest.fixture(scope='session')
 def services():
     tests_dir = Path('tests')
     purge_var = False  # toggle to start with an empty state directory
+    start_timeout_secs = 10
 
     data_dir = tests_dir / 'data'
     if not data_dir.is_dir() and not data_dir.is_symlink():
@@ -24,6 +31,8 @@ def services():
         shutil.rmtree(var_dir)
     var_dir.mkdir(exist_ok=not purge_var)
 
+    conf_file = tests_dir / 'supervisor.conf'
+
     logs_dir = var_dir / 'supervisord-logs'
     logs_dir.mkdir(exist_ok=not purge_var)
 
@@ -31,12 +40,21 @@ def services():
 
     subprocess.check_call([
         'supervisord',
-        '-c', tests_dir / 'supervisor.conf',
+        '-c', conf_file,
         '-l', var_dir / 'supervisord.log',
         '-q', logs_dir,
         '-j', pid_file])
-    time.sleep(3.0)
+
     try:
+        start_sleep_secs = 1
+        for _ in range(start_timeout_secs // start_sleep_secs):
+            time.sleep(start_sleep_secs)
+            status = supervisor_send('status', conf=conf_file)
+            if all(l.split()[1] == b'RUNNING' for l in status.splitlines()):
+                break
+        else:
+            raise RuntimeError("test programs failed to start on time")
+
         yield
     finally:
         try:
