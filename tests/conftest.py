@@ -16,6 +16,17 @@ def supervisor_send(*args, conf=None):
         *args])
 
 
+def wait_for_programs(start_timeout_secs, get_status):
+    start_sleep_secs = 1
+    for _ in range(start_timeout_secs // start_sleep_secs):
+        time.sleep(start_sleep_secs)
+        status = get_status()
+        if all(l.split()[1] == b'RUNNING' for l in status.splitlines()):
+            break
+    else:
+        raise RuntimeError("test programs failed to start on time")
+
+
 @pytest.fixture(scope='session')
 def services():
     tests_dir = Path('tests')
@@ -46,15 +57,8 @@ def services():
         '-j', pid_file])
 
     try:
-        start_sleep_secs = 1
-        for _ in range(start_timeout_secs // start_sleep_secs):
-            time.sleep(start_sleep_secs)
-            status = supervisor_send('status', conf=conf_file)
-            if all(l.split()[1] == b'RUNNING' for l in status.splitlines()):
-                break
-        else:
-            raise RuntimeError("test programs failed to start on time")
-
+        wait_for_programs(start_timeout_secs,
+                          lambda: supervisor_send('status', conf=conf_file))
         yield
     finally:
         try:
