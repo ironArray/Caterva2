@@ -9,6 +9,13 @@ import pytest
 from pathlib import Path
 
 
+def supervisor_start(*args, conf=None):
+    return subprocess.check_call([
+        'supervisord',
+        '-c', conf,
+        *args])
+
+
 def supervisor_send(*args, conf=None):
     return subprocess.check_output([
         'supervisorctl',
@@ -51,12 +58,10 @@ def services():
 
     pid_file = var_dir / 'supervisord.pid'
 
-    subprocess.check_call([
-        'supervisord',
-        '-c', conf_file,
-        '-l', var_dir / 'supervisord.log',
-        '-q', logs_dir,
-        '-j', pid_file])
+    supervisor_start('-l', var_dir / 'supervisord.log',
+                     '-q', logs_dir,
+                     '-j', pid_file,
+                     conf=conf_file)
 
     try:
         wait_for_programs(start_timeout_secs,
