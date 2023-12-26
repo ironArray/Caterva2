@@ -35,13 +35,44 @@ cache = None
 client = None
 
 
+def compress(src, dst):
+    dst.parent.mkdir(exist_ok=True, parents=True)
+    if dst.exists():
+        dst.unlink()
+
+    # Create schunk
+    cparams = {}
+    dparams = {}
+    storage = {
+        'urlpath': dst,
+        'cparams': cparams,
+        'dparams': dparams,
+    }
+    schunk = blosc2.SChunk(**storage)
+
+    # Append data
+    with open(src, 'rb') as f:
+        data = f.read()
+        schunk.append_data(data)
+
+
 async def worker(queue):
     while True:
         abspath, change = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
             if abspath.is_file():
                 relpath = pathlib.Path(abspath).relative_to(root)
-                metadata = utils.read_metadata(abspath)
+
+                # Load metadata
+                if abspath.suffix in {'.b2frame', '.b2nd'}:
+                    metadata = utils.read_metadata(abspath)
+                else:
+                    # Compress regular files in publisher's cache
+                    b2path = cache / f'{relpath}.b2'
+                    compress(abspath, b2path)
+                    metadata = utils.read_metadata(b2path)
+
+                # Publish
                 metadata = metadata.model_dump()
                 data = {'change': change.name, 'path': relpath, 'metadata': metadata}
                 await client.publish(name, data=data)
@@ -99,39 +130,34 @@ async def get_list():
 
 @app.get("/api/info/{path:path}")
 async def get_info(path):
-    try:
-        return utils.read_metadata(root / path)
-    except FileNotFoundError:
-        utils.raise_not_found()
+    abspath = utils.get_abspath(root, path)
 
+    suffix = abspath.suffix
+    if suffix not in {'.b2frame', '.b2nd'}:
+        abspath = utils.get_abspath(cache, f'{path}.b2')
 
-def download_file(path):
-    with open(path, 'rb') as file:
-        yield from file
-
+    return utils.read_metadata(abspath)
 
 @app.get("/api/download/{path:path}")
 async def get_download(path: str, nchunk: int = -1):
-    abspath = root / path
+    if nchunk < 0:
+        utils.raise_bad_request('Chunk number required')
+
+    abspath = utils.get_abspath(root, path)
 
     suffix = abspath.suffix
     if suffix == '.b2nd':
-        if nchunk < 0:
-            utils.raise_bad_request('Chunk number required')
         array = blosc2.open(abspath)
-        chunk = array.schunk.get_chunk(nchunk)
-        downloader = utils.iterchunk(chunk)
+        schunk = array.schunk
     elif suffix == '.b2frame':
-        if nchunk < 0:
-            utils.raise_bad_request('Chunk number required')
         schunk = blosc2.open(abspath)
-        chunk = schunk.get_chunk(nchunk)
-        downloader = utils.iterchunk(chunk)
     else:
-        if nchunk >= 0:
-            utils.raise_bad_request('Regular files don\'t have chunks')
+        relpath = pathlib.Path(abspath).relative_to(root)
+        b2path = cache / f'{relpath}.b2'
+        schunk = blosc2.open(b2path)
 
-        downloader = download_file(abspath)
+    chunk = schunk.get_chunk(nchunk)
+    downloader = utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
 

@@ -54,29 +54,22 @@ async def download_chunk(path, schunk, nchunk):
 
 async def worker(queue):
     while True:
-        key = await queue.get()
-        path, nchunk = key
+        path, nchunk, abspath = await queue.get()
         with utils.log_exception(logger, 'Download failed'):
-            urlpath = cache / path
-            urlpath.parent.mkdir(exist_ok=True, parents=True)
+            abspath.parent.mkdir(exist_ok=True, parents=True)
 
-            suffix = urlpath.suffix
+            suffix = abspath.suffix
             if suffix == '.b2nd':
-                array = blosc2.open(urlpath)
+                array = blosc2.open(abspath)
                 await download_chunk(path, array.schunk, nchunk)
-            elif suffix == '.b2frame':
-                schunk = blosc2.open(urlpath)
+            elif suffix in {'.b2frame', '.b2'}:
+                schunk = blosc2.open(abspath)
                 await download_chunk(path, schunk, nchunk)
             else:
-                root, relpath = path.split('/', 1)
-                host = database.roots[root].http
-                with urlpath.open('wb') as file:
-                    with httpx.stream('GET', f'http://{host}/api/download/{relpath}') as resp:
-                        for chunk in resp.iter_bytes():
-                            file.write(chunk)
+                raise NotImplementedError()
 
         queue.task_done()
-        downloads.remove(key)
+        downloads.remove((path, nchunk))
 
 
 async def new_root(data, topic):
@@ -123,8 +116,9 @@ def follow(name: str):
                 metadata = models.SChunk(**metadata)
                 utils.init_b2frame(metadata, abspath)
             else:
-                metadata = models.File(**metadata)
-                abspath.touch()
+                abspath = rootdir / f'{relpath}.b2'
+                metadata = models.SChunk(**metadata)
+                utils.init_b2frame(metadata, abspath)
 
     # Subscribe to changes in the dataset
     if name not in clients:
@@ -140,6 +134,13 @@ def parse_slice(string):
         obj.append(segment)
 
     return obj
+
+def lookup_path(path):
+    path = pathlib.Path(path)
+    if path.suffix not in {'.b2frame', '.b2nd'}:
+        path = f'{path}.b2'
+
+    return utils.get_abspath(cache, path)
 
 
 #
@@ -231,7 +232,10 @@ async def get_list(name: str):
     if not rootdir.exists():
         utils.raise_not_found(f'Not subscribed to {name}')
 
-    return [relpath for path, relpath in utils.walk_files(rootdir)]
+    return [
+        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        for path, relpath in utils.walk_files(rootdir)
+    ]
 
 @app.get('/api/url/{name}')
 async def get_url(name: str):
@@ -239,14 +243,10 @@ async def get_url(name: str):
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str, slice: str = None):
-    abspath = cache / path
-    try:
-        metadata = utils.read_metadata(abspath)
-    except FileNotFoundError:
-        utils.raise_not_found()
+    abspath = lookup_path(path)
 
     if slice is None:
-        return metadata
+        return utils.read_metadata(abspath)
 
     # Read metadata
     slice_obj = parse_slice(slice)
@@ -265,12 +265,7 @@ async def get_info(path: str, slice: str = None):
 
 @app.get('/api/download/{path:path}')
 async def get_download(path: str, nchunk: int, slice: str = None):
-    # Not found
-    abspath = cache / path
-    try:
-        utils.read_metadata(abspath)
-    except FileNotFoundError:
-        utils.raise_not_found()
+    abspath = lookup_path(path)
 
     # Build the list of chunks we need to download from the publisher
     array, schunk = utils.open_b2(abspath)
@@ -286,7 +281,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
             key = (path, n)
             if key not in downloads:
                 downloads.add(key)
-                queue.put_nowait(key)
+                queue.put_nowait((path, n, abspath))
 
             # Wait until the chunk is available
             while True: # TODO timeout

@@ -66,6 +66,9 @@ def open_b2(abspath):
     elif suffix == '.b2frame':
         array = None
         schunk = blosc2.open(abspath)
+    elif suffix == '.b2':
+        array = None
+        schunk = blosc2.open(abspath)
     else:
         raise NotImplementedError()
 
@@ -104,9 +107,7 @@ def read_metadata(obj):
             raise FileNotFoundError('File does not exist or is a directory')
 
         suffix = path.suffix
-        if suffix == '.b2nd':
-            obj = blosc2.open(path)
-        elif suffix == '.b2frame':
+        if suffix in {'.b2frame', '.b2nd', '.b2'}:
             obj = blosc2.open(path)
         else:
             # Special case for regular files
@@ -231,6 +232,19 @@ def raise_bad_request(detail):
 
 def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
+
+def get_abspath(root, path):
+    abspath = root / path
+
+    # Security check
+    if root not in abspath.parents:
+        raise_bad_request(f'Invalid path {path}')
+
+    # Existence check
+    if not abspath.is_file():
+        raise_not_found()
+
+    return abspath
 
 
 #
