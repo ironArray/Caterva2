@@ -27,12 +27,12 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
-cache = None
 nworkers = 100
 
 # State
-database = None    # <Database> instance
+cache = None
 clients = {}       # topic: <PubSubClient>
+database = None    # <Database> instance
 downloads = set()  # Downloads in progress
 
 queue = asyncio.Queue()
@@ -322,12 +322,14 @@ if __name__ == '__main__':
     # Global configuration
     broker = args.broker
 
-    # Init cache and database
+    # Init cache
     var = pathlib.Path('var/sub').resolve()
-    model = models.Subscriber(roots={})
-    database = utils.Database(var / 'db.json', model)
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
+
+    # Init database
+    model = models.Subscriber(roots={})
+    database = utils.Database(var / 'db.json', model)
 
     # Run
     host, port = args.http

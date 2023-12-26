@@ -10,7 +10,7 @@
 import asyncio
 import contextlib
 import logging
-from pathlib import Path
+import pathlib
 
 # Requirements
 import blosc2
@@ -31,6 +31,7 @@ root = None
 nworkers = 1
 
 # State
+cache = None
 client = None
 
 
@@ -39,7 +40,7 @@ async def worker(queue):
         abspath, change = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
             if abspath.is_file():
-                relpath = Path(abspath).relative_to(root)
+                relpath = pathlib.Path(abspath).relative_to(root)
                 metadata = utils.read_metadata(abspath)
                 metadata = metadata.model_dump()
                 data = {'change': change.name, 'path': relpath, 'metadata': metadata}
@@ -104,33 +105,33 @@ async def get_info(path):
         utils.raise_not_found()
 
 
-def download_file(filepath):
-    with open(filepath, 'rb') as file:
+def download_file(path):
+    with open(path, 'rb') as file:
         yield from file
 
 
-@app.get("/api/download/{name:path}")
-async def get_download(name: str, nchunk: int = -1):
-    filepath = root / name
+@app.get("/api/download/{path:path}")
+async def get_download(path: str, nchunk: int = -1):
+    abspath = root / path
 
-    suffix = filepath.suffix
+    suffix = abspath.suffix
     if suffix == '.b2nd':
         if nchunk < 0:
             utils.raise_bad_request('Chunk number required')
-        array = blosc2.open(filepath)
+        array = blosc2.open(abspath)
         chunk = array.schunk.get_chunk(nchunk)
         downloader = utils.iterchunk(chunk)
     elif suffix == '.b2frame':
         if nchunk < 0:
             utils.raise_bad_request('Chunk number required')
-        schunk = blosc2.open(filepath)
+        schunk = blosc2.open(abspath)
         chunk = schunk.get_chunk(nchunk)
         downloader = utils.iterchunk(chunk)
     else:
         if nchunk >= 0:
             utils.raise_bad_request('Regular files don\'t have chunks')
 
-        downloader = download_file(filepath)
+        downloader = download_file(abspath)
 
     return responses.StreamingResponse(downloader)
 
@@ -144,7 +145,12 @@ if __name__ == '__main__':
     # Global configuration
     broker = args.broker
     name = args.name
-    root = Path(args.root).resolve()
+    root = pathlib.Path(args.root).resolve()
+
+    # Init cache and database
+    var = pathlib.Path('var/pub').resolve()
+    cache = var / 'cache'
+    cache.mkdir(exist_ok=True, parents=True)
 
     # Register
     host, port = args.http

@@ -6,7 +6,7 @@ install:
 	python -m venv venv
 	${BIN}/pip install -U pip
 	${BIN}/pip install -r requirements.txt
-	${BIN}/pip install -r requirements-test.txt
+	${BIN}/pip install -r requirements.d/test.txt
 	mkdir -p data
 
 bro:
