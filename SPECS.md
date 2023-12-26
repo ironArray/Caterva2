@@ -102,8 +102,8 @@ Out[16]:
 For `.b2frame`, or `.b2` files (the latter is mandatory as an additional file extension in generic files), they are read as `SChunk` instances, and `meta` is a dictionary with the following fields:
 
 ```
-In [17]: c = blosc2.SChunk(chunksize=100)
-In [18]: c.fill_special(8 * 100, special_value=blosc2.SpecialValue.UNINIT)
+In [17]: sc = blosc2.SChunk(chunksize=100)
+In [18]: sc.fill_special(8 * 100, special_value=blosc2.SpecialValue.UNINIT)
 Out[18]: 8
 In [19]: dict(chunksize=c.chunksize, typesize=c.typesize, cparams=c.cparams)
 Out[19]:

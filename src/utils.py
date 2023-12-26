@@ -36,7 +36,8 @@ def init_b2nd(metadata, urlpath=None):
             urlpath.unlink()
 
     dtype = getattr(np, metadata.dtype)
-    return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath)
+    return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
+                         chunks=metadata.chunks, blocks=metadata.blocks)
 
 def init_b2frame(metadata, urlpath=None):
     if urlpath is not None:
@@ -45,13 +46,17 @@ def init_b2frame(metadata, urlpath=None):
             urlpath.unlink()
 
     cparams = metadata.cparams.model_dump()
-    return blosc2.SChunk(
+    sc = blosc2.SChunk(
         metadata.chunksize,
         contiguous=metadata.contiguous,
         cparams=cparams,
         dparams={},
         urlpath=urlpath,
     )
+    sc.fill_special(metadata.nbytes / metadata.typesize,
+                    special_value=blosc2.SpecialValue.UNINIT)
+    return sc
+
 
 def open_b2(abspath):
     suffix = abspath.suffix

@@ -248,7 +248,7 @@ async def get_info(path: str, slice: str = None):
     if slice is None:
         return metadata
 
-    # Reade metadata
+    # Read metadata
     slice_obj = parse_slice(slice)
     array, schunk = utils.open_b2(abspath)
     if array is not None:

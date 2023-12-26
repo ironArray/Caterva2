@@ -128,7 +128,7 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
 }
 ```
 
-Also, get we can ask the url of a root:
+Also, we can ask for the url of a root:
 
 ```sh
 python src/cli.py url foo
@@ -138,15 +138,54 @@ python src/cli.py url foo
 http://localhost:8001
 ```
 
-[TODO] Allow to specify a path to a dataset in the url command.
+[TODO] Allow to specify a path to a dataset in the url command (e.g. `url foo/ds-hello.b2frame`).
 
-Finally, tell the subscriber to download the dataset:
+Let's print data from a specified dataset:
+
+```sh
+python src/cli.py show foo/ds-hello.b2frame
+```
+
+```
+b'Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!'
+```
+
+TODO: Allow slicing in schunks too (e.g. `foo/ds-hello.b2frame[:10]`)
+
+It allows printing slices instead of the whole dataset too:
+
+```sh
+python src/cli.py show foo/dir2/ds-4d.b2nd[:1]
+```
+
+```
+[[[[ 0. +0.j  1. +1.j  2. +2.j  3. +3.j  4. +4.j]
+   [ 5. +5.j  6. +6.j  7. +7.j  8. +8.j  9. +9.j]
+   [10.+10.j 11.+11.j 12.+12.j 13.+13.j 14.+14.j]
+   [15.+15.j 16.+16.j 17.+17.j 18.+18.j 19.+19.j]]
+
+  [[20.+20.j 21.+21.j 22.+22.j 23.+23.j 24.+24.j]
+   [25.+25.j 26.+26.j 27.+27.j 28.+28.j 29.+29.j]
+   [30.+30.j 31.+31.j 32.+32.j 33.+33.j 34.+34.j]
+   [35.+35.j 36.+36.j 37.+37.j 38.+38.j 39.+39.j]]
+
+  [[40.+40.j 41.+41.j 42.+42.j 43.+43.j 44.+44.j]
+   [45.+45.j 46.+46.j 47.+47.j 48.+48.j 49.+49.j]
+   [50.+50.j 51.+51.j 52.+52.j 53.+53.j 54.+54.j]
+   [55.+55.j 56.+56.j 57.+57.j 58.+58.j 59.+59.j]]]]
+```
+
+TODO: Allow for more complex slices too (e.g. `ds-4d.b2nd[:1,:1]`)
+
+Finally, we can tell the subscriber to download the dataset:
 
 ```sh
 python src/cli.py download foo/dir2/ds-4d.b2nd
 ```
 
-[TODO] Show where the dataset has been downloaded.
+```
+Dataset saved to /.../foo/dir2/ds-4d.b2nd
+```
 
 ## Tests
 
