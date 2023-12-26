@@ -17,6 +17,7 @@ import pydantic
 class CParams(pydantic.BaseModel):
     codec: blosc2.Codec
     typesize: int
+    blocksize: int
 
 class SChunk(pydantic.BaseModel):
     blocksize: int
