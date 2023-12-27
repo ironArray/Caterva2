@@ -121,7 +121,7 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
         'cratio': 0.0,
         'nbytes': 1920,
         'typesize': 16,
-        'urlpath': '/Users/faltet/blosc/Caterva2/var/sub/cache/foo/dir2/ds-4d.b2nd',
+        'urlpath': '/Users/faltet/blosc/Caterva2/caterva2/sub/cache/foo/dir2/ds-4d.b2nd',
         'nchunks': 1
     },
     'size': 1920
@@ -195,7 +195,7 @@ And then the tests can be run:
 pytest -v
 ```
 
-You may place your own data files under `tests/data`, otherwise the test publisher will use the files under `root-example`.  After tests finish, state files will be left under `tests/var` in case you want to inspect them.
+You may place your own data files under `tests/data`, otherwise the test publisher will use the files under `root-example`.  After tests finish, state files will be left under `tests/caterva2` in case you want to inspect them.
 
 
 ## Use with caution

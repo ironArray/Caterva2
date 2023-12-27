@@ -1,8 +1,7 @@
+.*.swp
+/caterva2/
 /cache/
 /data/
+/tests/caterva2/
 /venv/
-.*.swp
 __pycache__
-
-/tests/data
-/tests/var/

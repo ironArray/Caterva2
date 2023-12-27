@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
     # Init database
     # roots = {name: <Root>}
-    var = pathlib.Path('var/broker').resolve()
+    var = pathlib.Path('caterva2/broker').resolve()
     database = utils.Database(var / 'db.json', models.Broker(roots={}))
     print(database.data)
 

@@ -333,7 +333,7 @@ if __name__ == '__main__':
     broker = args.broker
 
     # Init cache
-    var = pathlib.Path('var/sub').resolve()
+    var = pathlib.Path('caterva2/sub').resolve()
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 

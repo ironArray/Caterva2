@@ -153,7 +153,7 @@ if __name__ == '__main__':
     root = pathlib.Path(args.root).resolve()
 
     # Init cache and database
-    var = pathlib.Path('var/pub').resolve()
+    var = pathlib.Path('caterva2/pub').resolve()
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 
