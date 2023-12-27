@@ -15,4 +15,4 @@ def test_roots():
 
 def test_url():
     out = cli(['url', 'foo'])
-    assert out == 'localhost:8001'
+    assert out == ['http://localhost:8001']
