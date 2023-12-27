@@ -110,27 +110,31 @@ def follow(name: str):
         val = database.etags.get(key)
         headers = None if val is None else {'If-None-Match': val}
 
+        # Call API
         response = httpx.get(f'http://{root.http}/api/info/{relpath}', headers=headers)
+        if response.status_code == 304:
+            continue
+
         response.raise_for_status()
-        if response.status_code != 304:
-            metadata = response.json()
+        metadata = response.json()
 
-            abspath = rootdir / relpath
-            suffix = abspath.suffix
-            if suffix == '.b2nd':
-                metadata = models.Metadata(**metadata)
-                utils.init_b2nd(metadata, abspath)
-            elif suffix == '.b2frame':
-                metadata = models.SChunk(**metadata)
-                utils.init_b2frame(metadata, abspath)
-            else:
-                abspath = rootdir / f'{relpath}.b2'
-                metadata = models.SChunk(**metadata)
-                utils.init_b2frame(metadata, abspath)
+        # Save metadata
+        abspath = rootdir / relpath
+        suffix = abspath.suffix
+        if suffix == '.b2nd':
+            metadata = models.Metadata(**metadata)
+            utils.init_b2nd(metadata, abspath)
+        elif suffix == '.b2frame':
+            metadata = models.SChunk(**metadata)
+            utils.init_b2frame(metadata, abspath)
+        else:
+            abspath = rootdir / f'{relpath}.b2'
+            metadata = models.SChunk(**metadata)
+            utils.init_b2frame(metadata, abspath)
 
-            # Save etag
-            database.etags[key] = response.headers['etag']
-            database.save()
+        # Save etag
+        database.etags[key] = response.headers['etag']
+        database.save()
 
     # Subscribe to changes in the dataset
     if name not in clients:
@@ -233,8 +237,9 @@ def get_root(name):
 
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(name: str):
-    get_root(name)
-    return follow(name)
+    get_root(name)  # Not Found
+    follow(name)
+    return 'Ok'
 
 @app.get('/api/list/{name}')
 async def get_list(name: str):
