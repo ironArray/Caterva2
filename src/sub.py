@@ -252,10 +252,12 @@ async def get_info(path: str, slice: str = None):
     slice_obj = parse_slice(slice)
     array, schunk = utils.open_b2(abspath)
     if array is not None:
-        array = array.__getitem__(*slice_obj)
+        for x in slice_obj:
+            array = array.__getitem__(x)
         array = blosc2.asarray(array)
         metadata = utils.read_metadata(array)
     else:
+        assert len(slice_obj) == 1
         data = schunk.__getitem__(*slice_obj)
         schunk = utils.compress(data)
         metadata = utils.read_metadata(schunk)
@@ -293,10 +295,12 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     # With slice
     if slice is not None:
         if array is not None:
-            array = array.__getitem__(*slice_obj)
+            for x in slice_obj:
+                array = array.__getitem__(x)
             array = blosc2.asarray(array)
             schunk = array.schunk
         else:
+            assert len(slice_obj) == 1
             data = schunk.__getitem__(*slice_obj)
             schunk = utils.compress(data)
 

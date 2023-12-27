@@ -173,8 +173,6 @@ python src/cli.py show foo/dir2/ds-4d.b2nd[:1]
    [55.+55.j 56.+56.j 57.+57.j 58.+58.j 59.+59.j]]]]
 ```
 
-TODO: Allow for more complex slices too (e.g. `ds-4d.b2nd[:1,:1]`)
-
 Finally, we can tell the subscriber to download the dataset:
 
 ```sh
