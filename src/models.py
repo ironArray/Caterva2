@@ -62,3 +62,4 @@ class Broker(pydantic.BaseModel):
 
 class Subscriber(pydantic.BaseModel):
     roots: typing.Dict[str, Root]
+    etags: typing.Dict[str, str]

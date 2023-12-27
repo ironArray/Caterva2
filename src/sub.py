@@ -105,9 +105,17 @@ def follow(name: str):
     # Initialize the datasets in the cache
     data = utils.get(f'http://{root.http}/api/list')
     for relpath in data:
-        metadata = utils.get(f'http://{root.http}/api/info/{relpath}')
-        abspath = rootdir / relpath
-        if not abspath.exists():
+        # If-None-Match header
+        key = f'{name}/{relpath}'
+        val = database.etags.get(key)
+        headers = None if val is None else {'If-None-Match': val}
+
+        response = httpx.get(f'http://{root.http}/api/info/{relpath}', headers=headers)
+        response.raise_for_status()
+        if response.status_code != 304:
+            metadata = response.json()
+
+            abspath = rootdir / relpath
             suffix = abspath.suffix
             if suffix == '.b2nd':
                 metadata = models.Metadata(**metadata)
@@ -119,6 +127,10 @@ def follow(name: str):
                 abspath = rootdir / f'{relpath}.b2'
                 metadata = models.SChunk(**metadata)
                 utils.init_b2frame(metadata, abspath)
+
+            # Save etag
+            database.etags[key] = response.headers['etag']
+            database.save()
 
     # Subscribe to changes in the dataset
     if name not in clients:
@@ -338,7 +350,7 @@ if __name__ == '__main__':
     cache.mkdir(exist_ok=True, parents=True)
 
     # Init database
-    model = models.Subscriber(roots={})
+    model = models.Subscriber(roots={}, etags={})
     database = utils.Database(var / 'db.json', model)
 
     # Run

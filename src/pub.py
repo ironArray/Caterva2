@@ -11,10 +11,11 @@ import asyncio
 import contextlib
 import logging
 import pathlib
+import typing
 
 # Requirements
 import blosc2
-from fastapi import FastAPI, responses
+from fastapi import FastAPI, Header, Response, responses
 import uvicorn
 from watchfiles import Change, awatch
 
@@ -108,13 +109,25 @@ async def get_list():
     return [relpath for path, relpath in utils.walk_files(root)]
 
 @app.get("/api/info/{path:path}")
-async def get_info(path):
+async def get_info(
+    path: str,
+    response: Response,
+    if_none_match: typing.Annotated[str | None, Header()] = None
+):
     abspath = utils.get_abspath(root, path)
 
-    suffix = abspath.suffix
-    if suffix not in {'.b2frame', '.b2nd'}:
+    # Check etag
+    stat = abspath.stat()
+    etag = str(stat.st_mtime)
+    if if_none_match == etag:
+        return Response(status_code=304)
+
+    # Regular files (.b2)
+    if abspath.suffix not in {'.b2frame', '.b2nd'}:
         abspath = utils.get_abspath(cache, f'{path}.b2')
 
+    # Return
+    response.headers['Etag'] = etag
     return utils.read_metadata(abspath)
 
 @app.get("/api/download/{path:path}")
