@@ -138,8 +138,6 @@ python src/cli.py url foo
 http://localhost:8001
 ```
 
-[TODO] Allow to specify a path to a dataset in the url command (e.g. `url foo/ds-hello.b2frame`).
-
 Let's print data from a specified dataset:
 
 ```sh

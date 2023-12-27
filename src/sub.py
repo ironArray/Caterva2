@@ -237,9 +237,20 @@ async def get_list(name: str):
         for path, relpath in utils.walk_files(rootdir)
     ]
 
-@app.get('/api/url/{name}')
-async def get_url(name: str):
-    return get_root(name).http
+@app.get('/api/url/{path:path}')
+async def get_url(path: str):
+    root, *dataset = path.split('/', 1)
+    scheme = 'http'
+    http = get_root(root).http
+    http = f'{scheme}://{http}'
+    if dataset:
+        dataset = dataset[0]
+        return [
+            f'{http}/api/info/{dataset}',
+            f'{http}/api/download/{dataset}',
+        ]
+
+    return [http]
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str, slice: str = None):

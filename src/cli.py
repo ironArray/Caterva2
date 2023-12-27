@@ -90,7 +90,8 @@ def cmd_url(args):
         print(json.dumps(data))
         return
 
-    print(data)
+    for url in data:
+        print(url)
 
 @handle_errors
 def cmd_info(args):
