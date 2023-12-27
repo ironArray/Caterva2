@@ -29,6 +29,33 @@ import models
 # Blosc2 related functions
 #
 
+def compress(data, dst=None):
+    assert isinstance(data, (bytes, pathlib.Path))
+
+    if dst is not None:
+        dst.parent.mkdir(exist_ok=True, parents=True)
+        if dst.exists():
+            dst.unlink()
+
+    # Create schunk
+    cparams = {}
+    dparams = {}
+    storage = {
+        'urlpath': dst,
+        'cparams': cparams,
+        'dparams': dparams,
+    }
+    schunk = blosc2.SChunk(**storage)
+
+    # Append data
+    if isinstance(data, pathlib.Path):
+        with open(data, 'rb') as f:
+            data = f.read()
+
+    schunk.append_data(data)
+
+    return schunk
+
 def init_b2nd(metadata, urlpath=None):
     if urlpath is not None:
         urlpath.parent.mkdir(exist_ok=True, parents=True)

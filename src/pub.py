@@ -35,27 +35,6 @@ cache = None
 client = None
 
 
-def compress(src, dst):
-    dst.parent.mkdir(exist_ok=True, parents=True)
-    if dst.exists():
-        dst.unlink()
-
-    # Create schunk
-    cparams = {}
-    dparams = {}
-    storage = {
-        'urlpath': dst,
-        'cparams': cparams,
-        'dparams': dparams,
-    }
-    schunk = blosc2.SChunk(**storage)
-
-    # Append data
-    with open(src, 'rb') as f:
-        data = f.read()
-        schunk.append_data(data)
-
-
 async def worker(queue):
     while True:
         abspath, change = await queue.get()
@@ -69,7 +48,7 @@ async def worker(queue):
                 else:
                     # Compress regular files in publisher's cache
                     b2path = cache / f'{relpath}.b2'
-                    compress(abspath, b2path)
+                    utils.compress(abspath, b2path)
                     metadata = utils.read_metadata(b2path)
 
                 # Publish

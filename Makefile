@@ -13,7 +13,8 @@ bro:
 	${BIN}/python src/bro.py #--loglevel=INFO
 
 pub:
-	${BIN}/python src/pub.py foo data #--loglevel=INFO
+	${BIN}/python src/pub.py foo root-example
+#	${BIN}/python src/pub.py foo data #--loglevel=INFO
 
 sub:
 	${BIN}/python src/sub.py #--loglevel=INFO

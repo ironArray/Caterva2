@@ -256,8 +256,8 @@ async def get_info(path: str, slice: str = None):
         array = blosc2.asarray(array)
         metadata = utils.read_metadata(array)
     else:
-        schunk = schunk.__getitem__(*slice_obj)
-        schunk = blosc2.asarray(schunk)
+        data = schunk.__getitem__(*slice_obj)
+        schunk = utils.compress(data)
         metadata = utils.read_metadata(schunk)
 
     return metadata
@@ -297,8 +297,8 @@ async def get_download(path: str, nchunk: int, slice: str = None):
             array = blosc2.asarray(array)
             schunk = array.schunk
         else:
-            schunk = schunk.__getitem__(*slice_obj)
-            schunk = blosc2.asarray(schunk)
+            data = schunk.__getitem__(*slice_obj)
+            schunk = utils.compress(data)
 
     # Stream response
     chunk = schunk.get_chunk(nchunk)
