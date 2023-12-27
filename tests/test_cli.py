@@ -16,3 +16,13 @@ def test_roots():
 def test_url():
     out = cli(['url', 'foo'])
     assert out == ['http://localhost:8001']
+
+
+def test_subscribe():
+    # Subscribe once
+    out = cli(['subscribe', 'foo'])
+    assert out == 'Ok'
+
+    # Subscribe again, should be a noop
+    out = cli(['subscribe', 'foo'])
+    assert out == 'Ok'
