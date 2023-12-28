@@ -17,7 +17,7 @@ import typing
 import blosc2
 from fastapi import FastAPI, Header, Response, responses
 import uvicorn
-from watchfiles import Change, awatch
+from watchfiles import awatch
 
 # Project
 import models
@@ -44,19 +44,13 @@ def get_etag(abspath):
 
 async def worker(queue):
     while True:
-        abspath, change = await queue.get()
+        abspath = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
             assert isinstance(abspath, pathlib.Path)
             relpath = abspath.relative_to(root)
             key = str(relpath)
-            if change == Change.deleted:
-                data = {'change': change.name, 'path': relpath}
-                await client.publish(name, data=data)
-                # Update database
-                if key in database.etags:
-                    del database.etags[key]
-                    database.save()
-            else:
+            if abspath.is_file():
+                print('UPDATE', relpath)
                 # Load metadata
                 if abspath.suffix in {'.b2frame', '.b2nd'}:
                     metadata = utils.read_metadata(abspath)
@@ -68,11 +62,19 @@ async def worker(queue):
 
                 # Publish
                 metadata = metadata.model_dump()
-                data = {'change': change.name, 'path': relpath, 'metadata': metadata}
+                data = {'path': relpath, 'metadata': metadata}
                 await client.publish(name, data=data)
                 # Update database
                 database.etags[key] = get_etag(abspath)
                 database.save()
+            else:
+                print('DELETE', relpath)
+                data = {'path': relpath}
+                await client.publish(name, data=data)
+                # Update database
+                if key in database.etags:
+                    del database.etags[key]
+                    database.save()
 
         queue.task_done()
 
@@ -84,25 +86,22 @@ async def watchfiles(queue):
     for abspath, relpath in utils.walk_files(root):
         key = str(relpath)
         val = etags.pop(key, None)
-        if val == get_etag(abspath):
-            continue
-        elif val is None:
-            queue.put_nowait((abspath, Change.added))
-        else: # val != etag
-            queue.put_nowait((abspath, Change.modified))
+        if val != get_etag(abspath):
+            queue.put_nowait(abspath)
 
     # The etags left are those that were deleted
     for key in etags:
-        queue.put_nowait((abspath, Change.deleted))
+        queue.put_nowait(abspath)
         del database.etags[key]
         database.save()
 
     # Watch directory for changes
     async for changes in awatch(root):
-        for change, abspath in changes:
+        paths = set([abspath for change, abspath in changes])
+        for abspath in paths:
             abspath = pathlib.Path(abspath)
-            if abspath.is_file():
-                queue.put_nowait((abspath, change))
+            queue.put_nowait(abspath)
+
     print('THIS SHOULD BE PRINTED ON CTRL+C')
 
 
@@ -149,7 +148,7 @@ async def get_info(
     abspath = utils.get_abspath(root, path)
 
     # Check etag
-    etag = get_etag(abspath)
+    etag = database.etags[path]
     if if_none_match == etag:
         return Response(status_code=304)
 
@@ -187,6 +186,7 @@ async def get_download(path: str, nchunk: int = -1):
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
+    parser.add_argument('--statedir', default='caterva2', type=pathlib.Path)
     parser.add_argument('name')
     parser.add_argument('root', default='data')
     args = utils.run_parser(parser)
@@ -197,13 +197,13 @@ if __name__ == '__main__':
     root = pathlib.Path(args.root).resolve()
 
     # Init cache
-    var = pathlib.Path('caterva2/pub').resolve()
-    cache = var / 'cache'
+    statedir = args.statedir.resolve()
+    cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 
     # Init database
     model = models.Publisher(etags={})
-    database = utils.Database(var / 'db.json', model)
+    database = utils.Database(statedir / 'db.json', model)
 
     # Register
     host, port = args.http

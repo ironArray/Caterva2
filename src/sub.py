@@ -78,8 +78,33 @@ async def new_root(data, topic):
     database.roots[root.name] = root
     database.save()
 
+def init_b2(abspath, metadata):
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**metadata)
+        utils.init_b2nd(metadata, abspath)
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**metadata)
+        utils.init_b2frame(metadata, abspath)
+    else:
+        abspath = pathlib.Path(f'{abspath}.b2')
+        metadata = models.SChunk(**metadata)
+        utils.init_b2frame(metadata, abspath)
+
 async def updated_dataset(data, topic):
-    logger.info(f'Updated dataset {topic} {data=}')
+    name = topic
+    relpath = data['path']
+
+    rootdir = cache / name
+    abspath = rootdir / relpath
+    metadata = data.get('metadata')
+    if metadata is None:
+        if abspath.suffix not in {'.b2nd', '.b2frame'}:
+            abspath = pathlib.Path(f'{abspath}.b2')
+        if abspath.is_file():
+            abspath.unlink()
+    else:
+        init_b2(abspath, metadata)
 
 
 #
@@ -120,17 +145,7 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        suffix = abspath.suffix
-        if suffix == '.b2nd':
-            metadata = models.Metadata(**metadata)
-            utils.init_b2nd(metadata, abspath)
-        elif suffix == '.b2frame':
-            metadata = models.SChunk(**metadata)
-            utils.init_b2frame(metadata, abspath)
-        else:
-            abspath = rootdir / f'{relpath}.b2'
-            metadata = models.SChunk(**metadata)
-            utils.init_b2frame(metadata, abspath)
+        init_b2(abspath, metadata)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -302,7 +317,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
         nchunks = [nchunk]
     else:
         slice_obj = parse_slice(slice)
-        nchunks = utils.get_nchunks_from_slice(array or schunk, slice_obj)
+        nchunks = blosc2.get_slice_nchunks(array or schunk, slice_obj)
 
     # Fetch the chunks
     for n in nchunks:
@@ -314,7 +329,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
 
             # Wait until the chunk is available
             while True: # TODO timeout
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.01)
                 array, schunk = utils.open_b2(abspath)
                 if utils.chunk_is_available(schunk, n):
                     break
@@ -342,19 +357,20 @@ async def get_download(path: str, nchunk: int, slice: str = None):
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
+    parser.add_argument('--statedir', default='caterva2', type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Global configuration
     broker = args.broker
 
     # Init cache
-    var = pathlib.Path('caterva2/sub').resolve()
-    cache = var / 'cache'
+    statedir = args.statedir.resolve()
+    cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 
     # Init database
     model = models.Subscriber(roots={}, etags={})
-    database = utils.Database(var / 'db.json', model)
+    database = utils.Database(statedir / 'db.json', model)
 
     # Run
     host, port = args.http

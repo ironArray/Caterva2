@@ -157,17 +157,6 @@ def read_metadata(obj):
         raise TypeError(f'unexpected {type(obj)}')
 
 
-def get_nchunks_from_slice(obj, slice_obj):
-    # TODO Stub. This may be implemented in python-blosc2
-    if isinstance(obj, blosc2.ndarray.NDArray):
-        schunk = obj.schunk
-    elif isinstance(obj, blosc2.schunk.SChunk):
-        schunk = obj
-
-    total = schunk.nchunks
-    return range(total)
-
-
 #
 # Context managers
 #

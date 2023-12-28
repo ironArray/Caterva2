@@ -10,11 +10,11 @@ install:
 	mkdir -p data
 
 bro:
-	${BIN}/python src/bro.py #--loglevel=INFO
+	${BIN}/python src/bro.py --statedir=var/bro
 
 pub:
-	${BIN}/python src/pub.py foo root-example
-#	${BIN}/python src/pub.py foo data #--loglevel=INFO
+	${BIN}/python src/pub.py --statedir=var/pub foo root-example
+	#${BIN}/python src/pub.py --statedir=var/pub foo data
 
 sub:
-	${BIN}/python src/sub.py #--loglevel=INFO
+	${BIN}/python src/sub.py --statedir=var/sub

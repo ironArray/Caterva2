@@ -1,4 +1,4 @@
-blosc2>=2.3.2
+blosc2>=2.4.0
 httpx
 rich
 tqdm
