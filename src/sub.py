@@ -329,7 +329,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
 
             # Wait until the chunk is available
             while True: # TODO timeout
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.01)
                 array, schunk = utils.open_b2(abspath)
                 if utils.chunk_is_available(schunk, n):
                     break
