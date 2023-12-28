@@ -97,12 +97,13 @@ async def updated_dataset(data, topic):
 
     rootdir = cache / name
     abspath = rootdir / relpath
-    if data['change'] == 'deleted':
+    metadata = data.get('metadata')
+    if metadata is None:
         if abspath.suffix not in {'.b2nd', '.b2frame'}:
             abspath = pathlib.Path(f'{abspath}.b2')
-        abspath.unlink()
+        if abspath.is_file():
+            abspath.unlink()
     else:
-        metadata = data['metadata']
         init_b2(abspath, metadata)
 
 
