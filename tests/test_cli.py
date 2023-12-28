@@ -1,9 +1,12 @@
+import os
+import pathlib
 import json
 import subprocess
 
 
 def cli(args):
-    args = ['python', './src/cli.py'] + args + ['--json']
+    cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'src' / 'cli.py'
+    args = ['python', str(cli_path)] + args + ['--json']
     ret = subprocess.run(args, capture_output=True, text=True)
     assert ret.returncode == 0
     return json.loads(ret.stdout)
