@@ -35,7 +35,7 @@ def wait_for_programs(start_timeout_secs, get_status):
 @pytest.fixture(scope='session')
 def services():
     tests_dir = Path('tests')
-    purge_var = False  # toggle to start with an empty state directory
+    purge_var = True  # toggle to keep the state directory on start
     start_timeout_secs = 10
 
     data_dir = tests_dir / 'data'
