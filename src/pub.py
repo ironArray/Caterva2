@@ -20,6 +20,7 @@ import uvicorn
 from watchfiles import Change, awatch
 
 # Project
+import models
 import utils
 
 
@@ -34,15 +35,28 @@ nworkers = 1
 # State
 cache = None
 client = None
+database = None  # <Database> instance
 
+
+def get_etag(abspath):
+    stat = abspath.stat()
+    return str(stat.st_mtime)
 
 async def worker(queue):
     while True:
         abspath, change = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
-            if abspath.is_file():
-                relpath = pathlib.Path(abspath).relative_to(root)
-
+            assert isinstance(abspath, pathlib.Path)
+            relpath = abspath.relative_to(root)
+            key = str(relpath)
+            if change == Change.deleted:
+                data = {'change': change.name, 'path': relpath}
+                await client.publish(name, data=data)
+                # Update database
+                if key in database.etags:
+                    del database.etags[key]
+                    database.save()
+            else:
                 # Load metadata
                 if abspath.suffix in {'.b2frame', '.b2nd'}:
                     metadata = utils.read_metadata(abspath)
@@ -56,21 +70,39 @@ async def worker(queue):
                 metadata = metadata.model_dump()
                 data = {'change': change.name, 'path': relpath, 'metadata': metadata}
                 await client.publish(name, data=data)
+                # Update database
+                database.etags[key] = get_etag(abspath)
+                database.save()
 
         queue.task_done()
 
 
 async def watchfiles(queue):
-    # Notify the network about available datasets
-    # TODO Notify only about changes from previous run, for this purpose we need to
-    # persist state
-    for path, relpath in utils.walk_files(root):
-        queue.put_nowait((path, Change.added))
+    # On start, notify the network about changes to the datasets, changes done since the
+    # last run.
+    etags = database.etags.copy()
+    for abspath, relpath in utils.walk_files(root):
+        key = str(relpath)
+        val = etags.pop(key, None)
+        if val == get_etag(abspath):
+            continue
+        elif val is None:
+            queue.put_nowait((abspath, Change.added))
+        else: # val != etag
+            queue.put_nowait((abspath, Change.modified))
+
+    # The etags left are those that were deleted
+    for key in etags:
+        queue.put_nowait((abspath, Change.deleted))
+        del database.etags[key]
+        database.save()
 
     # Watch directory for changes
     async for changes in awatch(root):
-        for change, path in changes:
-            queue.put_nowait((path, change))
+        for change, abspath in changes:
+            abspath = pathlib.Path(abspath)
+            if abspath.is_file():
+                queue.put_nowait((abspath, change))
     print('THIS SHOULD BE PRINTED ON CTRL+C')
 
 
@@ -106,7 +138,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
-    return [relpath for path, relpath in utils.walk_files(root)]
+    return [relpath for abspath, relpath in utils.walk_files(root)]
 
 @app.get("/api/info/{path:path}")
 async def get_info(
@@ -117,8 +149,7 @@ async def get_info(
     abspath = utils.get_abspath(root, path)
 
     # Check etag
-    stat = abspath.stat()
-    etag = str(stat.st_mtime)
+    etag = get_etag(abspath)
     if if_none_match == etag:
         return Response(status_code=304)
 
@@ -165,10 +196,14 @@ if __name__ == '__main__':
     name = args.name
     root = pathlib.Path(args.root).resolve()
 
-    # Init cache and database
+    # Init cache
     var = pathlib.Path('caterva2/pub').resolve()
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
+
+    # Init database
+    model = models.Publisher(etags={})
+    database = utils.Database(var / 'db.json', model)
 
     # Register
     host, port = args.http
