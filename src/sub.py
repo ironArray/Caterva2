@@ -78,8 +78,32 @@ async def new_root(data, topic):
     database.roots[root.name] = root
     database.save()
 
+def init_b2(abspath, metadata):
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**metadata)
+        utils.init_b2nd(metadata, abspath)
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**metadata)
+        utils.init_b2frame(metadata, abspath)
+    else:
+        abspath = pathlib.Path(f'{abspath}.b2')
+        metadata = models.SChunk(**metadata)
+        utils.init_b2frame(metadata, abspath)
+
 async def updated_dataset(data, topic):
-    logger.info(f'Updated dataset {topic} {data=}')
+    name = topic
+    relpath = data['path']
+
+    rootdir = cache / name
+    abspath = rootdir / relpath
+    if data['change'] == 'deleted':
+        if abspath.suffix not in {'.b2nd', '.b2frame'}:
+            abspath = pathlib.Path(f'{abspath}.b2')
+        abspath.unlink()
+    else:
+        metadata = data['metadata']
+        init_b2(abspath, metadata)
 
 
 #
@@ -120,17 +144,7 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        suffix = abspath.suffix
-        if suffix == '.b2nd':
-            metadata = models.Metadata(**metadata)
-            utils.init_b2nd(metadata, abspath)
-        elif suffix == '.b2frame':
-            metadata = models.SChunk(**metadata)
-            utils.init_b2frame(metadata, abspath)
-        else:
-            abspath = rootdir / f'{relpath}.b2'
-            metadata = models.SChunk(**metadata)
-            utils.init_b2frame(metadata, abspath)
+        init_b2(abspath, metadata)
 
         # Save etag
         database.etags[key] = response.headers['etag']

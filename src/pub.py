@@ -149,7 +149,7 @@ async def get_info(
     abspath = utils.get_abspath(root, path)
 
     # Check etag
-    etag = get_etag(abspath)
+    etag = database.etags[path]
     if if_none_match == etag:
         return Response(status_code=304)
 
