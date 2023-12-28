@@ -49,9 +49,9 @@ def services():
     var_dir.mkdir(exist_ok=not purge_var)
 
     data_dir = var_dir / 'data'
-    if not data_dir.is_dir() and not data_dir.is_symlink():
+    if not data_dir.exists():
         examples_dir = src_dir / 'root-example'
-        data_dir.symlink_to(examples_dir, target_is_directory=True)
+        shutil.copytree(examples_dir, data_dir, symlinks=True)
 
     conf_file = tests_dir / 'supervisor.conf'
 
