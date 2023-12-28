@@ -357,13 +357,14 @@ async def get_download(path: str, nchunk: int, slice: str = None):
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
+    parser.add_argument('--var', default='caterva2', type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Global configuration
     broker = args.broker
 
     # Init cache
-    var = pathlib.Path('caterva2/sub').resolve()
+    var = args.var.resolve()
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 

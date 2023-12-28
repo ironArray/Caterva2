@@ -47,11 +47,12 @@ app.include_router(router)
 
 if __name__ == '__main__':
     parser = utils.get_parser(http='localhost:8000')
+    parser.add_argument('--var', default='caterva2', type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Init database
     # roots = {name: <Root>}
-    var = pathlib.Path('caterva2/broker').resolve()
+    var = args.var.resolve()
     database = utils.Database(var / 'db.json', models.Broker(roots={}))
     print(database.data)
 
