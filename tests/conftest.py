@@ -43,7 +43,7 @@ def services():
     src_dir = tests_dir.parent
     os.environ['CATERVA2_SOURCE'] = str(src_dir)
 
-    var_dir = tests_dir / '_caterva2'
+    var_dir = tests_dir / 'test-cat2-state'
     if purge_var and var_dir.is_dir():
         shutil.rmtree(var_dir)
     var_dir.mkdir(exist_ok=not purge_var)
