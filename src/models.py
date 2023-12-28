@@ -17,6 +17,7 @@ import pydantic
 class CParams(pydantic.BaseModel):
     codec: blosc2.Codec
     typesize: int
+    blocksize: int
 
 class SChunk(pydantic.BaseModel):
     blocksize: int
@@ -59,5 +60,9 @@ class Root(pydantic.BaseModel):
 class Broker(pydantic.BaseModel):
     roots: typing.Dict[str, Root]
 
+class Publisher(pydantic.BaseModel):
+    etags: typing.Dict[str, str]
+
 class Subscriber(pydantic.BaseModel):
     roots: typing.Dict[str, Root]
+    etags: typing.Dict[str, str]

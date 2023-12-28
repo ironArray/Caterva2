@@ -90,7 +90,8 @@ def cmd_url(args):
         print(json.dumps(data))
         return
 
-    print(data)
+    for url in data:
+        print(url)
 
 @handle_errors
 def cmd_info(args):
@@ -120,7 +121,9 @@ def __download(host, dataset, params, urlpath=None):
         schunk = utils.init_b2frame(metadata, urlpath=urlpath)
         array = None
     else:
-        raise NotImplementedError()
+        metadata = models.SChunk(**data)
+        schunk = utils.init_b2frame(metadata, urlpath=None)
+        array = None
 
     # Download
     url = f'http://{args.host}/api/download/{dataset}'
@@ -148,13 +151,15 @@ def cmd_show(args):
     array, schunk = __download(args.host, dataset, params)
 
     # Display
-    suffix = dataset.suffix
-    if suffix == '.b2nd':
-        print(array[:])
-    elif suffix == '.b2frame':
-        print(schunk[:])
+    if array is None:
+        data = schunk[:]  # byte string
+        try:
+            print(data.decode())
+        except UnicodeDecodeError:
+            print('Binary data')
     else:
-        raise NotImplementedError()
+        data = array[:]  # numpy array
+        print(data)
 
 @handle_errors
 def cmd_download(args):
@@ -162,14 +167,22 @@ def cmd_download(args):
     dataset, params = args.dataset
     output_dir = args.output_dir.resolve()
     urlpath = output_dir / dataset
+    urlpath.parent.mkdir(exist_ok=True, parents=True)
+
+    suffix = urlpath.suffix
+
     slice = params.get('slice')
     if slice:
-        suffix = urlpath.suffix
         urlpath = urlpath.with_suffix('')
         urlpath = pathlib.Path(f'{urlpath}[{slice}]{suffix}')
 
     # Download
     array, schunk = __download(args.host, dataset, params, urlpath=urlpath)
+    if suffix not in {'.b2frame', '.b2nd'}:
+        with open(urlpath, 'wb') as f:
+            data = schunk[:]
+            f.write(data)
+
     print(f'Dataset saved to {urlpath}')
 
 if __name__ == '__main__':

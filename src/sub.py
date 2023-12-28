@@ -27,12 +27,12 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
-cache = None
 nworkers = 100
 
 # State
-database = None    # <Database> instance
+cache = None
 clients = {}       # topic: <PubSubClient>
+database = None    # <Database> instance
 downloads = set()  # Downloads in progress
 
 queue = asyncio.Queue()
@@ -54,29 +54,22 @@ async def download_chunk(path, schunk, nchunk):
 
 async def worker(queue):
     while True:
-        key = await queue.get()
-        path, nchunk = key
+        path, nchunk, abspath = await queue.get()
         with utils.log_exception(logger, 'Download failed'):
-            urlpath = cache / path
-            urlpath.parent.mkdir(exist_ok=True, parents=True)
+            abspath.parent.mkdir(exist_ok=True, parents=True)
 
-            suffix = urlpath.suffix
+            suffix = abspath.suffix
             if suffix == '.b2nd':
-                array = blosc2.open(urlpath)
+                array = blosc2.open(abspath)
                 await download_chunk(path, array.schunk, nchunk)
-            elif suffix == '.b2frame':
-                schunk = blosc2.open(urlpath)
+            elif suffix in {'.b2frame', '.b2'}:
+                schunk = blosc2.open(abspath)
                 await download_chunk(path, schunk, nchunk)
             else:
-                root, relpath = path.split('/', 1)
-                host = database.roots[root].http
-                with urlpath.open('wb') as file:
-                    with httpx.stream('GET', f'http://{host}/api/download/{relpath}') as resp:
-                        for chunk in resp.iter_bytes():
-                            file.write(chunk)
+                raise NotImplementedError()
 
         queue.task_done()
-        downloads.remove(key)
+        downloads.remove((path, nchunk))
 
 
 async def new_root(data, topic):
@@ -112,19 +105,36 @@ def follow(name: str):
     # Initialize the datasets in the cache
     data = utils.get(f'http://{root.http}/api/list')
     for relpath in data:
-        metadata = utils.get(f'http://{root.http}/api/info/{relpath}')
+        # If-None-Match header
+        key = f'{name}/{relpath}'
+        val = database.etags.get(key)
+        headers = None if val is None else {'If-None-Match': val}
+
+        # Call API
+        response = httpx.get(f'http://{root.http}/api/info/{relpath}', headers=headers)
+        if response.status_code == 304:
+            continue
+
+        response.raise_for_status()
+        metadata = response.json()
+
+        # Save metadata
         abspath = rootdir / relpath
-        if not abspath.exists():
-            suffix = abspath.suffix
-            if suffix == '.b2nd':
-                metadata = models.Metadata(**metadata)
-                utils.init_b2nd(metadata, abspath)
-            elif suffix == '.b2frame':
-                metadata = models.SChunk(**metadata)
-                utils.init_b2frame(metadata, abspath)
-            else:
-                metadata = models.File(**metadata)
-                abspath.touch()
+        suffix = abspath.suffix
+        if suffix == '.b2nd':
+            metadata = models.Metadata(**metadata)
+            utils.init_b2nd(metadata, abspath)
+        elif suffix == '.b2frame':
+            metadata = models.SChunk(**metadata)
+            utils.init_b2frame(metadata, abspath)
+        else:
+            abspath = rootdir / f'{relpath}.b2'
+            metadata = models.SChunk(**metadata)
+            utils.init_b2frame(metadata, abspath)
+
+        # Save etag
+        database.etags[key] = response.headers['etag']
+        database.save()
 
     # Subscribe to changes in the dataset
     if name not in clients:
@@ -139,7 +149,14 @@ def parse_slice(string):
         segment = slice(*segment)
         obj.append(segment)
 
-    return obj
+    return tuple(obj)
+
+def lookup_path(path):
+    path = pathlib.Path(path)
+    if path.suffix not in {'.b2frame', '.b2nd'}:
+        path = f'{path}.b2'
+
+    return utils.get_abspath(cache, path)
 
 
 #
@@ -220,8 +237,9 @@ def get_root(name):
 
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(name: str):
-    get_root(name)
-    return follow(name)
+    get_root(name)  # Not Found
+    follow(name)
+    return 'Ok'
 
 @app.get('/api/list/{name}')
 async def get_list(name: str):
@@ -231,33 +249,44 @@ async def get_list(name: str):
     if not rootdir.exists():
         utils.raise_not_found(f'Not subscribed to {name}')
 
-    return [relpath for path, relpath in utils.walk_files(rootdir)]
+    return [
+        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        for path, relpath in utils.walk_files(rootdir)
+    ]
 
-@app.get('/api/url/{name}')
-async def get_url(name: str):
-    return get_root(name).http
+@app.get('/api/url/{path:path}')
+async def get_url(path: str):
+    root, *dataset = path.split('/', 1)
+    scheme = 'http'
+    http = get_root(root).http
+    http = f'{scheme}://{http}'
+    if dataset:
+        dataset = dataset[0]
+        return [
+            f'{http}/api/info/{dataset}',
+            f'{http}/api/download/{dataset}',
+        ]
+
+    return [http]
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str, slice: str = None):
-    abspath = cache / path
-    try:
-        metadata = utils.read_metadata(abspath)
-    except FileNotFoundError:
-        utils.raise_not_found()
+    abspath = lookup_path(path)
 
     if slice is None:
-        return metadata
+        return utils.read_metadata(abspath)
 
-    # Reade metadata
+    # Read metadata
     slice_obj = parse_slice(slice)
     array, schunk = utils.open_b2(abspath)
     if array is not None:
-        array = array.__getitem__(*slice_obj)
+        array = array.__getitem__(slice_obj)
         array = blosc2.asarray(array)
         metadata = utils.read_metadata(array)
     else:
-        schunk = schunk.__getitem__(*slice_obj)
-        schunk = blosc2.asarray(schunk)
+        assert len(slice_obj) == 1
+        data = schunk.__getitem__(*slice_obj)
+        schunk = utils.compress(data)
         metadata = utils.read_metadata(schunk)
 
     return metadata
@@ -265,12 +294,7 @@ async def get_info(path: str, slice: str = None):
 
 @app.get('/api/download/{path:path}')
 async def get_download(path: str, nchunk: int, slice: str = None):
-    # Not found
-    abspath = cache / path
-    try:
-        utils.read_metadata(abspath)
-    except FileNotFoundError:
-        utils.raise_not_found()
+    abspath = lookup_path(path)
 
     # Build the list of chunks we need to download from the publisher
     array, schunk = utils.open_b2(abspath)
@@ -286,7 +310,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
             key = (path, n)
             if key not in downloads:
                 downloads.add(key)
-                queue.put_nowait(key)
+                queue.put_nowait((path, n, abspath))
 
             # Wait until the chunk is available
             while True: # TODO timeout
@@ -298,12 +322,13 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     # With slice
     if slice is not None:
         if array is not None:
-            array = array.__getitem__(*slice_obj)
+            array = array.__getitem__(slice_obj)
             array = blosc2.asarray(array)
             schunk = array.schunk
         else:
-            schunk = schunk.__getitem__(*slice_obj)
-            schunk = blosc2.asarray(schunk)
+            assert len(slice_obj) == 1
+            data = schunk.__getitem__(*slice_obj)
+            schunk = utils.compress(data)
 
     # Stream response
     chunk = schunk.get_chunk(nchunk)
@@ -322,12 +347,14 @@ if __name__ == '__main__':
     # Global configuration
     broker = args.broker
 
-    # Init cache and database
-    var = pathlib.Path('var/sub').resolve()
-    model = models.Subscriber(roots={})
-    database = utils.Database(var / 'db.json', model)
+    # Init cache
+    var = pathlib.Path('caterva2/sub').resolve()
     cache = var / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
+
+    # Init database
+    model = models.Subscriber(roots={}, etags={})
+    database = utils.Database(var / 'db.json', model)
 
     # Run
     host, port = args.http

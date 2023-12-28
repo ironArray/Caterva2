@@ -29,6 +29,33 @@ import models
 # Blosc2 related functions
 #
 
+def compress(data, dst=None):
+    assert isinstance(data, (bytes, pathlib.Path))
+
+    if dst is not None:
+        dst.parent.mkdir(exist_ok=True, parents=True)
+        if dst.exists():
+            dst.unlink()
+
+    # Create schunk
+    cparams = {}
+    dparams = {}
+    storage = {
+        'urlpath': dst,
+        'cparams': cparams,
+        'dparams': dparams,
+    }
+    schunk = blosc2.SChunk(**storage)
+
+    # Append data
+    if isinstance(data, pathlib.Path):
+        with open(data, 'rb') as f:
+            data = f.read()
+
+    schunk.append_data(data)
+
+    return schunk
+
 def init_b2nd(metadata, urlpath=None):
     if urlpath is not None:
         urlpath.parent.mkdir(exist_ok=True, parents=True)
@@ -36,7 +63,8 @@ def init_b2nd(metadata, urlpath=None):
             urlpath.unlink()
 
     dtype = getattr(np, metadata.dtype)
-    return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath)
+    return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
+                         chunks=metadata.chunks, blocks=metadata.blocks)
 
 def init_b2frame(metadata, urlpath=None):
     if urlpath is not None:
@@ -45,13 +73,17 @@ def init_b2frame(metadata, urlpath=None):
             urlpath.unlink()
 
     cparams = metadata.cparams.model_dump()
-    return blosc2.SChunk(
+    sc = blosc2.SChunk(
         metadata.chunksize,
         contiguous=metadata.contiguous,
         cparams=cparams,
         dparams={},
         urlpath=urlpath,
     )
+    sc.fill_special(metadata.nbytes / metadata.typesize,
+                    special_value=blosc2.SpecialValue.UNINIT)
+    return sc
+
 
 def open_b2(abspath):
     suffix = abspath.suffix
@@ -59,6 +91,9 @@ def open_b2(abspath):
         array = blosc2.open(abspath)
         schunk = array.schunk
     elif suffix == '.b2frame':
+        array = None
+        schunk = blosc2.open(abspath)
+    elif suffix == '.b2':
         array = None
         schunk = blosc2.open(abspath)
     else:
@@ -99,9 +134,7 @@ def read_metadata(obj):
             raise FileNotFoundError('File does not exist or is a directory')
 
         suffix = path.suffix
-        if suffix == '.b2nd':
-            obj = blosc2.open(path)
-        elif suffix == '.b2frame':
+        if suffix in {'.b2frame', '.b2nd', '.b2'}:
             obj = blosc2.open(path)
         else:
             # Special case for regular files
@@ -206,8 +239,8 @@ def run_parser(parser):
 #
 # HTTP client helpers
 #
-def get(url, params=None, timeout=5, model=None):
-    response = httpx.get(url, params=params, timeout=timeout)
+def get(url, params=None, headers=None, timeout=5, model=None):
+    response = httpx.get(url, params=params, headers=headers, timeout=timeout)
     response.raise_for_status()
     json = response.json()
     return json if model is None else model(**json)
@@ -226,6 +259,19 @@ def raise_bad_request(detail):
 
 def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
+
+def get_abspath(root, path):
+    abspath = root / path
+
+    # Security check
+    if root not in abspath.parents:
+        raise_bad_request(f'Invalid path {path}')
+
+    # Existence check
+    if not abspath.is_file():
+        raise_not_found()
+
+    return abspath
 
 
 #

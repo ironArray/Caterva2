@@ -10,15 +10,17 @@
 import asyncio
 import contextlib
 import logging
-from pathlib import Path
+import pathlib
+import typing
 
 # Requirements
 import blosc2
-from fastapi import FastAPI, responses
+from fastapi import FastAPI, Header, Response, responses
 import uvicorn
 from watchfiles import Change, awatch
 
 # Project
+import models
 import utils
 
 
@@ -31,34 +33,76 @@ root = None
 nworkers = 1
 
 # State
+cache = None
 client = None
+database = None  # <Database> instance
 
+
+def get_etag(abspath):
+    stat = abspath.stat()
+    return str(stat.st_mtime)
 
 async def worker(queue):
     while True:
         abspath, change = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
-            if abspath.is_file():
-                relpath = Path(abspath).relative_to(root)
-                metadata = utils.read_metadata(abspath)
+            assert isinstance(abspath, pathlib.Path)
+            relpath = abspath.relative_to(root)
+            key = str(relpath)
+            if change == Change.deleted:
+                data = {'change': change.name, 'path': relpath}
+                await client.publish(name, data=data)
+                # Update database
+                if key in database.etags:
+                    del database.etags[key]
+                    database.save()
+            else:
+                # Load metadata
+                if abspath.suffix in {'.b2frame', '.b2nd'}:
+                    metadata = utils.read_metadata(abspath)
+                else:
+                    # Compress regular files in publisher's cache
+                    b2path = cache / f'{relpath}.b2'
+                    utils.compress(abspath, b2path)
+                    metadata = utils.read_metadata(b2path)
+
+                # Publish
                 metadata = metadata.model_dump()
                 data = {'change': change.name, 'path': relpath, 'metadata': metadata}
                 await client.publish(name, data=data)
+                # Update database
+                database.etags[key] = get_etag(abspath)
+                database.save()
 
         queue.task_done()
 
 
 async def watchfiles(queue):
-    # Notify the network about available datasets
-    # TODO Notify only about changes from previous run, for this purpose we need to
-    # persist state
-    for path, relpath in utils.walk_files(root):
-        queue.put_nowait((path, Change.added))
+    # On start, notify the network about changes to the datasets, changes done since the
+    # last run.
+    etags = database.etags.copy()
+    for abspath, relpath in utils.walk_files(root):
+        key = str(relpath)
+        val = etags.pop(key, None)
+        if val == get_etag(abspath):
+            continue
+        elif val is None:
+            queue.put_nowait((abspath, Change.added))
+        else: # val != etag
+            queue.put_nowait((abspath, Change.modified))
+
+    # The etags left are those that were deleted
+    for key in etags:
+        queue.put_nowait((abspath, Change.deleted))
+        del database.etags[key]
+        database.save()
 
     # Watch directory for changes
     async for changes in awatch(root):
-        for change, path in changes:
-            queue.put_nowait((path, change))
+        for change, abspath in changes:
+            abspath = pathlib.Path(abspath)
+            if abspath.is_file():
+                queue.put_nowait((abspath, change))
     print('THIS SHOULD BE PRINTED ON CTRL+C')
 
 
@@ -94,43 +138,49 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
-    return [relpath for path, relpath in utils.walk_files(root)]
+    return [relpath for abspath, relpath in utils.walk_files(root)]
 
 @app.get("/api/info/{path:path}")
-async def get_info(path):
-    try:
-        return utils.read_metadata(root / path)
-    except FileNotFoundError:
-        utils.raise_not_found()
+async def get_info(
+    path: str,
+    response: Response,
+    if_none_match: typing.Annotated[str | None, Header()] = None
+):
+    abspath = utils.get_abspath(root, path)
 
+    # Check etag
+    etag = get_etag(abspath)
+    if if_none_match == etag:
+        return Response(status_code=304)
 
-def download_file(filepath):
-    with open(filepath, 'rb') as file:
-        yield from file
+    # Regular files (.b2)
+    if abspath.suffix not in {'.b2frame', '.b2nd'}:
+        abspath = utils.get_abspath(cache, f'{path}.b2')
 
+    # Return
+    response.headers['Etag'] = etag
+    return utils.read_metadata(abspath)
 
-@app.get("/api/download/{name:path}")
-async def get_download(name: str, nchunk: int = -1):
-    filepath = root / name
+@app.get("/api/download/{path:path}")
+async def get_download(path: str, nchunk: int = -1):
+    if nchunk < 0:
+        utils.raise_bad_request('Chunk number required')
 
-    suffix = filepath.suffix
+    abspath = utils.get_abspath(root, path)
+
+    suffix = abspath.suffix
     if suffix == '.b2nd':
-        if nchunk < 0:
-            utils.raise_bad_request('Chunk number required')
-        array = blosc2.open(filepath)
-        chunk = array.schunk.get_chunk(nchunk)
-        downloader = utils.iterchunk(chunk)
+        array = blosc2.open(abspath)
+        schunk = array.schunk
     elif suffix == '.b2frame':
-        if nchunk < 0:
-            utils.raise_bad_request('Chunk number required')
-        schunk = blosc2.open(filepath)
-        chunk = schunk.get_chunk(nchunk)
-        downloader = utils.iterchunk(chunk)
+        schunk = blosc2.open(abspath)
     else:
-        if nchunk >= 0:
-            utils.raise_bad_request('Regular files don\'t have chunks')
+        relpath = pathlib.Path(abspath).relative_to(root)
+        b2path = cache / f'{relpath}.b2'
+        schunk = blosc2.open(b2path)
 
-        downloader = download_file(filepath)
+    chunk = schunk.get_chunk(nchunk)
+    downloader = utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
 
@@ -144,7 +194,16 @@ if __name__ == '__main__':
     # Global configuration
     broker = args.broker
     name = args.name
-    root = Path(args.root).resolve()
+    root = pathlib.Path(args.root).resolve()
+
+    # Init cache
+    var = pathlib.Path('caterva2/pub').resolve()
+    cache = var / 'cache'
+    cache.mkdir(exist_ok=True, parents=True)
+
+    # Init database
+    model = models.Publisher(etags={})
+    database = utils.Database(var / 'db.json', model)
 
     # Register
     host, port = args.http
