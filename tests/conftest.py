@@ -38,14 +38,14 @@ def services():
     purge_var = True  # toggle to keep the state directory on start
     start_timeout_secs = 10
 
-    data_dir = tests_dir / 'data'
-    if not data_dir.is_dir() and not data_dir.is_symlink():
-        data_dir.symlink_to('../root-example', target_is_directory=True)
-
     var_dir = tests_dir / 'caterva2'
     if purge_var and var_dir.is_dir():
         shutil.rmtree(var_dir)
     var_dir.mkdir(exist_ok=not purge_var)
+
+    data_dir = var_dir / 'data'
+    if not data_dir.is_dir() and not data_dir.is_symlink():
+        data_dir.symlink_to('../../root-example', target_is_directory=True)
 
     conf_file = tests_dir / 'supervisor.conf'
 
