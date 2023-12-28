@@ -317,7 +317,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
         nchunks = [nchunk]
     else:
         slice_obj = parse_slice(slice)
-        nchunks = utils.get_nchunks_from_slice(array or schunk, slice_obj)
+        nchunks = blosc2.get_slice_nchunks(array or schunk, slice_obj)
 
     # Fetch the chunks
     for n in nchunks:
