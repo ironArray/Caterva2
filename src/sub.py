@@ -357,20 +357,20 @@ async def get_download(path: str, nchunk: int, slice: str = None):
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
-    parser.add_argument('--var', default='caterva2', type=pathlib.Path)
+    parser.add_argument('--statedir', default='caterva2', type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Global configuration
     broker = args.broker
 
     # Init cache
-    var = args.var.resolve()
-    cache = var / 'cache'
+    statedir = args.statedir.resolve()
+    cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 
     # Init database
     model = models.Subscriber(roots={}, etags={})
-    database = utils.Database(var / 'db.json', model)
+    database = utils.Database(statedir / 'db.json', model)
 
     # Run
     host, port = args.http
