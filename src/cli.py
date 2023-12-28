@@ -130,6 +130,7 @@ def __download(host, dataset, params, urlpath=None):
     for nchunk in tqdm.tqdm(range(schunk.nchunks)):
         params['nchunk'] = nchunk
         response = httpx.get(url, params=params, timeout=None)
+        response.raise_for_status()
         chunk = response.read()
         schunk.update_chunk(nchunk, chunk)
 
