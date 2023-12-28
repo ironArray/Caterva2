@@ -47,6 +47,7 @@ def services():
     if purge_var and var_dir.is_dir():
         shutil.rmtree(var_dir)
     var_dir.mkdir(exist_ok=not purge_var)
+    os.environ['CATERVA2_STATE'] = str(var_dir)
 
     data_dir = var_dir / 'data'
     if not data_dir.exists():
