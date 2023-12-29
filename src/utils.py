@@ -20,6 +20,7 @@ import fastapi
 import fastapi_websocket_pubsub
 import httpx
 import numpy as np
+import safer
 
 # Project
 import models
@@ -286,7 +287,7 @@ class Database:
 
     def save(self):
         dump = self.data.model_dump_json(exclude_none=True)
-        with self.path.open('w') as file:
+        with safer.open(self.path, 'w') as file:
             file.write(dump)
 
     def __getattr__(self, name):
