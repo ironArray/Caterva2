@@ -33,7 +33,7 @@ clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 downloads = set()  # Downloads in progress
 
-async def __download_chunk(path, schunk, nchunk):
+async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
 
@@ -47,24 +47,6 @@ async def __download_chunk(path, schunk, nchunk):
             buffer.append(chunk)
         chunk = b''.join(buffer)
         schunk.update_chunk(nchunk, chunk)
-
-async def download_chunk(path, nchunk, abspath):
-    key = (path, nchunk)
-    downloads.add(key)
-    try:
-        abspath.parent.mkdir(exist_ok=True, parents=True)
-
-        suffix = abspath.suffix
-        if suffix == '.b2nd':
-            array = blosc2.open(abspath)
-            await __download_chunk(path, array.schunk, nchunk)
-        elif suffix in {'.b2frame', '.b2'}:
-            schunk = blosc2.open(abspath)
-            await __download_chunk(path, schunk, nchunk)
-        else:
-            raise NotImplementedError()
-    finally:
-        downloads.remove(key)
 
 
 async def new_root(data, topic):
@@ -312,8 +294,14 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     # Fetch the chunks
     for n in nchunks:
         if not utils.chunk_is_available(schunk, n):
-            if (path, n) not in downloads:
-                await download_chunk(path, n, abspath)
+            key = (path, nchunk)
+            if key not in downloads:
+                abspath.parent.mkdir(exist_ok=True, parents=True)
+                downloads.add(key)
+                try:
+                    await download_chunk(path, schunk, nchunk)
+                finally:
+                    downloads.remove(key)
 
     # With slice
     if slice is not None:
