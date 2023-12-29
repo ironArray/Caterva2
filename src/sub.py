@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import asyncio
 import contextlib
 import logging
 import pathlib
@@ -31,7 +32,7 @@ broker = None
 cache = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
-downloads = set()  # Downloads in progress
+locks = {}
 
 async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
@@ -292,16 +293,12 @@ async def get_download(path: str, nchunk: int, slice: str = None):
             nchunks = blosc2.get_slice_nchunks(array, slice_obj)
 
     # Fetch the chunks
-    for n in nchunks:
-        if not utils.chunk_is_available(schunk, n):
-            key = (path, nchunk)
-            if key not in downloads:
+    lock = locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        for n in nchunks:
+            if not utils.chunk_is_available(schunk, n):
                 abspath.parent.mkdir(exist_ok=True, parents=True)
-                downloads.add(key)
-                try:
-                    await download_chunk(path, schunk, nchunk)
-                finally:
-                    downloads.remove(key)
+                await download_chunk(path, schunk, nchunk)
 
     # With slice
     if slice is not None:
