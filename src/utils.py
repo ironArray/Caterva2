@@ -103,7 +103,9 @@ def open_b2(abspath):
     return array, schunk
 
 def chunk_is_available(schunk, nchunk):
-    flag = (schunk.get_chunk(nchunk)[31] & 0b01110000) >> 4
+    # Blosc2 flags are at offset 31
+    # (see https://github.com/Blosc/c-blosc2/blob/main/README_CHUNK_FORMAT.rst)
+    flag = (schunk.get_lazychunk(nchunk)[31] & 0b01110000) >> 4
     return flag != blosc2.SpecialValue.UNINIT.value
 
 def iterchunk(chunk):
