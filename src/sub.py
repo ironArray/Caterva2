@@ -138,8 +138,11 @@ def follow(name: str):
 def parse_slice(string):
     obj = []
     for segment in string.split(','):
-        segment = [int(x) if x else None for x in segment.split(':')]
-        segment = slice(*segment)
+        if ':' not in segment:
+            segment = int(segment)
+        else:
+            segment = [int(x) if x else None for x in segment.split(':')]
+            segment = slice(*segment)
         obj.append(segment)
 
     return tuple(obj)
