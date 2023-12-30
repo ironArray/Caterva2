@@ -300,8 +300,11 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     async with lock:
         for n in nchunks:
             if not utils.chunk_is_available(schunk, n):
-                abspath.parent.mkdir(exist_ok=True, parents=True)
-                await download_chunk(path, schunk, nchunk)
+                # TODO: I think the line below can be removed,
+                #  as it is guaranteed to exist per the `utils.open_b2(abspath)`
+                #  above, isn't it?
+                # abspath.parent.mkdir(exist_ok=True, parents=True)
+                await download_chunk(path, schunk, n)
 
     # With slice
     if slice is not None:
