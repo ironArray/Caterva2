@@ -56,11 +56,11 @@ Whenever the subscriber gets a request to `subscribe` to a root, it must check i
 
 Metadata can be fetched and consolidated as uninitialized datasets in cache by using the API described in the [Metadata](#metadata) section below.
 
-There will be not an in-memory cache in the subscriber, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so there is no need to duplicate it (at least initially).  The folder will be called `$(cwd)/caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
+There will be not an in-memory cache in the subscriber, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so there is no need to duplicate it (at least initially).  The folder will be called `$(cwd)/_caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
 
 Updates to the cache for a given root should happen in an atomic fashion.  The subscriber should get and store all new required information in a temporary location of the same device where the current database and cache are located, and only once the storage operation is complete shall it replace the old data.
 
-When a publisher has to serve a data file that is not in Blosc2 format (e.g. a text file), it will be compressed locally (initially in one go with the technique shown in [section "Compressing general files"](#compressing-general-files)), and stored in `$(cwd)/caterva2/cache/`. The file will be named `$(dataset_path).b2` (e.g. `foo/bar.txt` will be stored as `$(cwd)/caterva2/cache/foo/bar.txt.b2`).
+When a publisher has to serve a data file that is not in Blosc2 format (e.g. a text file), it will be compressed locally (initially in one go with the technique shown in [section "Compressing general files"](#compressing-general-files)), and stored in `$(cwd)/_caterva2/cache/`. The file will be named `$(dataset_path).b2` (e.g. `foo/bar.txt` will be stored as `$(cwd)/_caterva2/cache/foo/bar.txt.b2`).
 
 The publisher will serve the data in its own cache as-is, without decompressing it. The subscriber will store and send the data as-is too, and only the client will be responsible to decompress it (it will receive a Blosc2 frame than can be opened with `blosc2.open()` and data can be retrieved using slicing).
 
@@ -207,7 +207,7 @@ For the time being, `.b2` files can be made in one shot (i.e. a single `schunk.a
 
 ## Internal database
 
-There will be an internal database for publishers and subscribers for storing different metadata.  It will be a JSON file called `$(cwd)/caterva2/db.json` and it will contain the following fields (J. David: please check this):
+There will be an internal database for publishers and subscribers for storing different metadata.  It will be a JSON file called `$(cwd)/_caterva2/db.json` and it will contain the following fields (J. David: please check this):
 
 * `version`: The version of the database.
 * `roots`: A list of roots.  Each root is a dictionary with the following fields:
