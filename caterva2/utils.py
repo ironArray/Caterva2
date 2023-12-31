@@ -23,7 +23,7 @@ import numpy as np
 import safer
 
 # Project
-import models
+from . import models
 
 
 #

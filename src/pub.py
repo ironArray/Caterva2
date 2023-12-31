@@ -20,9 +20,7 @@ import uvicorn
 from watchfiles import awatch
 
 # Project
-import models
-import utils
-
+from caterva2 import utils, models
 
 logger = logging.getLogger('pub')
 

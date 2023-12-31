@@ -1,11 +1,24 @@
-import os
+###############################################################################
+# Caterva2 - On demand access to remote Blosc2 data repositories
+#
+# Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
+# https://www.blosc.org
+# License: GNU Affero General Public License v3.0
+# See LICENSE.txt for details about copyright and rights to use.
+###############################################################################
+
+
+import caterva2 as cat2
 import pathlib
 import json
 import subprocess
 
 
+root_default = 'foo'
+
 def cli(args, binary=False):
-    cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'src' / 'cli.py'
+    # cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'src' / 'cli.py'
+    cli_path = pathlib.Path().parent.parent / 'src' / 'cli.py'
     args = ['python', str(cli_path)] + args
     if not binary:
         args += ['--json']
@@ -15,15 +28,16 @@ def cli(args, binary=False):
     return out if binary else json.loads(out)
 
 
-def test_roots(services):
-    out = cli(['roots'])
-    assert out == {'foo': {'name': 'foo', 'http': 'localhost:8001', 'subscribed': None}}
+def test_roots():
+    roots = cli(['roots'])
+    assert roots[root_default]['name'] == root_default
+    assert roots[root_default]['http'] == cat2.pub_host_default
 
-def test_url(services):
+def test_url():
     out = cli(['url', 'foo'])
     assert out == ['http://localhost:8001']
 
-def test_subscribe(services):
+def test_subscribe():
     # Subscribe once
     out = cli(['subscribe', 'foo'])
     assert out == 'Ok'

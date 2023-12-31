@@ -17,8 +17,7 @@ from fastapi_websocket_pubsub import PubSubEndpoint
 import uvicorn
 
 # Project
-import models
-import utils
+from caterva2 import utils, models
 
 
 # State

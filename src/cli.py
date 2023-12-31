@@ -17,8 +17,7 @@ import rich
 import tqdm
 
 # Project
-import models
-import utils
+from caterva2 import utils, models
 
 
 def handle_errors(func):

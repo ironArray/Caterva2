@@ -19,9 +19,7 @@ import httpx
 import uvicorn
 
 # Project
-import models
-import utils
-
+from caterva2 import utils, models
 
 logger = logging.getLogger('sub')
 
