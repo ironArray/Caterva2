@@ -22,19 +22,20 @@ class TreeApp(App):
 
     def __init__(self, args):
         super().__init__()
-        self.data = utils.get(f'http://{args.host}/api/list')
+        self.root = args.root
+        self.data = utils.get(f'http://{args.host}/api/list/{args.root}')
 
     def compose(self) -> ComposeResult:
-        path = pathlib.Path(self.data[0])
+        path = self.root / pathlib.Path(self.data[0])
         root, _ = path.parts
         tree: Tree[dict] = Tree(root)
         tree.root.expand()
         datasets = tree.root.add("Datasets", expand=True)
         files = tree.root.add("Files", expand=True)
         for dataset in self.data:
-            path = pathlib.Path(dataset)
+            path = self.root / pathlib.Path(dataset)
             _, *parts = path.parts
-            if dataset.endswith(".b2nd"):
+            if dataset.endswith((".b2nd", ".b2frame")):
                 datasets.add_leaf("/".join(parts))
             else:
                 files.add_leaf("/".join(parts))
@@ -44,6 +45,7 @@ class TreeApp(App):
 if __name__ == "__main__":
     parser = utils.get_parser()
     parser.add_argument('--host', default='localhost:8002')
+    parser.add_argument('--root', default='foo')
 
     # Go
     args = utils.run_parser(parser)

@@ -7,12 +7,12 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import asyncio
 import contextlib
 import logging
 import pathlib
 
 # Requirements
-import asyncio
 import blosc2
 from fastapi import FastAPI, responses
 import httpx
@@ -27,15 +27,12 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
-nworkers = 100
 
 # State
 cache = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
-downloads = set()  # Downloads in progress
-
-queue = asyncio.Queue()
+locks = {}
 
 async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
@@ -45,31 +42,12 @@ async def download_chunk(path, schunk, nchunk):
     params = {'nchunk': nchunk}
 
     client = httpx.AsyncClient()
-    async with client.stream('GET', url, params=params) as resp:
+    async with client.stream('GET', url, params=params, timeout=5) as resp:
         buffer = []
         async for chunk in resp.aiter_bytes():
             buffer.append(chunk)
         chunk = b''.join(buffer)
         schunk.update_chunk(nchunk, chunk)
-
-async def worker(queue):
-    while True:
-        path, nchunk, abspath = await queue.get()
-        with utils.log_exception(logger, 'Download failed'):
-            abspath.parent.mkdir(exist_ok=True, parents=True)
-
-            suffix = abspath.suffix
-            if suffix == '.b2nd':
-                array = blosc2.open(abspath)
-                await download_chunk(path, array.schunk, nchunk)
-            elif suffix in {'.b2frame', '.b2'}:
-                schunk = blosc2.open(abspath)
-                await download_chunk(path, schunk, nchunk)
-            else:
-                raise NotImplementedError()
-
-        queue.task_done()
-        downloads.remove((path, nchunk))
 
 
 async def new_root(data, topic):
@@ -160,8 +138,11 @@ def follow(name: str):
 def parse_slice(string):
     obj = []
     for segment in string.split(','):
-        segment = [int(x) if x else None for x in segment.split(':')]
-        segment = slice(*segment)
+        if ':' not in segment:
+            segment = int(segment)
+        else:
+            segment = [int(x) if x else None for x in segment.split(':')]
+            segment = slice(*segment)
         obj.append(segment)
 
     return tuple(obj)
@@ -220,22 +201,11 @@ async def lifespan(app: FastAPI):
             if path.is_dir():
                 follow(path.name)
 
-        # Start workers
-        tasks = []
-        for i in range(nworkers):
-            task = asyncio.create_task(worker(queue))
-            tasks.append(task)
-
     yield
 
     # Disconnect from worker
     if client is not None:
         await utils.disconnect_client(client)
-
-        # Cancel worker tasks
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -317,22 +287,24 @@ async def get_download(path: str, nchunk: int, slice: str = None):
         nchunks = [nchunk]
     else:
         slice_obj = parse_slice(slice)
-        nchunks = blosc2.get_slice_nchunks(array or schunk, slice_obj)
+        if not array:
+            # get_slice_nchunks() does not support slices for schunks yet
+            # TODO: support slices for schunks in python-blosc2
+            start, stop, _ = slice_obj[0].indices(schunk.nchunks)
+            nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
+        else:
+            nchunks = blosc2.get_slice_nchunks(array, slice_obj)
 
     # Fetch the chunks
-    for n in nchunks:
-        if not utils.chunk_is_available(schunk, n):
-            key = (path, n)
-            if key not in downloads:
-                downloads.add(key)
-                queue.put_nowait((path, n, abspath))
-
-            # Wait until the chunk is available
-            while True: # TODO timeout
-                await asyncio.sleep(0.01)
-                array, schunk = utils.open_b2(abspath)
-                if utils.chunk_is_available(schunk, n):
-                    break
+    lock = locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        for n in nchunks:
+            if not utils.chunk_is_available(schunk, n):
+                # TODO: I think the line below can be removed,
+                #  as it is guaranteed to exist per the `utils.open_b2(abspath)`
+                #  above, isn't it?
+                # abspath.parent.mkdir(exist_ok=True, parents=True)
+                await download_chunk(path, schunk, n)
 
     # With slice
     if slice is not None:
@@ -357,7 +329,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
-    parser.add_argument('--statedir', default='caterva2', type=pathlib.Path)
+    parser.add_argument('--statedir', default='_caterva2/sub', type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Global configuration

@@ -20,6 +20,7 @@ import fastapi
 import fastapi_websocket_pubsub
 import httpx
 import numpy as np
+import safer
 
 # Project
 import models
@@ -102,7 +103,9 @@ def open_b2(abspath):
     return array, schunk
 
 def chunk_is_available(schunk, nchunk):
-    flag = (schunk.get_chunk(nchunk)[31] & 0b01110000) >> 4
+    # Blosc2 flags are at offset 31
+    # (see https://github.com/Blosc/c-blosc2/blob/main/README_CHUNK_FORMAT.rst)
+    flag = (schunk.get_lazychunk(nchunk)[31] & 0b01110000) >> 4
     return flag != blosc2.SpecialValue.UNINIT.value
 
 def iterchunk(chunk):
@@ -286,7 +289,7 @@ class Database:
 
     def save(self):
         dump = self.data.model_dump_json(exclude_none=True)
-        with self.path.open('w') as file:
+        with safer.open(self.path, 'w') as file:
             file.write(dump)
 
     def __getattr__(self, name):

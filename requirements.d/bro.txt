@@ -1,2 +1,3 @@
 fastapi_websocket_pubsub
+safer
 uvicorn

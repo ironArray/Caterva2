@@ -47,7 +47,7 @@ app.include_router(router)
 
 if __name__ == '__main__':
     parser = utils.get_parser(http='localhost:8000')
-    parser.add_argument('--statedir', default='caterva2', type=pathlib.Path)
+    parser.add_argument('--statedir', default='_caterva2/bro', type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Init database

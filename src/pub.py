@@ -186,7 +186,7 @@ async def get_download(path: str, nchunk: int = -1):
 
 if __name__ == '__main__':
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
-    parser.add_argument('--statedir', default='caterva2', type=pathlib.Path)
+    parser.add_argument('--statedir', default='_caterva2/pub', type=pathlib.Path)
     parser.add_argument('name')
     parser.add_argument('root', default='data')
     args = utils.run_parser(parser)
