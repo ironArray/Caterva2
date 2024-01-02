@@ -24,8 +24,14 @@ class Services:
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
+
+        source_dir = self.src_dir.parent
+        os.environ['CATERVA2_SOURCE'] = str(source_dir)
+
+        if not self.data_dir.exists():
+            examples_dir = source_dir / 'root-example'
+            shutil.copytree(examples_dir, self.data_dir, symlinks=True)
         self.data_dir.mkdir(exist_ok=True)
-        os.environ['CATERVA2_SOURCE'] = str(self.src_dir.parent)
 
         self._bro = subprocess.Popen([sys.executable,
                                       self.src_dir / 'bro.py',
