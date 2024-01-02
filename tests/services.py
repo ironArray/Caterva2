@@ -3,10 +3,13 @@ import signal
 import subprocess
 import sys
 
+import pytest
+
 from pathlib import Path
 
 
 DEFAULT_STATE_DIR = '_caterva2'
+TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 
 
 class Services:
@@ -18,6 +21,8 @@ class Services:
     def start_all(self):
         self.state_dir.mkdir(exist_ok=True)
         self.data_dir.mkdir(exist_ok=True)
+        os.environ['CATERVA2_SOURCE'] = str(self.src_dir.parent)
+
         self._bro = subprocess.Popen(['python',
                                       self.src_dir / 'bro.py',
                                       '--statedir=%s' % (self.state_dir / 'bro')])
@@ -37,6 +42,15 @@ class Services:
         self._sub.wait()
         self._pub.wait()
         self._bro.wait()
+
+
+@pytest.fixture(scope='session')
+def services():
+    srvs = Services(TEST_STATE_DIR)
+    srvs.start_all()
+    yield srvs
+    srvs.stop_all()
+    srvs.wait_for_all()
 
 
 def main(argv, env):
