@@ -1,4 +1,5 @@
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -13,12 +14,15 @@ TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 
 
 class Services:
-    def __init__(self, state_dir):
+    def __init__(self, state_dir, reuse_state=True):
         self.state_dir = Path(state_dir).resolve()
         self.data_dir = self.state_dir / 'data'
         self.src_dir = Path(__file__).parent.parent / 'src'
+        self.reuse_state = reuse_state
 
     def start_all(self):
+        if not self.reuse_state and self.state_dir.is_dir():
+            shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
         self.data_dir.mkdir(exist_ok=True)
         os.environ['CATERVA2_SOURCE'] = str(self.src_dir.parent)
@@ -46,7 +50,7 @@ class Services:
 
 @pytest.fixture(scope='session')
 def services():
-    srvs = Services(TEST_STATE_DIR)
+    srvs = Services(TEST_STATE_DIR, reuse_state=False)
     srvs.start_all()
     yield srvs
     srvs.stop_all()
@@ -55,7 +59,7 @@ def services():
 
 def main(argv, env):
     state_dir = argv[1] if len(argv) >= 2 else DEFAULT_STATE_DIR
-    srvs = Services(state_dir)
+    srvs = Services(state_dir, reuse_state=True)
     srvs.start_all()
     srvs.wait_for_all()
 
