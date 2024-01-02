@@ -16,8 +16,7 @@ TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 class Services:
     def __init__(self, state_dir, reuse_state=True):
         self.state_dir = Path(state_dir).resolve()
-        self.data_dir = self.state_dir / 'data'
-        self.src_dir = Path(__file__).parent.parent / 'src'
+        self.source_dir = Path(__file__).parent.parent
         self.reuse_state = reuse_state
 
     def start_all(self):
@@ -25,23 +24,24 @@ class Services:
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
 
-        source_dir = self.src_dir.parent
-        os.environ['CATERVA2_SOURCE'] = str(source_dir)
+        data_dir = self.state_dir / 'data'
+        if not data_dir.exists():
+            examples_dir = self.source_dir / 'root-example'
+            shutil.copytree(examples_dir, data_dir, symlinks=True)
+        data_dir.mkdir(exist_ok=True)
 
-        if not self.data_dir.exists():
-            examples_dir = source_dir / 'root-example'
-            shutil.copytree(examples_dir, self.data_dir, symlinks=True)
-        self.data_dir.mkdir(exist_ok=True)
+        src_dir = self.source_dir / 'src'
+        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
 
         self._bro = subprocess.Popen([sys.executable,
-                                      self.src_dir / 'bro.py',
+                                      src_dir / 'bro.py',
                                       '--statedir=%s' % (self.state_dir / 'bro')])
         self._pub = subprocess.Popen([sys.executable,
-                                      self.src_dir / 'pub.py',
+                                      src_dir / 'pub.py',
                                       '--statedir=%s' % (self.state_dir / 'pub'),
-                                      'foo', self.data_dir])
+                                      'foo', data_dir])
         self._sub = subprocess.Popen([sys.executable,
-                                      self.src_dir / 'sub.py',
+                                      src_dir / 'sub.py',
                                       '--statedir=%s' % (self.state_dir / 'sub')])
 
     def stop_all(self):
