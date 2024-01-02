@@ -43,7 +43,7 @@ def services():
     src_dir = tests_dir.parent
     os.environ['CATERVA2_SOURCE'] = str(src_dir)
 
-    var_dir = tests_dir / 'test-cat2-state'
+    var_dir = Path(os.getcwd()) / '_caterva2_tests'
     if not reuse_var and var_dir.is_dir():
         shutil.rmtree(var_dir)
     var_dir.mkdir(exist_ok=reuse_var)

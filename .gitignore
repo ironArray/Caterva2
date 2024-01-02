@@ -1,6 +1,6 @@
 .*.swp
 /_caterva2/
+/_caterva2_tests/
 /cache/
-/tests/test-cat2-state/
 /venv/
 __pycache__
