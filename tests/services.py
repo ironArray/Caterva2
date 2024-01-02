@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import sys
 
@@ -27,6 +28,10 @@ class Services:
         self._sub = subprocess.Popen(['python',
                                       self.src_dir / 'sub.py',
                                       '--statedir=%s' % (self.state_dir / 'sub')])
+
+    def stop_all(self):
+        for proc in [self._sub, self._pub, self._bro]:
+            os.kill(proc.pid, signal.SIGTERM)
 
     def wait_for_all(self):
         self._sub.wait()
