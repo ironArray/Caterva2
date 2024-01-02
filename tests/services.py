@@ -23,14 +23,14 @@ class Services:
         self.data_dir.mkdir(exist_ok=True)
         os.environ['CATERVA2_SOURCE'] = str(self.src_dir.parent)
 
-        self._bro = subprocess.Popen(['python',
+        self._bro = subprocess.Popen([sys.executable,
                                       self.src_dir / 'bro.py',
                                       '--statedir=%s' % (self.state_dir / 'bro')])
-        self._pub = subprocess.Popen(['python',
+        self._pub = subprocess.Popen([sys.executable,
                                       self.src_dir / 'pub.py',
                                       '--statedir=%s' % (self.state_dir / 'pub'),
                                       'foo', self.data_dir])
-        self._sub = subprocess.Popen(['python',
+        self._sub = subprocess.Popen([sys.executable,
                                       self.src_dir / 'sub.py',
                                       '--statedir=%s' % (self.state_dir / 'sub')])
 
