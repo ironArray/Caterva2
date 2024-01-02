@@ -324,10 +324,9 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     # With slice
     if slice is not None:
         if array is not None:
-            array = array.__getitem__(slice_obj)
-            # The chunks and blocks are automatic, and already computed for the container
-            # in the get_info() call above.
-            array = blosc2.asarray(array)
+            # The chunks and blocks below are automatic, and already computed for the
+            # in-memory container in the get_info() call above.
+            array = array.slice(slice_obj)
             schunk = array.schunk
         else:
             assert len(slice_obj) == 1
