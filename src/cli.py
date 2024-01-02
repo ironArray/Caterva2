@@ -124,7 +124,7 @@ def __download(host, dataset, params, urlpath=None):
         schunk = utils.init_b2frame(metadata, urlpath=None)
         array = None
 
-    # Download
+    # Download and update schunk in memory
     url = f'http://{args.host}/api/download/{dataset}'
     for nchunk in tqdm.tqdm(range(schunk.nchunks)):
         params['nchunk'] = nchunk
@@ -133,6 +133,7 @@ def __download(host, dataset, params, urlpath=None):
         chunk = response.read()
         schunk.update_chunk(nchunk, chunk)
 
+    # TODO: streaming
 #       with httpx.stream('GET', url, params=params) as resp:
 #           buffer = []
 #           for chunk in resp.iter_bytes():

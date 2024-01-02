@@ -14,6 +14,8 @@ import pathlib
 
 # Requirements
 import blosc2
+import ndindex
+import numpy as np
 from fastapi import FastAPI, responses
 import httpx
 import uvicorn
@@ -262,14 +264,29 @@ async def get_info(path: str, slice: str = None):
     # Read metadata
     slice_obj = parse_slice(slice)
     array, schunk = utils.open_b2(abspath)
+    # Get the metadata for the slice
     if array is not None:
-        array = array.__getitem__(slice_obj)
-        array = blosc2.asarray(array)
+        # This avoids materializing the slice in memory
+        newshape = ndindex.Tuple(*slice_obj).newshape(array.shape)
+        chunks, blocks = blosc2.compute_chunks_blocks(newshape, dtype=array.dtype)
+        array = blosc2.uninit(newshape, chunks=chunks, blocks=blocks, dtype=array.dtype)
         metadata = utils.read_metadata(array)
     else:
         assert len(slice_obj) == 1
-        data = schunk.__getitem__(*slice_obj)
-        schunk = utils.compress(data)
+        if True:
+            data = schunk.__getitem__(*slice_obj)
+            schunk = utils.compress(data)
+        else:
+            # Alternative solution without materializing the slice in memory.
+            # For this to work we would need the SChunk to support compute_chunks_blocks()
+            # in the constructor.
+            # TODO: add a __len__ method to schunk
+            sclen = schunk.nbytes // schunk.typesize
+            newshape = ndindex.Slice(*slice_obj).newshape(sclen)
+            dtype = np.dtype(f"V{schunk.typesize}")
+            chunks, blocks = blosc2.compute_chunks_blocks(newshape, dtype=dtype)
+            schunk = blosc2.SChunk(chunksize=chunks[0], blocksize=blocks[0])
+            schunk.fill_special(sclen, special_value=blosc2.SpecialValue.UNINIT)
         metadata = utils.read_metadata(schunk)
 
     return metadata
@@ -308,6 +325,8 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     if slice is not None:
         if array is not None:
             array = array.__getitem__(slice_obj)
+            # The chunks and blocks are automatic, and already computed for the container
+            # in the get_info() call above.
             array = blosc2.asarray(array)
             schunk = array.schunk
         else:
