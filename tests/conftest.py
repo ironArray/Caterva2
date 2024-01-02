@@ -35,7 +35,7 @@ def wait_for_programs(start_timeout_secs, get_status):
 
 @pytest.fixture(scope='session')
 def services():
-    purge_var = True  # toggle to keep the state directory on start
+    reuse_var = False  # Reuse data from previous run (if existing)?
     start_timeout_secs = 10
 
     tests_dir = Path(__file__).parent
@@ -43,10 +43,11 @@ def services():
     src_dir = tests_dir.parent
     os.environ['CATERVA2_SOURCE'] = str(src_dir)
 
-    var_dir = tests_dir / '_caterva2'
-    if purge_var and var_dir.is_dir():
+    var_dir = Path(os.getcwd()) / '_caterva2_tests'
+    if not reuse_var and var_dir.is_dir():
         shutil.rmtree(var_dir)
-    var_dir.mkdir(exist_ok=not purge_var)
+    var_dir.mkdir(exist_ok=reuse_var)
+    os.environ['CATERVA2_STATE'] = str(var_dir)
 
     data_dir = var_dir / 'data'
     if not data_dir.exists():
@@ -56,7 +57,7 @@ def services():
     conf_file = tests_dir / 'supervisor.conf'
 
     logs_dir = var_dir / 'supervisord-logs'
-    logs_dir.mkdir(exist_ok=not purge_var)
+    logs_dir.mkdir(exist_ok=reuse_var)
 
     supervisor_start('-l', var_dir / 'supervisord.log',
                      '-q', logs_dir,
