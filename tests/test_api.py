@@ -64,8 +64,8 @@ def test_dataset_2d():
     np.testing.assert_array_equal(ds[1], a[1])
     np.testing.assert_array_equal(ds[:1], a[:1])
     np.testing.assert_array_equal(ds[0:10], a[0:10])
-    # TODO: fix this; index out of bounds should be supported (empty array)
-    # np.testing.assert_array_equal(ds[10:20], a[10:20])
+    # The next is out of bounds, but it is supported (by numpy too)
+    np.testing.assert_array_equal(ds[10:20], a[10:20])
     np.testing.assert_array_equal(ds[:], a)
     np.testing.assert_array_equal(ds[1:5:1], a[1:5:1])
     # We don't support step != 1
