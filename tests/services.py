@@ -84,6 +84,8 @@ class Services:
         for proc in self._procs.values():
             try:
                 os.kill(proc.pid, signal.SIGTERM)
+                time.sleep(1)
+                os.kill(proc.pid, signal.SIGHUP)
             except ProcessLookupError:
                 pass
 
