@@ -6,6 +6,7 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import pathlib
 
 from caterva2 import utils
 
@@ -45,10 +46,27 @@ class File:
         self.root = root
         self.name = name
         self.host = host
+        self.path = pathlib.Path(f'{self.root}/{self.name}')
 
     def __repr__(self):
-        return f'<File: {self.root}/{self.name}>'
+        return f'<File: {self.path}>'
 
+
+def slice_to_string(indexes):
+    slice_parts = []
+    if not isinstance(indexes, tuple):
+        indexes = (indexes,)
+    for index in indexes:
+        if isinstance(index, int):
+            slice_parts.append(str(index))
+        elif isinstance(index, slice):
+            start = index.start or ''
+            stop = index.stop or ''
+            if index.step not in (1, None):
+                raise IndexError('Only step=1 is supported')
+            step = index.step or ''
+            slice_parts.append(f"{start}:{stop}:{step}")
+    return ", ".join(slice_parts)
 
 class Dataset(File):
     def __init__(self, name, root, host):
@@ -56,4 +74,13 @@ class Dataset(File):
         self.json = utils.get(f'http://{host}/api/info/{root}/{name}')
 
     def __repr__(self):
-        return f'<Dataset: {self.root}/{self.name}>'
+        return f'<Dataset: {self.path}>'
+
+    def __getitem__(self, indexes):
+        slice = slice_to_string(indexes)
+        array, schunk = utils.download(self.host, self.path, {'slice': slice})
+        if array:
+            data = array[:] if array.ndim > 0 else array[()]
+        else:
+            data = schunk[:]  # byte string
+        return data

@@ -6,8 +6,10 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import pytest
 
 import caterva2 as cat2
+import numpy as np
 import pathlib
 
 
@@ -32,6 +34,41 @@ def test_list():
 
 def test_file():
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
-    file = myroot['foo/README.md']
-    assert file.name == 'foo/README.md'
+    file = myroot['README.md']
+    assert file.name == 'README.md'
     assert file.host == cat2.sub_host_default
+
+
+def test_dataset_1d():
+    myroot = cat2.Root(root_default, host=cat2.sub_host_default)
+    ds = myroot['ds-1d.b2nd']
+    assert ds.name == 'ds-1d.b2nd'
+    assert ds.host == cat2.sub_host_default
+    a = np.arange(1000, dtype="int64")
+    np.testing.assert_array_equal(ds[1], a[1])
+    np.testing.assert_array_equal(ds[:1], a[:1])
+    np.testing.assert_array_equal(ds[0:10], a[0:10])
+    np.testing.assert_array_equal(ds[10:20], a[10:20])
+    np.testing.assert_array_equal(ds[:], a)
+    np.testing.assert_array_equal(ds[10:20:1], a[10:20:1])
+    # We don't support step != 1
+    with pytest.raises(Exception) as e_info:
+        np.testing.assert_array_equal(ds[::2], a[::2])
+        assert str(e_info.value) == 'Only step=1 is supported'
+
+
+def test_dataset_2d():
+    myroot = cat2.Root(root_default, host=cat2.sub_host_default)
+    ds = myroot['dir1/ds-2d.b2nd']
+    a = np.arange(200, dtype="uint16").reshape(10, 20)
+    np.testing.assert_array_equal(ds[1], a[1])
+    np.testing.assert_array_equal(ds[:1], a[:1])
+    np.testing.assert_array_equal(ds[0:10], a[0:10])
+    # TODO: fix this; index out of bounds should be supported (empty array)
+    # np.testing.assert_array_equal(ds[10:20], a[10:20])
+    np.testing.assert_array_equal(ds[:], a)
+    np.testing.assert_array_equal(ds[1:5:1], a[1:5:1])
+    # We don't support step != 1
+    with pytest.raises(Exception) as e_info:
+        np.testing.assert_array_equal(ds[::2], a[::2])
+        assert str(e_info.value) == 'Only step=1 is supported'

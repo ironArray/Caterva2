@@ -268,6 +268,9 @@ async def get_info(path: str, slice: str = None):
     if array is not None:
         # This avoids materializing the slice in memory
         newshape = ndindex.Tuple(*slice_obj).newshape(array.shape)
+        # TODO: we should not raise an exception here, but rather return an empty array
+        if 0 in newshape:
+            raise IndexError('Index out of bounds')
         chunks, blocks = blosc2.compute_chunks_blocks(newshape, dtype=array.dtype)
         array = blosc2.uninit(newshape, chunks=chunks, blocks=blocks, dtype=array.dtype)
         metadata = utils.read_metadata(array)
@@ -322,6 +325,8 @@ async def get_download(path: str, nchunk: int, slice: str = None):
                 await download_chunk(path, schunk, n)
 
     # With slice
+    # TODO: This is a bit of a hack, as we are slicing the array for every chunk.
+    #  How could we hold the slice in memory and reuse it for all chunks?
     if slice is not None:
         if array is not None:
             # The chunks and blocks below are automatic, and already computed for the

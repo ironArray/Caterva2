@@ -21,6 +21,7 @@ import fastapi_websocket_pubsub
 import httpx
 import numpy as np
 import safer
+import tqdm
 
 # Project
 from . import models
@@ -158,6 +159,47 @@ def read_metadata(obj):
         return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
     else:
         raise TypeError(f'unexpected {type(obj)}')
+
+def download(host, dataset, params, urlpath=None, verbose=False):
+    data = get(f'http://{host}/api/info/{dataset}', params=params)
+
+    # Create array/schunk in memory
+    suffix = dataset.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**data)
+        array = init_b2nd(metadata, urlpath=urlpath)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**data)
+        schunk = init_b2frame(metadata, urlpath=urlpath)
+        array = None
+    else:
+        metadata = models.SChunk(**data)
+        schunk = init_b2frame(metadata, urlpath=None)
+        array = None
+
+    # Download and update schunk in memory
+    url = f'http://{host}/api/download/{dataset}'
+    iter_chunks = range(schunk.nchunks)
+    if verbose:
+        iter_chunks = tqdm.tqdm(iter_chunks, desc='Downloading', unit='chunk')
+    for nchunk in iter_chunks:
+        params['nchunk'] = nchunk
+        response = httpx.get(url, params=params, timeout=None)
+        response.raise_for_status()
+        chunk = response.read()
+        schunk.update_chunk(nchunk, chunk)
+
+    # TODO: streaming
+#       with httpx.stream('GET', url, params=params) as resp:
+#           buffer = []
+#           for chunk in resp.iter_bytes():
+#               print('LEN', len(buffer))
+#               buffer.append(chunk)
+#           chunk = b''.join(buffer)
+#           schunk.update_chunk(nchunk, chunk)
+
+    return array, schunk
 
 
 #
