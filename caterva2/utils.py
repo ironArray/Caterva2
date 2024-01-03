@@ -219,9 +219,25 @@ def download(host, dataset, params, urlpath=None, verbose=False):
     if 'slice' in params:
         slice_ = parse_slice(params['slice'])
         if array:
-            array = array[slice_] if array.ndim > 0 else array[()]
+            if urlpath is not None:
+                # We want to save the slice to a file
+                ndarray = array.slice(slice_)  # in memory (compressed)
+                # Remove previous new on-disk array and create a new one
+                ndarray.copy(urlpath=urlpath, mode="w", contiguous=True, cparams=schunk.cparams)
+            else:
+                array = array[slice_] if array.ndim > 0 else array[()]
         else:
-            schunk = schunk[slice_]
+            assert len(slice_) == 1
+            slice_ = slice_[0]
+            if urlpath is not None:
+                data = schunk[slice_]
+                # TODO: fix the upstream bug in python-blosc2 that prevents this from working
+                #  when not specifying chunksize (uses `data.size` instead of `len(data)`).
+                blosc2.SChunk(data=data, mode="w", urlpath=urlpath,
+                              chunksize=schunk.chunksize,
+                              cparams=schunk.cparams)
+            else:
+                schunk = schunk[slice_]
 
     return array, schunk
 
