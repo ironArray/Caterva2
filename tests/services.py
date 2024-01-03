@@ -19,6 +19,8 @@ class Services:
         self.source_dir = Path(__file__).parent.parent
         self.reuse_state = reuse_state
 
+        self._procs = {}
+
     def start_all(self):
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
@@ -33,25 +35,25 @@ class Services:
         src_dir = self.source_dir / 'src'
         os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
 
-        self._bro = subprocess.Popen([sys.executable,
-                                      src_dir / 'bro.py',
-                                      '--statedir=%s' % (self.state_dir / 'bro')])
-        self._pub = subprocess.Popen([sys.executable,
-                                      src_dir / 'pub.py',
-                                      '--statedir=%s' % (self.state_dir / 'pub'),
-                                      'foo', data_dir])
-        self._sub = subprocess.Popen([sys.executable,
-                                      src_dir / 'sub.py',
-                                      '--statedir=%s' % (self.state_dir / 'sub')])
+        procs = self._procs
+        procs['bro'] = subprocess.Popen([sys.executable,
+                                         src_dir / 'bro.py',
+                                         '--statedir=%s' % (self.state_dir / 'bro')])
+        procs['pub'] = subprocess.Popen([sys.executable,
+                                         src_dir / 'pub.py',
+                                         '--statedir=%s' % (self.state_dir / 'pub'),
+                                         'foo', data_dir])
+        procs['sub'] = subprocess.Popen([sys.executable,
+                                         src_dir / 'sub.py',
+                                         '--statedir=%s' % (self.state_dir / 'sub')])
 
     def stop_all(self):
-        for proc in [self._sub, self._pub, self._bro]:
+        for proc in self._procs.values():
             os.kill(proc.pid, signal.SIGTERM)
 
     def wait_for_all(self):
-        self._sub.wait()
-        self._pub.wait()
-        self._bro.wait()
+        for proc in self._procs.values():
+            proc.wait()
 
 
 @pytest.fixture(scope='session')
