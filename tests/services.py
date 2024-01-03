@@ -82,7 +82,10 @@ class Services:
 
     def stop_all(self):
         for proc in self._procs.values():
-            os.kill(proc.pid, signal.SIGTERM)
+            try:
+                os.kill(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
 
     def wait_for_all(self):
         for proc in self._procs.values():
