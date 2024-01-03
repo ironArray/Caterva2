@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 
+import httpx
 import pytest
 
 from pathlib import Path
@@ -12,6 +13,17 @@ from pathlib import Path
 
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
+
+
+def get_local_http(port, path='/'):
+    def check():
+        url = f'http://localhost:{port}{path}'
+        try:
+            r = httpx.get(url, timeout=0.5)
+            return r.status_code == 200
+        except httpx.ConnectError:
+            return False
+    return check
 
 
 class Services:
@@ -63,9 +75,10 @@ class Services:
     def start_all(self):
         self._setup()
 
-        self._start_proc('bro')
-        self._start_proc('pub', 'foo', self.data_dir)
-        self._start_proc('sub')
+        self._start_proc('bro', check=get_local_http(8000, '/api/roots'))
+        self._start_proc('pub', 'foo', self.data_dir,
+                         check=get_local_http(8001, '/api/list'))
+        self._start_proc('sub', check=get_local_http(8002, '/api/roots'))
 
     def stop_all(self):
         for proc in self._procs.values():
