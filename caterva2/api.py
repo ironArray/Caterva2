@@ -17,6 +17,25 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 
 
+def slice_to_string(indexes):
+    if indexes is None:
+        return None
+    slice_parts = []
+    if not isinstance(indexes, tuple):
+        indexes = (indexes,)
+    for index in indexes:
+        if isinstance(index, int):
+            slice_parts.append(str(index))
+        elif isinstance(index, slice):
+            start = index.start or ''
+            stop = index.stop or ''
+            if index.step not in (1, None):
+                raise IndexError('Only step=1 is supported')
+            step = index.step or ''
+            slice_parts.append(f"{start}:{stop}:{step}")
+    return ", ".join(slice_parts)
+
+
 def get_roots(host=sub_host_default):
     return utils.get(f'http://{host}/api/roots')
 
@@ -51,22 +70,25 @@ class File:
     def __repr__(self):
         return f'<File: {self.path}>'
 
+    def download(self, index=None):
+        path = self.path
+        suffix = self.path.suffix
 
-def slice_to_string(indexes):
-    slice_parts = []
-    if not isinstance(indexes, tuple):
-        indexes = (indexes,)
-    for index in indexes:
-        if isinstance(index, int):
-            slice_parts.append(str(index))
-        elif isinstance(index, slice):
-            start = index.start or ''
-            stop = index.stop or ''
-            if index.step not in (1, None):
-                raise IndexError('Only step=1 is supported')
-            step = index.step or ''
-            slice_parts.append(f"{start}:{stop}:{step}")
-    return ", ".join(slice_parts)
+        slice_ = slice_to_string(index)
+        params = {}
+        if slice_:
+            path = self.path.with_suffix('')
+            path = pathlib.Path(f'{path}[{slice}]{suffix}')
+            params = {'slice': slice_}
+        array, schunk = utils.download(self.host, path, urlpath=path, params=params)
+
+        if suffix not in {'.b2frame', '.b2nd'}:
+            with open(path, 'wb') as f:
+                data = schunk[:]
+                f.write(data)
+
+        return path
+
 
 class Dataset(File):
     def __init__(self, name, root, host):
@@ -77,8 +99,8 @@ class Dataset(File):
         return f'<Dataset: {self.path}>'
 
     def __getitem__(self, indexes):
-        slice = slice_to_string(indexes)
-        array, schunk = utils.download(self.host, self.path, {'slice': slice})
+        slice_ = slice_to_string(indexes)
+        array, schunk = utils.download(self.host, self.path, {'slice': slice_})
         if array is not None:
             data = array[:] if array.ndim > 0 else array[()]
         else:

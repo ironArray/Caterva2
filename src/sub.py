@@ -248,19 +248,22 @@ async def get_info(path: str, slice: str = None):
 
 
 @app.get('/api/download/{path:path}')
-async def get_download(path: str, nchunk: int, slice: str = None):
+async def get_download(path: str, nchunk: int, slice_: str = None):
     abspath = lookup_path(path)
 
     # Build the list of chunks we need to download from the publisher
     array, schunk = utils.open_b2(abspath)
-    if slice is None:
+    if slice_ is None:
         nchunks = [nchunk]
     else:
-        slice_obj = utils.parse_slice(slice)
+        slice_obj = utils.parse_slice(slice_)
         if not array:
+            if isinstance(slice_obj[0], slice):
+                start, stop, _ = slice_obj[0].indices(schunk.nchunks)
+            else:
+                start, stop = slice_obj[0], slice_obj[0] + 1
             # get_slice_nchunks() does not support slices for schunks yet
             # TODO: support slices for schunks in python-blosc2
-            start, stop, _ = slice_obj[0].indices(schunk.nchunks)
             nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
         else:
             nchunks = blosc2.get_slice_nchunks(array, slice_obj)

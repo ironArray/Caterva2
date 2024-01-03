@@ -162,6 +162,8 @@ def read_metadata(obj):
 
 
 def parse_slice(string):
+    if not string:
+        return ()
     obj = []
     for segment in string.split(','):
         if ':' not in segment:
@@ -237,6 +239,8 @@ def download(host, dataset, params, urlpath=None, verbose=False):
                               chunksize=schunk.chunksize,
                               cparams=schunk.cparams)
             else:
+                if isinstance(slice_, int):
+                    slice_ = slice(slice_, slice_ + 1)
                 schunk = schunk[slice_]
 
     return array, schunk
