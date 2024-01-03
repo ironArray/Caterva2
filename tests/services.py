@@ -67,17 +67,22 @@ class Services:
 @pytest.fixture(scope='session')
 def services():
     srvs = Services(TEST_STATE_DIR, reuse_state=False)
-    srvs.start_all()
-    yield srvs
-    srvs.stop_all()
+    try:
+        srvs.start_all()
+        yield srvs
+    finally:
+        srvs.stop_all()
     srvs.wait_for_all()
 
 
 def main(argv, env):
     state_dir = argv[1] if len(argv) >= 2 else DEFAULT_STATE_DIR
     srvs = Services(state_dir, reuse_state=True)
-    srvs.start_all()
-    srvs.wait_for_all()
+    try:
+        srvs.start_all()
+        srvs.wait_for_all()
+    finally:
+        srvs.stop_all()
 
 
 if __name__ == '__main__':
