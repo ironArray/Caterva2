@@ -19,7 +19,10 @@ class Services:
         self.source_dir = Path(__file__).parent.parent
         self.reuse_state = reuse_state
 
+        self.data_dir = self.state_dir / 'data'
+
         self._procs = {}
+        self._setup_done = False
 
     def _start_proc(self, name, *args):
         self._procs[name] = subprocess.Popen(
@@ -28,21 +31,28 @@ class Services:
              '--statedir=%s' % (self.state_dir / name),
              *args])
 
-    def start_all(self):
+    def _setup(self):
+        if self._setup_done:
+            return
+
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
 
-        data_dir = self.state_dir / 'data'
-        if not data_dir.exists():
+        if not self.data_dir.exists():
             examples_dir = self.source_dir / 'root-example'
-            shutil.copytree(examples_dir, data_dir, symlinks=True)
-        data_dir.mkdir(exist_ok=True)
+            shutil.copytree(examples_dir, self.data_dir, symlinks=True)
+        self.data_dir.mkdir(exist_ok=True)
 
         os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
 
+        self._setup_done = True
+
+    def start_all(self):
+        self._setup()
+
         self._start_proc('bro')
-        self._start_proc('pub', 'foo', data_dir)
+        self._start_proc('pub', 'foo', self.data_dir)
         self._start_proc('sub')
 
     def stop_all(self):
