@@ -174,9 +174,10 @@ def parse_slice(string):
     return tuple(obj)
 
 def download(host, dataset, params, urlpath=None, verbose=False):
-    # TODO: should we allow downloading a slice to a file (and fill the rest as uninit)?
-    if urlpath is not None and 'slice' in params:
-        raise ValueError('Cannot download a slice to a file')
+    # TODO: Should we allow downloading a slice to a file (and fill the rest as uninit)?
+    #  Let's do so for now.
+    # if urlpath is not None and 'slice' in params:
+    #     raise ValueError('Cannot download a slice to a file')
     data = get(f'http://{host}/api/info/{dataset}')
 
     # Create array/schunk in memory
