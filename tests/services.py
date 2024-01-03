@@ -3,6 +3,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -24,12 +25,23 @@ class Services:
         self._procs = {}
         self._setup_done = False
 
-    def _start_proc(self, name, *args):
+    def _start_proc(self, name, *args, check=None):
         self._procs[name] = subprocess.Popen(
             [sys.executable,
              self.source_dir / 'src' / f'{name}.py',
              '--statedir=%s' % (self.state_dir / name),
              *args])
+
+        if check is None:
+            return
+
+        start_timeout_secs = 10
+        start_sleep_secs = 1
+        for retry in range(int(start_timeout_secs / start_sleep_secs)):
+            time.sleep(start_sleep_secs)
+            if check():
+                break
+        # TODO: else error?
 
     def _setup(self):
         if self._setup_done:
