@@ -21,6 +21,13 @@ class Services:
 
         self._procs = {}
 
+    def _start_proc(self, name, *args):
+        self._procs[name] = subprocess.Popen(
+            [sys.executable,
+             self.source_dir / 'src' / f'{name}.py',
+             '--statedir=%s' % (self.state_dir / name),
+             *args])
+
     def start_all(self):
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
@@ -32,20 +39,11 @@ class Services:
             shutil.copytree(examples_dir, data_dir, symlinks=True)
         data_dir.mkdir(exist_ok=True)
 
-        src_dir = self.source_dir / 'src'
         os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
 
-        procs = self._procs
-        procs['bro'] = subprocess.Popen([sys.executable,
-                                         src_dir / 'bro.py',
-                                         '--statedir=%s' % (self.state_dir / 'bro')])
-        procs['pub'] = subprocess.Popen([sys.executable,
-                                         src_dir / 'pub.py',
-                                         '--statedir=%s' % (self.state_dir / 'pub'),
-                                         'foo', data_dir])
-        procs['sub'] = subprocess.Popen([sys.executable,
-                                         src_dir / 'sub.py',
-                                         '--statedir=%s' % (self.state_dir / 'sub')])
+        self._start_proc('bro')
+        self._start_proc('pub', 'foo', data_dir)
+        self._start_proc('sub')
 
     def stop_all(self):
         for proc in self._procs.values():
