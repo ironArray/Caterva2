@@ -71,7 +71,7 @@ def slice_to_string(indexes):
 class Dataset(File):
     def __init__(self, name, root, host):
         super().__init__(name, root, host)
-        self.json = utils.get(f'http://{host}/api/info/{root}/{name}')
+        self.json = utils.get(f'http://{host}/api/info/{self.path}')
 
     def __repr__(self):
         return f'<Dataset: {self.path}>'
@@ -79,7 +79,7 @@ class Dataset(File):
     def __getitem__(self, indexes):
         slice = slice_to_string(indexes)
         array, schunk = utils.download(self.host, self.path, {'slice': slice})
-        if array:
+        if array is not None:
             data = array[:] if array.ndim > 0 else array[()]
         else:
             data = schunk[:]  # byte string

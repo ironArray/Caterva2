@@ -14,8 +14,6 @@ import pathlib
 
 # Requirements
 import blosc2
-import ndindex
-import numpy as np
 from fastapi import FastAPI, responses
 import httpx
 import uvicorn
@@ -135,18 +133,6 @@ def follow(name: str):
         client.subscribe(name, updated_dataset)
         clients[name] = client
 
-def parse_slice(string):
-    obj = []
-    for segment in string.split(','):
-        if ':' not in segment:
-            segment = int(segment)
-        else:
-            segment = [int(x) if x else None for x in segment.split(':')]
-            segment = slice(*segment)
-        obj.append(segment)
-
-    return tuple(obj)
-
 def lookup_path(path):
     path = pathlib.Path(path)
     if path.suffix not in {'.b2frame', '.b2nd'}:
@@ -256,43 +242,9 @@ async def get_url(path: str):
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str, slice: str = None):
+    assert slice is None, 'Slices not supported here'
     abspath = lookup_path(path)
-
-    if slice is None:
-        return utils.read_metadata(abspath)
-
-    # Read metadata
-    slice_obj = parse_slice(slice)
-    array, schunk = utils.open_b2(abspath)
-    # Get the metadata for the slice
-    if array is not None:
-        # This avoids materializing the slice in memory
-        newshape = ndindex.Tuple(*slice_obj).newshape(array.shape)
-        # TODO: we should not raise an exception here, but rather return an empty array
-        if 0 in newshape:
-            raise IndexError('Index out of bounds')
-        chunks, blocks = blosc2.compute_chunks_blocks(newshape, dtype=array.dtype)
-        array = blosc2.uninit(newshape, chunks=chunks, blocks=blocks, dtype=array.dtype)
-        metadata = utils.read_metadata(array)
-    else:
-        assert len(slice_obj) == 1
-        if True:
-            data = schunk.__getitem__(*slice_obj)
-            schunk = utils.compress(data)
-        else:
-            # Alternative solution without materializing the slice in memory.
-            # For this to work we would need the SChunk to support compute_chunks_blocks()
-            # in the constructor.
-            # TODO: add a __len__ method to schunk
-            sclen = schunk.nbytes // schunk.typesize
-            newshape = ndindex.Slice(*slice_obj).newshape(sclen)
-            dtype = np.dtype(f"V{schunk.typesize}")
-            chunks, blocks = blosc2.compute_chunks_blocks(newshape, dtype=dtype)
-            schunk = blosc2.SChunk(chunksize=chunks[0], blocksize=blocks[0])
-            schunk.fill_special(sclen, special_value=blosc2.SpecialValue.UNINIT)
-        metadata = utils.read_metadata(schunk)
-
-    return metadata
+    return utils.read_metadata(abspath)
 
 
 @app.get('/api/download/{path:path}')
@@ -304,7 +256,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     if slice is None:
         nchunks = [nchunk]
     else:
-        slice_obj = parse_slice(slice)
+        slice_obj = utils.parse_slice(slice)
         if not array:
             # get_slice_nchunks() does not support slices for schunks yet
             # TODO: support slices for schunks in python-blosc2
@@ -318,25 +270,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     async with lock:
         for n in nchunks:
             if not utils.chunk_is_available(schunk, n):
-                # TODO: I think the line below can be removed,
-                #  as it is guaranteed to exist per the `utils.open_b2(abspath)`
-                #  above, isn't it?
-                # abspath.parent.mkdir(exist_ok=True, parents=True)
                 await download_chunk(path, schunk, n)
-
-    # With slice
-    # TODO: This is a bit of a hack, as we are slicing the array for every chunk.
-    #  How could we hold the slice in memory and reuse it for all chunks?
-    if slice is not None:
-        if array is not None:
-            # The chunks and blocks below are automatic, and already computed for the
-            # in-memory container in the get_info() call above.
-            array = array.slice(slice_obj)
-            schunk = array.schunk
-        else:
-            assert len(slice_obj) == 1
-            data = schunk.__getitem__(*slice_obj)
-            schunk = utils.compress(data)
 
     # Stream response
     chunk = schunk.get_chunk(nchunk)

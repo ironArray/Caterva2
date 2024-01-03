@@ -160,8 +160,24 @@ def read_metadata(obj):
     else:
         raise TypeError(f'unexpected {type(obj)}')
 
+
+def parse_slice(string):
+    obj = []
+    for segment in string.split(','):
+        if ':' not in segment:
+            segment = int(segment)
+        else:
+            segment = [int(x) if x else None for x in segment.split(':')]
+            segment = slice(*segment)
+        obj.append(segment)
+
+    return tuple(obj)
+
 def download(host, dataset, params, urlpath=None, verbose=False):
-    data = get(f'http://{host}/api/info/{dataset}', params=params)
+    # TODO: should we allow downloading a slice to a file (and fill the rest as uninit)?
+    if urlpath is not None and 'slice' in params:
+        raise ValueError('Cannot download a slice to a file')
+    data = get(f'http://{host}/api/info/{dataset}')
 
     # Create array/schunk in memory
     suffix = dataset.suffix
@@ -178,7 +194,7 @@ def download(host, dataset, params, urlpath=None, verbose=False):
         schunk = init_b2frame(metadata, urlpath=None)
         array = None
 
-    # Download and update schunk in memory
+    # Download and update schunk
     url = f'http://{host}/api/download/{dataset}'
     iter_chunks = range(schunk.nchunks)
     if verbose:
@@ -198,6 +214,13 @@ def download(host, dataset, params, urlpath=None, verbose=False):
 #               buffer.append(chunk)
 #           chunk = b''.join(buffer)
 #           schunk.update_chunk(nchunk, chunk)
+
+    if 'slice' in params:
+        slice_ = parse_slice(params['slice'])
+        if array:
+            array = array[slice_] if array.ndim > 0 else array[()]
+        else:
+            schunk = schunk[slice_]
 
     return array, schunk
 
