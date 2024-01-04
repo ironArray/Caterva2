@@ -33,13 +33,17 @@ sub_check = get_local_http(8002, '/api/roots')
 
 
 class Services:
-    pass
+    def __init__(self):
+        self.source_dir = Path(__file__).parent.parent
+
+    def _setup(self):
+        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
 
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True):
+        super().__init__()
         self.state_dir = Path(state_dir).resolve()
-        self.source_dir = Path(__file__).parent.parent
         self.reuse_state = reuse_state
 
         self.data_dir = self.state_dir / 'data'
@@ -69,6 +73,8 @@ class ManagedServices(Services):
         if self._setup_done:
             return
 
+        super()._setup()
+
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
@@ -77,8 +83,6 @@ class ManagedServices(Services):
             examples_dir = self.source_dir / 'root-example'
             shutil.copytree(examples_dir, self.data_dir, symlinks=True)
         self.data_dir.mkdir(exist_ok=True)
-
-        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
 
         self._setup_done = True
 
@@ -106,11 +110,8 @@ class ManagedServices(Services):
 class ExternalServices(Services):
     _checks = [bro_check, pub_check, sub_check]
 
-    def __init__(self):
-        self.source_dir = Path(__file__).parent.parent
-
     def start_all(self):
-        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
+        super()._setup()
 
         failed = [check.__name__ for check in self._checks if not check()]
         if failed:
