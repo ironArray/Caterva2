@@ -13,6 +13,7 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example::
 
       $ cd Caterva2
+      $ export PYTHONPATH=.
       $ python -m tests.services &  # state in ``_caterva2``
       [3] 12345
       $ pytest
@@ -35,6 +36,7 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example::
 
       $ cd Caterva2
+      $ export PYTHONPATH=.
       $ env CATERVA2_USE_EXTERNAL=0 pytest  # state in ``_caterva2_tests``
 
 In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
