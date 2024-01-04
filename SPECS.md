@@ -14,6 +14,18 @@ This document describes the minimal specifications for the project.  It is meant
 - **Subscriber**: The subscriber is the entity that follows changes in a root and allows the download of datasets from publishers.
 - **Client**: The client is a subscriber consumer (e.g. a command line tool) for the user to access the datasets; it connects to a subscriber.
 
+## Services
+
+The three services (broker, publisher and subscriber) have a number of common options:
+
+- `--http`: the hostname and port that it listens, e.g. `localhost:8000`
+- `--loglevel`: by default `warning`
+- `--statedir`: directory where to store the service state files (cache, logs, pid file, etc.)
+- `--broker`: the hostname and port where the broker runs (only for publisher and subscriber)
+- `--daemon`: whether the service daemonizes itself (false by default)
+
+In production deployments it's recommended to use Systemd services.
+
 ## Client commands
 
 The client must implement the following commands:
@@ -25,6 +37,30 @@ The client must implement the following commands:
 - `info <dataset>`: Get metadata about a dataset.
 - `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
 - `download <dataset[slice]> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder. `slice` is optional.
+
+## Configuration
+
+There should be a configuration file (by default $CWD/caterva2.toml) where the configuration for each service is specified. For example:
+
+```
+[broker]
+http = localhost:8000
+statedir = _caterva2/bro
+loglevel = warning
+
+[publisher.1]
+http = localhost:8001
+statedir = _caterva2/pub
+loglevel = warning
+name = foo
+root = root-examples
+
+[subscriber.1]
+http = localhost:8002
+statedir = _caterva2/sub
+loglevel = warning
+```
+
 
 ## Client implementation
 
@@ -178,6 +214,9 @@ This is a list of possible actions:
 
 * When a subscriber needs to update its database and cache for a given root, if the communication fails or a reply from the publisher is not received in a certain amount of time, or there is some other local problem (like lack of storage space), since the update should be atomic, the temporary data should be discarded and the cached one used according to the previous points.
 
+* When a publisher is down, and the root files are added/updated, when the publisher comes up again, it should announce the new/updated root files to the broker.  The broker should then notify the subscribers that the root files have changed, and the subscribers should update their local database and cache.
+
+
 TODO: think about other situations.
 
 ## Data transmission
@@ -222,3 +261,7 @@ There will be an internal database for publishers and subscribers for storing di
     * `vlmeta`: The variable length metadata of the dataset.
 
 The ``meta`` and ``vlmeta`` fields above are the same as described in the [Metadata](#metadata) section above. They are purely informational at this point, but they will be used in a next version for searching and filtering datasets ([TinyDB](https://tinydb.readthedocs.io/en/latest/) can be used for this).
+
+## TODO
+
+- Broker: add API to remove a root (only the publisher that creates it can remove it)

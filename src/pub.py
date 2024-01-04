@@ -20,9 +20,7 @@ import uvicorn
 from watchfiles import awatch
 
 # Project
-import models
-import utils
-
+from caterva2 import utils, models
 
 logger = logging.getLogger('pub')
 
@@ -40,7 +38,7 @@ database = None  # <Database> instance
 
 def get_etag(abspath):
     stat = abspath.stat()
-    return str(stat.st_mtime)
+    return f'{stat.st_mtime}:{stat.st_size}'
 
 async def worker(queue):
     while True:

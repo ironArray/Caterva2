@@ -19,9 +19,7 @@ import httpx
 import uvicorn
 
 # Project
-import models
-import utils
-
+from caterva2 import utils, models
 
 logger = logging.getLogger('sub')
 
@@ -135,18 +133,6 @@ def follow(name: str):
         client.subscribe(name, updated_dataset)
         clients[name] = client
 
-def parse_slice(string):
-    obj = []
-    for segment in string.split(','):
-        if ':' not in segment:
-            segment = int(segment)
-        else:
-            segment = [int(x) if x else None for x in segment.split(':')]
-            segment = slice(*segment)
-        obj.append(segment)
-
-    return tuple(obj)
-
 def lookup_path(path):
     path = pathlib.Path(path)
     if path.suffix not in {'.b2frame', '.b2nd'}:
@@ -172,13 +158,10 @@ async def lifespan(app: FastAPI):
         # Deleted
         for name, root in database.roots.items():
             if name not in data:
-                if root.subscribed:
-                    pass # TODO mark the root as stale
-                else:
-                    del database.roots[name]
-                    changed = True
+                del database.roots[name]
+                changed = True
 
-        # New or updadted
+        # New or updated
         for name, data in data.items():
             root = models.Root(**data)
             if name not in database.roots:
@@ -256,41 +239,28 @@ async def get_url(path: str):
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str, slice: str = None):
+    assert slice is None, 'Slices not supported here'
     abspath = lookup_path(path)
-
-    if slice is None:
-        return utils.read_metadata(abspath)
-
-    # Read metadata
-    slice_obj = parse_slice(slice)
-    array, schunk = utils.open_b2(abspath)
-    if array is not None:
-        array = array.__getitem__(slice_obj)
-        array = blosc2.asarray(array)
-        metadata = utils.read_metadata(array)
-    else:
-        assert len(slice_obj) == 1
-        data = schunk.__getitem__(*slice_obj)
-        schunk = utils.compress(data)
-        metadata = utils.read_metadata(schunk)
-
-    return metadata
+    return utils.read_metadata(abspath)
 
 
 @app.get('/api/download/{path:path}')
-async def get_download(path: str, nchunk: int, slice: str = None):
+async def get_download(path: str, nchunk: int, slice_: str = None):
     abspath = lookup_path(path)
 
     # Build the list of chunks we need to download from the publisher
     array, schunk = utils.open_b2(abspath)
-    if slice is None:
+    if slice_ is None:
         nchunks = [nchunk]
     else:
-        slice_obj = parse_slice(slice)
+        slice_obj = utils.parse_slice(slice_)
         if not array:
+            if isinstance(slice_obj[0], slice):
+                start, stop, _ = slice_obj[0].indices(schunk.nchunks)
+            else:
+                start, stop = slice_obj[0], slice_obj[0] + 1
             # get_slice_nchunks() does not support slices for schunks yet
             # TODO: support slices for schunks in python-blosc2
-            start, stop, _ = slice_obj[0].indices(schunk.nchunks)
             nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
         else:
             nchunks = blosc2.get_slice_nchunks(array, slice_obj)
@@ -300,22 +270,7 @@ async def get_download(path: str, nchunk: int, slice: str = None):
     async with lock:
         for n in nchunks:
             if not utils.chunk_is_available(schunk, n):
-                # TODO: I think the line below can be removed,
-                #  as it is guaranteed to exist per the `utils.open_b2(abspath)`
-                #  above, isn't it?
-                # abspath.parent.mkdir(exist_ok=True, parents=True)
                 await download_chunk(path, schunk, n)
-
-    # With slice
-    if slice is not None:
-        if array is not None:
-            array = array.__getitem__(slice_obj)
-            array = blosc2.asarray(array)
-            schunk = array.schunk
-        else:
-            assert len(slice_obj) == 1
-            data = schunk.__getitem__(*slice_obj)
-            schunk = utils.compress(data)
 
     # Stream response
     chunk = schunk.get_chunk(nchunk)
