@@ -24,6 +24,8 @@ This will start the daemons, run the tests, and shut the daemons down:
 env CATERVA2_USE_EXTERNAL=0 pytest
 ```
 
+State files will be left in `_caterva2_tests`.
+
 ### With external daemons
 
 To have daemons running across several test runs (for faster testing), start the daemons:
@@ -40,6 +42,8 @@ python src/bro.py &
 python src/pub.py foo root-example &
 python src/sub.py &
 ```
+
+State files will be left in `_caterva2`.
 
 Finally, in another shell (or if you like to hear the daemons chatting), run the tests:
 
