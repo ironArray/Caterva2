@@ -149,6 +149,10 @@ def services():
 
 
 def main():
+    if '--help' in sys.argv:
+        print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\"]")
+        return
+
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     srvs = ManagedServices(state_dir, reuse_state=True)
     try:
