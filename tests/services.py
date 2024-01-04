@@ -146,8 +146,8 @@ def services():
     srvs.wait_for_all()
 
 
-def main(argv, env):
-    state_dir = argv[1] if len(argv) >= 2 else DEFAULT_STATE_DIR
+def main():
+    state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     srvs = ManagedServices(state_dir, reuse_state=True)
     try:
         srvs.start_all()
@@ -157,4 +157,4 @@ def main(argv, env):
 
 
 if __name__ == '__main__':
-    main(sys.argv, os.environ)
+    main()
