@@ -176,10 +176,6 @@ def parse_slice(string):
     return tuple(obj)
 
 def download(host, dataset, params, urlpath=None, verbose=False):
-    # TODO: Should we allow downloading a slice to a file (and fill the rest as uninit)?
-    #  Let's do so for now.
-    # if urlpath is not None and 'slice' in params:
-    #     raise ValueError('Cannot download a slice to a file')
     data = get(f'http://{host}/api/info/{dataset}')
 
     # Create array/schunk in memory
@@ -208,15 +204,6 @@ def download(host, dataset, params, urlpath=None, verbose=False):
         response.raise_for_status()
         chunk = response.read()
         schunk.update_chunk(nchunk, chunk)
-
-    # TODO: streaming
-#       with httpx.stream('GET', url, params=params) as resp:
-#           buffer = []
-#           for chunk in resp.iter_bytes():
-#               print('LEN', len(buffer))
-#               buffer.append(chunk)
-#           chunk = b''.join(buffer)
-#           schunk.update_chunk(nchunk, chunk)
 
     if 'slice' in params:
         slice_ = parse_slice(params['slice'])

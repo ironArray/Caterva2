@@ -158,13 +158,10 @@ async def lifespan(app: FastAPI):
         # Deleted
         for name, root in database.roots.items():
             if name not in data:
-                if root.subscribed:
-                    pass # TODO mark the root as stale
-                else:
-                    del database.roots[name]
-                    changed = True
+                del database.roots[name]
+                changed = True
 
-        # New or updadted
+        # New or updated
         for name, data in data.items():
             root = models.Root(**data)
             if name not in database.roots:

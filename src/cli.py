@@ -34,8 +34,6 @@ def handle_errors(func):
     return wrapper
 
 def dataset_with_slice(dataset):
-    # match = re.match('(.*)\[(.*)\]', dataset)
-    # TODO: this works on python 3.12 without warnings. does this work on older versions?
     match = re.match('(.*)\\[(.*)]', dataset)
     if match is None:
         params = {}
