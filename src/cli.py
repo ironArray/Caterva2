@@ -14,11 +14,9 @@ import re
 # Requirements
 import httpx
 import rich
-import tqdm
 
 # Project
-import models
-import utils
+from caterva2 import utils, models
 
 
 def handle_errors(func):
@@ -36,7 +34,9 @@ def handle_errors(func):
     return wrapper
 
 def dataset_with_slice(dataset):
-    match = re.match('(.*)\[(.*)\]', dataset)
+    # match = re.match('(.*)\[(.*)\]', dataset)
+    # TODO: this works on python 3.12 without warnings. does this work on older versions?
+    match = re.match('(.*)\\[(.*)]', dataset)
     if match is None:
         params = {}
     else:
@@ -107,49 +107,11 @@ def cmd_info(args):
     rich.print(data)
 
 
-def __download(host, dataset, params, urlpath=None):
-    data = utils.get(f'http://{host}/api/info/{dataset}', params=params)
-
-    # Create array/schunk in memory
-    suffix = dataset.suffix
-    if suffix == '.b2nd':
-        metadata = models.Metadata(**data)
-        array = utils.init_b2nd(metadata, urlpath=urlpath)
-        schunk = array.schunk
-    elif suffix == '.b2frame':
-        metadata = models.SChunk(**data)
-        schunk = utils.init_b2frame(metadata, urlpath=urlpath)
-        array = None
-    else:
-        metadata = models.SChunk(**data)
-        schunk = utils.init_b2frame(metadata, urlpath=None)
-        array = None
-
-    # Download
-    url = f'http://{args.host}/api/download/{dataset}'
-    for nchunk in tqdm.tqdm(range(schunk.nchunks)):
-        params['nchunk'] = nchunk
-        response = httpx.get(url, params=params, timeout=None)
-        response.raise_for_status()
-        chunk = response.read()
-        schunk.update_chunk(nchunk, chunk)
-
-#       with httpx.stream('GET', url, params=params) as resp:
-#           buffer = []
-#           for chunk in resp.iter_bytes():
-#               print('LEN', len(buffer))
-#               buffer.append(chunk)
-#           chunk = b''.join(buffer)
-#           schunk.update_chunk(nchunk, chunk)
-
-    return array, schunk
-
-
 @handle_errors
 def cmd_show(args):
     # Download
     dataset, params = args.dataset
-    array, schunk = __download(args.host, dataset, params)
+    array, schunk = utils.download(args.host, dataset, params, verbose=True)
 
     # Display
     if array is None:
@@ -159,7 +121,7 @@ def cmd_show(args):
         except UnicodeDecodeError:
             print('Binary data')
     else:
-        data = array[:]  # numpy array
+        data = array[:] if array.ndim > 0 else array[()]
         print(data)
 
 @handle_errors
@@ -178,7 +140,7 @@ def cmd_download(args):
         urlpath = pathlib.Path(f'{urlpath}[{slice}]{suffix}')
 
     # Download
-    array, schunk = __download(args.host, dataset, params, urlpath=urlpath)
+    array, schunk = utils.download(args.host, dataset, params, urlpath=urlpath, verbose=True)
     if suffix not in {'.b2frame', '.b2nd'}:
         with open(urlpath, 'wb') as f:
             data = schunk[:]

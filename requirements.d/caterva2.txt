@@ -1,0 +1,7 @@
+blosc2
+fastapi
+fastapi_websocket_pubsub
+httpx
+numpy
+safer
+tqdm

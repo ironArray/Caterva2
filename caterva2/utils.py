@@ -21,9 +21,10 @@ import fastapi_websocket_pubsub
 import httpx
 import numpy as np
 import safer
+import tqdm
 
 # Project
-import models
+from . import models
 
 
 #
@@ -158,6 +159,91 @@ def read_metadata(obj):
         return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
     else:
         raise TypeError(f'unexpected {type(obj)}')
+
+
+def parse_slice(string):
+    if not string:
+        return ()
+    obj = []
+    for segment in string.split(','):
+        if ':' not in segment:
+            segment = int(segment)
+        else:
+            segment = [int(x) if x else None for x in segment.split(':')]
+            segment = slice(*segment)
+        obj.append(segment)
+
+    return tuple(obj)
+
+def download(host, dataset, params, urlpath=None, verbose=False):
+    # TODO: Should we allow downloading a slice to a file (and fill the rest as uninit)?
+    #  Let's do so for now.
+    # if urlpath is not None and 'slice' in params:
+    #     raise ValueError('Cannot download a slice to a file')
+    data = get(f'http://{host}/api/info/{dataset}')
+
+    # Create array/schunk in memory
+    suffix = dataset.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**data)
+        array = init_b2nd(metadata, urlpath=urlpath)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**data)
+        schunk = init_b2frame(metadata, urlpath=urlpath)
+        array = None
+    else:
+        metadata = models.SChunk(**data)
+        schunk = init_b2frame(metadata, urlpath=None)
+        array = None
+
+    # Download and update schunk
+    url = f'http://{host}/api/download/{dataset}'
+    iter_chunks = range(schunk.nchunks)
+    if verbose:
+        iter_chunks = tqdm.tqdm(iter_chunks, desc='Downloading', unit='chunk')
+    for nchunk in iter_chunks:
+        params['nchunk'] = nchunk
+        response = httpx.get(url, params=params, timeout=None)
+        response.raise_for_status()
+        chunk = response.read()
+        schunk.update_chunk(nchunk, chunk)
+
+    # TODO: streaming
+#       with httpx.stream('GET', url, params=params) as resp:
+#           buffer = []
+#           for chunk in resp.iter_bytes():
+#               print('LEN', len(buffer))
+#               buffer.append(chunk)
+#           chunk = b''.join(buffer)
+#           schunk.update_chunk(nchunk, chunk)
+
+    if 'slice' in params:
+        slice_ = parse_slice(params['slice'])
+        if array:
+            if urlpath is not None:
+                # We want to save the slice to a file
+                ndarray = array.slice(slice_)  # in memory (compressed)
+                # Remove previous new on-disk array and create a new one
+                ndarray.copy(urlpath=urlpath, mode="w", contiguous=True, cparams=schunk.cparams)
+            else:
+                array = array[slice_] if array.ndim > 0 else array[()]
+        else:
+            assert len(slice_) == 1
+            slice_ = slice_[0]
+            if urlpath is not None:
+                data = schunk[slice_]
+                # TODO: fix the upstream bug in python-blosc2 that prevents this from working
+                #  when not specifying chunksize (uses `data.size` instead of `len(data)`).
+                blosc2.SChunk(data=data, mode="w", urlpath=urlpath,
+                              chunksize=schunk.chunksize,
+                              cparams=schunk.cparams)
+            else:
+                if isinstance(slice_, int):
+                    slice_ = slice(slice_, slice_ + 1)
+                schunk = schunk[slice_]
+
+    return array, schunk
 
 
 #
