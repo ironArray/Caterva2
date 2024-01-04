@@ -9,6 +9,7 @@
 
 
 import caterva2 as cat2
+import os
 import pathlib
 import json
 import subprocess
@@ -17,8 +18,7 @@ import subprocess
 root_default = 'foo'
 
 def cli(args, binary=False):
-    # cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'src' / 'cli.py'
-    cli_path = pathlib.Path().parent.parent / 'src' / 'cli.py'
+    cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'src' / 'cli.py'
     args = ['python', str(cli_path)] + args
     if not binary:
         args += ['--json']
