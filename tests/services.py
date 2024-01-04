@@ -17,13 +17,13 @@ TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 
 def get_local_http(port, path='/'):
     def check():
-        url = f'http://localhost:{port}{path}'
+        url = f'http://localhost:{port:d}{path}'
         try:
             r = httpx.get(url, timeout=0.5)
             return r.status_code == 200
         except httpx.ConnectError:
             return False
-    check.__name__ = f'get_local_http_{port}'  # more descriptive
+    check.__name__ = f'get_local_http_{port:d}'  # more descriptive
     return check
 
 
