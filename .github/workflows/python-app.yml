@@ -29,4 +29,4 @@ jobs:
         pip install -e .[test]
     - name: Test with pytest
       run: |
-        CATERVA2_USE_EXTERNAL=0 pytest
+        PYTHONPATH=. CATERVA2_USE_EXTERNAL=0 pytest
