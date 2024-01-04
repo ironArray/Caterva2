@@ -261,3 +261,7 @@ There will be an internal database for publishers and subscribers for storing di
     * `vlmeta`: The variable length metadata of the dataset.
 
 The ``meta`` and ``vlmeta`` fields above are the same as described in the [Metadata](#metadata) section above. They are purely informational at this point, but they will be used in a next version for searching and filtering datasets ([TinyDB](https://tinydb.readthedocs.io/en/latest/) can be used for this).
+
+## TODO
+
+- Broker: add API to remove a root (only the publisher that creates it can remove it)
