@@ -31,8 +31,11 @@ classifiers = [
 ]
 dependencies = [
     "blosc2>=2.4.0",
+    "fastapi",
     "fastapi_websocket_pubsub",
     "httpx",
+    "numpy",
+    "rich",
     "safer",
     "tqdm",
     "uvicorn",
