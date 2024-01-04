@@ -16,7 +16,17 @@ export PYTHONPATH=.
 The PYTHONPATH is needed because the tests import the modules in the `caterva2` package folder.
 Not sure how to fix this (or if it is necessary).
 
-Now, start the daemons:
+### With managed daemons
+
+This will start the daemons, run the tests, and shut the daemons down:
+
+```shell
+env CATERVA2_USE_EXTERNAL=0 pytest
+```
+
+### With external daemons
+
+To have daemons running across several test runs (for faster testing), start the daemons:
 
 ```shell
 python -m tests.services &
