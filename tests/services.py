@@ -10,9 +10,19 @@ running before proceeding to tests.  It has three modes of operation:
   created and populated with the example files from the source distribution.
   Terminating the program stops the services.
 
+  Usage example::
+
+      $ cd Caterva2
+      $ python -m tests.services &  # state in ``_caterva2``
+      [3] 12345
+      $ pytest
+      $ kill %3
+
 - pytest fixture with external services: when using `services()` as a fixture,
   it checks that the services are available to other local programs.  It does
   not tamper with the state directory nor stop the services when tests finish.
+
+  Usage example: same as above (but on the pytest side).
 
 - pytest fixture with managed services: if the environment variable
   ``CATERVA2_USE_EXTERNAL`` is set to 0, the `services()` fixture takes care
@@ -21,6 +31,11 @@ running before proceeding to tests.  It has three modes of operation:
   directory to store state in.  If the directory exists, it is removed first.
   Then the directory is created and populated with the example files from the
   source distribution.  When tests finish, the services are stopped.
+
+  Usage example::
+
+      $ cd Caterva2
+      $ env CATERVA2_USE_EXTERNAL=0 pytest  # state in ``_caterva2_tests``
 
 In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
 of the source distribution.
