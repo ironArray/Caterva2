@@ -1,3 +1,31 @@
+"""Caterva2 services for tests.
+
+This ensures that Caterva2 broker, publisher and subscriber services are
+running before proceeding to tests.  It has three modes of operation:
+
+- Standalone script: when run as a script, it starts the services as children
+  and makes sure that they are available to other local programs.  If given an
+  argument, it uses it as the directory to store state in; otherwise it uses
+  the value in `DEFAULT_STATE_DIR`.  If the directory does not exist, it is
+  created and populated with the example files from the source distribution.
+  Terminating the program stops the services.
+
+- pytest fixture with external services: when using `services()` as a fixture,
+  it checks that the services are available to other local programs.  It does
+  not tamper with the state directory nor stop the services when tests finish.
+
+- pytest fixture with managed services: if the environment variable
+  ``CATERVA2_USE_EXTERNAL`` is set to 0, the `services()` fixture takes care
+  of starting the services as children and making sure that they are available
+  to other local programs.  It uses the value in `TEST_STATE_DIR` as the
+  directory to store state in.  If the directory exists, it is removed first.
+  Then the directory is created and populated with the example files from the
+  source distribution.  When tests finish, the services are stopped.
+
+In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
+of the source distribution.
+"""
+
 import os
 import shutil
 import signal
