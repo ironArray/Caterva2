@@ -23,6 +23,7 @@ def get_local_http(port, path='/'):
             return r.status_code == 200
         except httpx.ConnectError:
             return False
+    check.__name__ = f'get_local_http_{port}'  # more descriptive
     return check
 
 
@@ -32,6 +33,10 @@ sub_check = get_local_http(8002, '/api/roots')
 
 
 class Services:
+    pass
+
+
+class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True):
         self.state_dir = Path(state_dir).resolve()
         self.source_dir = Path(__file__).parent.parent
@@ -98,9 +103,33 @@ class Services:
             proc.wait()
 
 
+class ExternalServices(Services):
+    _checks = [bro_check, pub_check, sub_check]
+
+    def __init__(self):
+        self.source_dir = Path(__file__).parent.parent
+
+    def start_all(self):
+        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
+
+        failed = [check.__name__ for check in self._checks if not check()]
+        if failed:
+            raise RuntimeError("failed checks for external services: "
+                               + ' '.join(failed))
+
+    def stop_all(self):
+        pass
+
+    def wait_for_all(self):
+        pass
+
+
 @pytest.fixture(scope='session')
 def services():
-    srvs = Services(TEST_STATE_DIR, reuse_state=False)
+    use_external = False  # TODO: make configurable
+    srvs = (ManagedServices(TEST_STATE_DIR, reuse_state=False)
+            if not use_external
+            else ExternalServices())
     try:
         srvs.start_all()
         yield srvs
@@ -111,7 +140,7 @@ def services():
 
 def main(argv, env):
     state_dir = argv[1] if len(argv) >= 2 else DEFAULT_STATE_DIR
-    srvs = Services(state_dir, reuse_state=True)
+    srvs = ManagedServices(state_dir, reuse_state=True)
     try:
         srvs.start_all()
         srvs.wait_for_all()
