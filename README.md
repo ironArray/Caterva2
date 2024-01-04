@@ -15,11 +15,11 @@ There are 4 elements:
 - The client(s). A command line interface for the user to access the datasets, it connects
   to a subscriber.
 
-These components have a number of requirements, which are all in the `requirements.txt`
+These components have a number of requirements, which are all in the `pyproject.toml`
 file, so just create a virtual environment and install:
 
 ```sh
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Quick start
@@ -186,7 +186,7 @@ Dataset saved to /.../foo/dir2/ds-4d.b2nd
 To run the test suite first some more requirements must be installed:
 
 ```sh
-pip install -r requirements.d/test.txt
+pip install -e .[test]
 ```
 
 And then the tests can be run:

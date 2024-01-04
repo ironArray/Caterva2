@@ -5,8 +5,8 @@ BIN = ./venv/bin
 install:
 	python -m venv venv
 	${BIN}/pip install -U pip
-	${BIN}/pip install -r requirements.txt
-	${BIN}/pip install -r requirements.d/test.txt
+	${BIN}/pip install -e .
+	${BIN}/pip install -e .[test]
 	mkdir -p data
 
 bro:

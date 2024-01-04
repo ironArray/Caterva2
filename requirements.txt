@@ -1,4 +1,0 @@
--r requirements.d/bro.txt
--r requirements.d/pub.txt
--r requirements.d/sub.txt
--r requirements.d/cli.txt

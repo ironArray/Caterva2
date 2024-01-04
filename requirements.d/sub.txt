@@ -1,7 +1,0 @@
-fastapi_websocket_pubsub
-safer
-uvicorn
-
-blosc2>=2.4.0
-httpx
--r caterva2.txt
