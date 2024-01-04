@@ -134,9 +134,8 @@ class ExternalServices(Services):
 
 @pytest.fixture(scope='session')
 def services():
-    use_external = False  # TODO: make configurable
     srvs = (ManagedServices(TEST_STATE_DIR, reuse_state=False)
-            if not use_external
+            if os.environ.get('CATERVA2_USE_EXTERNAL', '1') == '0'
             else ExternalServices())
     try:
         srvs.start_all()
