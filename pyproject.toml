@@ -34,6 +34,7 @@ dependencies = [
     "fastapi_websocket_pubsub",
     "httpx",
     "safer",
+    "tqdm",
     "uvicorn",
     "watchfiles",
 ]
