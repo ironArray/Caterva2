@@ -14,6 +14,18 @@ This document describes the minimal specifications for the project.  It is meant
 - **Subscriber**: The subscriber is the entity that follows changes in a root and allows the download of datasets from publishers.
 - **Client**: The client is a subscriber consumer (e.g. a command line tool) for the user to access the datasets; it connects to a subscriber.
 
+## Services
+
+The three services (broker, publisher and subscriber) have a number of common options:
+
+- `--http`: the hostname and port that it listens, e.g. `localhost:8000`
+- `--loglevel`: by default `warning`
+- `--statedir`: directory where to store the service state files (cache, logs, pid file, etc.)
+- `--broker`: the hostname and port where the broker runs (only for publisher and subscriber)
+- `--daemon`: whether the service daemonizes itself (false by default)
+
+In production deployments it's recommended to use Systemd services.
+
 ## Client commands
 
 The client must implement the following commands:
@@ -25,6 +37,30 @@ The client must implement the following commands:
 - `info <dataset>`: Get metadata about a dataset.
 - `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
 - `download <dataset[slice]> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder. `slice` is optional.
+
+## Configuration
+
+There should be a configuration file (by default $CWD/caterva2.toml) where the configuration for each service is specified. For example:
+
+```
+[broker]
+http = localhost:8000
+statedir = _caterva2/bro
+loglevel = warning
+
+[publisher.1]
+http = localhost:8001
+statedir = _caterva2/pub
+loglevel = warning
+name = foo
+root = root-examples
+
+[subscriber.1]
+http = localhost:8002
+statedir = _caterva2/sub
+loglevel = warning
+```
+
 
 ## Client implementation
 
