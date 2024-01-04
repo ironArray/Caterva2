@@ -52,6 +52,11 @@ class ManagedServices(Services):
         self._setup_done = False
 
     def _start_proc(self, name, *args, check=None):
+        if check is not None and check():
+            raise RuntimeError(
+                f"check for service \"{name}\" succeeded before start"
+                f" (external service running?): {check.__name__}")
+
         self._procs[name] = subprocess.Popen(
             [sys.executable,
              self.source_dir / 'src' / f'{name}.py',
