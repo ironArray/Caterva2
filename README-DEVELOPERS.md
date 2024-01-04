@@ -37,8 +37,4 @@ Finally, in another shell (or if you like to hear the daemons chatting), run the
 python -m pytest -s tests
 ```
 
-Note: Although not working for me on Mac, the original configuration of supervisor is
-still there. We should find a solution for this, but for the time being, the procedure
-above should work.
-
 For stopping the daemons, you will have to kill them manually (sorry!).
