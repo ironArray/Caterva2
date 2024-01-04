@@ -26,6 +26,11 @@ def get_local_http(port, path='/'):
     return check
 
 
+bro_check = get_local_http(8000, '/api/roots')
+pub_check = get_local_http(8001, '/api/list')
+sub_check = get_local_http(8002, '/api/roots')
+
+
 class Services:
     def __init__(self, state_dir, reuse_state=True):
         self.state_dir = Path(state_dir).resolve()
@@ -75,10 +80,9 @@ class Services:
     def start_all(self):
         self._setup()
 
-        self._start_proc('bro', check=get_local_http(8000, '/api/roots'))
-        self._start_proc('pub', 'foo', self.data_dir,
-                         check=get_local_http(8001, '/api/list'))
-        self._start_proc('sub', check=get_local_http(8002, '/api/roots'))
+        self._start_proc('bro', check=bro_check)
+        self._start_proc('pub', 'foo', self.data_dir, check=pub_check)
+        self._start_proc('sub', check=sub_check)
 
     def stop_all(self):
         for proc in self._procs.values():
