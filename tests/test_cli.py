@@ -28,16 +28,16 @@ def cli(args, binary=False):
     return out if binary else json.loads(out)
 
 
-def test_roots():
+def test_roots(services):
     roots = cli(['roots'])
     assert roots[root_default]['name'] == root_default
     assert roots[root_default]['http'] == cat2.pub_host_default
 
-def test_url():
+def test_url(services):
     out = cli(['url', 'foo'])
     assert out == ['http://localhost:8001']
 
-def test_subscribe():
+def test_subscribe(services):
     # Subscribe once
     out = cli(['subscribe', 'foo'])
     assert out == 'Ok'

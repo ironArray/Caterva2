@@ -19,30 +19,30 @@ import pathlib
 root_default = 'foo'
 
 
-def test_roots():
+def test_roots(services):
     roots = cat2.get_roots()
     assert roots[root_default]['name'] == root_default
     assert roots[root_default]['http'] == cat2.pub_host_default
 
-def test_root():
+def test_root(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     assert myroot.name == root_default
     assert myroot.host == cat2.sub_host_default
 
-def test_list():
+def test_list(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     example = pathlib.Path(__file__).parent.parent / 'root-example'
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
 
-def test_file():
+def test_file(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     file = myroot['README.md']
     assert file.name == 'README.md'
     assert file.host == cat2.sub_host_default
 
 
-def test_dataset_frame():
+def test_dataset_frame(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
@@ -62,7 +62,7 @@ def test_dataset_frame():
         assert ds[::2] == a[::2]
         assert str(e_info.value) == 'Only step=1 is supported'
 
-def test_dataset_1d():
+def test_dataset_1d(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     ds = myroot['ds-1d.b2nd']
     assert ds.name == 'ds-1d.b2nd'
@@ -83,7 +83,7 @@ def test_dataset_1d():
 
 
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
-def test_dataset_nd(name):
+def test_dataset_nd(name, services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     ds = myroot[name]
     example = pathlib.Path(__file__).parent.parent / 'root-example' / ds.name
@@ -101,7 +101,7 @@ def test_dataset_nd(name):
         assert str(e_info.value) == 'Only step=1 is supported'
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def test_download_b2nd(name):
+def test_download_b2nd(name, services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     ds = myroot[name]
     dsd = ds.download()
@@ -114,7 +114,7 @@ def test_download_b2nd(name):
     np.testing.assert_array_equal(a[:], b[:])
     os.unlink(dsd)
 
-def test_download_b2frame():
+def test_download_b2frame(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     dsd = ds.download()
@@ -127,7 +127,7 @@ def test_download_b2frame():
     assert a[:] == b[:]
     os.unlink(dsd)
 
-def test_download_regular_file():
+def test_download_regular_file(services):
     myroot = cat2.Root(root_default, host=cat2.sub_host_default)
     ds = myroot['README.md']
     dsd = ds.download()
