@@ -3,7 +3,7 @@
 For the time being, the code is not very well documented, so this need to be fixed asap.
 
 Also, for running the tests, one needs to run manually the broker, publisher and subscriber.
-There is a `start_test_daemons.sh` script that does this, but it is not very robust.
+There is a `tests/services.py` script that does this.
 
 ## Running the tests
 
@@ -16,10 +16,22 @@ export PYTHONPATH=.
 The PYTHONPATH is needed because the tests import the modules in the `caterva2` package folder.
 Not sure how to fix this (or if it is necessary).
 
-Now, start the daemons:
+### With managed daemons
+
+This will start the daemons, run the tests, and shut the daemons down:
 
 ```shell
-sh start_test_daemons.sh
+env CATERVA2_USE_EXTERNAL=0 pytest
+```
+
+State files will be left in `_caterva2_tests`.
+
+### With external daemons
+
+To have daemons running across several test runs (for faster testing), start the daemons:
+
+```shell
+python -m tests.services &
 ```
 
 or, if you prefer:
@@ -31,14 +43,13 @@ python src/pub.py foo root-example &
 python src/sub.py &
 ```
 
+State files will be left in `_caterva2`.
+
 Finally, in another shell (or if you like to hear the daemons chatting), run the tests:
 
 ```shell
 python -m pytest -s tests
 ```
 
-Note: Although not working for me on Mac, the original configuration of supervisor is
-still there. We should find a solution for this, but for the time being, the procedure
-above should work.
-
-For stopping the daemons, you will have to kill them manually (sorry!).
+For stopping the daemons, you will have to kill the `tests.services` process.
+If you started them manually, you will have to kill them manually too (sorry!).
