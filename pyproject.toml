@@ -41,7 +41,9 @@ dependencies = [
     "uvicorn",
     "watchfiles",
 ]
-test-dependencies = [
+
+[project.optional-dependencies]
+test = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
