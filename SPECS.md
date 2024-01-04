@@ -214,6 +214,9 @@ This is a list of possible actions:
 
 * When a subscriber needs to update its database and cache for a given root, if the communication fails or a reply from the publisher is not received in a certain amount of time, or there is some other local problem (like lack of storage space), since the update should be atomic, the temporary data should be discarded and the cached one used according to the previous points.
 
+* When a publisher is down, and the root files are added/updated, when the publisher comes up again, it should announce the new/updated root files to the broker.  The broker should then notify the subscribers that the root files have changed, and the subscribers should update their local database and cache.
+
+
 TODO: think about other situations.
 
 ## Data transmission
