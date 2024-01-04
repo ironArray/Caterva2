@@ -1,3 +1,4 @@
 blosc2>=2.4.0
 httpx
 rich
+-r caterva2.txt
