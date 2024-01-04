@@ -13,6 +13,7 @@ from pathlib import Path
 
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
+TEST_PUBLISHED_ROOT = 'foo'
 
 
 def get_local_http(port, path='/'):
@@ -95,7 +96,8 @@ class ManagedServices(Services):
         self._setup()
 
         self._start_proc('bro', check=bro_check)
-        self._start_proc('pub', 'foo', self.data_dir, check=pub_check)
+        self._start_proc('pub', TEST_PUBLISHED_ROOT, self.data_dir,
+                         check=pub_check)
         self._start_proc('sub', check=sub_check)
 
     def stop_all(self):
