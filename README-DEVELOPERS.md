@@ -3,7 +3,7 @@
 For the time being, the code is not very well documented, so this need to be fixed asap.
 
 Also, for running the tests, one needs to run manually the broker, publisher and subscriber.
-There is a `start_test_daemons.sh` script that does this, but it is not very robust.
+There is a `tests/services.py` script that does this.
 
 ## Running the tests
 
@@ -19,7 +19,7 @@ Not sure how to fix this (or if it is necessary).
 Now, start the daemons:
 
 ```shell
-sh start_test_daemons.sh
+python -m tests.services &
 ```
 
 or, if you prefer:
@@ -37,4 +37,5 @@ Finally, in another shell (or if you like to hear the daemons chatting), run the
 python -m pytest -s tests
 ```
 
-For stopping the daemons, you will have to kill them manually (sorry!).
+For stopping the daemons, you will have to kill the `tests.services` process.
+If you started them manually, you will have to kill them manually too (sorry!).
