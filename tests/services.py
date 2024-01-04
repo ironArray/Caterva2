@@ -73,7 +73,10 @@ class ManagedServices(Services):
             time.sleep(start_sleep_secs)
             if check():
                 break
-        # TODO: else error?
+        else:
+            raise RuntimeError(
+                f"service \"{name}\" failed to become available"
+                f" after {start_timeout_secs:d} seconds")
 
     def _setup(self):
         if self._setup_done:
