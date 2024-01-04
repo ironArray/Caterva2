@@ -30,7 +30,7 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "blosc2",
+    "blosc2>=2.4.0",
     "fastapi_websocket_pubsub",
     "httpx",
     "safer",
