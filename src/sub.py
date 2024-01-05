@@ -12,9 +12,11 @@ import contextlib
 import logging
 import pathlib
 
+
 # Requirements
 import blosc2
 from fastapi import FastAPI, responses
+from fastapi.staticfiles import StaticFiles
 import httpx
 import uvicorn
 
@@ -191,6 +193,7 @@ async def lifespan(app: FastAPI):
         await utils.disconnect_client(client)
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get('/api/roots')
 async def get_roots():
@@ -278,9 +281,42 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
     return responses.StreamingResponse(downloader)
 
 
+@app.get('/api/html/test', response_class=responses.HTMLResponse)
+async def get_html_test():
+    return "[Here Mouse, Mouse!]"
+
+@app.get('/api/html/list/{name}', response_class=responses.HTMLResponse)
+async def html_list(name: str):
+    root = get_root(name)
+
+    rootdir = cache / root.name
+    if not rootdir.exists():
+        utils.raise_not_found(f'Not subscribed to {name}')
+
+    node_list = [
+        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        for path, relpath in utils.walk_files(rootdir)
+    ]
+
+    return "<br>".join([f'<a href="/api/html/info/{name}/{node}">{node}</a>' for node in node_list])
+
+
 @app.get('/api/html/info/{path:path}', response_class=responses.HTMLResponse)
 async def get_html_info(path: str):
-    ret = f'<h1>{path}</h1>'
+    ret = (f'''
+<html>
+    <script src="/static/htmx.min.js"></script>
+    <head>
+        <title>{path}</title>
+    </head>
+    <body>
+        <-- div hx-get="/api/html/test" hx-swap="outerHTML">
+        <div hx-get="/api/html/list/{path}" hx-swap="outerHTML">
+            <button>Refresh</button>
+        </div>
+   </body>
+</html>
+''')
     return ret
 
 
