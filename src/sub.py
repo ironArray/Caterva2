@@ -278,6 +278,12 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
     return responses.StreamingResponse(downloader)
 
 
+@app.get('/api/html/info/{path:path}', response_class=responses.HTMLResponse)
+async def get_html_info(path: str):
+    ret = f'<h1>{path}</h1>'
+    return ret
+
+
 #
 # Command line interface
 #
