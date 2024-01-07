@@ -13,7 +13,6 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example::
 
       $ cd Caterva2
-      $ export PYTHONPATH=.
       $ python -m tests.services &  # state in ``_caterva2``
       [3] 12345
       $ pytest
@@ -38,7 +37,6 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example::
 
       $ cd Caterva2
-      $ export PYTHONPATH=.
       $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
 
 In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
@@ -61,6 +59,7 @@ from pathlib import Path
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_PUBLISHED_ROOT = 'foo'
+TEST_ROOT_EXAMPLE = 'root-example'
 
 
 def get_local_http(port, path='/'):
@@ -82,7 +81,9 @@ sub_check = get_local_http(8002, '/api/roots')
 
 class Services:
     def __init__(self):
-        self.source_dir = Path(__file__).parent.parent
+        self.source_dir = Path(__file__).parent.parent.parent
+        self.published_root = TEST_PUBLISHED_ROOT
+        self.root_example = TEST_ROOT_EXAMPLE
 
     def _setup(self):
         os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
