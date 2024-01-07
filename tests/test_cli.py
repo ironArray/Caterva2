@@ -18,7 +18,7 @@ import subprocess
 root_default = 'foo'
 
 def cli(args, binary=False):
-    cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'src' / 'cli.py'
+    cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'caterva2/clients' / 'cli.py'
     args = ['python', str(cli_path)] + args
     if not binary:
         args += ['--json']

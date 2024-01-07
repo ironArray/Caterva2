@@ -6,15 +6,16 @@ install:
 	python -m venv venv
 	${BIN}/pip install -U pip
 	${BIN}/pip install -e .
+	${BIN}/pip install -e .[services,clients]
 	${BIN}/pip install -e .[test]
 	mkdir -p data
 
 bro:
-	${BIN}/python src/bro.py --statedir=var/bro
+	${BIN}/python -m caterva2.services.bro --statedir=var/bro
 
 pub:
-	${BIN}/python src/pub.py --statedir=var/pub foo root-example
-	#${BIN}/python src/pub.py --statedir=var/pub foo data
+	${BIN}/python -m caterva2.services.pub --statedir=var/pub foo root-example
+	#${BIN}/python -m caterva2.services.pub --statedir=var/pub foo data
 
 sub:
-	${BIN}/python src/sub.py --statedir=var/sub
+	${BIN}/python -m caterva2.services.sub --statedir=var/sub

@@ -105,7 +105,7 @@ class ManagedServices(Services):
 
         self._procs[name] = subprocess.Popen(
             [sys.executable,
-             self.source_dir / 'src' / f'{name}.py',
+             self.source_dir / 'caterva2/services' / f'{name}.py',
              '--statedir=%s' % (self.state_dir / name),
              *args])
 

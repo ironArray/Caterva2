@@ -8,8 +8,8 @@
 ###############################################################################
 
 [build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "caterva2"
@@ -37,11 +37,14 @@ dependencies = [
     "fastapi",  # TODO: ditto
     "fastapi_websocket_pubsub",  # TODO: ditto
     "safer",  # TODO: ditto
+    "tqdm",  # TODO: ditto, but move into clients
     "httpx",
     "numpy",
     "rich",
-    "tqdm",
 ]
+
+[tool.hatch.version]
+path = "caterva2/__init__.py"
 
 [project.optional-dependencies]
 services = [
@@ -53,9 +56,23 @@ services = [
     "uvicorn",
     "watchfiles",
 ]
+clients = [
+    # "tqdm",
+    "rich",
+    "textual",
+]
 test = [
     "pytest",
 ]
 
 [project.urls]
 Home = "https://github.com/Blosc/Caterva2"
+
+[project.services]
+cat2bro = "caterva2.services.bro:main"
+cat2pub = "caterva2.services.pub:main"
+cat2sub = "caterva2.services.sub:main"
+
+[project.clients]
+cat2cli = "caterva2.clients.cli:main"
+cat2tbrowser = "caterva2.clients.tbrowser:main"

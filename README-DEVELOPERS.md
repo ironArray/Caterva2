@@ -38,9 +38,9 @@ or, if you prefer:
 
 ```shell
 export PYTHONPATH=.
-python src/bro.py &
-python src/pub.py foo root-example &
-python src/sub.py &
+python -m caterva2.services.bro &
+python -m caterva2.services.pub foo root-example &
+python -m caterva2.services.sub &
 ```
 
 State files will be left in `_caterva2`.
@@ -53,3 +53,15 @@ python -m pytest -s tests
 
 For stopping the daemons, you will have to kill the `tests.services` process.
 If you started them manually, you will have to kill them manually too (sorry!).
+
+## Build wheels
+
+```
+python -m build
+```
+
+We are using [hatch](https://hatch.pypa.io) as the build system, so you can also run
+
+```shell
+hatch build
+```

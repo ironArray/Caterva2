@@ -19,7 +19,7 @@ These components have a number of requirements, which are all in the `pyproject.
 file, so just create a virtual environment and install:
 
 ```sh
-pip install -e .
+pip install -e .[services,clients]
 ```
 
 ## Quick start
@@ -27,7 +27,7 @@ pip install -e .
 Start the broker:
 
 ```sh
-python src/bro.py
+python -m caterva2.services.bro
 ```
 
 For the purpose of this quick start, let's use the datasets within the `root-example` folder:
@@ -49,13 +49,13 @@ ds-4d.b2nd
 Start publishing `root-example` in another shell:
 
 ```sh
-python src/pub.py foo root-example
+python -m caterva2.services.pub foo root-example
 ```
 
 Now, let's create a subscriber (in yet another shell):
 
 ```sh
-python src/sub.py
+python -m caterva2.services.sub
 ```
 
 ### The command line client
@@ -64,7 +64,7 @@ Finally, we can use a python script (called `cli.py`) that talks to the subscrib
 It can list all the available datasets:
 
 ```sh
-python src/cli.py roots
+python -m caterva2.clients.cli roots
 ```
 
 ```
@@ -74,13 +74,13 @@ foo
 Ask the subscriber to subscribe to changes in the `foo` root:
 
 ```sh
-python src/cli.py subscribe foo
+python -m caterva2.clients.cli subscribe foo
 ```
 
 Now, one can list the datasets in the `foo` root:
 
 ```sh
-python src/cli.py list foo
+python -m caterva2.clients.cli list foo
 ```
 
 ```
@@ -97,7 +97,7 @@ We can see how the client has subscribed successfully, and the datasets appear l
 Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
 ```sh
-python src/cli.py info foo/dir2/ds-4d.b2nd
+python -m caterva2.clients.cli info foo/dir2/ds-4d.b2nd
 ```
 
 ```
@@ -131,7 +131,7 @@ python src/cli.py info foo/dir2/ds-4d.b2nd
 Also, we can ask for the url of a root:
 
 ```sh
-python src/cli.py url foo
+python -m caterva2.clients.cli url foo
 ```
 
 ```
@@ -141,7 +141,7 @@ http://localhost:8001
 Let's print data from a specified dataset:
 
 ```sh
-python src/cli.py show foo/ds-hello.b2frame
+python -m caterva2.clients.cli show foo/ds-hello.b2frame
 ```
 
 ```
@@ -151,7 +151,7 @@ b'Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello 
 It allows printing slices instead of the whole dataset too:
 
 ```sh
-python src/cli.py show foo/dir2/ds-4d.b2nd[:1]
+python -m caterva2.clients.cli show foo/dir2/ds-4d.b2nd[:1]
 ```
 
 ```
@@ -174,7 +174,7 @@ python src/cli.py show foo/dir2/ds-4d.b2nd[:1]
 Finally, we can tell the subscriber to download the dataset:
 
 ```sh
-python src/cli.py download foo/dir2/ds-4d.b2nd
+python -m caterva2.clients.cli download foo/dir2/ds-4d.b2nd
 ```
 
 ```
