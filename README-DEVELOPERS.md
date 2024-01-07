@@ -21,7 +21,7 @@ Not sure how to fix this (or if it is necessary).
 This will start the daemons, run the tests, and shut the daemons down:
 
 ```shell
-env CATERVA2_USE_EXTERNAL=0 pytest
+python -m pytest
 ```
 
 State files will be left in `_caterva2_tests`.
@@ -48,7 +48,7 @@ State files will be left in `_caterva2`.
 Finally, in another shell (or if you like to hear the daemons chatting), run the tests:
 
 ```shell
-python -m pytest -s tests
+env CATERVA2_USE_EXTERNAL=1 python -m pytest -s tests
 ```
 
 For stopping the daemons, you will have to kill the `tests.services` process.

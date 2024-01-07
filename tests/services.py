@@ -26,18 +26,20 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example: same as above (but on the pytest side).
 
 - pytest fixture with managed services: if the environment variable
-  ``CATERVA2_USE_EXTERNAL`` is set to 0, the `services()` fixture takes care
+  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture will use
+   external services; otherwise, it takes care
   of starting the services as children and making sure that they are available
-  to other local programs.  It uses the value in `TEST_STATE_DIR` as the
-  directory to store state in.  If the directory exists, it is removed first.
-  Then the directory is created and populated with the example files from the
-  source distribution.  When tests finish, the services are stopped.
+  to other local programs.
+  It also uses the value in `TEST_STATE_DIR` as the directory to store state in.
+  If the directory exists, it is removed first. Then the directory is created
+  and populated with the example files from the source distribution.  When
+  tests finish, the services are stopped.
 
   Usage example::
 
       $ cd Caterva2
       $ export PYTHONPATH=.
-      $ env CATERVA2_USE_EXTERNAL=0 pytest  # state in ``_caterva2_tests``
+      $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
 
 In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
 of the source distribution.
@@ -182,9 +184,9 @@ class ExternalServices(Services):
 
 @pytest.fixture(scope='session')
 def services():
-    srvs = (ManagedServices(TEST_STATE_DIR, reuse_state=False)
-            if os.environ.get('CATERVA2_USE_EXTERNAL', '1') == '0'
-            else ExternalServices())
+    srvs = (ExternalServices()
+            if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
+            else ManagedServices(TEST_STATE_DIR, reuse_state=False))
     try:
         srvs.start_all()
         yield srvs
