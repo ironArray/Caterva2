@@ -7,7 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-# Minimal API for Caterva2
+"""Caterva2 - On demand access to remote Blosc2 data repositories"""
 
-from .api import bro_host_default, pub_host_default, sub_host_default
-from .api import get_roots, Root, File, Dataset
+__version__ = "0.1"
+

@@ -7,15 +7,18 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
 [project]
 name = "caterva2"
-requires-python = ">3.8"
-version = "0.1.0"
+requires-python = ">3.10"
 readme = "README.md"
 authors = [
     {name = "Blosc Development Team", email = "contact@blosc.org"},
 ]
-description = "Caterva2 - On demand access to remote Blosc2 data repositories"
+dynamic = ["version", "description"]
 keywords = ["pubsub", "blosc2"]
 license = {text = "GNU Affero General Public License version 3"}
 classifiers = [
@@ -30,27 +33,29 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "blosc2>=2.4.0",
-    "fastapi",
-    "fastapi_websocket_pubsub",
+    "blosc2>=2.4.0",  # TODO: try to remove this dependency, and move to services, if possible
+    "fastapi",  # TODO: ditto
+    "fastapi_websocket_pubsub",  # TODO: ditto
+    "safer",  # TODO: ditto
     "httpx",
     "numpy",
     "rich",
-    "safer",
     "tqdm",
-    "uvicorn",
-    "watchfiles",
 ]
 
 [project.optional-dependencies]
+services = [
+    # TODO: try to add these dependencies here, and remove them from caterva2, if possible
+    # "blosc2>=2.4.0",
+    # "fastapi",
+    # "fastapi_websocket_pubsub",
+    # "safer",
+    "uvicorn",
+    "watchfiles",
+]
 test = [
     "pytest",
-    "pytest-asyncio",
-    "pytest-cov",
 ]
 
-[tool.setuptools]
-platforms = [ "any" ]
-
-[tool.scikit-build]
-wheel.py-api = "py3"
+[project.urls]
+Home = "https://github.com/Blosc/Caterva2"
