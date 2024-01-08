@@ -3,7 +3,7 @@
 For the time being, the code is not very well documented, so this need to be fixed asap.
 
 Also, for running the tests, one needs to run manually the broker, publisher and subscriber.
-There is a `tests/services.py` script that does this.
+There is a `caterva2.tests.services` script that does this.
 
 ## Running the tests
 
@@ -22,7 +22,7 @@ State files will be left in `_caterva2_tests`.
 To have daemons running across several test runs (for faster testing), start the daemons:
 
 ```shell
-python -m tests.services &
+python -m caterva2.tests.services &
 ```
 
 or, if you prefer:
@@ -41,7 +41,7 @@ Finally, in another shell (or if you like to hear the daemons chatting), run the
 env CATERVA2_USE_EXTERNAL=1 python -m pytest -s
 ```
 
-For stopping the daemons, you will have to kill the `tests.services` process.
+For stopping the daemons, you will have to kill the `caterva2.tests.services` process.
 If you started them manually, you will have to kill them manually too (sorry!).
 
 ## Build wheels

@@ -13,7 +13,7 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example::
 
       $ cd Caterva2
-      $ python -m tests.services &  # state in ``_caterva2``
+      $ python -m caterva2.tests.services &  # state in ``_caterva2``
       [3] 12345
       $ pytest
       $ kill %3
