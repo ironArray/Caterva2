@@ -25,14 +25,13 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example: same as above (but on the pytest side).
 
 - pytest fixture with managed services: if the environment variable
-  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture will use
-   external services; otherwise, it takes care
-  of starting the services as children and making sure that they are available
-  to other local programs.
-  It also uses the value in `TEST_STATE_DIR` as the directory to store state in.
-  If the directory exists, it is removed first. Then the directory is created
-  and populated with the example files from the source distribution.  When
-  tests finish, the services are stopped.
+  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture uses
+  external services; otherwise, it takes care of starting the services as
+  children and making sure that they are available to other local programs.
+  It also uses the value in `TEST_STATE_DIR` as the directory to store state
+  in.  If the directory exists, it is removed first. Then the directory is
+  created and populated with the example files from the source distribution.
+  When tests finish, the services are stopped.
 
   Usage example::
 
