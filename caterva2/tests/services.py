@@ -75,14 +75,12 @@ sub_check = get_local_http(8002, '/api/roots')
 
 
 class Services:
-    def __init__(self):
-        self.published_root = TEST_PUBLISHED_ROOT
+    pass
 
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True,
                  examples_dir=None):
-        super().__init__()
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
         self.examples_dir = examples_dir
