@@ -13,6 +13,7 @@ import os
 import pathlib
 import json
 import subprocess
+import sys
 
 
 root_default = 'foo'
@@ -21,7 +22,7 @@ root_example = 'root-example'
 
 def cli(args, binary=False):
     cli_path = 'caterva2.clients.cli'
-    args = ['python', '-m' + str(cli_path)] + args
+    args = [sys.executable, '-m' + str(cli_path)] + args
     if not binary:
         args += ['--json']
     ret = subprocess.run(args, capture_output=True, text=True)
