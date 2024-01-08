@@ -76,15 +76,16 @@ sub_check = get_local_http(8002, '/api/roots')
 
 class Services:
     def __init__(self):
-        self.source_dir = Path(__file__).parent.parent.parent
         self.published_root = TEST_PUBLISHED_ROOT
 
 
 class ManagedServices(Services):
-    def __init__(self, state_dir, reuse_state=True):
+    def __init__(self, state_dir, reuse_state=True,
+                 examples_dir=None):
         super().__init__()
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
+        self.examples_dir = examples_dir
 
         self.data_dir = self.state_dir / 'data'
 
@@ -126,8 +127,7 @@ class ManagedServices(Services):
         self.state_dir.mkdir(exist_ok=True)
 
         if not self.data_dir.exists():
-            examples_dir = self.source_dir / 'root-example'
-            shutil.copytree(examples_dir, self.data_dir, symlinks=True)
+            shutil.copytree(self.examples_dir, self.data_dir, symlinks=True)
         self.data_dir.mkdir(exist_ok=True)
 
         self._setup_done = True
@@ -171,10 +171,11 @@ class ExternalServices(Services):
 
 
 @pytest.fixture(scope='session')
-def services():
+def services(examples_dir):
     srvs = (ExternalServices()
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
-            else ManagedServices(TEST_STATE_DIR, reuse_state=False))
+            else ManagedServices(TEST_STATE_DIR, reuse_state=False,
+                                 examples_dir=examples_dir))
     try:
         srvs.start_all()
         yield srvs
@@ -188,8 +189,12 @@ def main():
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\"]")
         return
 
+    from . import files
+
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    srvs = ManagedServices(state_dir, reuse_state=True)
+    examples_dir = files.get_examples_dir(files.get_source_dir())
+    srvs = ManagedServices(state_dir, reuse_state=True,
+                           examples_dir=examples_dir)
     try:
         srvs.start_all()
         srvs.wait_for_all()
