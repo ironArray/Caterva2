@@ -20,8 +20,8 @@ root_example = 'root-example'
 
 
 def cli(args, binary=False):
-    cli_path = pathlib.Path(os.environ['CATERVA2_SOURCE']) / 'caterva2/clients/cli.py'
-    args = ['python', str(cli_path)] + args
+    cli_path = 'caterva2.clients.cli'
+    args = ['python', '-m' + str(cli_path)] + args
     if not binary:
         args += ['--json']
     ret = subprocess.run(args, capture_output=True, text=True)
