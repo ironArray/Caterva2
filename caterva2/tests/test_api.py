@@ -26,9 +26,9 @@ def test_root(services):
     assert myroot.name == services.published_root
     assert myroot.host == cat2.sub_host_default
 
-def test_list(services):
+def test_list(services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
-    example = services.source_dir / services.root_example
+    example = examples_dir
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
 
@@ -39,13 +39,13 @@ def test_file(services):
     assert file.host == cat2.sub_host_default
 
 
-def test_dataset_frame(services):
+def test_dataset_frame(services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
     assert ds.host == cat2.sub_host_default
 
-    example = services.source_dir / services.root_example / ds.name
+    example = examples_dir / ds.name
     a = blosc2.open(example)[:]
     # assert ds[1] == a[1]  # TODO: this test does not work yet
     assert ds[:1] == a[:1]
@@ -59,13 +59,13 @@ def test_dataset_frame(services):
         assert ds[::2] == a[::2]
         assert str(e_info.value) == 'Only step=1 is supported'
 
-def test_dataset_1d(services):
+def test_dataset_1d(services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
     ds = myroot['ds-1d.b2nd']
     assert ds.name == 'ds-1d.b2nd'
     assert ds.host == cat2.sub_host_default
 
-    example = services.source_dir / services.root_example / ds.name
+    example = examples_dir / ds.name
     a = blosc2.open(example)[:]
     np.testing.assert_array_equal(ds[1], a[1])
     np.testing.assert_array_equal(ds[:1], a[:1])
@@ -80,10 +80,10 @@ def test_dataset_1d(services):
 
 
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
-def test_dataset_nd(name, services):
+def test_dataset_nd(name, services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
     ds = myroot[name]
-    example = services.source_dir / services.root_example / ds.name
+    example = examples_dir / ds.name
     a = blosc2.open(example)[:]
     np.testing.assert_array_equal(ds[1], a[1])
     np.testing.assert_array_equal(ds[:1], a[:1])
@@ -98,40 +98,40 @@ def test_dataset_nd(name, services):
         assert str(e_info.value) == 'Only step=1 is supported'
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def test_download_b2nd(name, services):
+def test_download_b2nd(name, services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
     ds = myroot[name]
     dsd = ds.download()
     assert dsd == ds.path
 
     # Data contents
-    example = services.source_dir / services.root_example / name
+    example = examples_dir / name
     a = blosc2.open(example)
     b = blosc2.open(dsd)
     np.testing.assert_array_equal(a[:], b[:])
     os.unlink(dsd)
 
-def test_download_b2frame(services):
+def test_download_b2frame(services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     dsd = ds.download()
     assert dsd == ds.path
 
     # Data contents
-    example = services.source_dir / services.root_example / ds.name
+    example = examples_dir / ds.name
     a = blosc2.open(example)
     b = blosc2.open(dsd)
     assert a[:] == b[:]
     os.unlink(dsd)
 
-def test_download_regular_file(services):
+def test_download_regular_file(services, examples_dir):
     myroot = cat2.Root(services.published_root, host=cat2.sub_host_default)
     ds = myroot['README.md']
     dsd = ds.download()
     assert dsd == ds.path
 
     # Data contents
-    example = services.source_dir / services.root_example / ds.name
+    example = examples_dir / ds.name
     a = open(example).read()
     b = open(dsd).read()
     assert a[:] == b[:]
