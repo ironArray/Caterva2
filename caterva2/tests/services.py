@@ -38,9 +38,6 @@ running before proceeding to tests.  It has three modes of operation:
 
       $ cd Caterva2
       $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
-
-In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
-of the source distribution.
 """
 
 import os
@@ -85,9 +82,6 @@ class Services:
         self.published_root = TEST_PUBLISHED_ROOT
         self.root_example = TEST_ROOT_EXAMPLE
 
-    def _setup(self):
-        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
-
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True):
@@ -130,8 +124,6 @@ class ManagedServices(Services):
         if self._setup_done:
             return
 
-        super()._setup()
-
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
@@ -169,8 +161,6 @@ class ExternalServices(Services):
     _checks = [bro_check, pub_check, sub_check]
 
     def start_all(self):
-        super()._setup()
-
         failed = [check.__name__ for check in self._checks if not check()]
         if failed:
             raise RuntimeError("failed checks for external services: "
