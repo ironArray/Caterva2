@@ -25,22 +25,18 @@ running before proceeding to tests.  It has three modes of operation:
   Usage example: same as above (but on the pytest side).
 
 - pytest fixture with managed services: if the environment variable
-  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture will use
-   external services; otherwise, it takes care
-  of starting the services as children and making sure that they are available
-  to other local programs.
-  It also uses the value in `TEST_STATE_DIR` as the directory to store state in.
-  If the directory exists, it is removed first. Then the directory is created
-  and populated with the example files from the source distribution.  When
-  tests finish, the services are stopped.
+  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture uses
+  external services; otherwise, it takes care of starting the services as
+  children and making sure that they are available to other local programs.
+  It also uses the value in `TEST_STATE_DIR` as the directory to store state
+  in.  If the directory exists, it is removed first. Then the directory is
+  created and populated with the example files from the source distribution.
+  When tests finish, the services are stopped.
 
   Usage example::
 
       $ cd Caterva2
       $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
-
-In all cases, the ``CATERVA2_SOURCE`` environment variable is set to the path
-of the source distribution.
 """
 
 import os
@@ -59,7 +55,6 @@ from pathlib import Path
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_PUBLISHED_ROOT = 'foo'
-TEST_ROOT_EXAMPLE = 'root-example'
 
 
 def get_local_http(port, path='/'):
@@ -80,20 +75,15 @@ sub_check = get_local_http(8002, '/api/roots')
 
 
 class Services:
-    def __init__(self):
-        self.source_dir = Path(__file__).parent.parent.parent
-        self.published_root = TEST_PUBLISHED_ROOT
-        self.root_example = TEST_ROOT_EXAMPLE
-
-    def _setup(self):
-        os.environ['CATERVA2_SOURCE'] = str(self.source_dir)
+    pass
 
 
 class ManagedServices(Services):
-    def __init__(self, state_dir, reuse_state=True):
-        super().__init__()
+    def __init__(self, state_dir, reuse_state=True,
+                 examples_dir=None):
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
+        self.examples_dir = examples_dir
 
         self.data_dir = self.state_dir / 'data'
 
@@ -130,15 +120,12 @@ class ManagedServices(Services):
         if self._setup_done:
             return
 
-        super()._setup()
-
         if not self.reuse_state and self.state_dir.is_dir():
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
 
         if not self.data_dir.exists():
-            examples_dir = self.source_dir / 'root-example'
-            shutil.copytree(examples_dir, self.data_dir, symlinks=True)
+            shutil.copytree(self.examples_dir, self.data_dir, symlinks=True)
         self.data_dir.mkdir(exist_ok=True)
 
         self._setup_done = True
@@ -169,8 +156,6 @@ class ExternalServices(Services):
     _checks = [bro_check, pub_check, sub_check]
 
     def start_all(self):
-        super()._setup()
-
         failed = [check.__name__ for check in self._checks if not check()]
         if failed:
             raise RuntimeError("failed checks for external services: "
@@ -184,10 +169,11 @@ class ExternalServices(Services):
 
 
 @pytest.fixture(scope='session')
-def services():
+def services(examples_dir):
     srvs = (ExternalServices()
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
-            else ManagedServices(TEST_STATE_DIR, reuse_state=False))
+            else ManagedServices(TEST_STATE_DIR, reuse_state=False,
+                                 examples_dir=examples_dir))
     try:
         srvs.start_all()
         yield srvs
@@ -201,8 +187,12 @@ def main():
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\"]")
         return
 
+    from . import files
+
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    srvs = ManagedServices(state_dir, reuse_state=True)
+    examples_dir = files.get_examples_dir()
+    srvs = ManagedServices(state_dir, reuse_state=True,
+                           examples_dir=examples_dir)
     try:
         srvs.start_all()
         srvs.wait_for_all()
