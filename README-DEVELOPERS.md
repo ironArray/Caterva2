@@ -38,7 +38,7 @@ State files will be left in `_caterva2`.
 Finally, in another shell (or if you like to hear the daemons chatting), run the tests:
 
 ```shell
-env CATERVA2_USE_EXTERNAL=1 python -m pytest -s tests
+env CATERVA2_USE_EXTERNAL=1 python -m pytest -s
 ```
 
 For stopping the daemons, you will have to kill the `tests.services` process.

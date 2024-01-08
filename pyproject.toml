@@ -40,7 +40,7 @@ dependencies = [
     "tqdm",  # TODO: ditto, but move into clients
     "httpx",
     "numpy",
-    "rich",
+    "pytest",
 ]
 
 [tool.hatch.version]
@@ -60,9 +60,6 @@ clients = [
     # "tqdm",
     "rich",
     "textual",
-]
-test = [
-    "pytest",
 ]
 
 [project.urls]
