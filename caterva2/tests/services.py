@@ -55,7 +55,6 @@ from pathlib import Path
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_PUBLISHED_ROOT = 'foo'
-TEST_ROOT_EXAMPLE = 'root-example'
 
 
 def get_local_http(port, path='/'):
@@ -79,7 +78,6 @@ class Services:
     def __init__(self):
         self.source_dir = Path(__file__).parent.parent.parent
         self.published_root = TEST_PUBLISHED_ROOT
-        self.root_example = TEST_ROOT_EXAMPLE
 
 
 class ManagedServices(Services):
