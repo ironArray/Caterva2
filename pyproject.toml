@@ -65,11 +65,9 @@ clients = [
 [project.urls]
 Home = "https://github.com/Blosc/Caterva2"
 
-[project.services]
+[project.scripts]
 cat2bro = "caterva2.services.bro:main"
 cat2pub = "caterva2.services.pub:main"
 cat2sub = "caterva2.services.sub:main"
-
-[project.clients]
 cat2cli = "caterva2.clients.cli:main"
 cat2tbrowser = "caterva2.clients.tbrowser:main"
