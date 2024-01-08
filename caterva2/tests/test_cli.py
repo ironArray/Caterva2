@@ -15,9 +15,7 @@ import json
 import subprocess
 import sys
 
-
-root_default = 'foo'
-root_example = 'root-example'
+from .services import TEST_PUBLISHED_ROOT as root_default
 
 
 def cli(args, binary=False):
@@ -37,19 +35,19 @@ def test_roots(services):
     assert roots[root_default]['http'] == cat2.pub_host_default
 
 def test_url(services):
-    out = cli(['url', 'foo'])
+    out = cli(['url', root_default])
     assert out == ['http://localhost:8001']
 
 def test_subscribe(services):
     # Subscribe once
-    out = cli(['subscribe', 'foo'])
+    out = cli(['subscribe', root_default])
     assert out == 'Ok'
 
     # Subscribe again, should be a noop
-    out = cli(['subscribe', 'foo'])
+    out = cli(['subscribe', root_default])
     assert out == 'Ok'
 
     # Show
-    a = cli(['show', 'foo/ds-1d.b2nd'], binary=True)
-    b = cli(['show', 'foo/ds-1d.b2nd'], binary=True)
+    a = cli(['show', f'{root_default}/ds-1d.b2nd'], binary=True)
+    b = cli(['show', f'{root_default}/ds-1d.b2nd'], binary=True)
     assert a == b
