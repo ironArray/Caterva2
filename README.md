@@ -195,7 +195,7 @@ And then the tests can be run:
 pytest -v
 ```
 
-You may place your own data files under `tests/data`, otherwise the test publisher will use the files under `root-example`.  After tests finish, state files will be left under `tests/_caterva2` in case you want to inspect them.
+The test publisher will use the files under `root-example`.  After tests finish, state files will be left under `_caterva2_tests` in case you want to inspect them.
 
 
 ## Use with caution
