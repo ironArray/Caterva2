@@ -190,7 +190,7 @@ def main():
     from . import files
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    examples_dir = files.get_examples_dir(files.get_source_dir())
+    examples_dir = files.get_examples_dir()
     srvs = ManagedServices(state_dir, reuse_state=True,
                            examples_dir=examples_dir)
     try:
