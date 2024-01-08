@@ -16,7 +16,7 @@ import httpx
 import rich
 
 # Project
-from caterva2 import utils, models
+from caterva2 import utils, api_utils, models
 
 
 def handle_errors(func):
@@ -50,7 +50,7 @@ def url_with_slice(url, slice):
 
 @handle_errors
 def cmd_roots(args):
-    data = utils.get(f'http://{args.host}/api/roots')
+    data = api_utils.get(f'http://{args.host}/api/roots')
     if args.json:
         print(json.dumps(data))
         return
@@ -64,7 +64,7 @@ def cmd_roots(args):
 
 @handle_errors
 def cmd_subscribe(args):
-    data = utils.post(f'http://{args.host}/api/subscribe/{args.root}')
+    data = api_utils.post(f'http://{args.host}/api/subscribe/{args.root}')
     if args.json:
         print(json.dumps(data))
         return
@@ -73,7 +73,7 @@ def cmd_subscribe(args):
 
 @handle_errors
 def cmd_list(args):
-    data = utils.get(f'http://{args.host}/api/list/{args.root}')
+    data = api_utils.get(f'http://{args.host}/api/list/{args.root}')
     if args.json:
         print(json.dumps(data))
         return
@@ -83,7 +83,7 @@ def cmd_list(args):
 
 @handle_errors
 def cmd_url(args):
-    data = utils.get(f'http://{args.host}/api/url/{args.root}')
+    data = api_utils.get(f'http://{args.host}/api/url/{args.root}')
     if args.json:
         print(json.dumps(data))
         return
@@ -95,7 +95,7 @@ def cmd_url(args):
 def cmd_info(args):
     # Get
     dataset, params = args.dataset
-    data = utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
+    data = api_utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
 
     # Print
     if args.json:
@@ -124,27 +124,27 @@ def cmd_show(args):
 
 @handle_errors
 def cmd_download(args):
-    # urlpath
+    # localpath
     dataset, params = args.dataset
     output_dir = args.output_dir.resolve()
-    urlpath = output_dir / dataset
-    urlpath.parent.mkdir(exist_ok=True, parents=True)
+    localpath = output_dir / dataset
+    localpath.parent.mkdir(exist_ok=True, parents=True)
 
-    suffix = urlpath.suffix
+    suffix = localpath.suffix
 
     slice = params.get('slice')
     if slice:
-        urlpath = urlpath.with_suffix('')
-        urlpath = pathlib.Path(f'{urlpath}[{slice}]{suffix}')
+        localpath = localpath.with_suffix('')
+        localpath = pathlib.Path(f'{localpath}[{slice}]{suffix}')
 
     # Download
-    array, schunk = utils.download(args.host, dataset, params, urlpath=urlpath, verbose=True)
+    array, schunk = utils.download(args.host, dataset, params, localpath=localpath, verbose=True)
     if suffix not in {'.b2frame', '.b2nd'}:
-        with open(urlpath, 'wb') as f:
+        with open(localpath, 'wb') as f:
             data = schunk[:]
             f.write(data)
 
-    print(f'Dataset saved to {urlpath}')
+    print(f'Dataset saved to {localpath}')
 
 if __name__ == '__main__':
     parser = utils.get_parser()

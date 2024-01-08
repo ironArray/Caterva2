@@ -8,7 +8,7 @@
 ###############################################################################
 import pathlib
 
-from caterva2 import utils
+from caterva2 import api_utils
 
 
 # Defaults
@@ -37,18 +37,19 @@ def slice_to_string(indexes):
 
 
 def get_roots(host=sub_host_default):
-    return utils.get(f'http://{host}/api/roots')
+    return api_utils.get(f'http://{host}/api/roots')
+
 
 class Root:
     def __init__(self, name, host=sub_host_default):
         self.name = name
         self.host = host
-        ret = utils.post(f'http://{host}/api/subscribe/{name}')
+        ret = api_utils.post(f'http://{host}/api/subscribe/{name}')
         if ret != 'Ok':
             roots = get_roots(host)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = utils.get(f'http://{host}/api/list/{name}')
+        self.node_list = api_utils.get(f'http://{host}/api/list/{name}')
 
     def __repr__(self):
         return f'<Root: {self.name}>'
@@ -80,7 +81,7 @@ class File:
             path = self.path.with_suffix('')
             path = pathlib.Path(f'{path}[{slice}]{suffix}')
             params = {'slice': slice_}
-        array, schunk = utils.download(self.host, path, urlpath=path, params=params)
+        array, schunk = api_utils.download(self.host, path, localpath=path, params=params)
 
         if suffix not in {'.b2frame', '.b2nd'}:
             with open(path, 'wb') as f:
@@ -93,16 +94,12 @@ class File:
 class Dataset(File):
     def __init__(self, name, root, host):
         super().__init__(name, root, host)
-        self.json = utils.get(f'http://{host}/api/info/{self.path}')
+        self.json = api_utils.get(f'http://{host}/api/info/{self.path}')
 
     def __repr__(self):
         return f'<Dataset: {self.path}>'
 
     def __getitem__(self, indexes):
         slice_ = slice_to_string(indexes)
-        array, schunk = utils.download(self.host, self.path, {'slice': slice_})
-        if array is not None:
-            data = array[:] if array.ndim > 0 else array[()]
-        else:
-            data = schunk[:]  # byte string
+        data = api_utils.fetch_data(self.host, self.path, {'slice': slice_})
         return data

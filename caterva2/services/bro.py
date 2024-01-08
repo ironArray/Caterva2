@@ -18,6 +18,7 @@ import uvicorn
 
 # Project
 from caterva2 import utils, models
+from caterva2.services import srv_utils
 
 
 # State
@@ -52,7 +53,7 @@ if __name__ == '__main__':
     # Init database
     # roots = {name: <Root>}
     statedir = args.statedir.resolve()
-    database = utils.Database(statedir / 'db.json', models.Broker(roots={}))
+    database = srv_utils.Database(statedir / 'db.json', models.Broker(roots={}))
     print(database.data)
 
     # Run

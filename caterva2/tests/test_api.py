@@ -1,6 +1,6 @@
 ###############################################################################
 # Caterva2 - On demand access to remote Blosc2 data repositories
-#
+#º
 # Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
 # https://www.blosc.org
 # License: GNU Affero General Public License v3.0

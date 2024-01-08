@@ -20,7 +20,9 @@ import uvicorn
 from watchfiles import awatch
 
 # Project
-from caterva2 import utils, models
+from caterva2 import utils, api_utils, models
+from caterva2.services import srv_utils
+
 
 logger = logging.getLogger('pub')
 
@@ -201,12 +203,12 @@ if __name__ == '__main__':
 
     # Init database
     model = models.Publisher(etags={})
-    database = utils.Database(statedir / 'db.json', model)
+    database = srv_utils.Database(statedir / 'db.json', model)
 
     # Register
     host, port = args.http
     data = {'name': name, 'http': f'{host}:{port}'}
-    utils.post(f'http://{broker}/api/roots', json=data)
+    api_utils.post(f'http://{broker}/api/roots', json=data)
 
     # Run
     host, port = args.http

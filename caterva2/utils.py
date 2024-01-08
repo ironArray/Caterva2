@@ -10,7 +10,6 @@
 import argparse
 import asyncio
 import contextlib
-import json
 import logging
 import pathlib
 
@@ -20,12 +19,11 @@ import fastapi
 import fastapi_websocket_pubsub
 import httpx
 import numpy as np
-import safer
 import tqdm
 
 # Project
 from . import models
-
+from . import api_utils
 
 #
 # Blosc2 related functions
@@ -58,6 +56,7 @@ def compress(data, dst=None):
 
     return schunk
 
+
 def init_b2nd(metadata, urlpath=None):
     if urlpath is not None:
         urlpath.parent.mkdir(exist_ok=True, parents=True)
@@ -67,6 +66,7 @@ def init_b2nd(metadata, urlpath=None):
     dtype = getattr(np, metadata.dtype)
     return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
                          chunks=metadata.chunks, blocks=metadata.blocks)
+
 
 def init_b2frame(metadata, urlpath=None):
     if urlpath is not None:
@@ -103,15 +103,18 @@ def open_b2(abspath):
 
     return array, schunk
 
+
 def chunk_is_available(schunk, nchunk):
     # Blosc2 flags are at offset 31
     # (see https://github.com/Blosc/c-blosc2/blob/main/README_CHUNK_FORMAT.rst)
     flag = (schunk.get_lazychunk(nchunk)[31] & 0b01110000) >> 4
     return flag != blosc2.SpecialValue.UNINIT.value
 
+
 def iterchunk(chunk):
     # TODO Yield block by block
     yield chunk
+
 
 def get_model_from_obj(obj, model_class, **kwargs):
     if type(obj) is dict:
@@ -129,6 +132,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
             data[key] = value
 
     return model_class(**data)
+
 
 def read_metadata(obj):
     # Open dataset
@@ -161,32 +165,18 @@ def read_metadata(obj):
         raise TypeError(f'unexpected {type(obj)}')
 
 
-def parse_slice(string):
-    if not string:
-        return ()
-    obj = []
-    for segment in string.split(','):
-        if ':' not in segment:
-            segment = int(segment)
-        else:
-            segment = [int(x) if x else None for x in segment.split(':')]
-            segment = slice(*segment)
-        obj.append(segment)
-
-    return tuple(obj)
-
-def download(host, dataset, params, urlpath=None, verbose=False):
-    data = get(f'http://{host}/api/info/{dataset}')
+def download(host, dataset, params, localpath=None, verbose=False):
+    data = api_utils.get(f'http://{host}/api/info/{dataset}')
 
     # Create array/schunk in memory
     suffix = dataset.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**data)
-        array = init_b2nd(metadata, urlpath=urlpath)
+        array = init_b2nd(metadata, urlpath=localpath)
         schunk = array.schunk
     elif suffix == '.b2frame':
         metadata = models.SChunk(**data)
-        schunk = init_b2frame(metadata, urlpath=urlpath)
+        schunk = init_b2frame(metadata, urlpath=localpath)
         array = None
     else:
         metadata = models.SChunk(**data)
@@ -206,28 +196,29 @@ def download(host, dataset, params, urlpath=None, verbose=False):
         schunk.update_chunk(nchunk, chunk)
 
     if 'slice' in params:
-        slice_ = parse_slice(params['slice'])
+        slice_ = api_utils.parse_slice(params['slice'])
         if array:
-            if urlpath is not None:
+            if localpath is not None:
                 # We want to save the slice to a file
                 ndarray = array.slice(slice_)  # in memory (compressed)
                 # Remove previous new on-disk array and create a new one
-                ndarray.copy(urlpath=urlpath, mode="w", contiguous=True, cparams=schunk.cparams)
+                ndarray.copy(urlpath=localpath, mode="w", contiguous=True, cparams=schunk.cparams)
             else:
                 array = array[slice_] if array.ndim > 0 else array[()]
         else:
             assert len(slice_) == 1
             slice_ = slice_[0]
-            if urlpath is not None:
+            if localpath is not None:
                 data = schunk[slice_]
                 # TODO: fix the upstream bug in python-blosc2 that prevents this from working
                 #  when not specifying chunksize (uses `data.size` instead of `len(data)`).
-                blosc2.SChunk(data=data, mode="w", urlpath=urlpath,
+                blosc2.SChunk(data=data, mode="w", urlpath=localpath,
                               chunksize=schunk.chunksize,
                               cparams=schunk.cparams)
             else:
                 if isinstance(slice_, int):
                     slice_ = slice(slice_, slice_ + 1)
+                # TODO: make SChunk support integer as slice
                 schunk = schunk[slice_]
 
     return array, schunk
@@ -259,6 +250,7 @@ def walk_files(root, exclude=None):
             if str(relpath) not in exclude:
                 yield path, relpath
 
+
 #
 # Pub/Sub helpers
 #
@@ -267,6 +259,7 @@ def start_client(url):
     client = fastapi_websocket_pubsub.PubSubClient()
     client.start_client(url)
     return client
+
 
 async def disconnect_client(client, timeout=5):
     if client is not None:
@@ -282,6 +275,7 @@ def socket_type(string):
     port = int(port)
     return (host, port)
 
+
 def get_parser(broker=None, http=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--loglevel', default='warning')
@@ -290,6 +284,7 @@ def get_parser(broker=None, http=None):
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
     return parser
+
 
 def run_parser(parser):
     args = parser.parse_args()
@@ -302,28 +297,15 @@ def run_parser(parser):
 
 
 #
-# HTTP client helpers
-#
-def get(url, params=None, headers=None, timeout=5, model=None):
-    response = httpx.get(url, params=params, headers=headers, timeout=timeout)
-    response.raise_for_status()
-    json = response.json()
-    return json if model is None else model(**json)
-
-def post(url, json=None):
-    response = httpx.post(url, json=json)
-    response.raise_for_status()
-    return response.json()
-
-
-#
 # HTTP server helpers
 #
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
 
+
 def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
+
 
 def get_abspath(root, path):
     abspath = root / path
@@ -337,33 +319,3 @@ def get_abspath(root, path):
         raise_not_found()
 
     return abspath
-
-
-#
-# Facility to persist program state
-#
-
-class Database:
-
-    def __init__(self, path, initial):
-        self.path = path
-        self.model = initial.__class__
-        if path.exists():
-            self.load()
-        else:
-            path.parent.mkdir(exist_ok=True, parents=True)
-            self.data = initial
-            self.save()
-
-    def load(self):
-        with self.path.open() as file:
-            dump = json.load(file)
-            self.data = self.model.model_validate(dump)
-
-    def save(self):
-        dump = self.data.model_dump_json(exclude_none=True)
-        with safer.open(self.path, 'w') as file:
-            file.write(dump)
-
-    def __getattr__(self, name):
-        return getattr(self.data, name)

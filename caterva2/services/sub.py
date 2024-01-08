@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import logging
 import pathlib
+import pickle
 
 # Requirements
 import blosc2
@@ -19,7 +20,9 @@ import httpx
 import uvicorn
 
 # Project
-from caterva2 import utils, models
+from caterva2 import utils, api_utils, models
+from caterva2.services import srv_utils
+
 
 logger = logging.getLogger('sub')
 
@@ -104,7 +107,7 @@ def follow(name: str):
         rootdir.mkdir(exist_ok=True)
 
     # Initialize the datasets in the cache
-    data = utils.get(f'http://{root.http}/api/list')
+    data = api_utils.get(f'http://{root.http}/api/list')
     for relpath in data:
         # If-None-Match header
         key = f'{name}/{relpath}'
@@ -149,7 +152,7 @@ def lookup_path(path):
 async def lifespan(app: FastAPI):
     # Initialize roots from the broker
     try:
-        data = utils.get(f'http://{broker}/api/roots')
+        data = api_utils.get(f'http://{broker}/api/roots')
     except httpx.ConnectError:
         logger.warning('Broker not available')
         client = None
@@ -238,8 +241,7 @@ async def get_url(path: str):
     return [http]
 
 @app.get('/api/info/{path:path}')
-async def get_info(path: str, slice: str = None):
-    assert slice is None, 'Slices not supported here'
+async def get_info(path: str):
     abspath = lookup_path(path)
     return utils.read_metadata(abspath)
 
@@ -277,6 +279,57 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
     downloader = utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
 
+@app.get('/api/fetch_data/{path:path}')
+async def fetch_data(host, dataset, params):
+    data = api_utils.get(f'http://{host}/api/info/{dataset}', params=params)
+
+    # Create array/schunk in memory
+    suffix = dataset.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**data)
+        array = utils.init_b2nd(metadata)
+        schunk = array.schunk
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**data)
+        schunk = utils.init_b2frame(metadata)
+        array = None
+    else:
+        metadata = models.SChunk(**data)
+        schunk = utils.init_b2frame(metadata, urlpath=None)
+        array = None
+
+    # Download and update schunk
+    url = f'http://{host}/api/download/{dataset}'
+    iter_chunks = range(schunk.nchunks)
+    for nchunk in iter_chunks:
+        params['nchunk'] = nchunk
+        response = httpx.get(url, params=params, timeout=None)
+        response.raise_for_status()
+        chunk = response.read()
+        schunk.update_chunk(nchunk, chunk)
+
+    if 'slice' in params:
+        slice_ = api_utils.parse_slice(params['slice'])
+        if array:
+            array = array[slice_] if array.ndim > 0 else array[()]
+        else:
+            assert len(slice_) == 1
+            slice_ = slice_[0]
+            if isinstance(slice_, int):
+                slice_ = slice(slice_, slice_ + 1)
+            # TODO: make SChunk support integer as slice
+            schunk = schunk[slice_]
+
+    if array is not None:
+        data = array[:] if array.ndim > 0 else array[()]  # numpy array
+    else:
+        data = schunk[:]  # byte string
+
+    # Pickle and stream response
+    data = pickle.dumps(data, protocol=-1)
+    # data = zlib.compress(data)
+    downloader = utils.iterchunk(data)
+    return responses.StreamingResponse(downloader)
 
 #
 # Command line interface
@@ -297,7 +350,7 @@ if __name__ == '__main__':
 
     # Init database
     model = models.Subscriber(roots={}, etags={})
-    database = utils.Database(statedir / 'db.json', model)
+    database = srv_utils.Database(statedir / 'db.json', model)
 
     # Run
     host, port = args.http
