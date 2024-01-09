@@ -183,16 +183,16 @@ Dataset saved to /.../foo/dir2/ds-4d.b2nd
 
 ## Tests
 
-To run the test suite first some more requirements must be installed:
-
-```sh
-pip install -e .[test]
-```
-
-And then the tests can be run:
+The tests can be run as follows:
 
 ```sh
 pytest -v
+```
+
+Also, the tests comes with the package, so you can always run them as:
+
+```sh
+python -c "import caterva2 as cat2; cat2.test(verbose=True)"
 ```
 
 The test publisher will use the files under `root-example`.  After tests finish, state files will be left under `_caterva2_tests` in case you want to inspect them.
