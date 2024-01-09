@@ -35,6 +35,7 @@ clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 locks = {}
 
+
 async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
@@ -57,6 +58,7 @@ async def new_root(data, topic):
     database.roots[root.name] = root
     database.save()
 
+
 def init_b2(abspath, metadata):
     suffix = abspath.suffix
     if suffix == '.b2nd':
@@ -69,6 +71,7 @@ def init_b2(abspath, metadata):
         abspath = pathlib.Path(f'{abspath}.b2')
         metadata = models.SChunk(**metadata)
         utils.init_b2frame(metadata, abspath)
+
 
 async def updated_dataset(data, topic):
     name = topic
@@ -136,6 +139,7 @@ def follow(name: str):
         client.subscribe(name, updated_dataset)
         clients[name] = client
 
+
 def lookup_path(path):
     path = pathlib.Path(path)
     if path.suffix not in {'.b2frame', '.b2nd'}:
@@ -176,7 +180,6 @@ async def lifespan(app: FastAPI):
 
         if changed:
             database.save()
-
 
         # Follow the @new channel to know when a new root is added
         client = utils.start_client(f'ws://{broker}/pubsub')
@@ -250,12 +253,19 @@ async def get_info(path: str):
 async def get_download(path: str, nchunk: int, slice_: str = None):
     abspath = lookup_path(path)
 
+    chunk = await partial_download(abspath, nchunk, path, slice_)
+    # Stream response
+    downloader = utils.iterchunk(chunk)
+    return responses.StreamingResponse(downloader)
+
+
+async def partial_download(abspath, nchunk, path, slice_):
     # Build the list of chunks we need to download from the publisher
     array, schunk = utils.open_b2(abspath)
     if slice_ is None:
         nchunks = [nchunk]
     else:
-        slice_obj = utils.parse_slice(slice_)
+        slice_obj = api_utils.parse_slice(slice_)
         if not array:
             if isinstance(slice_obj[0], slice):
                 start, stop, _ = slice_obj[0].indices(schunk.nchunks)
@@ -266,50 +276,41 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
             nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
         else:
             nchunks = blosc2.get_slice_nchunks(array, slice_obj)
-
     # Fetch the chunks
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         for n in nchunks:
             if not utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
-
-    # Stream response
     chunk = schunk.get_chunk(nchunk)
-    downloader = utils.iterchunk(chunk)
-    return responses.StreamingResponse(downloader)
+    return chunk
 
-@app.get('/api/fetch_data/{path:path}')
-async def fetch_data(host, dataset, params):
-    data = api_utils.get(f'http://{host}/api/info/{dataset}', params=params)
+
+@app.get('/api/fetch/{path:path}')
+async def fetch_data(path: str, slice_: str = None):
+    abspath = lookup_path(path)
+    metadata = utils.read_metadata(abspath)
 
     # Create array/schunk in memory
-    suffix = dataset.suffix
+    suffix = abspath.suffix
     if suffix == '.b2nd':
-        metadata = models.Metadata(**data)
-        array = utils.init_b2nd(metadata)
+        array = utils.init_b2nd(metadata, urlpath=None)
         schunk = array.schunk
     elif suffix == '.b2frame':
-        metadata = models.SChunk(**data)
-        schunk = utils.init_b2frame(metadata)
+        schunk = utils.init_b2frame(metadata, urlpath=None)
         array = None
     else:
-        metadata = models.SChunk(**data)
         schunk = utils.init_b2frame(metadata, urlpath=None)
         array = None
 
-    # Download and update schunk
-    url = f'http://{host}/api/download/{dataset}'
-    iter_chunks = range(schunk.nchunks)
-    for nchunk in iter_chunks:
-        params['nchunk'] = nchunk
-        response = httpx.get(url, params=params, timeout=None)
-        response.raise_for_status()
-        chunk = response.read()
+    # Download and update schunk in-memory
+    for nchunk in range(schunk.nchunks):
+        chunk = await partial_download(abspath, nchunk, path, slice_)
         schunk.update_chunk(nchunk, chunk)
 
-    if 'slice' in params:
-        slice_ = api_utils.parse_slice(params['slice'])
+    if slice_:
+        # Additional massage for slices
+        slice_ = api_utils.parse_slice(slice_)
         if array:
             array = array[slice_] if array.ndim > 0 else array[()]
         else:
@@ -327,6 +328,7 @@ async def fetch_data(host, dataset, params):
 
     # Pickle and stream response
     data = pickle.dumps(data, protocol=-1)
+    # TODO: compress data is not working. HTTPX does this automatically?
     # data = zlib.compress(data)
     downloader = utils.iterchunk(data)
     return responses.StreamingResponse(downloader)

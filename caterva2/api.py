@@ -88,7 +88,9 @@ class File:
                 data = schunk[:]
                 f.write(data)
 
-        return path
+        # TODO: how to support downloading on a browser?
+        raise NotImplementedError("TODO: how to support downloading on a browser?")
+        # return path
 
 
 class Dataset(File):
@@ -101,5 +103,5 @@ class Dataset(File):
 
     def __getitem__(self, indexes):
         slice_ = slice_to_string(indexes)
-        data = api_utils.fetch_data(self.host, self.path, {'slice': slice_})
+        data = api_utils.fetch_data(self.host, self.path, {'slice_': slice_})
         return data

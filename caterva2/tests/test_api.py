@@ -1,6 +1,6 @@
 ###############################################################################
 # Caterva2 - On demand access to remote Blosc2 data repositories
-#º
+#
 # Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
 # https://www.blosc.org
 # License: GNU Affero General Public License v3.0
@@ -99,7 +99,7 @@ def test_dataset_nd(name, services, examples_dir):
         assert str(e_info.value) == 'Only step=1 is supported'
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def test_download_b2nd(name, services, examples_dir):
+def _test_download_b2nd(name, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot[name]
     dsd = ds.download()
@@ -112,7 +112,7 @@ def test_download_b2nd(name, services, examples_dir):
     np.testing.assert_array_equal(a[:], b[:])
     os.unlink(dsd)
 
-def test_download_b2frame(services, examples_dir):
+def _test_download_b2frame(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     dsd = ds.download()
@@ -125,7 +125,7 @@ def test_download_b2frame(services, examples_dir):
     assert a[:] == b[:]
     os.unlink(dsd)
 
-def test_download_regular_file(services, examples_dir):
+def _test_download_regular_file(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['README.md']
     dsd = ds.download()

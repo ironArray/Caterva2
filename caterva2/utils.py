@@ -160,7 +160,8 @@ def read_metadata(obj):
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
-        return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
+        model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
+        return model
     else:
         raise TypeError(f'unexpected {type(obj)}')
 

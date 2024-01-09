@@ -29,8 +29,11 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def fetch_data(host, dataset, params):
-    data = get(f'http://{host}/api/fetch_data/{dataset}', params=params)
+def fetch_data(host, path, params):
+    response = httpx.get(f'http://{host}/api/fetch/{path}', params=params)
+    response.raise_for_status()
+    data = response.content
+    # TODO: decompression is not working yet. HTTPX does this automatically?
     # data = zlib.decompress(data)
     return pickle.loads(data)
 
