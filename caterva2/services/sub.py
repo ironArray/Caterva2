@@ -268,7 +268,9 @@ async def partial_download(abspath, nchunk, path, slice_):
         slice_obj = api_utils.parse_slice(slice_)
         if not array:
             if isinstance(slice_obj[0], slice):
-                start, stop, _ = slice_obj[0].indices(schunk.nchunks)
+                # TODO: support schunk.nitems to avoid computations like these
+                nitems = schunk.nbytes // schunk.typesize
+                start, stop, _ = slice_obj[0].indices(nitems)
             else:
                 start, stop = slice_obj[0], slice_obj[0] + 1
             # get_slice_nchunks() does not support slices for schunks yet
