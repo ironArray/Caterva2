@@ -321,10 +321,7 @@ async def fetch_data(path: str, slice_: str = None):
             # TODO: make SChunk support integer as slice
             schunk = schunk[slice_]
 
-    if array is not None:
-        data = array[:] if array.ndim > 0 else array[()]  # numpy array
-    else:
-        data = schunk[:]  # byte string
+    data = array if array is not None else schunk
 
     # Pickle and stream response
     data = pickle.dumps(data, protocol=-1)
