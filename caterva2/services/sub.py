@@ -63,14 +63,14 @@ def init_b2(abspath, metadata):
     suffix = abspath.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**metadata)
-        utils.init_b2nd(metadata, abspath)
+        srv_utils.init_b2nd(metadata, abspath)
     elif suffix == '.b2frame':
         metadata = models.SChunk(**metadata)
-        utils.init_b2frame(metadata, abspath)
+        srv_utils.init_b2frame(metadata, abspath)
     else:
         abspath = pathlib.Path(f'{abspath}.b2')
         metadata = models.SChunk(**metadata)
-        utils.init_b2frame(metadata, abspath)
+        srv_utils.init_b2frame(metadata, abspath)
 
 
 async def updated_dataset(data, topic):
@@ -261,7 +261,7 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
 
 async def partial_download(abspath, nchunk, path, slice_):
     # Build the list of chunks we need to download from the publisher
-    array, schunk = utils.open_b2(abspath)
+    array, schunk = srv_utils.open_b2(abspath)
     if slice_ is None:
         nchunks = [nchunk]
     else:
@@ -294,13 +294,13 @@ async def fetch_data(path: str, slice_: str = None):
     # Create array/schunk in memory
     suffix = abspath.suffix
     if suffix == '.b2nd':
-        array = utils.init_b2nd(metadata, urlpath=None)
+        array = srv_utils.init_b2nd(metadata, urlpath=None)
         schunk = array.schunk
     elif suffix == '.b2frame':
-        schunk = utils.init_b2frame(metadata, urlpath=None)
+        schunk = srv_utils.init_b2frame(metadata, urlpath=None)
         array = None
     else:
-        schunk = utils.init_b2frame(metadata, urlpath=None)
+        schunk = srv_utils.init_b2frame(metadata, urlpath=None)
         array = None
 
     # Download and update schunk in-memory

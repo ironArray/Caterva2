@@ -11,7 +11,6 @@ import pickle
 # Requirements
 import httpx
 
-# To remove
 
 
 def parse_slice(string):
