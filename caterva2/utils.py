@@ -11,55 +11,10 @@ import argparse
 import asyncio
 import contextlib
 import logging
-import pathlib
 
 # Requirements
-import blosc2
 import fastapi
 import fastapi_websocket_pubsub
-
-#
-# Blosc2 related functions
-#
-
-def compress(data, dst=None):
-    assert isinstance(data, (bytes, pathlib.Path))
-
-    if dst is not None:
-        dst.parent.mkdir(exist_ok=True, parents=True)
-        if dst.exists():
-            dst.unlink()
-
-    # Create schunk
-    cparams = {}
-    dparams = {}
-    storage = {
-        'urlpath': dst,
-        'cparams': cparams,
-        'dparams': dparams,
-    }
-    schunk = blosc2.SChunk(**storage)
-
-    # Append data
-    if isinstance(data, pathlib.Path):
-        with open(data, 'rb') as f:
-            data = f.read()
-
-    schunk.append_data(data)
-
-    return schunk
-
-
-def chunk_is_available(schunk, nchunk):
-    # Blosc2 flags are at offset 31
-    # (see https://github.com/Blosc/c-blosc2/blob/main/README_CHUNK_FORMAT.rst)
-    flag = (schunk.get_lazychunk(nchunk)[31] & 0b01110000) >> 4
-    return flag != blosc2.SpecialValue.UNINIT.value
-
-
-def iterchunk(chunk):
-    # TODO Yield block by block
-    yield chunk
 
 
 #

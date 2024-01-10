@@ -57,7 +57,7 @@ async def worker(queue):
                 else:
                     # Compress regular files in publisher's cache
                     b2path = cache / f'{relpath}.b2'
-                    utils.compress(abspath, b2path)
+                    srv_utils.compress(abspath, b2path)
                     metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
@@ -179,7 +179,7 @@ async def get_download(path: str, nchunk: int = -1):
         schunk = blosc2.open(b2path)
 
     chunk = schunk.get_chunk(nchunk)
-    downloader = utils.iterchunk(chunk)
+    downloader = srv_utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
 

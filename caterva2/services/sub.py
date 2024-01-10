@@ -255,7 +255,7 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
 
     chunk = await partial_download(abspath, nchunk, path, slice_)
     # Stream response
-    downloader = utils.iterchunk(chunk)
+    downloader = srv_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
 
 
@@ -282,7 +282,7 @@ async def partial_download(abspath, nchunk, path, slice_):
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         for n in nchunks:
-            if not utils.chunk_is_available(schunk, n):
+            if not srv_utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
     chunk = schunk.get_chunk(nchunk)
     return chunk
@@ -329,7 +329,7 @@ async def fetch_data(path: str, slice_: str = None):
     data = pickle.dumps(data, protocol=-1)
     # TODO: compress data is not working. HTTPX does this automatically?
     # data = zlib.compress(data)
-    downloader = utils.iterchunk(data)
+    downloader = srv_utils.iterchunk(data)
     return responses.StreamingResponse(downloader)
 
 #
