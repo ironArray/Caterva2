@@ -34,7 +34,6 @@ classifiers = [
 ]
 dependencies = [
     "blosc2>=2.4.0",  # TODO: try to remove this dependency, and move to services, if possible
-    "tqdm",  # TODO: ditto, but move into clients
     "httpx",
     "numpy",
     "pydantic>=2",  # TODO: ditto
@@ -55,7 +54,7 @@ services = [
     "watchfiles",
 ]
 clients = [
-    # "tqdm",
+    "tqdm",
     "rich",
     "textual",
 ]
