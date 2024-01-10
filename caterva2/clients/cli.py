@@ -17,7 +17,6 @@ import rich
 
 # Project
 from caterva2 import api_utils
-from caterva2.services import srv_utils
 from caterva2.clients import cli_utils
 
 
@@ -110,7 +109,7 @@ def cmd_info(args):
 def cmd_show(args):
     # Download
     dataset, params = args.dataset
-    array, schunk = srv_utils.download(args.host, dataset, params, verbose=True)
+    array, schunk = cli_utils.download(args.host, dataset, params, verbose=True)
 
     # Display
     if array is None:
@@ -139,7 +138,7 @@ def cmd_download(args):
         localpath = pathlib.Path(f'{localpath}[{slice}]{suffix}')
 
     # Download
-    array, schunk = srv_utils.download(args.host, dataset, params, localpath=localpath, verbose=True)
+    array, schunk = cli_utils.download(args.host, dataset, params, localpath=localpath, verbose=True)
     if suffix not in {'.b2frame', '.b2nd'}:
         with open(localpath, 'wb') as f:
             data = schunk[:]
