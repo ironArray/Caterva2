@@ -246,7 +246,7 @@ async def get_url(path: str):
 @app.get('/api/info/{path:path}')
 async def get_info(path: str):
     abspath = lookup_path(path)
-    return utils.read_metadata(abspath)
+    return srv_utils.read_metadata(abspath)
 
 
 @app.get('/api/download/{path:path}')
@@ -291,7 +291,7 @@ async def partial_download(abspath, nchunk, path, slice_):
 @app.get('/api/fetch/{path:path}')
 async def fetch_data(path: str, slice_: str = None):
     abspath = lookup_path(path)
-    metadata = utils.read_metadata(abspath)
+    metadata = srv_utils.read_metadata(abspath)
 
     # Create array/schunk in memory
     suffix = abspath.suffix

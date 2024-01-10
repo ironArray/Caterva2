@@ -18,9 +18,6 @@ import blosc2
 import fastapi
 import fastapi_websocket_pubsub
 
-# Project
-from . import models
-
 #
 # Blosc2 related functions
 #
@@ -63,56 +60,6 @@ def chunk_is_available(schunk, nchunk):
 def iterchunk(chunk):
     # TODO Yield block by block
     yield chunk
-
-
-def get_model_from_obj(obj, model_class, **kwargs):
-    if type(obj) is dict:
-        getter = lambda o, k: o[k]
-    else:
-        getter = getattr
-
-    data = kwargs.copy()
-    for key, info in model_class.model_fields.items():
-        if key not in data:
-            value = getter(obj, key)
-            if info.annotation is str:
-                value = str(value)
-
-            data[key] = value
-
-    return model_class(**data)
-
-
-def read_metadata(obj):
-    # Open dataset
-    if isinstance(obj, pathlib.Path):
-        path = obj
-        if not path.is_file():
-            raise FileNotFoundError('File does not exist or is a directory')
-
-        suffix = path.suffix
-        if suffix in {'.b2frame', '.b2nd', '.b2'}:
-            obj = blosc2.open(path)
-        else:
-            # Special case for regular files
-            stat = path.stat()
-            keys = ['mtime', 'size']
-            data = {key: getattr(stat, f'st_{key}') for key in keys}
-            return get_model_from_obj(data, models.File)
-
-    # Read metadata
-    if isinstance(obj, blosc2.ndarray.NDArray):
-        array = obj
-        cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
-        schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
-        return get_model_from_obj(array, models.Metadata, schunk=schunk)
-    elif isinstance(obj, blosc2.schunk.SChunk):
-        schunk = obj
-        cparams = get_model_from_obj(schunk.cparams, models.CParams)
-        model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
-        return model
-    else:
-        raise TypeError(f'unexpected {type(obj)}')
 
 
 #

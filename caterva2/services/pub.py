@@ -53,12 +53,12 @@ async def worker(queue):
                 print('UPDATE', relpath)
                 # Load metadata
                 if abspath.suffix in {'.b2frame', '.b2nd'}:
-                    metadata = utils.read_metadata(abspath)
+                    metadata = srv_utils.read_metadata(abspath)
                 else:
                     # Compress regular files in publisher's cache
                     b2path = cache / f'{relpath}.b2'
                     utils.compress(abspath, b2path)
-                    metadata = utils.read_metadata(b2path)
+                    metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
                 metadata = metadata.model_dump()
@@ -158,7 +158,7 @@ async def get_info(
 
     # Return
     response.headers['Etag'] = etag
-    return utils.read_metadata(abspath)
+    return srv_utils.read_metadata(abspath)
 
 @app.get("/api/download/{path:path}")
 async def get_download(path: str, nchunk: int = -1):
