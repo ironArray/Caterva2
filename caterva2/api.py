@@ -81,7 +81,9 @@ class File:
             path = self.path.with_suffix('')
             path = pathlib.Path(f'{path}[{slice}]{suffix}')
             params = {'slice': slice_}
-        array, schunk = api_utils.download(self.host, path, localpath=path, params=params)
+        # TODO: besides the circular import, cli_utils depends on blosc2 & pydantic.
+        from caterva2.clients import cli_utils
+        array, schunk = cli_utils.download(self.host, path, localpath=path, params=params)
 
         if suffix not in {'.b2frame', '.b2nd'}:
             with open(path, 'wb') as f:
