@@ -13,7 +13,6 @@ import logging
 # Requirements
 import blosc2
 import httpx
-import tqdm
 
 # Project
 from caterva2 import api_utils, b2_utils, models
@@ -23,7 +22,7 @@ from caterva2 import api_utils, b2_utils, models
 # Download helper
 #
 
-def download(host, dataset, params, localpath=None, verbose=False):
+def download(host, dataset, params, localpath=None, progress=None):
     data = api_utils.get(f'http://{host}/api/info/{dataset}')
 
     # Create array/schunk in memory
@@ -44,8 +43,8 @@ def download(host, dataset, params, localpath=None, verbose=False):
     # Download and update schunk
     url = f'http://{host}/api/download/{dataset}'
     iter_chunks = range(schunk.nchunks)
-    if verbose:
-        iter_chunks = tqdm.tqdm(iter_chunks, desc='Downloading', unit='chunk')
+    if progress is not None:
+        iter_chunks = progress(iter_chunks)
     for nchunk in iter_chunks:
         params['nchunk'] = nchunk
         response = httpx.get(url, params=params, timeout=None)
