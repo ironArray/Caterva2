@@ -16,7 +16,7 @@ import httpx
 import rich
 
 # Project
-from caterva2 import api_utils, models
+from caterva2 import api_utils
 from caterva2.services import srv_utils
 from caterva2.clients import cli_utils
 
@@ -58,8 +58,7 @@ def cmd_roots(args):
         return
 
     for name, root in data.items():
-        root = models.Root(**root)
-        if root.subscribed:
+        if root['subscribed'] is True:
             print(f'{name} (subscribed)')
         else:
             print(name)
