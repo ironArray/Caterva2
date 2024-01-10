@@ -40,6 +40,7 @@ dependencies = [
     "tqdm",  # TODO: ditto, but move into clients
     "httpx",
     "numpy",
+    "pydantic>=2",  # TODO: ditto
     "pytest",
 ]
 
