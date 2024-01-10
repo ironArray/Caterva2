@@ -20,7 +20,7 @@ import httpx
 import uvicorn
 
 # Project
-from caterva2 import utils, api_utils, models
+from caterva2 import utils, api_utils, b2_utils, models
 from caterva2.services import srv_utils
 
 
@@ -63,14 +63,14 @@ def init_b2(abspath, metadata):
     suffix = abspath.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**metadata)
-        srv_utils.init_b2nd(metadata, abspath)
+        b2_utils.init_b2nd(metadata, abspath)
     elif suffix == '.b2frame':
         metadata = models.SChunk(**metadata)
-        srv_utils.init_b2frame(metadata, abspath)
+        b2_utils.init_b2frame(metadata, abspath)
     else:
         abspath = pathlib.Path(f'{abspath}.b2')
         metadata = models.SChunk(**metadata)
-        srv_utils.init_b2frame(metadata, abspath)
+        b2_utils.init_b2frame(metadata, abspath)
 
 
 async def updated_dataset(data, topic):
@@ -255,13 +255,13 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
 
     chunk = await partial_download(abspath, nchunk, path, slice_)
     # Stream response
-    downloader = srv_utils.iterchunk(chunk)
+    downloader = b2_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
 
 
 async def partial_download(abspath, nchunk, path, slice_):
     # Build the list of chunks we need to download from the publisher
-    array, schunk = srv_utils.open_b2(abspath)
+    array, schunk = b2_utils.open_b2(abspath)
     if slice_ is None:
         nchunks = [nchunk]
     else:
@@ -282,7 +282,7 @@ async def partial_download(abspath, nchunk, path, slice_):
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         for n in nchunks:
-            if not srv_utils.chunk_is_available(schunk, n):
+            if not b2_utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
     chunk = schunk.get_chunk(nchunk)
     return chunk
@@ -296,13 +296,13 @@ async def fetch_data(path: str, slice_: str = None):
     # Create array/schunk in memory
     suffix = abspath.suffix
     if suffix == '.b2nd':
-        array = srv_utils.init_b2nd(metadata, urlpath=None)
+        array = b2_utils.init_b2nd(metadata, urlpath=None)
         schunk = array.schunk
     elif suffix == '.b2frame':
-        schunk = srv_utils.init_b2frame(metadata, urlpath=None)
+        schunk = b2_utils.init_b2frame(metadata, urlpath=None)
         array = None
     else:
-        schunk = srv_utils.init_b2frame(metadata, urlpath=None)
+        schunk = b2_utils.init_b2frame(metadata, urlpath=None)
         array = None
 
     # Download and update schunk in-memory
@@ -329,7 +329,7 @@ async def fetch_data(path: str, slice_: str = None):
     data = pickle.dumps(data, protocol=-1)
     # TODO: compress data is not working. HTTPX does this automatically?
     # data = zlib.compress(data)
-    downloader = srv_utils.iterchunk(data)
+    downloader = b2_utils.iterchunk(data)
     return responses.StreamingResponse(downloader)
 
 #

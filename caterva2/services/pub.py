@@ -20,7 +20,7 @@ import uvicorn
 from watchfiles import awatch
 
 # Project
-from caterva2 import utils, api_utils, models
+from caterva2 import utils, api_utils, b2_utils, models
 from caterva2.services import srv_utils
 
 
@@ -57,7 +57,7 @@ async def worker(queue):
                 else:
                     # Compress regular files in publisher's cache
                     b2path = cache / f'{relpath}.b2'
-                    srv_utils.compress(abspath, b2path)
+                    b2_utils.compress(abspath, b2path)
                     metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
@@ -179,7 +179,7 @@ async def get_download(path: str, nchunk: int = -1):
         schunk = blosc2.open(b2path)
 
     chunk = schunk.get_chunk(nchunk)
-    downloader = srv_utils.iterchunk(chunk)
+    downloader = b2_utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
 
