@@ -34,9 +34,6 @@ classifiers = [
 ]
 dependencies = [
     "blosc2>=2.4.0",  # TODO: try to remove this dependency, and move to services, if possible
-    "fastapi",  # TODO: ditto
-    "fastapi_websocket_pubsub",  # TODO: ditto
-    "safer",  # TODO: ditto
     "tqdm",  # TODO: ditto, but move into clients
     "httpx",
     "numpy",
@@ -51,9 +48,9 @@ path = "caterva2/__init__.py"
 services = [
     # TODO: try to add these dependencies here, and remove them from caterva2, if possible
     # "blosc2>=2.4.0",
-    # "fastapi",
-    # "fastapi_websocket_pubsub",
-    # "safer",
+    "fastapi",
+    "fastapi_websocket_pubsub",
+    "safer",
     "uvicorn",
     "watchfiles",
 ]
