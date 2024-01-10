@@ -135,7 +135,7 @@ def follow(name: str):
 
     # Subscribe to changes in the dataset
     if name not in clients:
-        client = utils.start_client(f'ws://{broker}/pubsub')
+        client = srv_utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe(name, updated_dataset)
         clients[name] = client
 
@@ -182,7 +182,7 @@ async def lifespan(app: FastAPI):
             database.save()
 
         # Follow the @new channel to know when a new root is added
-        client = utils.start_client(f'ws://{broker}/pubsub')
+        client = srv_utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe('@new', new_root)
 
         # Resume following
@@ -194,7 +194,7 @@ async def lifespan(app: FastAPI):
 
     # Disconnect from worker
     if client is not None:
-        await utils.disconnect_client(client)
+        await srv_utils.disconnect_client(client)
 
 app = FastAPI(lifespan=lifespan)
 

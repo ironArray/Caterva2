@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import asyncio
 import json
 import pathlib
 import safer
@@ -14,6 +15,7 @@ import safer
 # Requirements
 import blosc2
 import fastapi
+import fastapi_websocket_pubsub
 import httpx
 import tqdm
 import numpy as np
@@ -221,6 +223,22 @@ def download(host, dataset, params, localpath=None, verbose=False):
                 schunk = schunk[slice_]
 
     return array, schunk
+
+
+#
+# Pub/Sub helpers
+#
+
+def start_client(url):
+    client = fastapi_websocket_pubsub.PubSubClient()
+    client.start_client(url)
+    return client
+
+
+async def disconnect_client(client, timeout=5):
+    if client is not None:
+        # If the broker is down client.disconnect hangs, wo we wrap it in a timeout
+        await asyncio.wait_for(client.disconnect(), timeout)
 
 
 #

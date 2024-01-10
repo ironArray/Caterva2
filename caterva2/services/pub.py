@@ -109,7 +109,7 @@ async def watchfiles(queue):
 async def lifespan(app: FastAPI):
     # Connect to broker
     global client
-    client = utils.start_client(f'ws://{broker}/pubsub')
+    client = srv_utils.start_client(f'ws://{broker}/pubsub')
 
     # Create queue and start workers
     queue = asyncio.Queue()
@@ -130,7 +130,7 @@ async def lifespan(app: FastAPI):
     await asyncio.gather(*tasks, return_exceptions=True)
 
     # Disconnect from broker
-    await utils.disconnect_client(client)
+    await srv_utils.disconnect_client(client)
 
 
 app = FastAPI(lifespan=lifespan)

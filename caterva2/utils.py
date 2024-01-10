@@ -8,12 +8,8 @@
 ###############################################################################
 
 import argparse
-import asyncio
 import contextlib
 import logging
-
-# Requirements
-import fastapi_websocket_pubsub
 
 
 #
@@ -41,22 +37,6 @@ def walk_files(root, exclude=None):
             relpath = path.relative_to(root)
             if str(relpath) not in exclude:
                 yield path, relpath
-
-
-#
-# Pub/Sub helpers
-#
-
-def start_client(url):
-    client = fastapi_websocket_pubsub.PubSubClient()
-    client.start_client(url)
-    return client
-
-
-async def disconnect_client(client, timeout=5):
-    if client is not None:
-        # If the broker is down client.disconnect hangs, wo we wrap it in a timeout
-        await asyncio.wait_for(client.disconnect(), timeout)
 
 
 #
