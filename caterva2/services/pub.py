@@ -145,7 +145,7 @@ async def get_info(
     response: Response,
     if_none_match: typing.Annotated[str | None, Header()] = None
 ):
-    abspath = utils.get_abspath(root, path)
+    abspath = srv_utils.get_abspath(root, path)
 
     # Check etag
     etag = database.etags[path]
@@ -154,7 +154,7 @@ async def get_info(
 
     # Regular files (.b2)
     if abspath.suffix not in {'.b2frame', '.b2nd'}:
-        abspath = utils.get_abspath(cache, f'{path}.b2')
+        abspath = srv_utils.get_abspath(cache, f'{path}.b2')
 
     # Return
     response.headers['Etag'] = etag
@@ -163,9 +163,9 @@ async def get_info(
 @app.get("/api/download/{path:path}")
 async def get_download(path: str, nchunk: int = -1):
     if nchunk < 0:
-        utils.raise_bad_request('Chunk number required')
+        srv_utils.raise_bad_request('Chunk number required')
 
-    abspath = utils.get_abspath(root, path)
+    abspath = srv_utils.get_abspath(root, path)
 
     suffix = abspath.suffix
     if suffix == '.b2nd':

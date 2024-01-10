@@ -145,7 +145,7 @@ def lookup_path(path):
     if path.suffix not in {'.b2frame', '.b2nd'}:
         path = f'{path}.b2'
 
-    return utils.get_abspath(cache, path)
+    return srv_utils.get_abspath(cache, path)
 
 
 #
@@ -205,7 +205,7 @@ async def get_roots():
 def get_root(name):
     root = database.roots.get(name)
     if root is None:
-        utils.raise_not_found(f'{name} not known by the broker')
+        srv_utils.raise_not_found(f'{name} not known by the broker')
 
     return root
 
@@ -221,7 +221,7 @@ async def get_list(name: str):
 
     rootdir = cache / root.name
     if not rootdir.exists():
-        utils.raise_not_found(f'Not subscribed to {name}')
+        srv_utils.raise_not_found(f'Not subscribed to {name}')
 
     return [
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath

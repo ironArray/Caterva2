@@ -13,7 +13,6 @@ import contextlib
 import logging
 
 # Requirements
-import fastapi
 import fastapi_websocket_pubsub
 
 
@@ -87,28 +86,3 @@ def run_parser(parser):
     logging.basicConfig(level=loglevel)
 
     return args
-
-
-#
-# HTTP server helpers
-#
-def raise_bad_request(detail):
-    raise fastapi.HTTPException(status_code=400, detail=detail)
-
-
-def raise_not_found(detail='Not Found'):
-    raise fastapi.HTTPException(status_code=404, detail=detail)
-
-
-def get_abspath(root, path):
-    abspath = root / path
-
-    # Security check
-    if root not in abspath.parents:
-        raise_bad_request(f'Invalid path {path}')
-
-    # Existence check
-    if not abspath.is_file():
-        raise_not_found()
-
-    return abspath
