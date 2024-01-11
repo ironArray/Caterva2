@@ -20,6 +20,17 @@ import h5py
 def node_exporter(c2_root):
     """Return an HDF5 node item visitor to export to existing Caterva2 root at `c2_root`."""
     def export_node(name, node):
+        if any(d in [os.path.curdir, os.path.pardir] for d in name.split('/')):
+            logging.warning(f"Invalid node name, skipping: {name!r}")
+            return
+        if isinstance(node, h5py.Group):
+            pass  # TODO
+        elif isinstance(node, h5py.Dataset):
+            pass  # TODO
+        else:
+            logging.warning(f"Unsupported node type {type(node).__name__}, skipping: {name!r}")
+            return
+
         logging.info(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
         # TODO
     return export_node
