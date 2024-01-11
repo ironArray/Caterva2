@@ -64,6 +64,7 @@ clients = [
 ]
 tools = [
     "h5py",
+    "hdf5plugin",
 ]
 
 [project.urls]

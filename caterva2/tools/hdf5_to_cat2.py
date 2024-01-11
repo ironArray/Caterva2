@@ -15,6 +15,7 @@ import pathlib
 import sys
 
 import h5py
+import hdf5plugin
 
 
 def create_directory(name, node, c2_root):
