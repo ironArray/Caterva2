@@ -25,6 +25,8 @@ def create_directory(name, node, c2_root):
         path.mkdir()  # parent should exist, not itself
     except OSError as ose:
         logging.error(f"Failed to create directory for node: {name!r} -> %r", ose)
+        return
+    logging.info(f"Exported group {name!r} -> {str(c2_root)!r}")
 
 
 def copy_dataset(name, node, c2_root):
@@ -40,6 +42,8 @@ def copy_dataset(name, node, c2_root):
     except Exception as e:
         b2_path.unlink(missing_ok=True)
         logging.error(f"Failed to save node as Blosc2 ND array: {name!r} -> %r", e)
+        return
+    logging.info(f"Exported dataset {name!r} -> {str(c2_root)!r}")
 
 
 def node_exporter(c2_root):
@@ -59,7 +63,6 @@ def node_exporter(c2_root):
         if len(node.attrs.keys()) > 0:
             logging.warning(f"Exporting node attributes is not supported yet: {name!r}")
 
-        logging.info(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
         do_export_node(name, node, c2_root)
     return export_node
 
