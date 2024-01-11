@@ -18,7 +18,11 @@ import h5py
 
 
 def create_directory(name, node, c2_root):
-    pass  # TODO
+    path = c2_root / name
+    try:
+        path.mkdir()  # parent should exist, not itself
+    except OSError as ose:
+        logging.error(f"Failed to create directory for node: {name!r} -> %r", ose)
 
 
 def copy_dataset(name, node, c2_root):
