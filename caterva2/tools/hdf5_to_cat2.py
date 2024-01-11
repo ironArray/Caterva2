@@ -26,7 +26,7 @@ def create_directory(name, node, c2_root):
     except OSError as ose:
         logging.error(f"Failed to create directory for node: {name!r} -> %r", ose)
         return
-    logging.info(f"Exported group {name!r} -> {str(c2_root)!r}")
+    logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
 def copy_dataset(name, node, c2_root):
@@ -43,7 +43,7 @@ def copy_dataset(name, node, c2_root):
         b2_path.unlink(missing_ok=True)
         logging.error(f"Failed to save node as Blosc2 ND array: {name!r} -> %r", e)
         return
-    logging.info(f"Exported dataset {name!r} -> {str(c2_root)!r}")
+    logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
 
 def node_exporter(c2_root):
