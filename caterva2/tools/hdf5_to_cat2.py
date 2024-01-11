@@ -9,6 +9,7 @@
 
 """Export datasets in an HDF5 file to a Caterva2 root."""
 
+import logging
 import os
 import pathlib
 import sys
@@ -19,7 +20,8 @@ import h5py
 def node_exporter(c2_root):
     """Return an HDF5 node item visitor to export to existing Caterva2 root at `c2_root`."""
     def export_node(name, node):
-        print(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
+        logging.info(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
+        # TODO
     return export_node
 
 
