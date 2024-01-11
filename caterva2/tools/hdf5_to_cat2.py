@@ -16,10 +16,22 @@ import sys
 import h5py
 
 
+def node_exporter(c2_root):
+    def export_node(name, node):
+        print(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
+    return export_node
+
+
+def export_group(h5_group, c2_root):
+    h5_group.visititems(node_exporter(c2_root))
+
+
 def export(hdf5_path, cat2_path):
     with h5py.File(hdf5_path, 'r') as h5f:
         c2r = pathlib.Path(cat2_path).resolve()
         c2r.mkdir(parents=True)
+
+        export_group(h5f, c2r)
 
 
 def main():
