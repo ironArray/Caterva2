@@ -17,6 +17,14 @@ import sys
 import h5py
 
 
+def create_directory(name, node, c2_root):
+    pass  # TODO
+
+
+def copy_dataset(name, node, c2_root):
+    pass  # TODO
+
+
 def node_exporter(c2_root):
     """Return an HDF5 node item visitor to export to existing Caterva2 root at `c2_root`."""
     def export_node(name, node):
@@ -24,9 +32,9 @@ def node_exporter(c2_root):
             logging.warning(f"Invalid node name, skipping: {name!r}")
             return
         if isinstance(node, h5py.Group):
-            pass  # TODO
+            do_export_node = create_directory
         elif isinstance(node, h5py.Dataset):
-            pass  # TODO
+            do_export_node = copy_dataset
         else:
             logging.warning(f"Unsupported node type {type(node).__name__}, skipping: {name!r}")
             return
@@ -35,7 +43,7 @@ def node_exporter(c2_root):
             logging.warning(f"Exporting node attributes is not supported yet: {name!r}")
 
         logging.info(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
-        # TODO
+        do_export_node(name, node, c2_root)
     return export_node
 
 
