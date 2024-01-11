@@ -14,6 +14,7 @@ import os
 import pathlib
 import sys
 
+import blosc2
 import h5py
 import hdf5plugin
 
@@ -27,7 +28,18 @@ def create_directory(name, node, c2_root):
 
 
 def copy_dataset(name, node, c2_root):
-    pass  # TODO
+    try:
+        b2_array = blosc2.asarray(node[:])
+    except ValueError as ve:
+        logging.error(f"Failed to convert node to Blosc2 ND array: {name!r} -> %r", ve)
+        return
+    b2_path = c2_root / f'{name}.b2nd'
+    try:
+        with open(b2_path, 'wb') as f:
+            f.write(b2_array.to_cframe())
+    except Exception as e:
+        b2_path.unlink(missing_ok=True)
+        logging.error(f"Failed to save node as Blosc2 ND array: {name!r} -> %r", e)
 
 
 def node_exporter(c2_root):
