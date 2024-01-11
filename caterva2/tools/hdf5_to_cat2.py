@@ -20,6 +20,9 @@ import hdf5plugin
 
 
 def create_directory(name, node, c2_root):
+    if len(node.attrs.keys()) > 0:
+        logging.warning(f"Exporting group attributes is not supported yet: {name!r}")
+
     path = c2_root / name
     try:
         path.mkdir()  # parent should exist, not itself
@@ -35,6 +38,14 @@ def copy_dataset(name, node, c2_root):
     except ValueError as ve:
         logging.error(f"Failed to convert node to Blosc2 ND array: {name!r} -> %r", ve)
         return
+
+    b2_attrs = b2_array.schunk.vlmeta
+    for (aname, avalue) in node.attrs.items():
+        try:
+            b2_attrs[aname] = avalue.decode()  # TODO: support non-bytes
+        except Exception as e:
+            logging.error(f"Failed to export node attribute {aname!r}: {name!r} -> %r", e)
+
     b2_path = c2_root / f'{name}.b2nd'
     try:
         with open(b2_path, 'wb') as f:
@@ -59,9 +70,6 @@ def node_exporter(c2_root):
         else:
             logging.warning(f"Unsupported node type {type(node).__name__}, skipping: {name!r}")
             return
-
-        if len(node.attrs.keys()) > 0:
-            logging.warning(f"Exporting node attributes is not supported yet: {name!r}")
 
         do_export_node(name, node, c2_root)
     return export_node
