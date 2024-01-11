@@ -31,6 +31,9 @@ def node_exporter(c2_root):
             logging.warning(f"Unsupported node type {type(node).__name__}, skipping: {name!r}")
             return
 
+        if len(node.attrs.keys()) > 0:
+            logging.warning(f"Exporting node attributes is not supported yet: {name!r}")
+
         logging.info(f"Export {type(node).__name__} {name!r} -> {str(c2_root)!r}")
         # TODO
     return export_node
