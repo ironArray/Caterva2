@@ -36,7 +36,7 @@ def copy_dataset(name, node, c2_root):
     try:
         b2_array = blosc2.asarray(node[:])
     except ValueError as ve:
-        logging.error(f"Failed to convert node to Blosc2 ND array: {name!r} -> %r", ve)
+        logging.error(f"Failed to convert dataset to Blosc2 ND array: {name!r} -> %r", ve)
         return
 
     b2_attrs = b2_array.schunk.vlmeta
@@ -44,7 +44,7 @@ def copy_dataset(name, node, c2_root):
         try:
             b2_attrs[aname] = avalue.decode()  # TODO: support non-bytes
         except Exception as e:
-            logging.error(f"Failed to export node attribute {aname!r}: {name!r} -> %r", e)
+            logging.error(f"Failed to export dataset attribute {aname!r}: {name!r} -> %r", e)
 
     b2_path = c2_root / f'{name}.b2nd'
     try:
@@ -52,7 +52,7 @@ def copy_dataset(name, node, c2_root):
             f.write(b2_array.to_cframe())
     except Exception as e:
         b2_path.unlink(missing_ok=True)
-        logging.error(f"Failed to save node as Blosc2 ND array: {name!r} -> %r", e)
+        logging.error(f"Failed to save dataset as Blosc2 ND array: {name!r} -> %r", e)
         return
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
