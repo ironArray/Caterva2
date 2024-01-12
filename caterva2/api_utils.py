@@ -6,6 +6,7 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import pathlib
 import pickle
 
 # Requirements
@@ -15,7 +16,7 @@ import httpx
 
 def parse_slice(string):
     if not string:
-        return ()
+        return None
     obj = []
     for segment in string.split(','):
         if ':' not in segment:
@@ -28,13 +29,27 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def fetch_data(host, path, params):
-    response = httpx.get(f'http://{host}/api/fetch/{path}', params=params)
+def download(host, path, params):
+    response = httpx.get(f'http://{host}/api/download/{path}', params=params)
     response.raise_for_status()
     data = response.content
-    # TODO: decompression is not working yet. HTTPX does this automatically?
-    # data = zlib.decompress(data)
-    return pickle.loads(data)
+    download = params.get('download', False)
+    slice_ = params.get('slice_', None)
+    if not download:
+        # TODO: decompression is not working yet. HTTPX does this automatically?
+        # data = zlib.decompress(data)
+        return pickle.loads(data)
+    else:
+        path = pathlib.Path(path)
+        if slice_:
+            suffix = path.suffix
+            path = path.with_suffix('')
+            path = pathlib.Path(f'{path}[{slice_}]{suffix}')
+        # TODO: save chunk by chunk
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(data)
+        return path
 
 #
 # HTTP client helpers

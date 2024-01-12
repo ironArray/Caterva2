@@ -17,13 +17,13 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 
 
-def slice_to_string(indexes):
-    if indexes is None:
-        return None
+def slice_to_string(key):
+    if key is None or key == () or key == slice(None):
+        return ''
     slice_parts = []
-    if not isinstance(indexes, tuple):
-        indexes = (indexes,)
-    for index in indexes:
+    if not isinstance(key, tuple):
+        key = (key,)
+    for index in key:
         if isinstance(index, int):
             slice_parts.append(str(index))
         elif isinstance(index, slice):
@@ -31,8 +31,8 @@ def slice_to_string(indexes):
             stop = index.stop or ''
             if index.step not in (1, None):
                 raise IndexError('Only step=1 is supported')
-            step = index.step or ''
-            slice_parts.append(f"{start}:{stop}:{step}")
+            # step = index.step or ''
+            slice_parts.append(f"{start}:{stop}")
     return ", ".join(slice_parts)
 
 
@@ -71,28 +71,11 @@ class File:
     def __repr__(self):
         return f'<File: {self.path}>'
 
-    def download(self, index=None):
-        path = self.path
-        suffix = self.path.suffix
-
-        slice_ = slice_to_string(index)
-        params = {}
-        if slice_:
-            path = self.path.with_suffix('')
-            path = pathlib.Path(f'{path}[{slice}]{suffix}')
-            params = {'slice': slice_}
-        # TODO: besides the circular import, cli_utils depends on blosc2 & pydantic.
-        from caterva2.clients import cli_utils
-        array, schunk = cli_utils.download(self.host, path, localpath=path, params=params)
-
-        if suffix not in {'.b2frame', '.b2nd'}:
-            with open(path, 'wb') as f:
-                data = schunk[:]
-                f.write(data)
-
-        # TODO: how to support downloading on a browser?
-        raise NotImplementedError("TODO: how to support downloading on a browser?")
-        # return path
+    def download(self, key=None):
+        slice_ = slice_to_string(key)
+        download_path = api_utils.download(
+            self.host, self.path, {'slice_': slice_, 'download': True})
+        return download_path
 
 
 class Dataset(File):
@@ -103,7 +86,7 @@ class Dataset(File):
     def __repr__(self):
         return f'<Dataset: {self.path}>'
 
-    def __getitem__(self, indexes):
-        slice_ = slice_to_string(indexes)
-        data = api_utils.fetch_data(self.host, self.path, {'slice_': slice_})
+    def __getitem__(self, key):
+        slice_ = slice_to_string(key)
+        data = api_utils.download(self.host, self.path, {'slice_': slice_})
         return data

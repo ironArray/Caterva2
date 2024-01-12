@@ -111,46 +111,30 @@ def cmd_info(args):
 
 @handle_errors
 def cmd_show(args):
-    # Download
     dataset, params = args.dataset
-    array, schunk = cli_utils.download(args.host, dataset, params,
-                                       progress=chunk_dl_progress)
+    data = api_utils.download(args.host, dataset, params)
+                              # TODO: support tqdm again
+                              # progress=chunk_dl_progress)
 
     # Display
-    if array is None:
-        data = schunk[:]  # byte string
+    if isinstance(data, bytes):
         try:
             print(data.decode())
         except UnicodeDecodeError:
             print('Binary data')
     else:
-        data = array[:] if array.ndim > 0 else array[()]
         print(data)
 
 @handle_errors
 def cmd_download(args):
-    # localpath
     dataset, params = args.dataset
-    output_dir = args.output_dir.resolve()
-    localpath = output_dir / dataset
-    localpath.parent.mkdir(exist_ok=True, parents=True)
+    params['download'] = True
+    path = api_utils.download(args.host, dataset, params)
+                              # TODO: support tqdm again
+                              # progress=chunk_dl_progress)
 
-    suffix = localpath.suffix
+    print(f'Dataset saved to {path}')
 
-    slice = params.get('slice')
-    if slice:
-        localpath = localpath.with_suffix('')
-        localpath = pathlib.Path(f'{localpath}[{slice}]{suffix}')
-
-    # Download
-    array, schunk = cli_utils.download(args.host, dataset, params, localpath=localpath,
-                                       progress=chunk_dl_progress)
-    if suffix not in {'.b2frame', '.b2nd'}:
-        with open(localpath, 'wb') as f:
-            data = schunk[:]
-            f.write(data)
-
-    print(f'Dataset saved to {localpath}')
 
 if __name__ == '__main__':
     parser = cli_utils.get_parser()

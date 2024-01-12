@@ -99,7 +99,7 @@ def test_dataset_nd(name, services, examples_dir):
         assert str(e_info.value) == 'Only step=1 is supported'
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def _test_download_b2nd(name, services, examples_dir):
+def test_download_b2nd(name, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot[name]
     dsd = ds.download()
@@ -110,9 +110,28 @@ def _test_download_b2nd(name, services, examples_dir):
     a = blosc2.open(example)
     b = blosc2.open(dsd)
     np.testing.assert_array_equal(a[:], b[:])
-    os.unlink(dsd)
+    # os.unlink(dsd)
 
-def _test_download_b2frame(services, examples_dir):
+# TODO: test slices that exceed the array dimensions
+@pytest.mark.parametrize("slice_", [slice(1,10), slice(4,8), slice(None), 1])
+@pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
+def test_download_b2nd_slice(slice_, name, services, examples_dir):
+    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+    ds = myroot[name]
+    dsd = ds.download(slice_)
+    #assert dsd == ds.path
+
+    # Data contents
+    example = examples_dir / name
+    a = blosc2.open(example)
+    b = blosc2.open(dsd)
+    if isinstance(slice_, int):
+        np.testing.assert_array_equal(a[slice_], b[()])
+    else:
+        np.testing.assert_array_equal(a[slice_], b[:])
+    # os.unlink(dsd)
+
+def test_download_b2frame(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     dsd = ds.download()
@@ -123,9 +142,25 @@ def _test_download_b2frame(services, examples_dir):
     a = blosc2.open(example)
     b = blosc2.open(dsd)
     assert a[:] == b[:]
-    os.unlink(dsd)
+    # os.unlink(dsd)
 
-def _test_download_regular_file(services, examples_dir):
+# TODO: add an integer slice test when it is supported in blosc2
+@pytest.mark.parametrize("slice_", [slice(1,10), slice(15,20), slice(None)])
+def test_download_b2frame_slice(slice_, services, examples_dir):
+    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+    ds = myroot['ds-hello.b2frame']
+    dsd = ds.download(slice_)
+    # TODO: fix the test below
+    # assert dsd == ds.path
+
+    # Data contents
+    example = examples_dir / ds.name
+    a = blosc2.open(example)
+    b = blosc2.open(dsd)
+    assert a[slice_] == b[:]
+    # os.unlink(dsd)
+
+def test_download_regular_file(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['README.md']
     dsd = ds.download()
@@ -136,4 +171,4 @@ def _test_download_regular_file(services, examples_dir):
     a = open(example).read()
     b = open(dsd).read()
     assert a[:] == b[:]
-    os.unlink(dsd)
+    # os.unlink(dsd)
