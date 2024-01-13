@@ -16,6 +16,7 @@ import pickle
 # Requirements
 import blosc2
 from fastapi import FastAPI, responses
+from fastapi.staticfiles import StaticFiles
 import httpx
 import uvicorn
 
@@ -359,6 +360,7 @@ if __name__ == '__main__':
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
+    app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Init database
     model = models.Subscriber(roots={}, etags={})
