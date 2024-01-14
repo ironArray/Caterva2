@@ -13,6 +13,24 @@ import pickle
 import httpx
 
 
+def slice_to_string(key):
+    if key is None or key == () or key == slice(None):
+        return ''
+    slice_parts = []
+    if not isinstance(key, tuple):
+        key = (key,)
+    for index in key:
+        if isinstance(index, int):
+            slice_parts.append(str(index))
+        elif isinstance(index, slice):
+            start = index.start or ''
+            stop = index.stop or ''
+            if index.step not in (1, None):
+                raise IndexError('Only step=1 is supported')
+            # step = index.step or ''
+            slice_parts.append(f"{start}:{stop}")
+    return ", ".join(slice_parts)
+
 
 def parse_slice(string):
     if not string:
@@ -29,27 +47,38 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def download(host, path, params):
+def get_download_url(host, path, params):
     response = httpx.get(f'http://{host}/api/download/{path}', params=params)
     response.raise_for_status()
-    data = response.content
-    download = params.get('download', False)
-    slice_ = params.get('slice_', None)
-    if not download:
+
+    download_ = params.get('download', False)
+    if not download_:
+        data = response.content
         # TODO: decompression is not working yet. HTTPX does this automatically?
         # data = zlib.decompress(data)
         return pickle.loads(data)
-    else:
-        path = pathlib.Path(path)
-        if slice_:
-            suffix = path.suffix
-            path = path.with_suffix('')
-            path = pathlib.Path(f'{path}[{slice_}]{suffix}')
-        # TODO: save chunk by chunk
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'wb') as f:
-            f.write(data)
-        return path
+
+    path = pathlib.Path(path)
+    suffix = path.suffix
+    slice_ = params.get('slice_', None)
+    if slice_:
+        path = 'downloads' / path.with_suffix('')
+        path = pathlib.Path(f'{path}[{slice_}]{suffix}')
+    elif suffix not in ('.b2frame', '.b2nd'):
+        # Other suffixes are to be found decompressed in the downloads folder
+        path = 'downloads' / path
+
+    return f'http://{host}/files/{path}'
+
+def download_url(url, path):
+    # Store the file locally
+    with httpx.stream("GET", url) as r:
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            for data in r.iter_bytes():
+                f.write(data)
+    return path
+
 
 #
 # HTTP client helpers

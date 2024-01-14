@@ -17,25 +17,6 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 
 
-def slice_to_string(key):
-    if key is None or key == () or key == slice(None):
-        return ''
-    slice_parts = []
-    if not isinstance(key, tuple):
-        key = (key,)
-    for index in key:
-        if isinstance(index, int):
-            slice_parts.append(str(index))
-        elif isinstance(index, slice):
-            start = index.start or ''
-            stop = index.stop or ''
-            if index.step not in (1, None):
-                raise IndexError('Only step=1 is supported')
-            # step = index.step or ''
-            slice_parts.append(f"{start}:{stop}")
-    return ", ".join(slice_parts)
-
-
 def get_roots(host=sub_host_default):
     return api_utils.get(f'http://{host}/api/roots')
 
@@ -71,12 +52,15 @@ class File:
     def __repr__(self):
         return f'<File: {self.path}>'
 
-    def download(self, key=None):
-        slice_ = slice_to_string(key)
-        download_path = api_utils.download(
+    def get_download_url(self, key=None):
+        slice_ = api_utils.slice_to_string(key)
+        download_path = api_utils.get_download_url(
             self.host, self.path, {'slice_': slice_, 'download': True})
         return download_path
 
+    def download(self, key=None):
+        url = self.get_download_url(key)
+        return api_utils.download_url(url, self.path)
 
 class Dataset(File):
     def __init__(self, name, root, host):
@@ -87,6 +71,6 @@ class Dataset(File):
         return f'<Dataset: {self.path}>'
 
     def __getitem__(self, key):
-        slice_ = slice_to_string(key)
-        data = api_utils.download(self.host, self.path, {'slice_': slice_})
+        slice_ = api_utils.slice_to_string(key)
+        data = api_utils.get_download_url(self.host, self.path, {'slice_': slice_})
         return data

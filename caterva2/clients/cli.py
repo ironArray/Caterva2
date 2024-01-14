@@ -112,7 +112,7 @@ def cmd_info(args):
 @handle_errors
 def cmd_show(args):
     dataset, params = args.dataset
-    data = api_utils.download(args.host, dataset, params)
+    data = api_utils.get_download_url(args.host, dataset, params)
                               # TODO: support tqdm again
                               # progress=chunk_dl_progress)
 
@@ -129,7 +129,7 @@ def cmd_show(args):
 def cmd_download(args):
     dataset, params = args.dataset
     params['download'] = True
-    path = api_utils.download(args.host, dataset, params)
+    path = api_utils.get_download_url(args.host, dataset, params)
                               # TODO: support tqdm again
                               # progress=chunk_dl_progress)
 

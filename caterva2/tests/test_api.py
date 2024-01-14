@@ -6,7 +6,9 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-import os
+import pathlib
+
+import httpx
 
 import blosc2
 import pytest
@@ -15,6 +17,18 @@ import caterva2 as cat2
 import numpy as np
 
 from .services import TEST_PUBLISHED_ROOT as published_root
+from .. import api_utils
+
+
+def my_urlpath(ds, slice_):
+    path = pathlib.Path(ds.path)
+    suffix = path.suffix
+    slice2 = api_utils.slice_to_string(slice_)
+    if slice2:
+        path = 'downloads' / path.with_suffix('')
+        path = pathlib.Path(f'{path}[{slice2}]{suffix}')
+    path = f"http://{cat2.sub_host_default}/files/{path}"
+    return path
 
 
 def test_roots(services):
@@ -102,15 +116,22 @@ def test_dataset_nd(name, services, examples_dir):
 def test_download_b2nd(name, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot[name]
-    dsd = ds.download()
-    assert dsd == ds.path
+    path = ds.download()
+    assert path == ds.path
 
     # Data contents
     example = examples_dir / name
     a = blosc2.open(example)
-    b = blosc2.open(dsd)
+    b = blosc2.open(path)
     np.testing.assert_array_equal(a[:], b[:])
-    # os.unlink(dsd)
+
+    # Using 2-step download
+    urlpath = ds.get_download_url()
+    assert urlpath == my_urlpath(ds, None)
+    data = httpx.get(urlpath)
+    assert data.status_code == 200
+    b = blosc2.ndarray_from_cframe(data.content)
+    np.testing.assert_array_equal(a[:], b[:])
 
 # TODO: test slices that exceed the array dimensions
 @pytest.mark.parametrize("slice_", [slice(1,10), slice(4,8), slice(None), 1])
@@ -118,57 +139,89 @@ def test_download_b2nd(name, services, examples_dir):
 def test_download_b2nd_slice(slice_, name, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot[name]
-    dsd = ds.download(slice_)
-    #assert dsd == ds.path
+    path = ds.download(slice_)
+    assert path == ds.path
 
     # Data contents
     example = examples_dir / name
     a = blosc2.open(example)
-    b = blosc2.open(dsd)
+    b = blosc2.open(path)
     if isinstance(slice_, int):
         np.testing.assert_array_equal(a[slice_], b[()])
     else:
         np.testing.assert_array_equal(a[slice_], b[:])
-    # os.unlink(dsd)
+
+    # Using 2-step download
+    urlpath = ds.get_download_url(slice_)
+    path = my_urlpath(ds, slice_)
+    assert urlpath == path
+    data = httpx.get(urlpath)
+    assert data.status_code == 200
+    b = blosc2.ndarray_from_cframe(data.content)
+    if isinstance(slice_, int):
+        np.testing.assert_array_equal(a[slice_], b[()])
+    else:
+        np.testing.assert_array_equal(a[slice_], b[:])
 
 def test_download_b2frame(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
-    dsd = ds.download()
-    assert dsd == ds.path
+    path = ds.download()
+    assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = blosc2.open(example)
-    b = blosc2.open(dsd)
+    b = blosc2.open(path)
     assert a[:] == b[:]
-    # os.unlink(dsd)
+
+    # Using 2-step download
+    urlpath = ds.get_download_url()
+    assert urlpath == f"http://{cat2.sub_host_default}/files/{ds.path}"
+    data = httpx.get(urlpath)
+    assert data.status_code == 200
+    b = blosc2.schunk_from_cframe(data.content)
+    assert a[:] == b[:]
 
 # TODO: add an integer slice test when it is supported in blosc2
 @pytest.mark.parametrize("slice_", [slice(1,10), slice(15,20), slice(None)])
 def test_download_b2frame_slice(slice_, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
-    dsd = ds.download(slice_)
-    # TODO: fix the test below
-    # assert dsd == ds.path
+    path = ds.download(slice_)
+    assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = blosc2.open(example)
-    b = blosc2.open(dsd)
+    b = blosc2.open(path)
     assert a[slice_] == b[:]
-    # os.unlink(dsd)
+
+    # Using 2-step download
+    urlpath = ds.get_download_url(slice_)
+    path = my_urlpath(ds, slice_)
+    assert urlpath == path
+    data = httpx.get(urlpath)
+    assert data.status_code == 200
+    b = blosc2.schunk_from_cframe(data.content)
+    assert a[slice_] == b[:]
 
 def test_download_regular_file(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['README.md']
-    dsd = ds.download()
-    assert dsd == ds.path
+    path = ds.download()
+    assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = open(example).read()
-    b = open(dsd).read()
+    b = open(path).read()
     assert a[:] == b[:]
-    # os.unlink(dsd)
+
+    # Using 2-step download
+    urlpath = ds.get_download_url()
+    assert urlpath == f"http://{cat2.sub_host_default}/files/downloads/{ds.path}"
+    data = httpx.get(urlpath)
+    assert data.status_code == 200
+    b = data.content.decode()
+    assert a[:] == b[:]

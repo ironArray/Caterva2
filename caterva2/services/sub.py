@@ -289,8 +289,8 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
     download_path = None
     if download:
         # Let's store the data in the downloads directory
-        download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
         if slice_:
+            download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
             download_path = download_path.with_suffix('')
             download_path = pathlib.Path(f'{download_path}[{slice_}]{suffix}')
         else:
@@ -330,9 +330,13 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
             # TODO: support context manager in blosc2.open()
             schunk = blosc2.open(download_path, 'wb')
             data = schunk[:]
-            downloader = b2_utils.iterchunk(data)
-            return responses.StreamingResponse(downloader)
-        return responses.FileResponse(download_path)
+            # Remove the .b2 extension, and save the data in the downloads directory
+            download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
+            with open(download_path, 'wb') as f:
+                f.write(data)
+        # We don't need to return anything, the file is already in the static files/
+        # directory and the client can download it from there.
+        return
 
     # Pickle and stream response of the NumPy array
     data = array if array is not None else schunk
