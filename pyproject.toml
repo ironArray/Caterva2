@@ -33,10 +33,8 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "blosc2>=2.4.0",  # TODO: try to move this dependency to the extras below, if possible
     "httpx",
     "numpy",
-    "pydantic>=2",  # TODO: ditto
     "pytest",
 ]
 
@@ -45,20 +43,15 @@ path = "caterva2/__init__.py"
 
 [project.optional-dependencies]
 services = [
-    # TODO: try to add these dependencies here, and remove them from caterva2, if possible
-    # "blosc2>=2.4.0",
+    "blosc2>=2.4.0",
+    "pydantic>=2",
     "fastapi",
     "fastapi_websocket_pubsub",
-    # "pydantic>=2",  # TODO: ditto
     "safer",
     "uvicorn",
     "watchfiles",
 ]
 clients = [
-    # TODO: try to add these dependencies here, and remove them from caterva2, if possible
-    # "blosc2>=2.4.0",
-    # "pydantic>=2",  # TODO: ditto
-    "tqdm",
     "rich",
     "textual",
 ]

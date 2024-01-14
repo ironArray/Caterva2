@@ -153,7 +153,8 @@ class File:
         PosixPath('foo/ds-1d[:10].b2nd')
         """
         url = self.get_download_url(key)
-        return api_utils.download_url(url, self.path, slice_=key)
+        slice_ = api_utils.slice_to_string(key)
+        return api_utils.download_url(url, self.path, slice_=slice_)
 
 class Dataset(File):
     """

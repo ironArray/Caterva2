@@ -289,10 +289,13 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
     download_path = None
     if download:
         # Let's store the data in the downloads directory
-        if slice_:
+        if slice_ or suffix == '.b2':
             download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
+            # Save data in the downloads directory (removing the '.b2' suffix, if needed)
+            suffix2 = download_path.suffix if suffix == '.b2' else suffix
             download_path = download_path.with_suffix('')
-            download_path = pathlib.Path(f'{download_path}[{slice_}]{suffix}')
+            slice2 = f"[{slice_}]" if slice_ else ""
+            download_path = pathlib.Path(f'{download_path}{slice2}{suffix2}')
         else:
             # By here, we already have the complete schunk in cache
             download_path = abspath
@@ -300,38 +303,38 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
 
     # Interesting data has been downloaded, let's use it
     array, schunk = srv_utils.open_b2(abspath)
-    slice_ = api_utils.parse_slice(slice_)
-    if slice_:
+    slice2 = api_utils.parse_slice(slice_)
+    if slice2:
         if array:
             if download_path:
                 # We want to save the slice to a file
-                array.slice(slice_, urlpath=download_path, mode="w", contiguous=True,
+                array.slice(slice2, urlpath=download_path, mode="w", contiguous=True,
                             cparams=schunk.cparams)
             else:
-                array = array[slice_] if array.ndim > 0 else array[()]
+                array = array[slice2] if array.ndim > 0 else array[()]
         else:
-            assert len(slice_) == 1
-            slice_ = slice_[0]
-            if isinstance(slice_, int):
+            assert len(slice2) == 1
+            slice2 = slice2[0]
+            if isinstance(slice2, int):
                 # TODO: make SChunk support integer as slice
-                slice_ = slice(slice_, slice_ + 1)
+                slice2 = slice(slice2, slice2 + 1)
             if download_path:
+                data = schunk[slice2]
                 # TODO: fix the upstream bug in python-blosc2 that prevents this from working
                 #  when not specifying chunksize (uses `data.size` instead of `len(data)`).
-                blosc2.SChunk(data=schunk[slice_], mode="w", urlpath=download_path,
+                blosc2.SChunk(data=data, mode="w", urlpath=download_path,
                               chunksize=schunk.chunksize,
                               cparams=schunk.cparams)
+                abspath = download_path
             else:
-                schunk = schunk[slice_]
+                schunk = schunk[slice2]
 
     if download:
         if suffix == '.b2':
             # Decompress before delivering
             # TODO: support context manager in blosc2.open()
-            schunk = blosc2.open(download_path, 'wb')
+            schunk = blosc2.open(abspath, 'rb')
             data = schunk[:]
-            # Remove the .b2 extension, and save the data in the downloads directory
-            download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
             with open(download_path, 'wb') as f:
                 f.write(data)
         # We don't need to return anything, the file is already in the static files/

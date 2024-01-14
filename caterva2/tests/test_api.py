@@ -33,9 +33,10 @@ def my_urlpath(ds, slice_):
     path = pathlib.Path(ds.path)
     suffix = path.suffix
     slice2 = api_utils.slice_to_string(slice_)
-    if slice2:
+    if slice2 or suffix not in {'.b2frame', '.b2nd'}:
         path = 'downloads' / path.with_suffix('')
-        path = pathlib.Path(f'{path}[{slice2}]{suffix}')
+        slice3 = f"[{slice2}]" if slice2 else ""
+        path = pathlib.Path(f'{path}{slice3}{suffix}')
     path = f"http://{cat2.sub_host_default}/files/{path}"
     return path
 
@@ -237,3 +238,26 @@ def test_download_regular_file(services, examples_dir):
     assert data.status_code == 200
     b = data.content.decode()
     assert a[:] == b[:]
+
+@pytest.mark.parametrize("slice_", [slice(1,10), slice(15,20), slice(None)])
+def test_download_regular_file_slice(slice_, services, examples_dir):
+    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+    ds = myroot['README.md']
+    path = ds.download(slice_)
+    dspath = my_path(ds.path, slice_)
+    assert path == dspath
+
+    # Data contents
+    example = examples_dir / ds.name
+    a = open(example).read()
+    b = open(path).read()
+    assert a[slice_] == b[:]
+
+    # Using 2-step download
+    urlpath = ds.get_download_url(slice_)
+    path = my_urlpath(ds, slice_)
+    assert urlpath == path
+    data = httpx.get(urlpath)
+    assert data.status_code == 200
+    b = data.content.decode()
+    assert a[slice_] == b[:]

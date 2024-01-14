@@ -74,7 +74,6 @@ def download_url(url, path, slice_=None):
     # Build the local filepath
     path = pathlib.Path(path)
     suffix = path.suffix
-    slice_ = slice_to_string(slice_)
     if slice_:
         path = path.with_suffix('')
         path = pathlib.Path(f'{path}[{slice_}]{suffix}')

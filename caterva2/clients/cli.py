@@ -14,11 +14,11 @@ import re
 # Requirements
 import httpx
 import rich
-import tqdm
 
 # Project
 from caterva2 import api_utils
 from caterva2.clients import cli_utils
+import caterva2 as cat2
 
 
 def handle_errors(func):
@@ -41,17 +41,9 @@ def dataset_with_slice(dataset):
         params = {}
     else:
         dataset, slice = match.groups()
-        params = {'slice': slice}
+        params = {'slice_': slice}
 
     return pathlib.Path(dataset), params
-
-def url_with_slice(url, slice):
-    if slice is not None:
-        return f'{url}?slice={args.slice}'
-    return url
-
-def chunk_dl_progress(it):
-    return tqdm.tqdm(it, desc='Downloading', unit='chunk')
 
 @handle_errors
 def cmd_roots(args):
@@ -113,8 +105,6 @@ def cmd_info(args):
 def cmd_show(args):
     dataset, params = args.dataset
     data = api_utils.get_download_url(args.host, dataset, params)
-                              # TODO: support tqdm again
-                              # progress=chunk_dl_progress)
 
     # Display
     if isinstance(data, bytes):
@@ -128,10 +118,11 @@ def cmd_show(args):
 @handle_errors
 def cmd_download(args):
     dataset, params = args.dataset
-    params['download'] = True
-    path = api_utils.get_download_url(args.host, dataset, params)
-                              # TODO: support tqdm again
-                              # progress=chunk_dl_progress)
+    root, dsname = str(dataset).split('/')
+    root = cat2.Root(root, host=args.host)
+    dataset = root[dsname]
+    slice_ = api_utils.parse_slice(params.get('slice_', None))
+    path = dataset.download(slice_)
 
     print(f'Dataset saved to {path}')
 
