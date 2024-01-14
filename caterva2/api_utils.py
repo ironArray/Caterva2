@@ -74,6 +74,7 @@ def download_url(url, path):
     # Store the file locally
     with httpx.stream("GET", url) as r:
         r.raise_for_status()
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
             for data in r.iter_bytes():
                 f.write(data)
