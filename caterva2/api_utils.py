@@ -70,8 +70,15 @@ def get_download_url(host, path, params):
 
     return f'http://{host}/files/{path}'
 
-def download_url(url, path):
-    # Store the file locally
+def download_url(url, path, slice_=None):
+    # Build the local filepath
+    path = pathlib.Path(path)
+    suffix = path.suffix
+    slice_ = slice_to_string(slice_)
+    if slice_:
+        path = path.with_suffix('')
+        path = pathlib.Path(f'{path}[{slice_}]{suffix}')
+
     with httpx.stream("GET", url) as r:
         r.raise_for_status()
         path.parent.mkdir(parents=True, exist_ok=True)

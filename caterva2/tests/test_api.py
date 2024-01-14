@@ -20,6 +20,15 @@ from .services import TEST_PUBLISHED_ROOT as published_root
 from .. import api_utils
 
 
+def my_path(dspath, slice_):
+    slice_ = api_utils.slice_to_string(slice_)
+    if slice_:
+        suffix = dspath.suffix
+        dspath = dspath.with_suffix('')
+        dspath = pathlib.Path(f'{dspath}[{slice_}]{suffix}')
+    return dspath
+
+
 def my_urlpath(ds, slice_):
     path = pathlib.Path(ds.path)
     suffix = path.suffix
@@ -140,7 +149,8 @@ def test_download_b2nd_slice(slice_, name, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot[name]
     path = ds.download(slice_)
-    assert path == ds.path
+    dspath = my_path(ds.path, slice_)
+    assert path == dspath
 
     # Data contents
     example = examples_dir / name
@@ -189,7 +199,8 @@ def test_download_b2frame_slice(slice_, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
     path = ds.download(slice_)
-    assert path == ds.path
+    dspath = my_path(ds.path, slice_)
+    assert path == dspath
 
     # Data contents
     example = examples_dir / ds.name
@@ -205,6 +216,7 @@ def test_download_b2frame_slice(slice_, services, examples_dir):
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
     assert a[slice_] == b[:]
+
 
 def test_download_regular_file(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
