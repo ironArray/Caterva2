@@ -21,7 +21,7 @@ import httpx
 import uvicorn
 
 # Project
-from caterva2 import utils, api_utils, b2_utils, models
+from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
 
 
@@ -64,14 +64,14 @@ def init_b2(abspath, metadata):
     suffix = abspath.suffix
     if suffix == '.b2nd':
         metadata = models.Metadata(**metadata)
-        b2_utils.init_b2nd(metadata, abspath)
+        srv_utils.init_b2nd(metadata, abspath)
     elif suffix == '.b2frame':
         metadata = models.SChunk(**metadata)
-        b2_utils.init_b2frame(metadata, abspath)
+        srv_utils.init_b2frame(metadata, abspath)
     else:
         abspath = pathlib.Path(f'{abspath}.b2')
         metadata = models.SChunk(**metadata)
-        b2_utils.init_b2frame(metadata, abspath)
+        srv_utils.init_b2frame(metadata, abspath)
 
 
 async def updated_dataset(data, topic):
@@ -252,7 +252,7 @@ async def get_info(path: str):
 
 async def partial_download(abspath, path, slice_):
     # Build the list of chunks we need to download from the publisher
-    array, schunk = b2_utils.open_b2(abspath)
+    array, schunk = srv_utils.open_b2(abspath)
     if slice_:
         slice_obj = api_utils.parse_slice(slice_)
         if not array:
@@ -274,7 +274,7 @@ async def partial_download(abspath, path, slice_):
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         for n in nchunks:
-            if not b2_utils.chunk_is_available(schunk, n):
+            if not srv_utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
 
 
@@ -299,7 +299,7 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
         download_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Interesting data has been downloaded, let's use it
-    array, schunk = b2_utils.open_b2(abspath)
+    array, schunk = srv_utils.open_b2(abspath)
     slice_ = api_utils.parse_slice(slice_)
     if slice_:
         if array:
@@ -345,7 +345,7 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
     data = pickle.dumps(data, protocol=-1)
     # TODO: compress data is not working. HTTPX does this automatically?
     # data = zlib.compress(data)
-    downloader = b2_utils.iterchunk(data)
+    downloader = srv_utils.iterchunk(data)
     return responses.StreamingResponse(downloader)
 
 #
