@@ -69,7 +69,7 @@ def cmd_subscribe(args):
 
 @handle_errors
 def cmd_list(args):
-    data = cat2.list(args.root, host=args.host)
+    data = cat2.get_list(args.root, host=args.host)
     if args.json:
         print(json.dumps(data))
         return
@@ -92,7 +92,7 @@ def cmd_url(args):
 @handle_errors
 def cmd_info(args):
     print(f"Getting info for {args.dataset}")
-    data = cat2.info(args.dataset, host=args.host)
+    data = cat2.get_info(args.dataset, host=args.host)
 
     # Print
     if args.json:

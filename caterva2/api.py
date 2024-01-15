@@ -59,7 +59,7 @@ def subscribe(root, host=sub_host_default):
     return api_utils.post(f'http://{host}/api/subscribe/{root}')
 
 
-def list(root, host=sub_host_default):
+def get_list(root, host=sub_host_default):
     """
     List the nodes in a root.
 
@@ -77,7 +77,7 @@ def list(root, host=sub_host_default):
     """
     return api_utils.get(f'http://{host}/api/list/{root}')
 
-def info(dataset, host=sub_host_default):
+def get_info(dataset, host=sub_host_default):
     """
     Get information about a dataset.
 
