@@ -47,7 +47,7 @@ def dataset_with_slice(dataset):
 
 @handle_errors
 def cmd_roots(args):
-    data = api_utils.get(f'http://{args.host}/api/roots')
+    data = cat2.get_roots(host=args.host)
     if args.json:
         print(json.dumps(data))
         return
@@ -60,7 +60,7 @@ def cmd_roots(args):
 
 @handle_errors
 def cmd_subscribe(args):
-    data = api_utils.post(f'http://{args.host}/api/subscribe/{args.root}')
+    data = cat2.subscribe(args.root, host=args.host)
     if args.json:
         print(json.dumps(data))
         return
@@ -69,7 +69,7 @@ def cmd_subscribe(args):
 
 @handle_errors
 def cmd_list(args):
-    data = api_utils.get(f'http://{args.host}/api/list/{args.root}')
+    data = cat2.list(args.root, host=args.host)
     if args.json:
         print(json.dumps(data))
         return
@@ -79,6 +79,8 @@ def cmd_list(args):
 
 @handle_errors
 def cmd_url(args):
+    # TODO: provide a url that can be used to open the dataset in blosc2
+    # TODO: add a new function to the API that returns the url
     data = api_utils.get(f'http://{args.host}/api/url/{args.root}')
     if args.json:
         print(json.dumps(data))
@@ -89,9 +91,8 @@ def cmd_url(args):
 
 @handle_errors
 def cmd_info(args):
-    # Get
-    dataset, params = args.dataset
-    data = api_utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
+    print(f"Getting info for {args.dataset}")
+    data = cat2.info(args.dataset, host=args.host)
 
     # Print
     if args.json:
@@ -103,11 +104,8 @@ def cmd_info(args):
 @handle_errors
 def cmd_show(args):
     dataset, params = args.dataset
-    dsname, root = api_utils.split_dsname(dataset)
-    root = cat2.Root(root, host=args.host)
-    dataset = root[dsname]
-    slice_ = api_utils.parse_slice(params.get('slice_', None))
-    data = dataset[slice_]
+    slice_ = params.get('slice_', None)
+    data = cat2.fetch(dataset, host=args.host, slice_=slice_)
 
     # Display
     if isinstance(data, bytes):
@@ -117,15 +115,14 @@ def cmd_show(args):
             print('Binary data')
     else:
         print(data)
+        # TODO: make rich optional in command line
+        # rich.print(data)
 
 @handle_errors
 def cmd_download(args):
     dataset, params = args.dataset
-    dsname, root = api_utils.split_dsname(dataset)
-    root = cat2.Root(root, host=args.host)
-    dataset = root[dsname]
-    slice_ = api_utils.parse_slice(params.get('slice_', None))
-    path = dataset.download(slice_)
+    slice_ = params.get('slice_', None)
+    path = cat2.download(dataset, host=args.host, slice_=slice_)
 
     print(f'Dataset saved to {path}')
 
@@ -167,7 +164,7 @@ if __name__ == '__main__':
     help = 'Get metadata about a dataset.'
     subparser = subparsers.add_parser('info', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset', type=dataset_with_slice)
+    subparser.add_argument('dataset', type=str)
     subparser.set_defaults(func=cmd_info)
 
     # show

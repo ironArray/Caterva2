@@ -20,13 +20,13 @@ def split_dsname(dataset):
     return dsname, root
 
 
-def slice_to_string(key):
-    if key is None or key == () or key == slice(None):
+def slice_to_string(slice_):
+    if slice_ is None or slice_ == () or slice_ == slice(None):
         return ''
     slice_parts = []
-    if not isinstance(key, tuple):
-        key = (key,)
-    for index in key:
+    if not isinstance(slice_, tuple):
+        slice_ = (slice_,)
+    for index in slice_:
         if isinstance(index, int):
             slice_parts.append(str(index))
         elif isinstance(index, slice):
@@ -54,7 +54,7 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def get_download_url(host, path, params):
+def get_download_url(path, host, params):
     response = httpx.get(f'http://{host}/api/download/{path}', params=params)
     response.raise_for_status()
 
@@ -77,21 +77,21 @@ def get_download_url(host, path, params):
 
     return f'http://{host}/files/{path}'
 
-def download_url(url, path, slice_=None):
+def download_url(url, localpath, slice_=None):
     # Build the local filepath
-    path = pathlib.Path(path)
-    suffix = path.suffix
+    localpath = pathlib.Path(localpath)
+    suffix = localpath.suffix
     if slice_:
-        path = path.with_suffix('')
-        path = pathlib.Path(f'{path}[{slice_}]{suffix}')
+        localpath = localpath.with_suffix('')
+        localpath = pathlib.Path(f'{localpath}[{slice_}]{suffix}')
 
     with httpx.stream("GET", url) as r:
         r.raise_for_status()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
+        localpath.parent.mkdir(parents=True, exist_ok=True)
+        with open(localpath, "wb") as f:
             for data in r.iter_bytes():
                 f.write(data)
-    return path
+    return localpath
 
 
 #

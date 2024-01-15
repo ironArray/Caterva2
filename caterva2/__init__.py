@@ -12,7 +12,8 @@
 __version__ = "0.1"
 
 from .api import bro_host_default, pub_host_default, sub_host_default
-from .api import get_roots, Root, File, Dataset
+from .api import get_roots, subscribe, list, info, fetch, download
+from .api import Root, File, Dataset
 
 import pytest
 import pathlib
@@ -39,6 +40,11 @@ __all__ = [
     'pub_host_default',
     'sub_host_default',
     'get_roots',
+    'subscribe',
+    'list',
+    'info',
+    'fetch',
+    'download',
     'Root',
     'File',
     'Dataset',

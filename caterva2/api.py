@@ -40,6 +40,105 @@ def get_roots(host=sub_host_default):
     return api_utils.get(f'http://{host}/api/roots')
 
 
+def subscribe(root, host=sub_host_default):
+    """
+    Subscribe to a root.
+
+    Parameters
+    ----------
+    root : str
+        The name of the root to subscribe to.
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    str
+        The response from the server.
+    """
+    return api_utils.post(f'http://{host}/api/subscribe/{root}')
+
+
+def list(root, host=sub_host_default):
+    """
+    List the nodes in a root.
+
+    Parameters
+    ----------
+    root : str
+        The name of the root to list.
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    list
+        The list of nodes in the root.
+    """
+    return api_utils.get(f'http://{host}/api/list/{root}')
+
+def info(dataset, host=sub_host_default):
+    """
+    Get information about a dataset.
+
+    Parameters
+    ----------
+    dataset : str
+        The name of the dataset.
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    dict
+        The information about the dataset.
+    """
+    return api_utils.get(f'http://{host}/api/info/{dataset}')
+
+def fetch(dataset, host=sub_host_default, slice_=None):
+    """
+    Fetch a slice of a dataset.
+
+    Parameters
+    ----------
+    dataset : str
+        The name of the dataset.
+    host : str
+        The host to query.
+    slice_ : str
+        The slice to fetch.
+
+    Returns
+    -------
+    numpy.ndarray
+        The slice of the dataset.
+    """
+    data = api_utils.get_download_url(dataset, host, {'slice_': slice_})
+    return data
+
+
+def download(dataset, host=sub_host_default, slice_=None):
+    """
+    Download a dataset.
+
+    Parameters
+    ----------
+    dataset : str
+        The name of the dataset.
+    host : str
+        The host to query.
+    slice_ : str
+        The slice to download.
+
+    Returns
+    -------
+    str
+        The path to the downloaded file.
+    """
+    url = api_utils.get_download_url(dataset, host, {'slice_': slice_, 'download': True})
+    return api_utils.download_url(url, dataset, slice_=slice_)
+
+
 class Root:
     """
     A root is a remote repository that can be subscribed to.
@@ -82,6 +181,7 @@ class File:
 
     Examples
     --------
+    >>> root = cat2.Root('foo')
     >>> file = root['README.md']
     >>> file.name
     'README.md'
@@ -108,13 +208,13 @@ class File:
     def __repr__(self):
         return f'<File: {self.path}>'
 
-    def get_download_url(self, key=None):
+    def get_download_url(self, slice_=None):
         """
         Get the download URL for a slice of the file.
 
         Parameters
         ----------
-        key : int or slice
+        slice_ : int or slice
             The slice to get.
 
         Returns
@@ -124,6 +224,7 @@ class File:
 
         Examples
         --------
+        >>> root = cat2.Root('foo')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
         'http://localhost:8002/files/foo/ds-1d.b2nd'
@@ -132,18 +233,18 @@ class File:
         >>> file.get_download_url(slice(0, 10))
         'http://localhost:8002/files/downloads/foo/ds-1d[:10].b2nd'
         """
-        slice_ = api_utils.slice_to_string(key)
-        download_path = api_utils.get_download_url(
-            self.host, self.path, {'slice_': slice_, 'download': True})
+        slice_ = api_utils.slice_to_string(slice_)
+        download_path = api_utils.get_download_url(self.path, self.host,
+                                                   {'slice_': slice_, 'download': True})
         return download_path
 
-    def __getitem__(self, key):
+    def __getitem__(self, slice_):
         """
         Get a slice of the dataset.
 
         Parameters
         ----------
-        key : int or slice
+        slice_ : int or slice
             The slice to get.
 
         Returns
@@ -161,17 +262,17 @@ class File:
         >>> ds[0:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        slice_ = api_utils.slice_to_string(key)
-        data = api_utils.get_download_url(self.host, self.path, {'slice_': slice_})
+        slice_ = api_utils.slice_to_string(slice_)
+        data = api_utils.get_download_url(self.path, self.host, {'slice_': slice_})
         return data
 
-    def download(self, key=None):
+    def download(self, slice_=None):
         """
         Download a slice of the file.
 
         Parameters
         ----------
-        key : int or slice
+        slice_ : int or slice
             The slice to get.
 
         Returns
@@ -189,8 +290,8 @@ class File:
         >>> file.download(slice(0, 10))
         PosixPath('foo/ds-1d[:10].b2nd')
         """
-        url = self.get_download_url(key)
-        slice_ = api_utils.slice_to_string(key)
+        url = self.get_download_url(slice_)
+        slice_ = api_utils.slice_to_string(slice_)
         return api_utils.download_url(url, self.path, slice_=slice_)
 
 
@@ -209,6 +310,7 @@ class Dataset(File):
 
     Examples
     --------
+    >>> root = cat2.Root('foo')
     >>> ds = root['ds-1d.b2nd']
     >>> ds.name
     'ds-1d.b2nd'
