@@ -23,8 +23,9 @@ from caterva2 import models
 
 
 def get_model_from_obj(obj, model_class, **kwargs):
-    if type(obj) is dict:
-        getter = lambda o, k: o[k]
+    if isinstance(obj, dict):
+        def getter(o, k):
+            return o[k]
     else:
         getter = getattr
 
@@ -116,6 +117,7 @@ def get_abspath(root, path):
 # Blosc2 related helpers
 #
 
+
 def compress(data, dst=None):
     assert isinstance(data, (bytes, pathlib.Path))
 
@@ -172,6 +174,20 @@ def init_b2frame(metadata, urlpath=None):
     sc.fill_special(metadata.nbytes / metadata.typesize,
                     special_value=blosc2.SpecialValue.UNINIT)
     return sc
+
+
+def init_b2(abspath, metadata):
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**metadata)
+        init_b2nd(metadata, abspath)
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**metadata)
+        init_b2frame(metadata, abspath)
+    else:
+        abspath = pathlib.Path(f'{abspath}.b2')
+        metadata = models.SChunk(**metadata)
+        init_b2frame(metadata, abspath)
 
 
 def open_b2(abspath):
@@ -231,17 +247,3 @@ class Database:
 
     def __getattr__(self, name):
         return getattr(self.data, name)
-
-
-def init_b2(abspath, metadata):
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        metadata = models.Metadata(**metadata)
-        init_b2nd(metadata, abspath)
-    elif suffix == '.b2frame':
-        metadata = models.SChunk(**metadata)
-        init_b2frame(metadata, abspath)
-    else:
-        abspath = pathlib.Path(f'{abspath}.b2')
-        metadata = models.SChunk(**metadata)
-        init_b2frame(metadata, abspath)

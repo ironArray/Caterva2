@@ -77,6 +77,7 @@ def get_download_url(path, host, params):
 
     return f'http://{host}/files/{path}'
 
+
 def download_url(url, localpath, slice_=None):
     # Build the local filepath
     localpath = pathlib.Path(localpath)
@@ -108,4 +109,3 @@ def post(url, json=None):
     response = httpx.post(url, json=json)
     response.raise_for_status()
     return response.json()
-

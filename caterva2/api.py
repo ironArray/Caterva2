@@ -77,6 +77,7 @@ def get_list(root, host=sub_host_default):
     """
     return api_utils.get(f'http://{host}/api/list/{root}')
 
+
 def get_info(dataset, host=sub_host_default):
     """
     Get information about a dataset.
@@ -94,6 +95,7 @@ def get_info(dataset, host=sub_host_default):
         The information about the dataset.
     """
     return api_utils.get(f'http://{host}/api/info/{dataset}')
+
 
 def fetch(dataset, host=sub_host_default, slice_=None):
     """
@@ -254,6 +256,7 @@ class File:
 
         Examples
         --------
+        >>> root = cat2.Root('foo')
         >>> ds = root['ds-1d.b2nd']
         >>> ds[1]
         array(1)
@@ -282,6 +285,7 @@ class File:
 
         Examples
         --------
+        >>> root = cat2.Root('foo')
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
         PosixPath('foo/ds-1d.b2nd')
