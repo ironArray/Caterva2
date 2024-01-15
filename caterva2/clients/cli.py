@@ -17,7 +17,7 @@ import rich
 
 # Project
 from caterva2 import api_utils
-from caterva2.clients import cli_utils
+from caterva2 import utils
 import caterva2 as cat2
 
 
@@ -129,7 +129,7 @@ def cmd_download(args):
 
 
 if __name__ == '__main__':
-    parser = cli_utils.get_parser()
+    parser = utils.get_parser()
     parser.add_argument('--host', default='localhost:8002')
     subparsers = parser.add_subparsers(required=True)
 
@@ -183,5 +183,5 @@ if __name__ == '__main__':
     subparser.set_defaults(func=cmd_download)
 
     # Go
-    args = cli_utils.run_parser(parser)
+    args = utils.run_parser(parser)
     args.func(args)
