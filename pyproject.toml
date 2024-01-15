@@ -66,6 +66,7 @@ tools = [
     "blosc2",
     "h5py",
     "hdf5plugin",
+    "msgpack",
 ]
 
 [project.urls]

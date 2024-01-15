@@ -17,6 +17,9 @@ import sys
 import blosc2
 import h5py
 import hdf5plugin
+import msgpack
+
+from blosc2 import blosc2_ext
 
 
 def create_directory(name, node, c2_root):
@@ -42,7 +45,11 @@ def copy_dataset(name, node, c2_root):
     b2_attrs = b2_array.schunk.vlmeta
     for (aname, avalue) in node.attrs.items():
         try:
-            b2_attrs[aname] = avalue
+            # This small workaround avoids Blosc2's strict type packing,
+            # so we can handle value subclasses like `numpy.bytes_`
+            # (e.g. for Fortran-style string attributes added by PyTables).
+            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
+            b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
         except Exception as e:
             logging.error(f"Failed to export dataset attribute {aname!r}: {name!r} -> %r", e)
 
