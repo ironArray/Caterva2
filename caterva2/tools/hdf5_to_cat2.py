@@ -24,13 +24,15 @@ from blosc2 import blosc2_ext
 
 def create_directory(name, node, c2_root):
     if len(node.attrs.keys()) > 0:
-        logging.warning(f"Exporting group attributes is not supported yet: {name!r}")
+        logging.warning(f"Exporting group attributes "
+                        f"is not supported yet: {name!r}")
 
     path = c2_root / name
     try:
         path.mkdir()  # parent should exist, not itself
     except OSError as ose:
-        logging.error(f"Failed to create directory for node: {name!r} -> %r", ose)
+        logging.error(f"Failed to create directory "
+                      f"for node: {name!r} -> %r", ose)
         return
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
@@ -39,7 +41,8 @@ def copy_dataset(name, node, c2_root):
     try:
         b2_array = blosc2.asarray(node[:])
     except ValueError as ve:
-        logging.error(f"Failed to convert dataset to Blosc2 ND array: {name!r} -> %r", ve)
+        logging.error(f"Failed to convert dataset "
+                      f"to Blosc2 ND array: {name!r} -> %r", ve)
         return
 
     b2_attrs = b2_array.schunk.vlmeta
@@ -51,7 +54,8 @@ def copy_dataset(name, node, c2_root):
             pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
             b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
         except Exception as e:
-            logging.error(f"Failed to export dataset attribute {aname!r}: {name!r} -> %r", e)
+            logging.error(f"Failed to export dataset attribute "
+                          f"{aname!r}: {name!r} -> %r", e)
 
     b2_path = c2_root / f'{name}.b2nd'
     try:
@@ -59,13 +63,16 @@ def copy_dataset(name, node, c2_root):
             f.write(b2_array.to_cframe())
     except Exception as e:
         b2_path.unlink(missing_ok=True)
-        logging.error(f"Failed to save dataset as Blosc2 ND array: {name!r} -> %r", e)
+        logging.error(f"Failed to save dataset "
+                      f"as Blosc2 ND array: {name!r} -> %r", e)
         return
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
 
 def node_exporter(c2_root):
-    """Return an HDF5 node item visitor to export to existing Caterva2 root at `c2_root`."""
+    """Return an HDF5 node item visitor to export to
+    existing Caterva2 root at `c2_root`.
+    """
     def export_node(name, node):
         if any(d in [os.path.curdir, os.path.pardir] for d in name.split('/')):
             logging.warning(f"Invalid node name, skipping: {name!r}")
@@ -75,7 +82,8 @@ def node_exporter(c2_root):
         elif isinstance(node, h5py.Dataset):
             do_export_node = copy_dataset
         else:
-            logging.warning(f"Unsupported node type {type(node).__name__}, skipping: {name!r}")
+            logging.warning(f"Unsupported node type "
+                            f"{type(node).__name__}, skipping: {name!r}")
             return
 
         do_export_node(name, node, c2_root)
@@ -83,7 +91,9 @@ def node_exporter(c2_root):
 
 
 def export_group(h5_group, c2_root):
-    """Export open HDF5 group `h5_group` to existing Caterva2 root at `c2_root`."""
+    """Export open HDF5 group `h5_group` to
+    existing Caterva2 root at `c2_root`.
+    """
     h5_group.visititems(node_exporter(c2_root))
 
 
