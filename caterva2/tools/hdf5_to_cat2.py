@@ -42,7 +42,7 @@ def copy_dataset(name, node, c2_root):
     b2_attrs = b2_array.schunk.vlmeta
     for (aname, avalue) in node.attrs.items():
         try:
-            b2_attrs[aname] = avalue.decode()  # TODO: support non-bytes
+            b2_attrs[aname] = avalue
         except Exception as e:
             logging.error(f"Failed to export dataset attribute {aname!r}: {name!r} -> %r", e)
 
