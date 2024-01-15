@@ -231,3 +231,17 @@ class Database:
 
     def __getattr__(self, name):
         return getattr(self.data, name)
+
+
+def init_b2(abspath, metadata):
+    suffix = abspath.suffix
+    if suffix == '.b2nd':
+        metadata = models.Metadata(**metadata)
+        init_b2nd(metadata, abspath)
+    elif suffix == '.b2frame':
+        metadata = models.SChunk(**metadata)
+        init_b2frame(metadata, abspath)
+    else:
+        abspath = pathlib.Path(f'{abspath}.b2')
+        metadata = models.SChunk(**metadata)
+        init_b2frame(metadata, abspath)

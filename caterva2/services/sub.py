@@ -24,7 +24,7 @@ import uvicorn
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
 
-
+# Logging
 logger = logging.getLogger('sub')
 
 # Configuration
@@ -60,20 +60,6 @@ async def new_root(data, topic):
     database.save()
 
 
-def init_b2(abspath, metadata):
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        metadata = models.Metadata(**metadata)
-        srv_utils.init_b2nd(metadata, abspath)
-    elif suffix == '.b2frame':
-        metadata = models.SChunk(**metadata)
-        srv_utils.init_b2frame(metadata, abspath)
-    else:
-        abspath = pathlib.Path(f'{abspath}.b2')
-        metadata = models.SChunk(**metadata)
-        srv_utils.init_b2frame(metadata, abspath)
-
-
 async def updated_dataset(data, topic):
     name = topic
     relpath = data['path']
@@ -87,7 +73,7 @@ async def updated_dataset(data, topic):
         if abspath.is_file():
             abspath.unlink()
     else:
-        init_b2(abspath, metadata)
+        srv_utils.init_b2(abspath, metadata)
 
 
 #
@@ -128,7 +114,7 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        init_b2(abspath, metadata)
+        srv_utils.init_b2(abspath, metadata)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -201,6 +187,14 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get('/api/roots')
 async def get_roots():
+    """
+    Get the list of roots.
+
+    Returns
+    -------
+    dict
+        The list of roots.
+    """
     return database.roots
 
 def get_root(name):
@@ -212,12 +206,38 @@ def get_root(name):
 
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(name: str):
+    """
+    Subscribe to a root.
+
+    Parameters
+    ----------
+    name : str
+        The name of the root.
+
+    Returns
+    -------
+    str
+        'Ok' if successful.
+    """
     get_root(name)  # Not Found
     follow(name)
     return 'Ok'
 
 @app.get('/api/list/{name}')
 async def get_list(name: str):
+    """
+    List the datasets in a root.
+
+    Parameters
+    ----------
+    name : str
+        The name of the root.
+
+    Returns
+    -------
+    list
+        The list of datasets in the root.
+    """
     root = get_root(name)
 
     rootdir = cache / root.name
@@ -231,6 +251,19 @@ async def get_list(name: str):
 
 @app.get('/api/url/{path:path}')
 async def get_url(path: str):
+    """
+    Get the URLs to access a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+
+    Returns
+    -------
+    list
+        The URLs to access the dataset.
+    """
     root, *dataset = path.split('/', 1)
     scheme = 'http'
     http = get_root(root).http
@@ -246,11 +279,41 @@ async def get_url(path: str):
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str):
+    """
+    Get the metadata of a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+
+    Returns
+    -------
+    dict
+        The metadata of the dataset.
+    """
     abspath = lookup_path(path)
     return srv_utils.read_metadata(abspath)
 
 
 async def partial_download(abspath, path, slice_):
+    """
+    Download the necessary chunks of a dataset.
+
+    Parameters
+    ----------
+    abspath : pathlib.Path
+        The absolute path to the dataset.
+    path : str
+        The path to the dataset.
+    slice_ : str
+        The slice to fetch.
+
+    Returns
+    -------
+    None
+        When finished, the dataset is available in cache.
+    """
     # Build the list of chunks we need to download from the publisher
     array, schunk = srv_utils.open_b2(abspath)
     if slice_:
@@ -280,10 +343,29 @@ async def partial_download(abspath, path, slice_):
 
 @app.get('/api/download/{path:path}')
 async def download_data(path: str, slice_: str = None, download: bool = False):
+    """
+    Download or fetch a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+    slice_ : str
+        The slice to fetch.
+    download : bool
+        Whether to download the dataset in the downloads dir.  If False, the data is
+        returned as a StreamingResponse (it is 'fetched').
+
+    Returns
+    -------
+    None or StreamingResponse
+        The data in case of a fetch, None otherwise.
+
+    """
     abspath = lookup_path(path)
     suffix = abspath.suffix
 
-    # Download and update the schunk in cache
+    # Download and update the necessary chunks of the schunk in cache
     await partial_download(abspath, path, slice_)
 
     download_path = None
@@ -333,7 +415,7 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
         if suffix == '.b2':
             # Decompress before delivering
             # TODO: support context manager in blosc2.open()
-            schunk = blosc2.open(abspath, 'rb')
+            schunk = blosc2.open(abspath)
             data = schunk[:]
             with open(download_path, 'wb') as f:
                 f.write(data)
