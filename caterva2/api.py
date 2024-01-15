@@ -89,12 +89,21 @@ class File:
     'localhost:8002'
     >>> file.path
     PosixPath('foo/README.md')
+    >>> file.meta['cparams']
+    {'codec': 5, 'typesize': 1, 'blocksize': 32768}
+    >>> file[:25]
+    b'This is a simple example,'
+    >>> file[0]
+    b'T'
     """
     def __init__(self, name, root, host):
         self.root = root
         self.name = name
         self.host = host
         self.path = pathlib.Path(f'{self.root}/{self.name}')
+        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}')
+        # TODO: 'cparams' is not always present (e.g. for .b2nd files)
+        # print(f"self.meta: {self.meta['cparams']}")
 
     def __repr__(self):
         return f'<File: {self.path}>'
@@ -128,6 +137,34 @@ class File:
             self.host, self.path, {'slice_': slice_, 'download': True})
         return download_path
 
+    def __getitem__(self, key):
+        """
+        Get a slice of the dataset.
+
+        Parameters
+        ----------
+        key : int or slice
+            The slice to get.
+
+        Returns
+        -------
+        numpy.ndarray
+            The slice.
+
+        Examples
+        --------
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds[1]
+        array(1)
+        >>> ds[:1]
+        array([0])
+        >>> ds[0:10]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        slice_ = api_utils.slice_to_string(key)
+        data = api_utils.get_download_url(self.host, self.path, {'slice_': slice_})
+        return data
+
     def download(self, key=None):
         """
         Download a slice of the file.
@@ -156,6 +193,7 @@ class File:
         slice_ = api_utils.slice_to_string(key)
         return api_utils.download_url(url, self.path, slice_=slice_)
 
+
 class Dataset(File):
     """
     A dataset is a Blosc2 container in a file.
@@ -179,35 +217,7 @@ class Dataset(File):
     """
     def __init__(self, name, root, host):
         super().__init__(name, root, host)
-        self.json = api_utils.get(f'http://{host}/api/info/{self.path}')
 
     def __repr__(self):
+        # TODO: add more info about dims, types, etc.
         return f'<Dataset: {self.path}>'
-
-    def __getitem__(self, key):
-        """
-        Get a slice of the dataset.
-
-        Parameters
-        ----------
-        key : int or slice
-            The slice to get.
-
-        Returns
-        -------
-        numpy.ndarray
-            The slice.
-
-        Examples
-        --------
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds[1]
-        array(1)
-        >>> ds[:1]
-        array([0])
-        >>> ds[0:10]
-        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        """
-        slice_ = api_utils.slice_to_string(key)
-        data = api_utils.get_download_url(self.host, self.path, {'slice_': slice_})
-        return data

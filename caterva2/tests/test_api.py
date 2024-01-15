@@ -72,7 +72,7 @@ def test_dataset_frame(services, examples_dir):
 
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
-    # assert ds[1] == a[1]  # TODO: this test does not work yet
+    assert ord(ds[1]) == a[1]  # TODO: why do we need ord() here?
     assert ds[:1] == a[:1]
     assert ds[0:10] == a[0:10]
     assert ds[10:20] == a[10:20]
@@ -217,6 +217,20 @@ def test_download_b2frame_slice(slice_, services, examples_dir):
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
     assert a[slice_] == b[:]
+
+
+def test_index_regular_file(services, examples_dir):
+    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+    ds = myroot['README.md']
+
+    # Data contents
+    example = examples_dir / ds.name
+    a = open(example).read().encode()
+    assert ds[:] == a[:]
+    assert ord(ds[1]) == a[1]     # TODO: why do we need ord() here?
+    assert ds[:1] == a[:1]
+    assert ds[0:10] == a[0:10]
+    assert ds[10:20] == a[10:20]
 
 
 def test_download_regular_file(services, examples_dir):
