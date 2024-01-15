@@ -152,7 +152,7 @@ def init_b2nd(metadata, urlpath=None):
         if urlpath.exists():
             urlpath.unlink()
 
-    dtype = getattr(np, metadata.dtype)
+    dtype = np.dtype(metadata.dtype)
     return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
                          chunks=metadata.chunks, blocks=metadata.blocks)
 
