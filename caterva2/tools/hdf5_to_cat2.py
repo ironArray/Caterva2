@@ -102,6 +102,8 @@ def main():
     except ValueError:
         prog = os.path.basename(sys.argv[0])
         print(f"Usage: {prog} HDF5_FILE CATERVA2_ROOT", file=sys.stderr)
+        print("Export the hierarchy in the existing HDF5_FILE "
+              "into the new CATERVA2_ROOT directory.", file=sys.stderr)
         sys.exit(1)
 
     export(hdf5_path, cat2_path)
