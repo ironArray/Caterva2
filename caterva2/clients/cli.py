@@ -100,11 +100,14 @@ def cmd_info(args):
 
     rich.print(data)
 
-
 @handle_errors
 def cmd_show(args):
     dataset, params = args.dataset
-    data = api_utils.get_download_url(args.host, dataset, params)
+    dsname, root = api_utils.split_dsname(dataset)
+    root = cat2.Root(root, host=args.host)
+    dataset = root[dsname]
+    slice_ = api_utils.parse_slice(params.get('slice_', None))
+    data = dataset[slice_]
 
     # Display
     if isinstance(data, bytes):
@@ -118,13 +121,14 @@ def cmd_show(args):
 @handle_errors
 def cmd_download(args):
     dataset, params = args.dataset
-    root, dsname = str(dataset).split('/')
+    dsname, root = api_utils.split_dsname(dataset)
     root = cat2.Root(root, host=args.host)
     dataset = root[dsname]
     slice_ = api_utils.parse_slice(params.get('slice_', None))
     path = dataset.download(slice_)
 
     print(f'Dataset saved to {path}')
+
 
 
 if __name__ == '__main__':

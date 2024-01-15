@@ -13,6 +13,13 @@ import pickle
 import httpx
 
 
+def split_dsname(dataset):
+    ds = str(dataset)
+    root_sep = ds.find('/')
+    root, dsname = ds[:root_sep], ds[root_sep + 1:]
+    return dsname, root
+
+
 def slice_to_string(key):
     if key is None or key == () or key == slice(None):
         return ''
