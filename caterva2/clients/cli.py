@@ -35,15 +35,17 @@ def handle_errors(func):
 
     return wrapper
 
+
 def dataset_with_slice(dataset):
     match = re.match('(.*)\\[(.*)]', dataset)
     if match is None:
         params = {}
     else:
-        dataset, slice = match.groups()
-        params = {'slice_': slice}
+        dataset, slice_ = match.groups()
+        params = {'slice_': slice_}
 
     return pathlib.Path(dataset), params
+
 
 @handle_errors
 def cmd_roots(args):
@@ -58,6 +60,7 @@ def cmd_roots(args):
         else:
             print(name)
 
+
 @handle_errors
 def cmd_subscribe(args):
     data = cat2.subscribe(args.root, host=args.host)
@@ -66,6 +69,7 @@ def cmd_subscribe(args):
         return
 
     print(data)
+
 
 @handle_errors
 def cmd_list(args):
@@ -76,6 +80,7 @@ def cmd_list(args):
 
     for item in data:
         print(f'{args.root}/{item}')
+
 
 @handle_errors
 def cmd_url(args):
@@ -89,6 +94,7 @@ def cmd_url(args):
     for url in data:
         print(url)
 
+
 @handle_errors
 def cmd_info(args):
     print(f"Getting info for {args.dataset}")
@@ -100,6 +106,7 @@ def cmd_info(args):
         return
 
     rich.print(data)
+
 
 @handle_errors
 def cmd_show(args):
@@ -118,6 +125,7 @@ def cmd_show(args):
         # TODO: make rich optional in command line
         # rich.print(data)
 
+
 @handle_errors
 def cmd_download(args):
     dataset, params = args.dataset
@@ -125,7 +133,6 @@ def cmd_download(args):
     path = cat2.download(dataset, host=args.host, slice_=slice_)
 
     print(f'Dataset saved to {path}')
-
 
 
 if __name__ == '__main__':
