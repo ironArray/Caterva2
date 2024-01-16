@@ -128,9 +128,7 @@ def cmd_show(args):
 
 @handle_errors
 def cmd_download(args):
-    dataset, params = args.dataset
-    slice_ = params.get('slice_', None)
-    path = cat2.download(dataset, host=args.host, slice_=slice_)
+    path = cat2.download(args.dataset, host=args.host)
 
     print(f'Dataset saved to {path}')
 
@@ -185,7 +183,7 @@ if __name__ == '__main__':
     help = 'Download a dataset and save it in the local system'
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset', type=dataset_with_slice)
+    subparser.add_argument('dataset', type=str)
     subparser.add_argument('output_dir', nargs='?', default='.', type=pathlib.Path)
     subparser.set_defaults(func=cmd_download)
 

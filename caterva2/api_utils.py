@@ -56,39 +56,28 @@ def parse_slice(string):
 
 
 def get_download_url(path, host, params):
+    download_ = params.get('download', False)
+    if download_ and params.get('slice_') is not None:
+        raise ValueError('Cannot download a slice')
     response = httpx.get(f'http://{host}/api/download/{path}', params=params)
     response.raise_for_status()
 
-    download_ = params.get('download', False)
-    if not download_:
-        data = response.content
-        # TODO: decompression is not working yet. HTTPX does this automatically?
-        # data = zlib.decompress(data)
-        return pickle.loads(data)
+    if download_:
+        return response.json()
 
-    path = pathlib.Path(path)
-    suffix = path.suffix
-    slice_ = params.get('slice_', None)
-    if slice_:
-        path = 'downloads' / path.with_suffix('')
-        path = pathlib.Path(f'{path}[{slice_}]{suffix}')
-    elif suffix not in ('.b2frame', '.b2nd'):
-        # Other suffixes are to be found decompressed in the downloads folder
-        path = 'downloads' / path
-
-    return f'http://{host}/files/{path}'
+    data = response.content
+    # TODO: decompression is not working yet. HTTPX does this automatically?
+    # data = zlib.decompress(data)
+    return pickle.loads(data)
 
 
-def download_url(url, localpath, slice_=None):
-    # Build the local filepath
-    localpath = pathlib.Path(localpath)
-    suffix = localpath.suffix
-    if slice_:
-        localpath = localpath.with_suffix('')
-        localpath = pathlib.Path(f'{localpath}[{slice_}]{suffix}')
-
+def download_url(url, localpath):
+    if url.endswith('.b2'):
+        localpath += '.b2'
     with httpx.stream("GET", url) as r:
         r.raise_for_status()
+        # Build the local filepath
+        localpath = pathlib.Path(localpath)
         localpath.parent.mkdir(parents=True, exist_ok=True)
         with open(localpath, "wb") as f:
             for data in r.iter_bytes():
