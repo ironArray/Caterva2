@@ -15,10 +15,15 @@ import pickle
 
 # Requirements
 import blosc2
-from fastapi import FastAPI, responses
+from fastapi import FastAPI, responses, Request
 from fastapi.staticfiles import StaticFiles
+
 import httpx
 import uvicorn
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 
 # Project
 from caterva2 import utils, api_utils, models
@@ -437,6 +442,19 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
     # data = zlib.compress(data)
     downloader = srv_utils.iterchunk(data)
     return responses.StreamingResponse(downloader)
+
+
+# app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+templates = Jinja2Templates(directory="templates")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    return templates.TemplateResponse(
+        request=request, name="home.html", context={"roots": database.roots}
+    )
 
 #
 # Command line interface

@@ -36,6 +36,7 @@ dependencies = [
     "httpx",
     "numpy",
     "pytest",
+    "jinja2",
 ]
 
 [tool.hatch.version]
