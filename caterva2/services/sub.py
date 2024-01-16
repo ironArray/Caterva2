@@ -446,16 +446,43 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
 
 # app.mount("/static", StaticFiles(directory="static"), name="static")
 
+BASE = pathlib.Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=BASE / "templates")
 
-templates = Jinja2Templates(directory="templates")
 
-
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
+@app.get("/html/", response_class=HTMLResponse)
+async def html_home(request: Request):
     return templates.TemplateResponse(
         request=request, name="home.html", context={"roots": database.roots}
     )
 
+@app.get("/html/sidebar/")
+async def htmx_sidebar(request: Request):
+    return templates.TemplateResponse(
+        request=request, name="sidebar.html", context={"roots": database.roots}
+    )
+
+@app.get("/html/{root}/", response_class=HTMLResponse)
+async def html_root(request: Request, root: str):
+    rootdir = cache / root
+    l = [
+        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        for path, relpath in utils.walk_files(rootdir)
+    ]
+    return templates.TemplateResponse(
+        request=request, name="paths.html", context={"paths": l}
+    )
+
+@app.get("/html/{root}/{path:path}", response_class=HTMLResponse)
+async def html_path(request: Request, root: str, path: str):
+    filepath = cache / root / path
+    abspath = lookup_path(filepath)
+    meta = srv_utils.read_metadata(abspath)
+
+    context = {"path": pathlib.Path(root) / path, "meta": meta}
+    return templates.TemplateResponse(
+        request=request, name="meta.html", context=context
+    )
 #
 # Command line interface
 #
