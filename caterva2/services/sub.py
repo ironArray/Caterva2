@@ -186,14 +186,14 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get('/api/roots')
-async def get_roots():
+async def get_roots() -> dict:
     """
-    Get the list of roots.
+    Get a dict of roots, with root names as keys and properties as values.
 
     Returns
     -------
     dict
-        The list of roots.
+        The dict of roots.
     """
     return database.roots
 
