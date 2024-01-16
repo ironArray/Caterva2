@@ -183,6 +183,16 @@ python -m caterva2.clients.cli download foo/dir2/ds-4d.b2nd
 Dataset saved to /.../foo/dir2/ds-4d.b2nd
 ```
 
+## Tools
+
+Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may invoke it like:
+
+```sh
+python -m caterva2.tools.hdf5_to_cat2 existing-hdf5-file.h5 new-caterva2-root
+```
+
+The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information.
+
 ## Tests
 
 The tests can be run as follows:
