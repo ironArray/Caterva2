@@ -150,7 +150,7 @@ def test_download_b2nd(name, services, examples_dir):
 
 
 # TODO: test slices that exceed the array dimensions
-@pytest.mark.parametrize("slice_", [slice(1,10), slice(4,8), slice(None), 1])
+@pytest.mark.parametrize("slice_", [slice(1, 10), slice(4, 8), slice(None), 1])
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
 def test_download_b2nd_slice(slice_, name, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
@@ -203,7 +203,7 @@ def test_download_b2frame(services, examples_dir):
 
 
 # TODO: add an integer slice test when it is supported in blosc2
-@pytest.mark.parametrize("slice_", [slice(1,10), slice(15,20), slice(None)])
+@pytest.mark.parametrize("slice_", [slice(1, 10), slice(15, 20), slice(None)])
 def test_download_b2frame_slice(slice_, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['ds-hello.b2frame']
@@ -262,7 +262,7 @@ def test_download_regular_file(services, examples_dir):
     assert a[:] == b[:]
 
 
-@pytest.mark.parametrize("slice_", [slice(1,10), slice(15,20), slice(None)])
+@pytest.mark.parametrize("slice_", [slice(1, 10), slice(15, 20), slice(None)])
 def test_download_regular_file_slice(slice_, services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['README.md']

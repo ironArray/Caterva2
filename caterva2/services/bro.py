@@ -28,9 +28,11 @@ database = None
 # API
 app = FastAPI()
 
+
 @app.get('/api/roots', response_model_exclude_none=True)
 async def get_roots() -> typing.Dict[str, models.Root]:
     return database.roots
+
 
 @app.post('/api/roots')
 async def post_roots(root: models.Root) -> models.Root:

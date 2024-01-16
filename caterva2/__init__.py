@@ -18,6 +18,7 @@ from .api import Root, File, Dataset
 import pytest
 import pathlib
 
+
 def test(verbose=False):
     """Run the test suite.
 
@@ -34,6 +35,7 @@ def test(verbose=False):
     test_dir = pathlib.Path(__file__).parent / 'tests'
     verb = "-v" if verbose else ""
     return pytest.main([verb, test_dir])
+
 
 __all__ = [
     'bro_host_default',

@@ -42,6 +42,7 @@ def get_etag(abspath):
     stat = abspath.stat()
     return f'{stat.st_mtime}:{stat.st_size}'
 
+
 async def worker(queue):
     while True:
         abspath = await queue.get()
@@ -135,9 +136,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 @app.get("/api/list")
 async def get_list():
     return [relpath for abspath, relpath in utils.walk_files(root)]
+
 
 @app.get("/api/info/{path:path}")
 async def get_info(
@@ -159,6 +162,7 @@ async def get_info(
     # Return
     response.headers['Etag'] = etag
     return srv_utils.read_metadata(abspath)
+
 
 @app.get("/api/download/{path:path}")
 async def get_download(path: str, nchunk: int = -1):

@@ -45,7 +45,7 @@ def walk_files(root, exclude=None):
 def socket_type(string):
     host, port = string.split(':')
     port = int(port)
-    return (host, port)
+    return host, port
 
 
 def get_parser(broker=None, http=None):

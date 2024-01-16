@@ -185,6 +185,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 @app.get('/api/roots')
 async def get_roots():
     """
@@ -197,12 +198,14 @@ async def get_roots():
     """
     return database.roots
 
+
 def get_root(name):
     root = database.roots.get(name)
     if root is None:
         srv_utils.raise_not_found(f'{name} not known by the broker')
 
     return root
+
 
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(name: str):
@@ -222,6 +225,7 @@ async def post_subscribe(name: str):
     get_root(name)  # Not Found
     follow(name)
     return 'Ok'
+
 
 @app.get('/api/list/{name}')
 async def get_list(name: str):
@@ -248,6 +252,7 @@ async def get_list(name: str):
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
         for path, relpath in utils.walk_files(rootdir)
     ]
+
 
 @app.get('/api/url/{path:path}')
 async def get_url(path: str):
@@ -276,6 +281,7 @@ async def get_url(path: str):
         ]
 
     return [http]
+
 
 @app.get('/api/info/{path:path}')
 async def get_info(path: str):
@@ -353,7 +359,7 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
     slice_ : str
         The slice to fetch.
     download : bool
-        Whether to download the dataset in the downloads dir.  If False, the data is
+        Whether to download the dataset in the downloads/ dir.  If False, the data is
         returned as a StreamingResponse (it is 'fetched').
 
     Returns
