@@ -55,6 +55,12 @@ clients = [
     "rich",
     "textual",
 ]
+tools = [
+    "blosc2",
+    "h5py",
+    "hdf5plugin",
+    "msgpack",
+]
 
 [project.urls]
 Home = "https://github.com/Blosc/Caterva2"
