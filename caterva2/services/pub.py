@@ -92,6 +92,7 @@ async def watchfiles(queue):
 
     # The etags left are those that were deleted
     for key in etags:
+        abspath = root / key
         queue.put_nowait(abspath)
         del database.etags[key]
         database.save()
@@ -121,9 +122,12 @@ async def lifespan(app: FastAPI):
 
     # Watch dataset files (must wait before publishing)
     await client.wait_until_ready()
-    asyncio.create_task(watchfiles(queue))
+    watch_task = asyncio.create_task(watchfiles(queue))
 
     yield
+
+    # Cancel watch task
+    watch_task.cancel()
 
     # Cancel worker tasks
     for task in tasks:
