@@ -20,7 +20,9 @@ import uvicorn
 from watchfiles import awatch
 
 # Project
-from caterva2 import utils, models
+from caterva2 import utils, api_utils, models
+from caterva2.services import srv_utils
+
 
 logger = logging.getLogger('pub')
 
@@ -40,6 +42,7 @@ def get_etag(abspath):
     stat = abspath.stat()
     return f'{stat.st_mtime}:{stat.st_size}'
 
+
 async def worker(queue):
     while True:
         abspath = await queue.get()
@@ -51,12 +54,12 @@ async def worker(queue):
                 print('UPDATE', relpath)
                 # Load metadata
                 if abspath.suffix in {'.b2frame', '.b2nd'}:
-                    metadata = utils.read_metadata(abspath)
+                    metadata = srv_utils.read_metadata(abspath)
                 else:
                     # Compress regular files in publisher's cache
                     b2path = cache / f'{relpath}.b2'
-                    utils.compress(abspath, b2path)
-                    metadata = utils.read_metadata(b2path)
+                    srv_utils.compress(abspath, b2path)
+                    metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
                 metadata = metadata.model_dump()
@@ -89,6 +92,7 @@ async def watchfiles(queue):
 
     # The etags left are those that were deleted
     for key in etags:
+        abspath = root / key
         queue.put_nowait(abspath)
         del database.etags[key]
         database.save()
@@ -107,7 +111,7 @@ async def watchfiles(queue):
 async def lifespan(app: FastAPI):
     # Connect to broker
     global client
-    client = utils.start_client(f'ws://{broker}/pubsub')
+    client = srv_utils.start_client(f'ws://{broker}/pubsub')
 
     # Create queue and start workers
     queue = asyncio.Queue()
@@ -118,9 +122,12 @@ async def lifespan(app: FastAPI):
 
     # Watch dataset files (must wait before publishing)
     await client.wait_until_ready()
-    asyncio.create_task(watchfiles(queue))
+    watch_task = asyncio.create_task(watchfiles(queue))
 
     yield
+
+    # Cancel watch task
+    watch_task.cancel()
 
     # Cancel worker tasks
     for task in tasks:
@@ -128,14 +135,16 @@ async def lifespan(app: FastAPI):
     await asyncio.gather(*tasks, return_exceptions=True)
 
     # Disconnect from broker
-    await utils.disconnect_client(client)
+    await srv_utils.disconnect_client(client)
 
 
 app = FastAPI(lifespan=lifespan)
 
+
 @app.get("/api/list")
 async def get_list():
     return [relpath for abspath, relpath in utils.walk_files(root)]
+
 
 @app.get("/api/info/{path:path}")
 async def get_info(
@@ -143,7 +152,7 @@ async def get_info(
     response: Response,
     if_none_match: typing.Annotated[str | None, Header()] = None
 ):
-    abspath = utils.get_abspath(root, path)
+    abspath = srv_utils.get_abspath(root, path)
 
     # Check etag
     etag = database.etags[path]
@@ -152,18 +161,19 @@ async def get_info(
 
     # Regular files (.b2)
     if abspath.suffix not in {'.b2frame', '.b2nd'}:
-        abspath = utils.get_abspath(cache, f'{path}.b2')
+        abspath = srv_utils.get_abspath(cache, f'{path}.b2')
 
     # Return
     response.headers['Etag'] = etag
-    return utils.read_metadata(abspath)
+    return srv_utils.read_metadata(abspath)
+
 
 @app.get("/api/download/{path:path}")
 async def get_download(path: str, nchunk: int = -1):
     if nchunk < 0:
-        utils.raise_bad_request('Chunk number required')
+        srv_utils.raise_bad_request('Chunk number required')
 
-    abspath = utils.get_abspath(root, path)
+    abspath = srv_utils.get_abspath(root, path)
 
     suffix = abspath.suffix
     if suffix == '.b2nd':
@@ -177,7 +187,7 @@ async def get_download(path: str, nchunk: int = -1):
         schunk = blosc2.open(b2path)
 
     chunk = schunk.get_chunk(nchunk)
-    downloader = utils.iterchunk(chunk)
+    downloader = srv_utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
 
@@ -201,12 +211,12 @@ if __name__ == '__main__':
 
     # Init database
     model = models.Publisher(etags={})
-    database = utils.Database(statedir / 'db.json', model)
+    database = srv_utils.Database(statedir / 'db.json', model)
 
     # Register
     host, port = args.http
     data = {'name': name, 'http': f'{host}:{port}'}
-    utils.post(f'http://{broker}/api/roots', json=data)
+    api_utils.post(f'http://{broker}/api/roots', json=data)
 
     # Run
     host, port = args.http

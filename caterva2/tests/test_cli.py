@@ -9,8 +9,6 @@
 
 
 import caterva2 as cat2
-import os
-import pathlib
 import json
 import subprocess
 import sys
@@ -34,9 +32,11 @@ def test_roots(services):
     assert roots[root_default]['name'] == root_default
     assert roots[root_default]['http'] == cat2.pub_host_default
 
+
 def test_url(services):
     out = cli(['url', root_default])
     assert out == ['http://localhost:8001']
+
 
 def test_subscribe(services):
     # Subscribe once

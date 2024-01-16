@@ -6,10 +6,13 @@ import httpx
 import numpy as np
 import sys
 import platform
-try: # Python-Blosc2 is optional
+
+
+try:  # Python-Blosc2 is optional
     import blosc2
 except ImportError:
     blosc2 = None
+
 
 def pytest_configure(config):
     print('\n' + '-=' * 38)

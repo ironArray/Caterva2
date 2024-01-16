@@ -18,6 +18,7 @@ import uvicorn
 
 # Project
 from caterva2 import utils, models
+from caterva2.services import srv_utils
 
 
 # State
@@ -27,9 +28,11 @@ database = None
 # API
 app = FastAPI()
 
+
 @app.get('/api/roots', response_model_exclude_none=True)
 async def get_roots() -> typing.Dict[str, models.Root]:
     return database.roots
+
 
 @app.post('/api/roots')
 async def post_roots(root: models.Root) -> models.Root:
@@ -52,7 +55,7 @@ if __name__ == '__main__':
     # Init database
     # roots = {name: <Root>}
     statedir = args.statedir.resolve()
-    database = utils.Database(statedir / 'db.json', models.Broker(roots={}))
+    database = srv_utils.Database(statedir / 'db.json', models.Broker(roots={}))
     print(database.data)
 
     # Run

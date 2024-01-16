@@ -16,7 +16,9 @@ import httpx
 import rich
 
 # Project
-from caterva2 import utils, models
+from caterva2 import api_utils
+from caterva2 import utils
+import caterva2 as cat2
 
 
 def handle_errors(func):
@@ -33,47 +35,45 @@ def handle_errors(func):
 
     return wrapper
 
+
 def dataset_with_slice(dataset):
     match = re.match('(.*)\\[(.*)]', dataset)
     if match is None:
         params = {}
     else:
-        dataset, slice = match.groups()
-        params = {'slice': slice}
+        dataset, slice_ = match.groups()
+        params = {'slice_': slice_}
 
     return pathlib.Path(dataset), params
 
-def url_with_slice(url, slice):
-    if slice is not None:
-        return f'{url}?slice={args.slice}'
-    return url
 
 @handle_errors
 def cmd_roots(args):
-    data = utils.get(f'http://{args.host}/api/roots')
+    data = cat2.get_roots(host=args.host)
     if args.json:
         print(json.dumps(data))
         return
 
     for name, root in data.items():
-        root = models.Root(**root)
-        if root.subscribed:
+        if root['subscribed'] is True:
             print(f'{name} (subscribed)')
         else:
             print(name)
 
+
 @handle_errors
 def cmd_subscribe(args):
-    data = utils.post(f'http://{args.host}/api/subscribe/{args.root}')
+    data = cat2.subscribe(args.root, host=args.host)
     if args.json:
         print(json.dumps(data))
         return
 
     print(data)
 
+
 @handle_errors
 def cmd_list(args):
-    data = utils.get(f'http://{args.host}/api/list/{args.root}')
+    data = cat2.get_list(args.root, host=args.host)
     if args.json:
         print(json.dumps(data))
         return
@@ -81,9 +81,12 @@ def cmd_list(args):
     for item in data:
         print(f'{args.root}/{item}')
 
+
 @handle_errors
 def cmd_url(args):
-    data = utils.get(f'http://{args.host}/api/url/{args.root}')
+    # TODO: provide a url that can be used to open the dataset in blosc2
+    # TODO: add a new function to the API that returns the url
+    data = api_utils.get(f'http://{args.host}/api/url/{args.root}')
     if args.json:
         print(json.dumps(data))
         return
@@ -91,11 +94,11 @@ def cmd_url(args):
     for url in data:
         print(url)
 
+
 @handle_errors
 def cmd_info(args):
-    # Get
-    dataset, params = args.dataset
-    data = utils.get(f'http://{args.host}/api/info/{dataset}', params=params)
+    print(f"Getting info for {args.dataset}")
+    data = cat2.get_info(args.dataset, host=args.host)
 
     # Print
     if args.json:
@@ -107,44 +110,30 @@ def cmd_info(args):
 
 @handle_errors
 def cmd_show(args):
-    # Download
     dataset, params = args.dataset
-    array, schunk = utils.download(args.host, dataset, params, verbose=True)
+    slice_ = params.get('slice_', None)
+    data = cat2.fetch(dataset, host=args.host, slice_=slice_)
 
     # Display
-    if array is None:
-        data = schunk[:]  # byte string
+    if isinstance(data, bytes):
         try:
             print(data.decode())
         except UnicodeDecodeError:
             print('Binary data')
     else:
-        data = array[:] if array.ndim > 0 else array[()]
         print(data)
+        # TODO: make rich optional in command line
+        # rich.print(data)
+
 
 @handle_errors
 def cmd_download(args):
-    # urlpath
     dataset, params = args.dataset
-    output_dir = args.output_dir.resolve()
-    urlpath = output_dir / dataset
-    urlpath.parent.mkdir(exist_ok=True, parents=True)
+    slice_ = params.get('slice_', None)
+    path = cat2.download(dataset, host=args.host, slice_=slice_)
 
-    suffix = urlpath.suffix
+    print(f'Dataset saved to {path}')
 
-    slice = params.get('slice')
-    if slice:
-        urlpath = urlpath.with_suffix('')
-        urlpath = pathlib.Path(f'{urlpath}[{slice}]{suffix}')
-
-    # Download
-    array, schunk = utils.download(args.host, dataset, params, urlpath=urlpath, verbose=True)
-    if suffix not in {'.b2frame', '.b2nd'}:
-        with open(urlpath, 'wb') as f:
-            data = schunk[:]
-            f.write(data)
-
-    print(f'Dataset saved to {urlpath}')
 
 if __name__ == '__main__':
     parser = utils.get_parser()
@@ -182,7 +171,7 @@ if __name__ == '__main__':
     help = 'Get metadata about a dataset.'
     subparser = subparsers.add_parser('info', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset', type=dataset_with_slice)
+    subparser.add_argument('dataset', type=str)
     subparser.set_defaults(func=cmd_info)
 
     # show

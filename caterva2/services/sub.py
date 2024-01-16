@@ -11,16 +11,20 @@ import asyncio
 import contextlib
 import logging
 import pathlib
+import pickle
 
 # Requirements
 import blosc2
 from fastapi import FastAPI, responses
+from fastapi.staticfiles import StaticFiles
 import httpx
 import uvicorn
 
 # Project
-from caterva2 import utils, models
+from caterva2 import utils, api_utils, models
+from caterva2.services import srv_utils
 
+# Logging
 logger = logging.getLogger('sub')
 
 # Configuration
@@ -31,6 +35,7 @@ cache = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 locks = {}
+
 
 async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
@@ -54,18 +59,6 @@ async def new_root(data, topic):
     database.roots[root.name] = root
     database.save()
 
-def init_b2(abspath, metadata):
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        metadata = models.Metadata(**metadata)
-        utils.init_b2nd(metadata, abspath)
-    elif suffix == '.b2frame':
-        metadata = models.SChunk(**metadata)
-        utils.init_b2frame(metadata, abspath)
-    else:
-        abspath = pathlib.Path(f'{abspath}.b2')
-        metadata = models.SChunk(**metadata)
-        utils.init_b2frame(metadata, abspath)
 
 async def updated_dataset(data, topic):
     name = topic
@@ -80,7 +73,7 @@ async def updated_dataset(data, topic):
         if abspath.is_file():
             abspath.unlink()
     else:
-        init_b2(abspath, metadata)
+        srv_utils.init_b2(abspath, metadata)
 
 
 #
@@ -90,8 +83,7 @@ async def updated_dataset(data, topic):
 def follow(name: str):
     root = database.roots.get(name)
     if root is None:
-        errors = {}
-        errors[name] = 'This dataset does not exist in the network'
+        errors = {name: 'This dataset does not exist in the network'}
         return errors
 
     if not root.subscribed:
@@ -104,7 +96,7 @@ def follow(name: str):
         rootdir.mkdir(exist_ok=True)
 
     # Initialize the datasets in the cache
-    data = utils.get(f'http://{root.http}/api/list')
+    data = api_utils.get(f'http://{root.http}/api/list')
     for relpath in data:
         # If-None-Match header
         key = f'{name}/{relpath}'
@@ -121,7 +113,7 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        init_b2(abspath, metadata)
+        srv_utils.init_b2(abspath, metadata)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -129,16 +121,17 @@ def follow(name: str):
 
     # Subscribe to changes in the dataset
     if name not in clients:
-        client = utils.start_client(f'ws://{broker}/pubsub')
+        client = srv_utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe(name, updated_dataset)
         clients[name] = client
+
 
 def lookup_path(path):
     path = pathlib.Path(path)
     if path.suffix not in {'.b2frame', '.b2nd'}:
         path = f'{path}.b2'
 
-    return utils.get_abspath(cache, path)
+    return srv_utils.get_abspath(cache, path)
 
 
 #
@@ -149,7 +142,7 @@ def lookup_path(path):
 async def lifespan(app: FastAPI):
     # Initialize roots from the broker
     try:
-        data = utils.get(f'http://{broker}/api/roots')
+        data = api_utils.get(f'http://{broker}/api/roots')
     except httpx.ConnectError:
         logger.warning('Broker not available')
         client = None
@@ -174,9 +167,8 @@ async def lifespan(app: FastAPI):
         if changed:
             database.save()
 
-
         # Follow the @new channel to know when a new root is added
-        client = utils.start_client(f'ws://{broker}/pubsub')
+        client = srv_utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe('@new', new_root)
 
         # Resume following
@@ -188,42 +180,94 @@ async def lifespan(app: FastAPI):
 
     # Disconnect from worker
     if client is not None:
-        await utils.disconnect_client(client)
+        await srv_utils.disconnect_client(client)
 
 app = FastAPI(lifespan=lifespan)
 
+
 @app.get('/api/roots')
 async def get_roots():
+    """
+    Get the list of roots.
+
+    Returns
+    -------
+    dict
+        The list of roots.
+    """
     return database.roots
+
 
 def get_root(name):
     root = database.roots.get(name)
     if root is None:
-        utils.raise_not_found(f'{name} not known by the broker')
+        srv_utils.raise_not_found(f'{name} not known by the broker')
 
     return root
 
+
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(name: str):
+    """
+    Subscribe to a root.
+
+    Parameters
+    ----------
+    name : str
+        The name of the root.
+
+    Returns
+    -------
+    str
+        'Ok' if successful.
+    """
     get_root(name)  # Not Found
     follow(name)
     return 'Ok'
 
+
 @app.get('/api/list/{name}')
 async def get_list(name: str):
+    """
+    List the datasets in a root.
+
+    Parameters
+    ----------
+    name : str
+        The name of the root.
+
+    Returns
+    -------
+    list
+        The list of datasets in the root.
+    """
     root = get_root(name)
 
     rootdir = cache / root.name
     if not rootdir.exists():
-        utils.raise_not_found(f'Not subscribed to {name}')
+        srv_utils.raise_not_found(f'Not subscribed to {name}')
 
     return [
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
         for path, relpath in utils.walk_files(rootdir)
     ]
 
+
 @app.get('/api/url/{path:path}')
 async def get_url(path: str):
+    """
+    Get the URLs to access a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+
+    Returns
+    -------
+    list
+        The URLs to access the dataset.
+    """
     root, *dataset = path.split('/', 1)
     scheme = 'http'
     http = get_root(root).http
@@ -237,26 +281,53 @@ async def get_url(path: str):
 
     return [http]
 
+
 @app.get('/api/info/{path:path}')
-async def get_info(path: str, slice: str = None):
-    assert slice is None, 'Slices not supported here'
+async def get_info(path: str):
+    """
+    Get the metadata of a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+
+    Returns
+    -------
+    dict
+        The metadata of the dataset.
+    """
     abspath = lookup_path(path)
-    return utils.read_metadata(abspath)
+    return srv_utils.read_metadata(abspath)
 
 
-@app.get('/api/download/{path:path}')
-async def get_download(path: str, nchunk: int, slice_: str = None):
-    abspath = lookup_path(path)
+async def partial_download(abspath, path, slice_):
+    """
+    Download the necessary chunks of a dataset.
 
+    Parameters
+    ----------
+    abspath : pathlib.Path
+        The absolute path to the dataset.
+    path : str
+        The path to the dataset.
+    slice_ : str
+        The slice to fetch.
+
+    Returns
+    -------
+    None
+        When finished, the dataset is available in cache.
+    """
     # Build the list of chunks we need to download from the publisher
-    array, schunk = utils.open_b2(abspath)
-    if slice_ is None:
-        nchunks = [nchunk]
-    else:
-        slice_obj = utils.parse_slice(slice_)
+    array, schunk = srv_utils.open_b2(abspath)
+    if slice_:
+        slice_obj = api_utils.parse_slice(slice_)
         if not array:
             if isinstance(slice_obj[0], slice):
-                start, stop, _ = slice_obj[0].indices(schunk.nchunks)
+                # TODO: support schunk.nitems to avoid computations like these
+                nitems = schunk.nbytes // schunk.typesize
+                start, stop, _ = slice_obj[0].indices(nitems)
             else:
                 start, stop = slice_obj[0], slice_obj[0] + 1
             # get_slice_nchunks() does not support slices for schunks yet
@@ -264,19 +335,108 @@ async def get_download(path: str, nchunk: int, slice_: str = None):
             nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
         else:
             nchunks = blosc2.get_slice_nchunks(array, slice_obj)
+    else:
+        nchunks = range(schunk.nchunks)
 
     # Fetch the chunks
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         for n in nchunks:
-            if not utils.chunk_is_available(schunk, n):
+            if not srv_utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
 
-    # Stream response
-    chunk = schunk.get_chunk(nchunk)
-    downloader = utils.iterchunk(chunk)
-    return responses.StreamingResponse(downloader)
 
+@app.get('/api/download/{path:path}')
+async def download_data(path: str, slice_: str = None, download: bool = False):
+    """
+    Download or fetch a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+    slice_ : str
+        The slice to fetch.
+    download : bool
+        Whether to download the dataset in the downloads/ dir.  If False, the data is
+        returned as a StreamingResponse (it is 'fetched').
+
+    Returns
+    -------
+    None or StreamingResponse
+        The data in case of a fetch, None otherwise.
+
+    """
+    abspath = lookup_path(path)
+    suffix = abspath.suffix
+
+    # Download and update the necessary chunks of the schunk in cache
+    await partial_download(abspath, path, slice_)
+
+    download_path = None
+    if download:
+        # Let's store the data in the downloads directory
+        if slice_ or suffix == '.b2':
+            download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
+            # Save data in the downloads directory (removing the '.b2' suffix, if needed)
+            suffix2 = download_path.suffix if suffix == '.b2' else suffix
+            download_path = download_path.with_suffix('')
+            slice2 = f"[{slice_}]" if slice_ else ""
+            download_path = pathlib.Path(f'{download_path}{slice2}{suffix2}')
+        else:
+            # By here, we already have the complete schunk in cache
+            download_path = abspath
+        download_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Interesting data has been downloaded, let's use it
+    array, schunk = srv_utils.open_b2(abspath)
+    slice2 = api_utils.parse_slice(slice_)
+    if slice2:
+        if array:
+            if download_path:
+                # We want to save the slice to a file
+                array.slice(slice2, urlpath=download_path, mode="w", contiguous=True,
+                            cparams=schunk.cparams)
+            else:
+                array = array[slice2] if array.ndim > 0 else array[()]
+        else:
+            assert len(slice2) == 1
+            slice2 = slice2[0]
+            if isinstance(slice2, int):
+                # TODO: make SChunk support integer as slice
+                slice2 = slice(slice2, slice2 + 1)
+            if download_path:
+                data = schunk[slice2]
+                # TODO: fix the upstream bug in python-blosc2 that prevents this from working
+                #  when not specifying chunksize (uses `data.size` instead of `len(data)`).
+                blosc2.SChunk(data=data, mode="w", urlpath=download_path,
+                              chunksize=schunk.chunksize,
+                              cparams=schunk.cparams)
+                abspath = download_path
+            else:
+                schunk = schunk[slice2]
+
+    if download:
+        if suffix == '.b2':
+            # Decompress before delivering
+            # TODO: support context manager in blosc2.open()
+            schunk = blosc2.open(abspath)
+            data = schunk[:]
+            with open(download_path, 'wb') as f:
+                f.write(data)
+        # We don't need to return anything, the file is already in the static files/
+        # directory and the client can download it from there.
+        return
+
+    # Pickle and stream response of the NumPy array
+    data = array if array is not None else schunk
+    if not slice_:
+        data = data[:]
+    data = pickle.dumps(data, protocol=-1)
+    # TODO: compress data is not working. HTTPX does this automatically?
+    # data = zlib.compress(data)
+    downloader = srv_utils.iterchunk(data)
+    return responses.StreamingResponse(downloader)
 
 #
 # Command line interface
@@ -294,10 +454,11 @@ if __name__ == '__main__':
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
+    app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Init database
     model = models.Subscriber(roots={}, etags={})
-    database = utils.Database(statedir / 'db.json', model)
+    database = srv_utils.Database(statedir / 'db.json', model)
 
     # Run
     host, port = args.http

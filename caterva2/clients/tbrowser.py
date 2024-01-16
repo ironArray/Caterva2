@@ -12,7 +12,7 @@
 import pathlib
 
 # Project
-from caterva2 import utils
+from caterva2 import utils, api_utils
 
 from textual.app import App, ComposeResult
 from textual.widgets import Tree
@@ -23,7 +23,7 @@ class TreeApp(App):
     def __init__(self, args):
         super().__init__()
         self.root = args.root
-        self.data = utils.get(f'http://{args.host}/api/list/{args.root}')
+        self.data = api_utils.get(f'http://{args.host}/api/list/{args.root}')
 
     def compose(self) -> ComposeResult:
         path = self.root / pathlib.Path(self.data[0])

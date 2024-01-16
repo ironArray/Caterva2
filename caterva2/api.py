@@ -6,9 +6,13 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+"""
+This module provides a Python API to Caterva2.
+"""
+
 import pathlib
 
-from caterva2 import utils
+from caterva2 import api_utils
 
 
 # Defaults
@@ -17,43 +21,147 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 
 
-def slice_to_string(indexes):
-    if indexes is None:
-        return None
-    slice_parts = []
-    if not isinstance(indexes, tuple):
-        indexes = (indexes,)
-    for index in indexes:
-        if isinstance(index, int):
-            slice_parts.append(str(index))
-        elif isinstance(index, slice):
-            start = index.start or ''
-            stop = index.stop or ''
-            if index.step not in (1, None):
-                raise IndexError('Only step=1 is supported')
-            step = index.step or ''
-            slice_parts.append(f"{start}:{stop}:{step}")
-    return ", ".join(slice_parts)
-
-
 def get_roots(host=sub_host_default):
-    return utils.get(f'http://{host}/api/roots')
+    """
+    Get the list of available roots.
+
+    Parameters
+    ----------
+
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    dict
+        The list of available roots.
+
+    """
+    return api_utils.get(f'http://{host}/api/roots')
+
+
+def subscribe(root, host=sub_host_default):
+    """
+    Subscribe to a root.
+
+    Parameters
+    ----------
+    root : str
+        The name of the root to subscribe to.
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    str
+        The response from the server.
+    """
+    return api_utils.post(f'http://{host}/api/subscribe/{root}')
+
+
+def get_list(root, host=sub_host_default):
+    """
+    List the nodes in a root.
+
+    Parameters
+    ----------
+    root : str
+        The name of the root to list.
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    list
+        The list of nodes in the root.
+    """
+    return api_utils.get(f'http://{host}/api/list/{root}')
+
+
+def get_info(dataset, host=sub_host_default):
+    """
+    Get information about a dataset.
+
+    Parameters
+    ----------
+    dataset : str
+        The name of the dataset.
+    host : str
+        The host to query.
+
+    Returns
+    -------
+    dict
+        The information about the dataset.
+    """
+    return api_utils.get(f'http://{host}/api/info/{dataset}')
+
+
+def fetch(dataset, host=sub_host_default, slice_=None):
+    """
+    Fetch a slice of a dataset.
+
+    Parameters
+    ----------
+    dataset : str
+        The name of the dataset.
+    host : str
+        The host to query.
+    slice_ : str
+        The slice to fetch.
+
+    Returns
+    -------
+    numpy.ndarray
+        The slice of the dataset.
+    """
+    data = api_utils.get_download_url(dataset, host, {'slice_': slice_})
+    return data
+
+
+def download(dataset, host=sub_host_default, slice_=None):
+    """
+    Download a dataset.
+
+    Parameters
+    ----------
+    dataset : str
+        The name of the dataset.
+    host : str
+        The host to query.
+    slice_ : str
+        The slice to download.
+
+    Returns
+    -------
+    str
+        The path to the downloaded file.
+    """
+    url = api_utils.get_download_url(dataset, host, {'slice_': slice_, 'download': True})
+    return api_utils.download_url(url, dataset, slice_=slice_)
+
 
 class Root:
+    """
+    A root is a remote repository that can be subscribed to.
+    """
     def __init__(self, name, host=sub_host_default):
         self.name = name
         self.host = host
-        ret = utils.post(f'http://{host}/api/subscribe/{name}')
+        ret = api_utils.post(f'http://{host}/api/subscribe/{name}')
         if ret != 'Ok':
             roots = get_roots(host)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = utils.get(f'http://{host}/api/list/{name}')
+        self.node_list = api_utils.get(f'http://{host}/api/list/{name}')
 
     def __repr__(self):
         return f'<Root: {self.name}>'
 
     def __getitem__(self, node):
+        """
+        Get a file or dataset from the root.
+        """
         if node.endswith((".b2nd", ".b2frame")):
             return Dataset(node, root=self.name, host=self.host)
         else:
@@ -61,48 +169,161 @@ class Root:
 
 
 class File:
+    """
+    A file is either a Blosc2 dataset or a regular file.
+
+    Parameters
+    ----------
+    name : str
+        The name of the file.
+    root : str
+        The name of the root.
+    host : str
+        The host to query.
+
+    Examples
+    --------
+    >>> root = cat2.Root('foo')
+    >>> file = root['README.md']
+    >>> file.name
+    'README.md'
+    >>> file.host
+    'localhost:8002'
+    >>> file.path
+    PosixPath('foo/README.md')
+    >>> file.meta['cparams']
+    {'codec': 5, 'typesize': 1, 'blocksize': 32768}
+    >>> file[:25]
+    b'This is a simple example,'
+    >>> file[0]
+    b'T'
+    """
     def __init__(self, name, root, host):
         self.root = root
         self.name = name
         self.host = host
         self.path = pathlib.Path(f'{self.root}/{self.name}')
+        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}')
+        # TODO: 'cparams' is not always present (e.g. for .b2nd files)
+        # print(f"self.meta: {self.meta['cparams']}")
 
     def __repr__(self):
         return f'<File: {self.path}>'
 
-    def download(self, index=None):
-        path = self.path
-        suffix = self.path.suffix
+    def get_download_url(self, slice_=None):
+        """
+        Get the download URL for a slice of the file.
 
-        slice_ = slice_to_string(index)
-        params = {}
-        if slice_:
-            path = self.path.with_suffix('')
-            path = pathlib.Path(f'{path}[{slice}]{suffix}')
-            params = {'slice': slice_}
-        array, schunk = utils.download(self.host, path, urlpath=path, params=params)
+        Parameters
+        ----------
+        slice_ : int or slice
+            The slice to get.
 
-        if suffix not in {'.b2frame', '.b2nd'}:
-            with open(path, 'wb') as f:
-                data = schunk[:]
-                f.write(data)
+        Returns
+        -------
+        str
+            The download URL.
 
-        return path
+        Examples
+        --------
+        >>> root = cat2.Root('foo')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.get_download_url()
+        'http://localhost:8002/files/foo/ds-1d.b2nd'
+        >>> file.get_download_url(1)
+        'http://localhost:8002/files/downloads/foo/ds-1d[1].b2nd'
+        >>> file.get_download_url(slice(0, 10))
+        'http://localhost:8002/files/downloads/foo/ds-1d[:10].b2nd'
+        """
+        slice_ = api_utils.slice_to_string(slice_)
+        download_path = api_utils.get_download_url(self.path, self.host,
+                                                   {'slice_': slice_, 'download': True})
+        return download_path
+
+    def __getitem__(self, slice_):
+        """
+        Get a slice of the dataset.
+
+        Parameters
+        ----------
+        slice_ : int or slice
+            The slice to get.
+
+        Returns
+        -------
+        numpy.ndarray
+            The slice.
+
+        Examples
+        --------
+        >>> root = cat2.Root('foo')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds[1]
+        array(1)
+        >>> ds[:1]
+        array([0])
+        >>> ds[0:10]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        slice_ = api_utils.slice_to_string(slice_)
+        data = api_utils.get_download_url(self.path, self.host, {'slice_': slice_})
+        return data
+
+    def download(self, slice_=None):
+        """
+        Download a slice of the file.
+
+        Parameters
+        ----------
+        slice_ : int or slice
+            The slice to get.
+
+        Returns
+        -------
+        PosixPath
+            The path to the downloaded file.
+
+        Examples
+        --------
+        >>> root = cat2.Root('foo')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.download()
+        PosixPath('foo/ds-1d.b2nd')
+        >>> file.download(1)
+        PosixPath('foo/ds-1d[1].b2nd')
+        >>> file.download(slice(0, 10))
+        PosixPath('foo/ds-1d[:10].b2nd')
+        """
+        url = self.get_download_url(slice_)
+        slice_ = api_utils.slice_to_string(slice_)
+        return api_utils.download_url(url, self.path, slice_=slice_)
 
 
 class Dataset(File):
+    """
+    A dataset is a Blosc2 container in a file.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset.
+    root : str
+        The name of the root.
+    host : str
+        The host to query.
+
+    Examples
+    --------
+    >>> root = cat2.Root('foo')
+    >>> ds = root['ds-1d.b2nd']
+    >>> ds.name
+    'ds-1d.b2nd'
+    >>> ds[1:10]
+    array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    """
     def __init__(self, name, root, host):
         super().__init__(name, root, host)
-        self.json = utils.get(f'http://{host}/api/info/{self.path}')
 
     def __repr__(self):
+        # TODO: add more info about dims, types, etc.
         return f'<Dataset: {self.path}>'
-
-    def __getitem__(self, indexes):
-        slice_ = slice_to_string(indexes)
-        array, schunk = utils.download(self.host, self.path, {'slice': slice_})
-        if array is not None:
-            data = array[:] if array.ndim > 0 else array[()]
-        else:
-            data = schunk[:]  # byte string
-        return data
