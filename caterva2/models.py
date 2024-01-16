@@ -19,6 +19,7 @@ class CParams(pydantic.BaseModel):
     typesize: int
     blocksize: int
 
+
 class SChunk(pydantic.BaseModel):
     blocksize: int
     cbytes: int
@@ -35,6 +36,7 @@ class SChunk(pydantic.BaseModel):
 #   vlmeta
     nchunks: int
 
+
 class Metadata(pydantic.BaseModel):
     dtype: str
     ndim: int
@@ -48,20 +50,25 @@ class Metadata(pydantic.BaseModel):
     schunk: SChunk
     size: int
 
+
 class File(pydantic.BaseModel):
     mtime: float
     size: int
 
+
 class Root(pydantic.BaseModel):
     name: str
     http: str
-    subscribed: typing.Optional[bool] = None # Used only by the subscriber program
+    subscribed: typing.Optional[bool] = None  # Used only by the subscriber program
+
 
 class Broker(pydantic.BaseModel):
     roots: typing.Dict[str, Root]
 
+
 class Publisher(pydantic.BaseModel):
     etags: typing.Dict[str, str]
+
 
 class Subscriber(pydantic.BaseModel):
     roots: typing.Dict[str, Root]

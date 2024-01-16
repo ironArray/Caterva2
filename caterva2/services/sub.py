@@ -83,8 +83,7 @@ async def updated_dataset(data, topic):
 def follow(name: str):
     root = database.roots.get(name)
     if root is None:
-        errors = {}
-        errors[name] = 'This dataset does not exist in the network'
+        errors = {name: 'This dataset does not exist in the network'}
         return errors
 
     if not root.subscribed:
