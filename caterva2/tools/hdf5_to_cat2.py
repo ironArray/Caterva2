@@ -7,7 +7,21 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-"""Export datasets in an HDF5 file to a Caterva2 root."""
+"""Export datasets in an HDF5 file to a Caterva2 root.
+
+The HDF5 file is opened in read-only mode, and the Caterva2 root directory is
+created anew (it must not exist).  For each group in the HDF5 file hierarchy,
+a directory with the same path name is created under the Caterva2 root.  For
+each dataset, a Blosc2 dataset with the same path name (plus the ``.b2nd``
+extension) is created under the Caterva2 root.
+
+The only datasets supported currently are those which can be converted to
+NumPy arrays.  Dataset attributes are supported as Blosc2 vlmeta entries if
+they can be serialized with msgpack.  Group attributes are not supported yet.
+
+Datasets or attributes which are unsupported or fail to be converted are
+simply reported and skipped, and they do not cause the program to fail.
+"""
 
 import logging
 import os
@@ -114,6 +128,7 @@ def main():
         print(f"Usage: {prog} HDF5_FILE CATERVA2_ROOT", file=sys.stderr)
         print("Export the hierarchy in the existing HDF5_FILE "
               "into the new CATERVA2_ROOT directory.", file=sys.stderr)
+        print('\n'.join(__doc__.splitlines()[1:]), file=sys.stderr)
         sys.exit(1)
 
     export(hdf5_path, cat2_path)
