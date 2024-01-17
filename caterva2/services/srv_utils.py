@@ -261,14 +261,19 @@ conf_file_name = 'caterva2.toml'
 
 
 class Conf:
-    def __init__(self, conf):
+    def __init__(self, conf, prefix=None):
         self._conf = conf
+        self.prefix = prefix
 
     def get(self, key, default=None):
         """Get configuration item with dot-separated `key`.
 
         The `default` value is returned if any part of the `key` is missing.
+
+        The prefix (if given) is prepended to a `key` that starts with a dot.
         """
+        if self.prefix is not None and key.startswith('.'):
+            key = self.prefix + key
         keys = key.split('.')
         conf = self._conf
         for k in keys:
@@ -278,17 +283,19 @@ class Conf:
         return conf
 
 
-def get_conf():
+def get_conf(prefix=None):
     """Get settings from the configuration file, if existing.
 
     If the configuration file does not exist, return an empyt configuration.
 
-    You may get a value from the returned configuration ``conf`` with
-    ``conf.get('path.to.item'[, default])``.
+    You may get the value for a key from the returned configuration ``conf``
+    with ``conf.get('path.to.item'[, default])``.  If a `prefix` is given and
+    the key starts with a dot, like ``.path.to.item``, `prefix` is prepended
+    to it.
     """
     try:
         with open(conf_file_name, 'rb') as conf_file:
             conf = toml.load(conf_file)
-            return Conf(conf)
+            return Conf(conf, prefix=prefix)
     except FileNotFoundError:
-        return Conf({})
+        return Conf({}, prefix=prefix)
