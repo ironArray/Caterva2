@@ -264,9 +264,13 @@ conf_file_name = 'caterva2.toml'
 
 
 class Conf:
-    def __init__(self, conf, prefix=None):
+    def __init__(self, conf, prefix=None, id=None):
         self._conf = conf
         self.prefix = prefix
+        self.id = id
+
+        self._pfx = ((f"{prefix}.{id}" if id else prefix) if prefix
+                     else None)
 
     def get(self, key, default=None):
         """Get configuration item with dot-separated `key`.
@@ -274,9 +278,10 @@ class Conf:
         The `default` value is returned if any part of the `key` is missing.
 
         The prefix (if given) is prepended to a `key` that starts with a dot.
+        If an ID was given, it is appended to `prefix`, separated by a dot.
         """
-        if self.prefix is not None and key.startswith('.'):
-            key = self.prefix + key
+        if self._pfx is not None and key.startswith('.'):
+            key = self._pfx + key
         keys = key.split('.')
         conf = self._conf
         for k in keys:
@@ -301,6 +306,7 @@ def get_conf(prefix=None, allow_id=False):
     For instance, with ``conf = get_conf('foo')`` and ``--id=bar``,
     ``conf.get('.item')`` is equivalent to ``conf.get('foo.bar.item')``.
     """
+    id_ = None
     if allow_id:  # quick'n'dirty argument parsing before full one
         opts = '#'.join(sys.argv)
         match_ = re.search(r'#--id[=#]([^#]+)', opts)
@@ -308,10 +314,9 @@ def get_conf(prefix=None, allow_id=False):
             id_ = match_.group(1)
             if any(p in id_ for p in [os.curdir, os.pardir, os.sep]):
                 raise ValueError("invalid identifier", id_)
-            prefix = f'{prefix}.{id_}'
     try:
         with open(conf_file_name, 'rb') as conf_file:
             conf = toml.load(conf_file)
-            return Conf(conf, prefix=prefix)
+            return Conf(conf, prefix=prefix, id=id_)
     except FileNotFoundError:
-        return Conf({}, prefix=prefix)
+        return Conf({}, prefix=prefix, id=id_)
