@@ -193,13 +193,17 @@ async def get_download(path: str, nchunk: int = -1):
 
 
 def main():
-    conf = srv_utils.get_conf('publisher')  # TODO: support id
+    conf = srv_utils.get_conf('publisher', allow_id=True)
     parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
                               http=conf.get('.http', 'localhost:8001'),
                               loglevel=conf.get('.loglevel', 'warning'))
+    _stdir = '_caterva2/pub' + (f'.{conf.id}' if conf.id else '')
     parser.add_argument('--statedir',
-                        default=conf.get('.statedir', '_caterva2/pub'),
+                        default=conf.get('.statedir', _stdir),
                         type=pathlib.Path)
+    parser.add_argument('--id', default=conf.id,
+                        help=("a string to distinguish services "
+                              "of the same category"))
     # TODO: really allow getting from config file
     parser.add_argument('name', default=conf.get('.name'))
     parser.add_argument('root', default=conf.get('.root', 'data'))
