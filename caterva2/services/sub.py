@@ -34,7 +34,9 @@ broker = None
 cache = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
+host = None
 locks = {}
+port = None
 
 
 async def download_chunk(path, schunk, nchunk):
@@ -413,19 +415,23 @@ def main():
     args = utils.run_parser(parser)
 
     # Global configuration
+    global broker
     broker = args.broker
 
     # Init cache
+    global cache
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
     app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Init database
+    global database
     model = models.Subscriber(roots={}, etags={})
     database = srv_utils.Database(statedir / 'db.json', model)
 
     # Run
+    global host, port
     host, port = args.http
     uvicorn.run(app, host=host, port=port)
 

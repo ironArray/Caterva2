@@ -200,16 +200,19 @@ def main():
     args = utils.run_parser(parser)
 
     # Global configuration
+    global broker, name, root
     broker = args.broker
     name = args.name
     root = pathlib.Path(args.root).resolve()
 
     # Init cache
+    global cache
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
 
     # Init database
+    global database
     model = models.Publisher(etags={})
     database = srv_utils.Database(statedir / 'db.json', model)
 

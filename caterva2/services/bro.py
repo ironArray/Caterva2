@@ -56,6 +56,7 @@ def main():
     # Init database
     # roots = {name: <Root>}
     statedir = args.statedir.resolve()
+    global database
     database = srv_utils.Database(statedir / 'db.json', models.Broker(roots={}))
     print(database.data)
 
