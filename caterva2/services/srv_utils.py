@@ -11,6 +11,8 @@ import asyncio
 import json
 import pathlib
 import safer
+import sys
+import re
 
 try:
     import tomllib as toml
@@ -283,16 +285,26 @@ class Conf:
         return conf
 
 
-def get_conf(prefix=None):
+def get_conf(prefix=None, allow_id=False):
     """Get settings from the configuration file, if existing.
 
-    If the configuration file does not exist, return an empyt configuration.
+    If the configuration file does not exist, return an empty configuration.
 
     You may get the value for a key from the returned configuration ``conf``
     with ``conf.get('path.to.item'[, default])``.  If a `prefix` is given and
     the key starts with a dot, like ``.path.to.item``, `prefix` is prepended
-    to it.
+    to it.  If `allow_id` is true and command line arguments has a non-empty
+    value for the ``--id`` option, the value gets appended to `prefix`,
+    separated by a dot.
+
+    For instance, with ``conf = get_conf('foo')`` and ``--id=bar``,
+    ``conf.get('.item')`` is equivalent to ``conf.get('foo.bar.item')``.
     """
+    if allow_id:  # quick'n'dirty argument parsing before full one
+        opts = '#'.join(sys.argv)
+        match_ = re.search(r'#--id[=#]([^#]+)', opts)
+        if match_ is not None:
+            prefix = f'{prefix}.{match_.group(1)}'
     try:
         with open(conf_file_name, 'rb') as conf_file:
             conf = toml.load(conf_file)
