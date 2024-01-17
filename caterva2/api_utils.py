@@ -62,20 +62,28 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def get_download_url(path, host, params):
-    download_ = params.get('download', False)
-    if download_ and params.get('slice_') is not None:
-        raise ValueError('Cannot download a slice')
-    response = httpx.get(f'http://{host}/api/download/{path}', params=params)
+def fetch_data(path, host, params):
+    if 'as_schunk' not in params:
+        params['as_schunk'] = blosc2_is_here
+    response = httpx.get(f'http://{host}/api/fetch/{path}', params=params)
     response.raise_for_status()
-
-    if download_:
-        return response.json()
-
     data = response.content
-    # TODO: decompression is not working yet. HTTPX does this automatically?
-    # data = zlib.decompress(data)
-    return pickle.loads(data)
+    # Try different deserialization methods
+    try:
+        data = pickle.loads(data)
+    except pickle.UnpicklingError:
+        try:
+            data = blosc2.decompress2(data)
+        except (ValueError, RuntimeError):
+            data = blosc2.ndarray_from_cframe(data)
+            data = data[:]
+    return data
+
+
+def get_download_url(path, host):
+    response = httpx.get(f'http://{host}/api/download/{path}')
+    response.raise_for_status()
+    return response.json()
 
 
 def b2_unpack(filepath):
