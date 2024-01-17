@@ -9,6 +9,7 @@
 
 import asyncio
 import json
+import os
 import pathlib
 import safer
 import sys
@@ -304,7 +305,10 @@ def get_conf(prefix=None, allow_id=False):
         opts = '#'.join(sys.argv)
         match_ = re.search(r'#--id[=#]([^#]+)', opts)
         if match_ is not None:
-            prefix = f'{prefix}.{match_.group(1)}'
+            id_ = match_.group(1)
+            if any(p in id_ for p in [os.curdir, os.pardir, os.sep]):
+                raise ValueError("invalid identifier", id_)
+            prefix = f'{prefix}.{id_}'
     try:
         with open(conf_file_name, 'rb') as conf_file:
             conf = toml.load(conf_file)
