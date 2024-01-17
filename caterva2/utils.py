@@ -48,9 +48,9 @@ def socket_type(string):
     return host, port
 
 
-def get_parser(broker=None, http=None):
+def get_parser(loglevel='warning', broker=None, http=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--loglevel', default='warning')
+    parser.add_argument('--loglevel', default=loglevel)
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:
