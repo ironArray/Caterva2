@@ -97,7 +97,7 @@ def get_info(dataset, host=sub_host_default):
     return api_utils.get(f'http://{host}/api/info/{dataset}')
 
 
-def fetch(dataset, host=sub_host_default, slice_=None):
+def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True):
     """
     Fetch a slice of a dataset.
 
@@ -109,13 +109,20 @@ def fetch(dataset, host=sub_host_default, slice_=None):
         The host to query.
     slice_ : str
         The slice to fetch.
+    prefer_schunk : bool
+        Whether to prefer using Blosc2 schunk serialization during data transport.
+        If False, pickle will always be used instead. Default is True, so Blosc2
+        serialization will be used if Blosc2 is installed (and data payload is large
+        enough).
 
     Returns
     -------
     numpy.ndarray
         The slice of the dataset.
     """
-    data = api_utils.get_download_url(dataset, host, {'slice_': slice_})
+    prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
+    data = api_utils.fetch_data(dataset, host,
+                                {'slice_': slice_, 'prefer_schunk': prefer_schunk})
     return data
 
 
@@ -136,11 +143,11 @@ def download(dataset, host=sub_host_default):
         The path to the downloaded file.
 
     Note: If dataset is a regular file, it will be downloaded and decompressed if blosc2
-     is installed. Otherwise, it will be downloaded as is in the internal caches (i.e.
-     compressed, and with the `.b2` extension).
+     is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
+     compressed with Blosc2, and with the `.b2` extension).
     """
-    url = api_utils.get_download_url(dataset, host, {'download': True})
-    return api_utils.download_url(url, dataset)
+    url = api_utils.get_download_url(dataset, host)
+    return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here)
 
 
 class Root:
@@ -228,8 +235,7 @@ class File:
         >>> file.get_download_url()
         'http://localhost:8002/files/foo/ds-1d.b2nd'
         """
-        download_path = api_utils.get_download_url(self.path, self.host,
-                                                   {'download': True})
+        download_path = api_utils.get_download_url(self.path, self.host)
         return download_path
 
     def __getitem__(self, slice_):
@@ -238,8 +244,8 @@ class File:
 
         Parameters
         ----------
-        slice_ : int or slice
-            The slice to get.
+        slice_ : int, slice, tuple of ints and slices, or None
+            The slice to fetch.
 
         Returns
         -------
@@ -257,8 +263,36 @@ class File:
         >>> ds[0:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
+        data = self.fetch(slice_=slice_)
+        return data
+
+    def fetch(self, slice_=None, prefer_schunk=True):
+        """
+        Fetch a slice of a dataset.  Can specify transport serialization.
+
+        Similar to `__getitem__()` but this one lets specify whether to prefer using Blosc2
+        schunk serialization or pickle during data transport between the subscriber and the
+        client. See below.
+
+        Parameters
+        ----------
+        slice_ : int, slice, tuple of ints and slices, or None
+            The slice to fetch.
+        prefer_schunk : bool
+            Whether to prefer using Blosc2 schunk serialization during data transport.
+            If False, pickle will always be used instead. Default is True, so Blosc2
+            serialization will be used if Blosc2 is installed (and data payload is large
+            enough).
+
+        Returns
+        -------
+        numpy.ndarray
+            The slice of the dataset.
+        """
         slice_ = api_utils.slice_to_string(slice_)
-        data = api_utils.get_download_url(self.path, self.host, {'slice_': slice_})
+        prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
+        data = api_utils.fetch_data(self.path, self.host,
+                                    {'slice_': slice_, 'prefer_schunk': prefer_schunk})
         return data
 
     def download(self):
