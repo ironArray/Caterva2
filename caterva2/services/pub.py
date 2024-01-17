@@ -192,7 +192,7 @@ async def get_download(path: str, nchunk: int = -1):
     return responses.StreamingResponse(downloader)
 
 
-if __name__ == '__main__':
+def main():
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
     parser.add_argument('--statedir', default='_caterva2/pub', type=pathlib.Path)
     parser.add_argument('name')
@@ -221,3 +221,7 @@ if __name__ == '__main__':
     # Run
     host, port = args.http
     uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == '__main__':
+    main()

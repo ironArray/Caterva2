@@ -133,7 +133,7 @@ def cmd_download(args):
     print(f'Dataset saved to {path}')
 
 
-if __name__ == '__main__':
+def main():
     parser = utils.get_parser()
     parser.add_argument('--host', default='localhost:8002')
     subparsers = parser.add_subparsers(required=True)
@@ -190,3 +190,7 @@ if __name__ == '__main__':
     # Go
     args = utils.run_parser(parser)
     args.func(args)
+
+
+if __name__ == '__main__':
+    main()

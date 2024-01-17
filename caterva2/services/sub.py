@@ -407,7 +407,7 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
 # Command line interface
 #
 
-if __name__ == '__main__':
+def main():
     parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
     parser.add_argument('--statedir', default='_caterva2/sub', type=pathlib.Path)
     args = utils.run_parser(parser)
@@ -428,3 +428,7 @@ if __name__ == '__main__':
     # Run
     host, port = args.http
     uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == '__main__':
+    main()

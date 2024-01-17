@@ -42,7 +42,7 @@ class TreeApp(App):
         yield tree
 
 
-if __name__ == "__main__":
+def main():
     parser = utils.get_parser()
     parser.add_argument('--host', default='localhost:8002')
     parser.add_argument('--root', default='foo')
@@ -51,3 +51,7 @@ if __name__ == "__main__":
     args = utils.run_parser(parser)
     app = TreeApp(args)
     app.run()
+
+
+if __name__ == "__main__":
+    main()

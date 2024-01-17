@@ -47,7 +47,8 @@ endpoint = PubSubEndpoint()
 endpoint.register_route(router)
 app.include_router(router)
 
-if __name__ == '__main__':
+
+def main():
     parser = utils.get_parser(http='localhost:8000')
     parser.add_argument('--statedir', default='_caterva2/bro', type=pathlib.Path)
     args = utils.run_parser(parser)
@@ -61,3 +62,7 @@ if __name__ == '__main__':
     # Run
     host, port = args.http
     uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == '__main__':
+    main()
