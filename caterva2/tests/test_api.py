@@ -175,14 +175,13 @@ def test_download_regular_file(services, examples_dir):
     myroot = cat2.Root(published_root, host=cat2.sub_host_default)
     ds = myroot['README.md']
     path = ds.download()
-    assert path == pathlib.Path(str(ds.path) + '.b2')
+    assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = open(example).read()
-    b = blosc2.open(path)
-    # TODO: why do we need .decode() here?
-    assert a[:] == b[:].decode()
+    b = open(path).read()
+    assert a[:] == b[:]
 
     # Using 2-step download
     urlpath = ds.get_download_url()

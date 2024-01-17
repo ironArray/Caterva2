@@ -134,6 +134,10 @@ def download(dataset, host=sub_host_default):
     -------
     str
         The path to the downloaded file.
+
+    Note: If dataset is a regular file, it will be downloaded and decompressed if blosc2
+     is installed. Otherwise, it will be downloaded as is in the internal caches (i.e.
+     compressed, and with the `.b2` extension).
     """
     url = api_utils.get_download_url(dataset, host, {'download': True})
     return api_utils.download_url(url, dataset)

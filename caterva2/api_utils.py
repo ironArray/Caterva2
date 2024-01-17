@@ -6,12 +6,19 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-
+import os
 import pathlib
 import pickle
 
 # Requirements
 import httpx
+
+# Optional requirements
+try:
+    import blosc2
+    blosc2_is_here = True
+except ImportError:
+    blosc2_is_here = False
 
 
 def split_dsname(dataset):
@@ -71,8 +78,22 @@ def get_download_url(path, host, params):
     return pickle.loads(data)
 
 
-def download_url(url, localpath):
-    if url.endswith('.b2'):
+def b2_unpack(filepath):
+    if not blosc2_is_here:
+        return filepath
+    schunk = blosc2.open(filepath)
+    outfile = filepath.with_suffix('')
+    with open(outfile, 'wb') as f:
+        for i in range(schunk.nchunks):
+            data = schunk.decompress_chunk(i)
+            f.write(data)
+    os.unlink(filepath)
+    return outfile
+
+
+def download_url(url, localpath, try_unpack=True):
+    is_b2 = url.endswith('.b2')
+    if is_b2:
         localpath += '.b2'
     with httpx.stream("GET", url) as r:
         r.raise_for_status()
@@ -82,6 +103,8 @@ def download_url(url, localpath):
         with open(localpath, "wb") as f:
             for data in r.iter_bytes():
                 f.write(data)
+        if is_b2 and try_unpack:
+            localpath = b2_unpack(localpath)
     return localpath
 
 
