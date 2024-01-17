@@ -36,7 +36,7 @@ The client must implement the following commands:
 - `url <root>`: Publisher URL for the REST API that serves the root.
 - `info <dataset>`: Get metadata about a dataset.
 - `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
-- `download <dataset[slice]> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder. `slice` is optional.
+- `download <dataset> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder.
 
 ## Configuration
 
@@ -80,7 +80,7 @@ The client must be implemented in Python 3 (3.9 being the minimal supported vers
 
 - When a `show` command is issued, the client must send a request to the subscriber to retrieve the data of the given dataset.  The subscriber will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 NDim and `.b2frame` for Blosc2 frames; an n-dim NumPy array and a 1-dim NumPy array will be shown respectively.  All other extensions will be delivered as a raw buffer (e.g. `foo/path/README.md` will be shown as text).
 
-- When a `download` command is issued, the client must send a request to the subscriber to retrieve the data of the dataset.  The subscriber will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`). If a slice is provided, it will store the slice of the dataset (e.g. `foo/bar.b2nd[10:20]` will be stored as `<output_dir>/foo/bar[10:20].b2nd`). TODO: see if this format is supported on Windows.
+- When a `download` command is issued, the client must send a request to the subscriber to retrieve the data of the dataset.  The subscriber will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`).
 
 The sequence diagram below summarizes how different messages flow between the components of the system.
 
@@ -102,7 +102,7 @@ The publisher will serve the data in its own cache as-is, without decompressing 
 
 Whenever a `show` or `download` command is issued, the subscriber must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the publisher; for this, it will ask the publisher for the `mtime` in the dataset, and compare it against the `mtime` field in the general JSON database.  If it has changed, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
 
-In the first implementation, `show` or `download` commands will make the subscriber download the whole data from publisher and store it in its cache folder. In a next version, subscriber will download only the chunks in `[slice]` that are not in cache.
+`show` or `download` commands will make the subscriber download the whole data from publisher and will store it in its cache folder. When a `slice` is provided (only for the `show` command), subscriber will download only the chunks in `[slice]` that are not in cache yet.
 
 ## Metadata
 
