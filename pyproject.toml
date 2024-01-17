@@ -48,6 +48,7 @@ services = [
     "fastapi",
     "fastapi_websocket_pubsub",
     "safer",
+    "tomli>=2;python_version<\"3.11\"",
     "uvicorn",
     "watchfiles",
 ]

@@ -12,6 +12,11 @@ import json
 import pathlib
 import safer
 
+try:
+    import tomllib as toml
+except ImportError:
+    import tomli as toml
+
 # Requirements
 import blosc2
 import fastapi
@@ -247,3 +252,43 @@ class Database:
 
     def __getattr__(self, name):
         return getattr(self.data, name)
+
+#
+# Configuration file
+#
+
+conf_file_name = 'caterva2.toml'
+
+
+class Conf:
+    def __init__(self, conf):
+        self._conf = conf
+
+    def get(self, key, default=None):
+        """Get configuration item with dot-separated `key`.
+
+        The `default` value is returned if any part of the `key` is missing.
+        """
+        keys = key.split('.')
+        conf = self._conf
+        for k in keys:
+            conf = conf.get(k)
+            if conf is None:
+                return default
+        return conf
+
+
+def get_conf():
+    """Get settings from the configuration file, if existing.
+
+    If the configuration file does not exist, return an empyt configuration.
+
+    You may get a value from the returned configuration ``conf`` with
+    ``conf.get('path.to.item'[, default])``.
+    """
+    try:
+        with open(conf_file_name, 'rb') as conf_file:
+            conf = toml.load(conf_file)
+            return Conf(conf)
+    except FileNotFoundError:
+        return Conf({})
