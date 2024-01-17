@@ -193,10 +193,16 @@ async def get_download(path: str, nchunk: int = -1):
 
 
 def main():
-    parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
-    parser.add_argument('--statedir', default='_caterva2/pub', type=pathlib.Path)
-    parser.add_argument('name')
-    parser.add_argument('root', default='data')
+    conf = srv_utils.get_conf('publisher')  # TODO: support id
+    parser = utils.get_parser(broker='localhost:8000',
+                              http=conf.get('.http', 'localhost:8001'),
+                              loglevel=conf.get('.loglevel', 'warning'))
+    parser.add_argument('--statedir',
+                        default=conf.get('.statedir', '_caterva2/pub'),
+                        type=pathlib.Path)
+    # TODO: really allow getting from config file
+    parser.add_argument('name', default=conf.get('.name'))
+    parser.add_argument('root', default=conf.get('.root', 'data'))
     args = utils.run_parser(parser)
 
     # Global configuration
