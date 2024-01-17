@@ -239,8 +239,8 @@ class File:
 
         Parameters
         ----------
-        slice_ : int or slice
-            The slice to get.
+        slice_ : int, slice, tuple of ints and slices, or None
+            The slice to fetch.
 
         Returns
         -------
@@ -258,8 +258,34 @@ class File:
         >>> ds[0:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
+        data = self.fetch(slice_=slice_)
+        return data
+
+    def fetch(self, slice_=None, as_schunk=True):
+        """
+        Fetch a slice of a dataset.  Can specify transport serialization.
+
+        Similar to `__getitem__()` but this one lets specify whether we want to use Blosc2 schunk
+        serialization or pickle during data transport between the subscriber and the client.
+
+        Parameters
+        ----------
+        slice_ : int, slice, tuple of ints and slices, or None
+            The slice to fetch.
+        as_schunk : bool
+            Whether to use Blosc2 schunk serialization during data transport. If False,
+            pickle will be used instead. Default is True, so Blosc2 serialization will
+            be used if Blosc2 is installed.
+
+        Returns
+        -------
+        numpy.ndarray
+            The slice of the dataset.
+        """
         slice_ = api_utils.slice_to_string(slice_)
-        data = api_utils.fetch_data(self.path, self.host, {'slice_': slice_})
+        as_schunk = api_utils.blosc2_is_here and as_schunk
+        data = api_utils.fetch_data(self.path, self.host,
+                                    {'slice_': slice_, 'as_schunk': as_schunk})
         return data
 
     def download(self):
