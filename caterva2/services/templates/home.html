@@ -7,6 +7,15 @@
 
 <body>
 
+
+<!--- Search box --->
+<form class="d-flex" method="post" action="/search">
+<input class="form-control me-2" id="autocomplete" name="path_search" type="search" placeholder="Search" aria-label="Search">
+<button class="btn btn-outline-success" type="submit" onclick="search()">Search</button>
+</form>
+<!--- Search box --->
+
+
 <div class="m-5 d-flex gap-5">
     <div id="sidebar" hx-get="/html/sidebar/" hx-trigger="load"></div>
     <div id="content"></div>

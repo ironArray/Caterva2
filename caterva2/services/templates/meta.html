@@ -1,3 +1,11 @@
 {{path}}
 <br>
-{{meta.chunksize}}
+<table>
+{% for key, value in meta %}
+   <tr>
+        <th> {{ key }} </th>
+        <td> {{ value }} </td>
+   </tr>
+{% endfor %}
+</table>
+

@@ -15,7 +15,7 @@ import pickle
 
 # Requirements
 import blosc2
-from fastapi import FastAPI, responses, Request
+from fastapi import FastAPI, responses, Request, Form
 from fastapi.staticfiles import StaticFiles
 
 import httpx
@@ -483,6 +483,18 @@ async def html_path(request: Request, root: str, path: str):
     return templates.TemplateResponse(
         request=request, name="meta.html", context=context
     )
+
+
+@app.post("/search", response_class=HTMLResponse)
+async def search(path_search: str = Form(...)):
+    search_paths = []
+    for path, relpath in utils.walk_files(cache):
+        if path_search in str(path):
+            search_paths.append(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
+    return search_paths
+
+
+
 #
 # Command line interface
 #
