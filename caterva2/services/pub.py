@@ -194,7 +194,7 @@ async def get_download(path: str, nchunk: int = -1):
 
 def main():
     conf = srv_utils.get_conf('publisher')  # TODO: support id
-    parser = utils.get_parser(broker='localhost:8000',
+    parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
                               http=conf.get('.http', 'localhost:8001'),
                               loglevel=conf.get('.loglevel', 'warning'))
     parser.add_argument('--statedir',
