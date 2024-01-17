@@ -346,7 +346,7 @@ async def partial_download(abspath, path, slice_=None):
 
 
 @app.get('/api/fetch/{path:path}')
-async def fetch_data(path: str, slice_: str = None, as_schunk: bool = False):
+async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
     """
     Fetch a dataset.
 
@@ -356,7 +356,7 @@ async def fetch_data(path: str, slice_: str = None, as_schunk: bool = False):
         The path to the dataset.
     slice_ : str
         The slice to fetch.
-    as_schunk : bool
+    prefer_schunk : bool
         True if the client accepts Blosc2 schunks.
 
     Returns
@@ -400,13 +400,13 @@ async def fetch_data(path: str, slice_: str = None, as_schunk: bool = False):
     if isinstance(array, np.ndarray):
         if array.size == 0:
             # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
-            as_schunk = False
+            prefer_schunk = False
         elif array.size * array.itemsize < SMALL_DATA:
-            as_schunk = False
+            prefer_schunk = False
     if isinstance(data, bytes) and len(data) < SMALL_DATA:
-        as_schunk = False
+        prefer_schunk = False
 
-    if as_schunk:
+    if prefer_schunk:
         if isinstance(data, np.ndarray):
             data = blosc2.asarray(data)
             data = data.to_cframe()

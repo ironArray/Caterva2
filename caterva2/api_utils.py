@@ -63,8 +63,8 @@ def parse_slice(string):
 
 
 def fetch_data(path, host, params):
-    if 'as_schunk' not in params:
-        params['as_schunk'] = blosc2_is_here
+    if 'prefer_schunk' not in params:
+        params['prefer_schunk'] = blosc2_is_here
     response = httpx.get(f'http://{host}/api/fetch/{path}', params=params)
     response.raise_for_status()
     data = response.content
