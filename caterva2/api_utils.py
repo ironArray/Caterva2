@@ -76,7 +76,7 @@ def fetch_data(path, host, params):
             data = blosc2.decompress2(data)
         except (ValueError, RuntimeError):
             data = blosc2.ndarray_from_cframe(data)
-            data = data[:]
+            data = data[:] if data.ndim == 1 else data[()]
     return data
 
 

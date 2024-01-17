@@ -275,7 +275,7 @@ class File:
         as_schunk : bool
             Whether to use Blosc2 schunk serialization during data transport. If False,
             pickle will be used instead. Default is True, so Blosc2 serialization will
-            be used if Blosc2 is installed.
+            be used if Blosc2 is installed (and data payload is large enough).
 
         Returns
         -------

@@ -390,11 +390,22 @@ async def fetch_data(path: str, slice_: str = None, as_schunk: bool = False):
     # * a pickled NumPy array (specially scalars and 0-dim arrays)
     data = array if array is not None else schunk
     if not slice_:
-        # data is still a SChunk, so we need to get a NumPy array, or a bytes object
+        # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[:]
-    if isinstance(array, np.ndarray) and (array.shape == () or len(array) == 0):
-        # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
+
+    # Optimizations for small data. If too small, we pickle it instead of compressing it.
+    # Some measurements have been done and it looks like this has no effect on performance.
+    # TODO: do more measurements and decide whether to keep this or not.
+    SMALL_DATA = 128  # length in bytes
+    if isinstance(array, np.ndarray):
+        if array.size == 0:
+            # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
+            as_schunk = False
+        elif array.size * array.itemsize < SMALL_DATA:
+            as_schunk = False
+    if isinstance(data, bytes) and len(data) < SMALL_DATA:
         as_schunk = False
+
     if as_schunk:
         if isinstance(data, np.ndarray):
             data = blosc2.asarray(data)
