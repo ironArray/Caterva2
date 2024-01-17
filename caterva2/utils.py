@@ -48,13 +48,17 @@ def socket_type(string):
     return host, port
 
 
-def get_parser(loglevel='warning', broker=None, http=None):
+def get_parser(loglevel='warning', broker=None, http=None, id=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--loglevel', default=loglevel)
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
+    if id is not None:  # the empty string is a valid (default) ID
+        parser.add_argument('--id', default=id,
+                            help=("a string to distinguish services "
+                                  "of the same category"))
     return parser
 
 
