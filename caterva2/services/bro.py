@@ -49,8 +49,11 @@ app.include_router(router)
 
 
 def main():
-    parser = utils.get_parser(http='localhost:8000')
-    parser.add_argument('--statedir', default='_caterva2/bro', type=pathlib.Path)
+    conf = srv_utils.get_conf()
+    parser = utils.get_parser(http=conf.get('broker.http', 'localhost:8000'))
+    parser.add_argument('--statedir',
+                        default=conf.get('broker.statedir', '_caterva2/bro'),
+                        type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Init database
