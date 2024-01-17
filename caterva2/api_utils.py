@@ -6,12 +6,19 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-
+import os
 import pathlib
 import pickle
 
 # Requirements
 import httpx
+
+# Optional requirements
+try:
+    import blosc2
+    blosc2_is_here = True
+except ImportError:
+    blosc2_is_here = False
 
 
 def split_dsname(dataset):
@@ -56,43 +63,48 @@ def parse_slice(string):
 
 
 def get_download_url(path, host, params):
+    download_ = params.get('download', False)
+    if download_ and params.get('slice_') is not None:
+        raise ValueError('Cannot download a slice')
     response = httpx.get(f'http://{host}/api/download/{path}', params=params)
     response.raise_for_status()
 
-    download_ = params.get('download', False)
-    if not download_:
-        data = response.content
-        # TODO: decompression is not working yet. HTTPX does this automatically?
-        # data = zlib.decompress(data)
-        return pickle.loads(data)
+    if download_:
+        return response.json()
 
-    path = pathlib.Path(path)
-    suffix = path.suffix
-    slice_ = params.get('slice_', None)
-    if slice_:
-        path = 'downloads' / path.with_suffix('')
-        path = pathlib.Path(f'{path}[{slice_}]{suffix}')
-    elif suffix not in ('.b2frame', '.b2nd'):
-        # Other suffixes are to be found decompressed in the downloads folder
-        path = 'downloads' / path
-
-    return f'http://{host}/files/{path}'
+    data = response.content
+    # TODO: decompression is not working yet. HTTPX does this automatically?
+    # data = zlib.decompress(data)
+    return pickle.loads(data)
 
 
-def download_url(url, localpath, slice_=None):
-    # Build the local filepath
-    localpath = pathlib.Path(localpath)
-    suffix = localpath.suffix
-    if slice_:
-        localpath = localpath.with_suffix('')
-        localpath = pathlib.Path(f'{localpath}[{slice_}]{suffix}')
+def b2_unpack(filepath):
+    if not blosc2_is_here:
+        return filepath
+    schunk = blosc2.open(filepath)
+    outfile = filepath.with_suffix('')
+    with open(outfile, 'wb') as f:
+        for i in range(schunk.nchunks):
+            data = schunk.decompress_chunk(i)
+            f.write(data)
+    os.unlink(filepath)
+    return outfile
 
+
+def download_url(url, localpath, try_unpack=True):
+    is_b2 = url.endswith('.b2')
+    if is_b2:
+        localpath += '.b2'
     with httpx.stream("GET", url) as r:
         r.raise_for_status()
+        # Build the local filepath
+        localpath = pathlib.Path(localpath)
         localpath.parent.mkdir(parents=True, exist_ok=True)
         with open(localpath, "wb") as f:
             for data in r.iter_bytes():
                 f.write(data)
+        if is_b2 and try_unpack:
+            localpath = b2_unpack(localpath)
     return localpath
 
 

@@ -40,7 +40,6 @@ locks = {}
 async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
-
     url = f'http://{host}/api/download/{name}'
     params = {'nchunk': nchunk}
 
@@ -311,7 +310,7 @@ async def partial_download(abspath, path, slice_):
         The absolute path to the dataset.
     path : str
         The path to the dataset.
-    slice_ : str
+    slice_ : slice, tuple of slices
         The slice to fetch.
 
     Returns
@@ -322,19 +321,18 @@ async def partial_download(abspath, path, slice_):
     # Build the list of chunks we need to download from the publisher
     array, schunk = srv_utils.open_b2(abspath)
     if slice_:
-        slice_obj = api_utils.parse_slice(slice_)
         if not array:
-            if isinstance(slice_obj[0], slice):
+            if isinstance(slice_[0], slice):
                 # TODO: support schunk.nitems to avoid computations like these
                 nitems = schunk.nbytes // schunk.typesize
-                start, stop, _ = slice_obj[0].indices(nitems)
+                start, stop, _ = slice_[0].indices(nitems)
             else:
-                start, stop = slice_obj[0], slice_obj[0] + 1
+                start, stop = slice_[0], slice_[0] + 1
             # get_slice_nchunks() does not support slices for schunks yet
             # TODO: support slices for schunks in python-blosc2
             nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
         else:
-            nchunks = blosc2.get_slice_nchunks(array, slice_obj)
+            nchunks = blosc2.get_slice_nchunks(array, slice_)
     else:
         nchunks = range(schunk.nchunks)
 
@@ -358,75 +356,42 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
     slice_ : str
         The slice to fetch.
     download : bool
-        Whether to download the dataset in the downloads/ dir.  If False, the data is
+        True if the intent is to download the dataset from 'files/'.  If False, the data is
         returned as a StreamingResponse (it is 'fetched').
 
     Returns
     -------
-    None or StreamingResponse
-        The data in case of a fetch, None otherwise.
+    url or StreamingResponse
+        The url of the file in 'files/' if `download` is True, or a StreamingResponse
+        with the data if download is False.
 
     """
     abspath = lookup_path(path)
-    suffix = abspath.suffix
+    slice_ = api_utils.parse_slice(slice_)
 
     # Download and update the necessary chunks of the schunk in cache
     await partial_download(abspath, path, slice_)
 
-    download_path = None
-    if download:
-        # Let's store the data in the downloads directory
-        if slice_ or suffix == '.b2':
-            download_path = cache / pathlib.Path('downloads') / pathlib.Path(path)
-            # Save data in the downloads directory (removing the '.b2' suffix, if needed)
-            suffix2 = download_path.suffix if suffix == '.b2' else suffix
-            download_path = download_path.with_suffix('')
-            slice2 = f"[{slice_}]" if slice_ else ""
-            download_path = pathlib.Path(f'{download_path}{slice2}{suffix2}')
-        else:
-            # By here, we already have the complete schunk in cache
-            download_path = abspath
-        download_path.parent.mkdir(parents=True, exist_ok=True)
-
     # Interesting data has been downloaded, let's use it
-    array, schunk = srv_utils.open_b2(abspath)
-    slice2 = api_utils.parse_slice(slice_)
-    if slice2:
-        if array:
-            if download_path:
-                # We want to save the slice to a file
-                array.slice(slice2, urlpath=download_path, mode="w", contiguous=True,
-                            cparams=schunk.cparams)
-            else:
-                array = array[slice2] if array.ndim > 0 else array[()]
-        else:
-            assert len(slice2) == 1
-            slice2 = slice2[0]
-            if isinstance(slice2, int):
-                # TODO: make SChunk support integer as slice
-                slice2 = slice(slice2, slice2 + 1)
-            if download_path:
-                data = schunk[slice2]
-                # TODO: fix the upstream bug in python-blosc2 that prevents this from working
-                #  when not specifying chunksize (uses `data.size` instead of `len(data)`).
-                blosc2.SChunk(data=data, mode="w", urlpath=download_path,
-                              chunksize=schunk.chunksize,
-                              cparams=schunk.cparams)
-                abspath = download_path
-            else:
-                schunk = schunk[slice2]
-
     if download:
-        if suffix == '.b2':
-            # Decompress before delivering
-            # TODO: support context manager in blosc2.open()
-            schunk = blosc2.open(abspath)
-            data = schunk[:]
-            with open(download_path, 'wb') as f:
-                f.write(data)
-        # We don't need to return anything, the file is already in the static files/
-        # directory and the client can download it from there.
-        return
+        # The complete file is already in the static files/ dir, so return the url.
+        # We don't currently decompress data before downloading, so let's add the extension
+        # in the url, if it is missing.
+        if abspath.suffix == '.b2':
+            path = f'{path}.b2'
+        return f'http://{host}:{port}/files/{path}'
+
+    array, schunk = srv_utils.open_b2(abspath)
+    if slice_:
+        if array:
+            array = array[slice_] if array.ndim > 0 else array[()]
+        else:
+            assert len(slice_) == 1
+            slice_ = slice_[0]
+            if isinstance(slice_, int):
+                # TODO: make SChunk support integer as slice
+                slice_ = slice(slice_, slice_ + 1)
+            schunk = schunk[slice_]
 
     # Pickle and stream response of the NumPy array
     data = array if array is not None else schunk

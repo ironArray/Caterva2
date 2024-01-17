@@ -119,7 +119,7 @@ def fetch(dataset, host=sub_host_default, slice_=None):
     return data
 
 
-def download(dataset, host=sub_host_default, slice_=None):
+def download(dataset, host=sub_host_default):
     """
     Download a dataset.
 
@@ -129,16 +129,18 @@ def download(dataset, host=sub_host_default, slice_=None):
         The name of the dataset.
     host : str
         The host to query.
-    slice_ : str
-        The slice to download.
 
     Returns
     -------
     str
         The path to the downloaded file.
+
+    Note: If dataset is a regular file, it will be downloaded and decompressed if blosc2
+     is installed. Otherwise, it will be downloaded as is in the internal caches (i.e.
+     compressed, and with the `.b2` extension).
     """
-    url = api_utils.get_download_url(dataset, host, {'slice_': slice_, 'download': True})
-    return api_utils.download_url(url, dataset, slice_=slice_)
+    url = api_utils.get_download_url(dataset, host, {'download': True})
+    return api_utils.download_url(url, dataset)
 
 
 class Root:
@@ -210,14 +212,9 @@ class File:
     def __repr__(self):
         return f'<File: {self.path}>'
 
-    def get_download_url(self, slice_=None):
+    def get_download_url(self):
         """
-        Get the download URL for a slice of the file.
-
-        Parameters
-        ----------
-        slice_ : int or slice
-            The slice to get.
+        Get the download URL for a file.
 
         Returns
         -------
@@ -230,14 +227,9 @@ class File:
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
         'http://localhost:8002/files/foo/ds-1d.b2nd'
-        >>> file.get_download_url(1)
-        'http://localhost:8002/files/downloads/foo/ds-1d[1].b2nd'
-        >>> file.get_download_url(slice(0, 10))
-        'http://localhost:8002/files/downloads/foo/ds-1d[:10].b2nd'
         """
-        slice_ = api_utils.slice_to_string(slice_)
         download_path = api_utils.get_download_url(self.path, self.host,
-                                                   {'slice_': slice_, 'download': True})
+                                                   {'download': True})
         return download_path
 
     def __getitem__(self, slice_):
@@ -269,14 +261,9 @@ class File:
         data = api_utils.get_download_url(self.path, self.host, {'slice_': slice_})
         return data
 
-    def download(self, slice_=None):
+    def download(self):
         """
-        Download a slice of the file.
-
-        Parameters
-        ----------
-        slice_ : int or slice
-            The slice to get.
+        Download a file.
 
         Returns
         -------
@@ -289,14 +276,9 @@ class File:
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
         PosixPath('foo/ds-1d.b2nd')
-        >>> file.download(1)
-        PosixPath('foo/ds-1d[1].b2nd')
-        >>> file.download(slice(0, 10))
-        PosixPath('foo/ds-1d[:10].b2nd')
         """
-        url = self.get_download_url(slice_)
-        slice_ = api_utils.slice_to_string(slice_)
-        return api_utils.download_url(url, self.path, slice_=slice_)
+        urlpath = self.get_download_url()
+        return api_utils.download_url(urlpath, str(self.path))
 
 
 class Dataset(File):
