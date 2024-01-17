@@ -314,6 +314,8 @@ def get_conf(prefix=None, allow_id=False):
             id_ = match_.group(1)
             if any(p in id_ for p in [os.curdir, os.pardir, os.sep]):
                 raise ValueError("invalid identifier", id_)
+        else:
+            id_ = ''
     try:
         with open(conf_file_name, 'rb') as conf_file:
             conf = toml.load(conf_file)
