@@ -52,3 +52,25 @@ package sources you can run:
 ```shell
 hatch build
 ```
+
+## Install wheels
+
+For installing the wheels, you can run:
+
+```shell
+hatch install
+```
+
+Then, you can run the tests:
+
+```shell
+cd ..   # to avoid using the source code
+python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+```
+
+Please note that the services should be not running at this point.  In case you want to check against
+the current services, you can do:
+
+```shell
+env CATERVA2_USE_EXTERNAL=1 python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+```
