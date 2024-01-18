@@ -1,3 +1,4 @@
+from .conf import configuration  # noqa: F401
 from .files import examples_dir  # noqa: F401
 from .services import services  # noqa: F401
 
