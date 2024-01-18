@@ -9,6 +9,7 @@
 
 import argparse
 import contextlib
+import pathlib
 import logging
 
 
@@ -48,9 +49,13 @@ def socket_type(string):
     return host, port
 
 
-def get_parser(loglevel='warning', broker=None, http=None, id=None):
+def get_parser(loglevel='warning', statedir=None,
+               broker=None, http=None, id=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--loglevel', default=loglevel)
+    if statedir:
+        parser.add_argument('--statedir', default=statedir,
+                            type=pathlib.Path)
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:

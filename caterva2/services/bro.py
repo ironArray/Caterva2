@@ -7,7 +7,6 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import pathlib
 import typing
 
 # Requirements
@@ -51,10 +50,8 @@ app.include_router(router)
 def main():
     conf = srv_utils.get_conf('broker')
     parser = utils.get_parser(http=conf.get('.http', 'localhost:8000'),
-                              loglevel=conf.get('.loglevel', 'warning'))
-    parser.add_argument('--statedir',
-                        default=conf.get('.statedir', '_caterva2/bro'),
-                        type=pathlib.Path)
+                              loglevel=conf.get('.loglevel', 'warning'),
+                              statedir=conf.get('.statedir', '_caterva2/bro'))
     args = utils.run_parser(parser)
 
     # Init database
