@@ -470,7 +470,7 @@ async def html_root(request: Request, root: str):
         for path, relpath in utils.walk_files(rootdir)
     ]
     return templates.TemplateResponse(
-        request=request, name="paths.html", context={"paths": l}
+        request=request, name="paths.html", context={"root": root, "paths": l}
     )
 
 @app.get("/html/{root}/{path:path}", response_class=HTMLResponse)
@@ -485,7 +485,7 @@ async def html_path(request: Request, root: str, path: str):
     )
 
 
-@app.post("/search", response_class=HTMLResponse)
+@app.post("/search")
 async def search(path_search: str = Form(...)):
     search_paths = []
     for path, relpath in utils.walk_files(cache):
