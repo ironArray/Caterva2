@@ -15,6 +15,7 @@ import pickle
 
 # Requirements
 import blosc2
+import numpy as np
 from fastapi import FastAPI, responses
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -302,7 +303,7 @@ async def get_info(path: str):
     return srv_utils.read_metadata(abspath)
 
 
-async def partial_download(abspath, path, slice_):
+async def partial_download(abspath, path, slice_=None):
     """
     Download the necessary chunks of a dataset.
 
@@ -346,10 +347,10 @@ async def partial_download(abspath, path, slice_):
                 await download_chunk(path, schunk, n)
 
 
-@app.get('/api/download/{path:path}')
-async def download_data(path: str, slice_: str = None, download: bool = False):
+@app.get('/api/fetch/{path:path}')
+async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
     """
-    Download or fetch a dataset.
+    Fetch a dataset.
 
     Parameters
     ----------
@@ -357,33 +358,23 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
         The path to the dataset.
     slice_ : str
         The slice to fetch.
-    download : bool
-        True if the intent is to download the dataset from 'files/'.  If False, the data is
-        returned as a StreamingResponse (it is 'fetched').
+    prefer_schunk : bool
+        True if the client accepts Blosc2 schunks.
 
     Returns
     -------
-    url or StreamingResponse
-        The url of the file in 'files/' if `download` is True, or a StreamingResponse
-        with the data if download is False.
-
+    StreamingResponse
+        The (slice of) dataset as a NumPy array or a Blosc2 schunk.
     """
+
     abspath = lookup_path(path)
     slice_ = api_utils.parse_slice(slice_)
 
     # Download and update the necessary chunks of the schunk in cache
     await partial_download(abspath, path, slice_)
 
-    # Interesting data has been downloaded, let's use it
-    if download:
-        # The complete file is already in the static files/ dir, so return the url.
-        # We don't currently decompress data before downloading, so let's add the extension
-        # in the url, if it is missing.
-        if abspath.suffix == '.b2':
-            path = f'{path}.b2'
-        return f'http://{host}:{port}/files/{path}'
-
     array, schunk = srv_utils.open_b2(abspath)
+    typesize = schunk.typesize
     if slice_:
         if array:
             array = array[slice_] if array.ndim > 0 else array[()]
@@ -395,15 +386,69 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
                 slice_ = slice(slice_, slice_ + 1)
             schunk = schunk[slice_]
 
-    # Pickle and stream response of the NumPy array
+    # Serialization can be done either as:
+    # * a serialized NDArray
+    # * a compressed SChunk (bytes, via blosc2.compress2)
+    # * a pickled NumPy array (specially scalars and 0-dim arrays)
     data = array if array is not None else schunk
     if not slice_:
+        # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[:]
-    data = pickle.dumps(data, protocol=-1)
-    # TODO: compress data is not working. HTTPX does this automatically?
-    # data = zlib.compress(data)
+
+    # Optimizations for small data. If too small, we pickle it instead of compressing it.
+    # Some measurements have been done and it looks like this has no effect on performance.
+    # TODO: do more measurements and decide whether to keep this or not.
+    SMALL_DATA = 128  # length in bytes
+    if isinstance(array, np.ndarray):
+        if array.size == 0:
+            # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
+            prefer_schunk = False
+        elif array.size * array.itemsize < SMALL_DATA:
+            prefer_schunk = False
+    if isinstance(data, bytes) and len(data) < SMALL_DATA:
+        prefer_schunk = False
+
+    if prefer_schunk:
+        if isinstance(data, np.ndarray):
+            data = blosc2.asarray(data)
+            data = data.to_cframe()
+        else:
+            # A bytes object can still be compressed
+            data = blosc2.compress2(data, typesize=typesize)
+    else:
+        data = pickle.dumps(data, protocol=-1)
     downloader = srv_utils.iterchunk(data)
     return responses.StreamingResponse(downloader)
+
+
+@app.get('/api/download/{path:path}')
+async def download_data(path: str):
+    """
+    Download a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+
+    Returns
+    -------
+    url
+        The url of the file in 'files/' to be downloaded later on.
+    """
+
+    abspath = lookup_path(path)
+
+    # Download and update the necessary chunks of the schunk in cache
+    await partial_download(abspath, path)
+
+    # The complete file is already in the static files/ dir, so return the url.
+    # We don't currently decompress data before downloading, so let's add the extension
+    # in the url, if it is missing.
+    if abspath.suffix == '.b2':
+        path = f'{path}.b2'
+    return f'http://{host}:{port}/files/{path}'
+
 
 #
 # Command line interface

@@ -65,7 +65,10 @@ def test_file(services, sub_host):
     assert file.host == sub_host
 
 
-def test_index_dataset_frame(services, examples_dir, sub_host):
+@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
+                                    slice(10, 20, 1)])
+@pytest.mark.parametrize("as_schunk", [True, False])
+def test_index_dataset_frame(slice_, as_schunk, services, examples_dir, sub_host):
     myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
@@ -73,20 +76,28 @@ def test_index_dataset_frame(services, examples_dir, sub_host):
 
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
-    assert ord(ds[1]) == a[1]  # TODO: why do we need ord() here?
-    assert ds[:1] == a[:1]
-    assert ds[0:10] == a[0:10]
-    assert ds[10:20] == a[10:20]
-    assert ds[:] == a
-    assert ds[10:20:1] == a[10:20:1]
+    if isinstance(slice_, int):
+        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
+        assert ord(ds.fetch(slice_, as_schunk)) == a[slice_]
+    else:
+        assert ds[slice_] == a[slice_]
+        assert ds.fetch(slice_, as_schunk) == a[slice_]
+
+def test_dataset_step_diff_1(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
+    ds = myroot['ds-hello.b2frame']
+    assert ds.name == 'ds-hello.b2frame'
+    assert ds.host == sub_host
     # We don't support step != 1
     with pytest.raises(Exception) as e_info:
-        np.testing.assert_array_equal(ds[::2], a[::2])
-        assert ds[::2] == a[::2]
+        data = ds[::2]
         assert str(e_info.value) == 'Only step=1 is supported'
 
 
-def test_index_dataset_1d(services, examples_dir, sub_host):
+@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
+                                    slice(1, 5, 1)])
+@pytest.mark.parametrize("as_schunk", [True, False])
+def test_index_dataset_1d(slice_, as_schunk, services, examples_dir, sub_host):
     myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['ds-1d.b2nd']
     assert ds.name == 'ds-1d.b2nd'
@@ -94,35 +105,21 @@ def test_index_dataset_1d(services, examples_dir, sub_host):
 
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
-    np.testing.assert_array_equal(ds[1], a[1])
-    np.testing.assert_array_equal(ds[:1], a[:1])
-    np.testing.assert_array_equal(ds[0:10], a[0:10])
-    np.testing.assert_array_equal(ds[10:20], a[10:20])
-    np.testing.assert_array_equal(ds[:], a)
-    np.testing.assert_array_equal(ds[10:20:1], a[10:20:1])
-    # We don't support step != 1
-    with pytest.raises(Exception) as e_info:
-        np.testing.assert_array_equal(ds[::2], a[::2])
-        assert str(e_info.value) == 'Only step=1 is supported'
+    np.testing.assert_array_equal(ds[slice_], a[slice_])
+    np.testing.assert_array_equal(ds.fetch(slice_, as_schunk), a[slice_])
 
 
+@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
+                                    slice(1, 5, 1)])
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
-def test_index_dataset_nd(name, services, examples_dir, sub_host):
+@pytest.mark.parametrize("as_schunk", [True, False])
+def test_index_dataset_nd(slice_, as_schunk, name, services, examples_dir, sub_host):
     myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot[name]
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
-    np.testing.assert_array_equal(ds[1], a[1])
-    np.testing.assert_array_equal(ds[:1], a[:1])
-    np.testing.assert_array_equal(ds[0:10], a[0:10])
-    # The next is out of bounds, but it is supported (by numpy too)
-    np.testing.assert_array_equal(ds[10:20], a[10:20])
-    np.testing.assert_array_equal(ds[:], a)
-    np.testing.assert_array_equal(ds[1:5:1], a[1:5:1])
-    # We don't support step != 1
-    with pytest.raises(Exception) as e_info:
-        np.testing.assert_array_equal(ds[::2], a[::2])
-        assert str(e_info.value) == 'Only step=1 is supported'
+    np.testing.assert_array_equal(ds[slice_], a[slice_])
+    np.testing.assert_array_equal(ds.fetch(slice_, as_schunk), a[slice_])
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
@@ -167,18 +164,22 @@ def test_download_b2frame(services, examples_dir, sub_host):
     assert a[:] == b[:]
 
 
-def test_index_regular_file(services, examples_dir, sub_host):
+@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
+                                    slice(1, 5, 1)])
+@pytest.mark.parametrize("as_schunk", [True, False])
+def test_index_regular_file(slice_, as_schunk, services, examples_dir, sub_host):
     myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['README.md']
 
     # Data contents
     example = examples_dir / ds.name
     a = open(example).read().encode()
-    assert ds[:] == a[:]
-    assert ord(ds[1]) == a[1]     # TODO: why do we need ord() here?
-    assert ds[:1] == a[:1]
-    assert ds[0:10] == a[0:10]
-    assert ds[10:20] == a[10:20]
+    if isinstance(slice_, int):
+        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
+        assert ord(ds.fetch(slice_, as_schunk)) == a[slice_]
+    else:
+        assert ds[slice_] == a[slice_]
+        assert ds.fetch(slice_, as_schunk) == a[slice_]
 
 
 def test_download_regular_file(services, examples_dir, sub_host):
