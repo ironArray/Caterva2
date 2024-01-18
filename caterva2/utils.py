@@ -49,13 +49,9 @@ def socket_type(string):
     return host, port
 
 
-def get_parser(loglevel='warning', statedir=None,
-               broker=None, http=None, id=None):
+def get_parser(loglevel='warning', statedir=None, id=None,
+               http=None, broker=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--loglevel', default=loglevel)
-    if statedir:
-        parser.add_argument('--statedir', default=statedir,
-                            type=pathlib.Path)
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:
@@ -64,6 +60,10 @@ def get_parser(loglevel='warning', statedir=None,
         parser.add_argument('--id', default=id,
                             help=("a string to distinguish services "
                                   "of the same category"))
+    if statedir:
+        parser.add_argument('--statedir', default=statedir,
+                            type=pathlib.Path)
+    parser.add_argument('--loglevel', default=loglevel)
     return parser
 
 
