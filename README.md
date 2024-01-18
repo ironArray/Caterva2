@@ -62,11 +62,11 @@ python -m caterva2.services.sub
 
 ### The command line client
 
-Finally, we can use a python script (called `cli.py`) that talks to the subscriber.
+Finally, we can use a python script (called `cat2cli`) that talks to the subscriber.
 It can list all the available datasets:
 
 ```sh
-python -m caterva2.clients.cli roots
+python -m cat2cli roots
 ```
 
 ```
@@ -76,13 +76,13 @@ foo
 Ask the subscriber to subscribe to changes in the `foo` root:
 
 ```sh
-python -m caterva2.clients.cli subscribe foo
+python -m cat2cli subscribe foo
 ```
 
 Now, one can list the datasets in the `foo` root:
 
 ```sh
-python -m caterva2.clients.cli list foo
+python -m cat2cli list foo
 ```
 
 ```
@@ -99,7 +99,7 @@ We can see how the client has subscribed successfully, and the datasets appear l
 Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
 ```sh
-python -m caterva2.clients.cli info foo/dir2/ds-4d.b2nd
+python -m cat2cli info foo/dir2/ds-4d.b2nd
 ```
 
 ```
@@ -133,7 +133,7 @@ python -m caterva2.clients.cli info foo/dir2/ds-4d.b2nd
 Also, we can ask for the url of a root:
 
 ```sh
-python -m caterva2.clients.cli url foo
+python -m cat2cli url foo
 ```
 
 ```
@@ -143,7 +143,7 @@ http://localhost:8001
 Let's print data from a specified dataset:
 
 ```sh
-python -m caterva2.clients.cli show foo/ds-hello.b2frame
+python -m cat2cli show foo/ds-hello.b2frame
 ```
 
 ```
@@ -153,7 +153,7 @@ b'Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello 
 It allows printing slices instead of the whole dataset too:
 
 ```sh
-python -m caterva2.clients.cli show foo/dir2/ds-4d.b2nd[:1]
+python -m cat2cli show foo/dir2/ds-4d.b2nd[:1]
 ```
 
 ```
@@ -176,7 +176,7 @@ python -m caterva2.clients.cli show foo/dir2/ds-4d.b2nd[:1]
 Finally, we can tell the subscriber to download the dataset:
 
 ```sh
-python -m caterva2.clients.cli download foo/dir2/ds-4d.b2nd
+python -m cat2cli download foo/dir2/ds-4d.b2nd
 ```
 
 ```
@@ -188,7 +188,7 @@ Dataset saved to /.../foo/dir2/ds-4d.b2nd
 Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may invoke it like:
 
 ```sh
-python -m caterva2.tools.hdf5_to_cat2 existing-hdf5-file.h5 new-caterva2-root
+python -m cat2import existing-hdf5-file.h5 new-caterva2-root
 ```
 
 The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information.
