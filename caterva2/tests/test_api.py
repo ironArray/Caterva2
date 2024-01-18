@@ -20,6 +20,16 @@ from .services import TEST_PUBLISHED_ROOT as published_root
 from .. import api_utils
 
 
+@pytest.fixture
+def pub_host(configuration):
+    return configuration.get('publisher.http', cat2.pub_host_default)
+
+
+@pytest.fixture
+def sub_host(configuration):
+    return configuration.get('subscriber.http', cat2.sub_host_default)
+
+
 def my_path(dspath, slice_):
     slice_ = api_utils.slice_to_string(slice_)
     if slice_:
@@ -29,37 +39,37 @@ def my_path(dspath, slice_):
     return dspath
 
 
-def test_roots(services):
-    roots = cat2.get_roots()
+def test_roots(services, pub_host, sub_host):
+    roots = cat2.get_roots(sub_host)
     assert roots[published_root]['name'] == published_root
-    assert roots[published_root]['http'] == cat2.pub_host_default
+    assert roots[published_root]['http'] == pub_host
 
 
-def test_root(services):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_root(services, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     assert myroot.name == published_root
-    assert myroot.host == cat2.sub_host_default
+    assert myroot.host == sub_host
 
 
-def test_list(services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_list(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     example = examples_dir
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
 
 
-def test_file(services):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_file(services, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     file = myroot['README.md']
     assert file.name == 'README.md'
-    assert file.host == cat2.sub_host_default
+    assert file.host == sub_host
 
 
-def test_index_dataset_frame(services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_index_dataset_frame(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
-    assert ds.host == cat2.sub_host_default
+    assert ds.host == sub_host
 
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
@@ -76,11 +86,11 @@ def test_index_dataset_frame(services, examples_dir):
         assert str(e_info.value) == 'Only step=1 is supported'
 
 
-def test_index_dataset_1d(services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_index_dataset_1d(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['ds-1d.b2nd']
     assert ds.name == 'ds-1d.b2nd'
-    assert ds.host == cat2.sub_host_default
+    assert ds.host == sub_host
 
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
@@ -97,8 +107,8 @@ def test_index_dataset_1d(services, examples_dir):
 
 
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
-def test_index_dataset_nd(name, services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_index_dataset_nd(name, services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot[name]
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
@@ -116,8 +126,8 @@ def test_index_dataset_nd(name, services, examples_dir):
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def test_download_b2nd(name, services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_download_b2nd(name, services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot[name]
     path = ds.download()
     assert path == ds.path
@@ -136,8 +146,8 @@ def test_download_b2nd(name, services, examples_dir):
     np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_b2frame(services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_download_b2frame(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['ds-hello.b2frame']
     path = ds.download()
     assert path == ds.path
@@ -150,15 +160,15 @@ def test_download_b2frame(services, examples_dir):
 
     # Using 2-step download
     urlpath = ds.get_download_url()
-    assert urlpath == f"http://{cat2.sub_host_default}/files/{ds.path}"
+    assert urlpath == f"http://{sub_host}/files/{ds.path}"
     data = httpx.get(urlpath)
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
     assert a[:] == b[:]
 
 
-def test_index_regular_file(services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_index_regular_file(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['README.md']
 
     # Data contents
@@ -171,8 +181,8 @@ def test_index_regular_file(services, examples_dir):
     assert ds[10:20] == a[10:20]
 
 
-def test_download_regular_file(services, examples_dir):
-    myroot = cat2.Root(published_root, host=cat2.sub_host_default)
+def test_download_regular_file(services, examples_dir, sub_host):
+    myroot = cat2.Root(published_root, host=sub_host)
     ds = myroot['README.md']
     path = ds.download()
     assert path == ds.path
@@ -185,7 +195,7 @@ def test_download_regular_file(services, examples_dir):
 
     # Using 2-step download
     urlpath = ds.get_download_url()
-    assert urlpath == f"http://{cat2.sub_host_default}/files/{ds.path}.b2"
+    assert urlpath == f"http://{sub_host}/files/{ds.path}.b2"
     data = httpx.get(urlpath)
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
