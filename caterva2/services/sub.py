@@ -410,7 +410,7 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
 #
 
 def main():
-    conf = srv_utils.get_conf('subscriber', allow_id=True)
+    conf = utils.get_conf('subscriber', allow_id=True)
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
     parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
                               http=conf.get('.http', 'localhost:8002'),

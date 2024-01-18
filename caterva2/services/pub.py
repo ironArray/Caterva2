@@ -193,7 +193,7 @@ async def get_download(path: str, nchunk: int = -1):
 
 
 def main():
-    conf = srv_utils.get_conf('publisher', allow_id=True)
+    conf = utils.get_conf('publisher', allow_id=True)
     _stdir = '_caterva2/pub' + (f'.{conf.id}' if conf.id else '')
     parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
                               http=conf.get('.http', 'localhost:8001'),

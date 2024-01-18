@@ -9,16 +9,8 @@
 
 import asyncio
 import json
-import os
 import pathlib
 import safer
-import sys
-import re
-
-try:
-    import tomllib as toml
-except ImportError:
-    import tomli as toml
 
 # Requirements
 import blosc2
@@ -255,70 +247,3 @@ class Database:
 
     def __getattr__(self, name):
         return getattr(self.data, name)
-
-#
-# Configuration file
-#
-
-conf_file_name = 'caterva2.toml'
-
-
-class Conf:
-    def __init__(self, conf, prefix=None, id=None):
-        self._conf = conf
-        self.prefix = prefix
-        self.id = id
-
-        self._pfx = ((f"{prefix}.{id}" if id else prefix) if prefix
-                     else None)
-
-    def get(self, key, default=None):
-        """Get configuration item with dot-separated `key`.
-
-        The `default` value is returned if any part of the `key` is missing.
-
-        The prefix (if given) is prepended to a `key` that starts with a dot.
-        If an ID was given, it is appended to `prefix`, separated by a dot.
-        """
-        if self._pfx is not None and key.startswith('.'):
-            key = self._pfx + key
-        keys = key.split('.')
-        conf = self._conf
-        for k in keys:
-            conf = conf.get(k)
-            if conf is None:
-                return default
-        return conf
-
-
-def get_conf(prefix=None, allow_id=False):
-    """Get settings from the configuration file, if existing.
-
-    If the configuration file does not exist, return an empty configuration.
-
-    You may get the value for a key from the returned configuration ``conf``
-    with ``conf.get('path.to.item'[, default])``.  If a `prefix` is given and
-    the key starts with a dot, like ``.path.to.item``, `prefix` is prepended
-    to it.  If `allow_id` is true and command line arguments has a non-empty
-    value for the ``--id`` option, the value gets appended to `prefix`,
-    separated by a dot.
-
-    For instance, with ``conf = get_conf('foo')`` and ``--id=bar``,
-    ``conf.get('.item')`` is equivalent to ``conf.get('foo.bar.item')``.
-    """
-    id_ = None
-    if allow_id:  # quick'n'dirty argument parsing before full one
-        opts = '#'.join(sys.argv)
-        match_ = re.search(r'#--id[=#]([^#]+)', opts)
-        if match_ is not None:
-            id_ = match_.group(1)
-            if any(p in id_ for p in [os.curdir, os.pardir, os.sep]):
-                raise ValueError("invalid identifier", id_)
-        else:
-            id_ = ''
-    try:
-        with open(conf_file_name, 'rb') as conf_file:
-            conf = toml.load(conf_file)
-            return Conf(conf, prefix=prefix, id=id_)
-    except FileNotFoundError:
-        return Conf({}, prefix=prefix, id=id_)

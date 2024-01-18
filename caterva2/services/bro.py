@@ -48,7 +48,7 @@ app.include_router(router)
 
 
 def main():
-    conf = srv_utils.get_conf('broker')
+    conf = utils.get_conf('broker')
     parser = utils.get_parser(http=conf.get('.http', 'localhost:8000'),
                               loglevel=conf.get('.loglevel', 'warning'),
                               statedir=conf.get('.statedir', '_caterva2/bro'))
