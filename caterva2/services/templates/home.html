@@ -13,6 +13,12 @@
     </div>
   </nav>
    Sidebar -->
+
+    <script>
+        function clearcontent(elementID) {
+            document.getElementById(elementID).innerHTML = "";
+        }
+    </script>
 </head>
 
 <body>
@@ -27,7 +33,7 @@
 
 
 <div class="m-5 d-flex gap-5">
-    <div id="sidebar" hx-get="/html/sidebar/" hx-trigger="load"></div>
+    <div id="sidebar" hx-get="/html/sidebar/" hx-trigger="load" onclick="clearcontent('meta')"></div>
     <div id="content"></div>
     <div id="meta"></div>
 </div>
