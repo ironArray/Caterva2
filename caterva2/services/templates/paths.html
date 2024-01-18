@@ -1,0 +1,5 @@
+{% for path in paths %}
+<div>
+    <a href="/html/{{root}}/{{path}}/" hx-boost="true" hx-target="#meta">{{path}}</a>
+</div>
+{% endfor %}

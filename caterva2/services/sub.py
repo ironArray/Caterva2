@@ -12,18 +12,24 @@ import contextlib
 import logging
 import pathlib
 import pickle
+import typing
+
+# FastAPI
+from fastapi import FastAPI, Header, responses, Request, Form
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 # Requirements
 import blosc2
 import numpy as np
-from fastapi import FastAPI, responses
-from fastapi.staticfiles import StaticFiles
 import httpx
 import uvicorn
 
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
+
 
 # Logging
 logger = logging.getLogger('sub')
@@ -448,6 +454,70 @@ async def download_data(path: str):
     if abspath.suffix == '.b2':
         path = f'{path}.b2'
     return f'http://{host}:{port}/files/{path}'
+
+
+BASE = pathlib.Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=BASE / "templates")
+
+
+def home(request, context=None):
+    return templates.TemplateResponse(request, "home.html", context or {})
+
+@app.get("/html/", response_class=HTMLResponse)
+async def html_home(request: Request):
+    return home(request)
+
+@app.get("/html/sidebar/")
+async def htmx_sidebar(request: Request):
+    context = {"roots": database.roots}
+    return templates.TemplateResponse(request, "sidebar.html", context)
+
+@app.get("/html/{root}/", response_class=HTMLResponse)
+async def html_root(request: Request, root: str,
+                    hx_request: typing.Annotated[str | None, Header()] = None):
+
+    if not hx_request:
+        context = {
+            'content_url': request.url_for('html_root', root=root),
+        }
+        return home(request, context)
+
+    rootdir = cache / root
+    paths = [
+        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        for path, relpath in utils.walk_files(rootdir)
+    ]
+    context = {"root": root, "paths": paths}
+    return templates.TemplateResponse(request, "paths.html", context)
+
+@app.get("/html/{root}/{path:path}", response_class=HTMLResponse)
+async def html_path(request: Request, root: str, path: str,
+                    hx_request: typing.Annotated[str | None, Header()] = None):
+
+    if not hx_request:
+        context = {
+            'content_url': request.url_for('html_root', root=root),
+            'meta_url': request.url_for('html_path', root=root, path=path),
+        }
+        return home(request, context)
+
+    filepath = cache / root / path
+    abspath = lookup_path(filepath)
+    meta = srv_utils.read_metadata(abspath)
+
+    context = {"path": pathlib.Path(root) / path, "meta": meta}
+    return templates.TemplateResponse(request, "meta.html", context=context)
+
+
+@app.post("/search")
+async def search(path_search: str = Form(...)):
+    search_paths = []
+    for path, relpath in utils.walk_files(cache):
+        # Do not take into account ".b2" suffix when searching, but take .b2frame and .b2nd
+        relpath = relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        if path_search in str(relpath):
+            search_paths.append(relpath)
+    return search_paths
 
 
 #
