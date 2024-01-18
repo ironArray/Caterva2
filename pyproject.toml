@@ -34,7 +34,6 @@ classifiers = [
 ]
 dependencies = [
     "httpx",
-    "jinja2",
     "numpy",
     "pytest",
     "tomli>=2;python_version<\"3.11\"",
@@ -46,9 +45,11 @@ path = "caterva2/__init__.py"
 [project.optional-dependencies]
 services = [
     "blosc2>=2.4.0",
-    "pydantic>=2",
     "fastapi",
     "fastapi_websocket_pubsub",
+    "jinja2",
+    "pydantic>=2",
+    "python-multipart",
     "safer",
     "uvicorn",
     "watchfiles",
