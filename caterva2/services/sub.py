@@ -489,8 +489,10 @@ async def html_path(request: Request, root: str, path: str):
 async def search(path_search: str = Form(...)):
     search_paths = []
     for path, relpath in utils.walk_files(cache):
-        if path_search in str(path):
-            search_paths.append(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
+        # Do not take into account ".b2" suffix when searching, but take .b2frame and .b2nd
+        relpath = relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        if path_search in str(relpath):
+            search_paths.append(relpath)
     return search_paths
 
 

@@ -2,10 +2,19 @@
 <br>
 <table>
 {% for key, value in meta %}
-   <tr>
-        <th> {{ key }} </th>
-        <td> {{ value }} </td>
-   </tr>
+    {% if key == 'schunk' %}
+        {% for key2, value2 in meta.schunk %}
+             <tr>
+                <th> {{ key2 }} </th>
+                <td> {{ value2 }} </td>
+            </tr>
+        {% endfor %}
+    {% else %}
+         <tr>
+            <th> {{ key }} </th>
+            <td> {{ value }} </td>
+        </tr>
+    {% endif %}
 {% endfor %}
 </table>
 
