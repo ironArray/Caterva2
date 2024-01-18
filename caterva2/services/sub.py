@@ -410,8 +410,15 @@ async def download_data(path: str, slice_: str = None, download: bool = False):
 #
 
 def main():
-    parser = utils.get_parser(broker='localhost:8000', http='localhost:8002')
-    parser.add_argument('--statedir', default='_caterva2/sub', type=pathlib.Path)
+    conf = srv_utils.get_conf('subscriber', allow_id=True)
+    parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
+                              http=conf.get('.http', 'localhost:8002'),
+                              loglevel=conf.get('.loglevel', 'warning'),
+                              id=conf.id)
+    _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
+    parser.add_argument('--statedir',
+                        default=conf.get('.statedir', _stdir),
+                        type=pathlib.Path)
     args = utils.run_parser(parser)
 
     # Global configuration
