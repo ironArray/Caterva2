@@ -200,10 +200,12 @@ def main():
                               loglevel=conf.get('.loglevel', 'warning'),
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
-    # TODO: really allow getting from config file
-    parser.add_argument('name', default=conf.get('.name'))
-    parser.add_argument('root', default=conf.get('.root', 'data'))
+    parser.add_argument('name', nargs='?', default=conf.get('.name'))
+    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'))
     args = utils.run_parser(parser)
+    if args.name is None:  # because optional positional arg w/o conf default
+        raise RuntimeError(
+            "root name was not specified in configuration nor in arguments")
 
     # Global configuration
     global broker, name, root
