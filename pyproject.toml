@@ -62,6 +62,9 @@ tools = [
     "msgpack",
 ]
 
+[tool.hatch.build.targets.wheel]
+only-include = ["caterva2", "root-example"]
+
 [project.urls]
 Home = "https://github.com/Blosc/Caterva2"
 
