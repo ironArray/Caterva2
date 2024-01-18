@@ -186,6 +186,9 @@ class ExternalServices(Services):
 
 @pytest.fixture(scope='session')
 def services(examples_dir, configuration):
+    # TODO: Consider using a temporary directory to avoid
+    # polluting the current directory with test files
+    # and tests being influenced by the presence of a configuration file.
     srvs = (ExternalServices(configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
@@ -208,6 +211,7 @@ def main():
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     examples_dir = files.get_examples_dir()
+    # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
                            examples_dir=examples_dir,
