@@ -12,7 +12,7 @@ There is a `caterva2.tests.services` script that does this.
 This will start the daemons, run the tests, and shut the daemons down:
 
 ```shell
-python -m pytest
+pytest
 ```
 
 State files will be left in `_caterva2_tests`.
@@ -28,14 +28,14 @@ python -m caterva2.tests.services &
 or, if you prefer:
 
 ```shell
-python -m caterva2.services.bro &
-python -m caterva2.services.pub foo root-example &
-python -m caterva2.services.sub &
+cat2bro &
+cat2pub foo root-example &
+cat2sub &
 ```
 
-State files will be left in `_caterva2`.
+State files will be stored in dir `_caterva2/`.
 
-Finally, in another shell (or if you like to hear the daemons chatting), run the tests:
+Finally, in another shell (unless you like to hear the daemons chatting), run the tests:
 
 ```shell
 env CATERVA2_USE_EXTERNAL=1 python -m pytest -s

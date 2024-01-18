@@ -29,7 +29,7 @@ pip install -e .[services,clients]
 Start the broker:
 
 ```sh
-python -m caterva2.services.bro
+cat2bro &
 ```
 
 For the purpose of this quick start, let's use the datasets within the `root-example` folder:
@@ -48,41 +48,44 @@ root-example//dir2:
 ds-4d.b2nd
 ```
 
-Start publishing `root-example` in another shell:
+Start publishing `root-example` datasets:
 
 ```sh
-python -m caterva2.services.pub foo root-example
+cat2pub foo root-example &
 ```
 
-Now, let's create a subscriber (in yet another shell):
+Now, let's create a subscriber:
 
 ```sh
-python -m caterva2.services.sub
+cat2sub &
 ```
 
 ### The command line client
 
-Finally, we can use a python script (called `cat2cli`) that talks to the subscriber.
-It can list all the available datasets:
+Now that we have the services running, we can start using a script (called `cat2cli`) that talks
+to the subscriber. Now, in another shell, let's list all the available roots in the system:
 
 ```sh
-python -m cat2cli roots
+cat2cli roots
 ```
 
 ```
 foo
 ```
 
-Ask the subscriber to subscribe to changes in the `foo` root:
+We only have a root called `foo` (the one we started publishing). If other publishers were running,
+we would see them listed here too.
+
+Let's ask our local subscriber to subscribe to the `foo` root:
 
 ```sh
-python -m cat2cli subscribe foo
+cat2cli subscribe foo
 ```
 
 Now, one can list the datasets in the `foo` root:
 
 ```sh
-python -m cat2cli list foo
+cat2cli list foo
 ```
 
 ```
@@ -99,7 +102,7 @@ We can see how the client has subscribed successfully, and the datasets appear l
 Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
 ```sh
-python -m cat2cli info foo/dir2/ds-4d.b2nd
+cat2cli info foo/dir2/ds-4d.b2nd
 ```
 
 ```
@@ -133,7 +136,7 @@ python -m cat2cli info foo/dir2/ds-4d.b2nd
 Also, we can ask for the url of a root:
 
 ```sh
-python -m cat2cli url foo
+cat2cli url foo
 ```
 
 ```
@@ -143,44 +146,31 @@ http://localhost:8001
 Let's print data from a specified dataset:
 
 ```sh
-python -m cat2cli show foo/ds-hello.b2frame
+cat2cli show foo/ds-hello.b2frame[:12]
 ```
 
 ```
-b'Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!Hello world!'
+Hello world!
 ```
 
 It allows printing slices instead of the whole dataset too:
 
 ```sh
-python -m cat2cli show foo/dir2/ds-4d.b2nd[:1]
+cat2cli show foo/dir2/ds-4d.b2nd[1,2,3]
 ```
 
 ```
-[[[[ 0. +0.j  1. +1.j  2. +2.j  3. +3.j  4. +4.j]
-   [ 5. +5.j  6. +6.j  7. +7.j  8. +8.j  9. +9.j]
-   [10.+10.j 11.+11.j 12.+12.j 13.+13.j 14.+14.j]
-   [15.+15.j 16.+16.j 17.+17.j 18.+18.j 19.+19.j]]
-
-  [[20.+20.j 21.+21.j 22.+22.j 23.+23.j 24.+24.j]
-   [25.+25.j 26.+26.j 27.+27.j 28.+28.j 29.+29.j]
-   [30.+30.j 31.+31.j 32.+32.j 33.+33.j 34.+34.j]
-   [35.+35.j 36.+36.j 37.+37.j 38.+38.j 39.+39.j]]
-
-  [[40.+40.j 41.+41.j 42.+42.j 43.+43.j 44.+44.j]
-   [45.+45.j 46.+46.j 47.+47.j 48.+48.j 49.+49.j]
-   [50.+50.j 51.+51.j 52.+52.j 53.+53.j 54.+54.j]
-   [55.+55.j 56.+56.j 57.+57.j 58.+58.j 59.+59.j]]]]
+[115.+115.j 116.+116.j 117.+117.j 118.+118.j 119.+119.j]
 ```
 
 Finally, we can tell the subscriber to download the dataset:
 
 ```sh
-python -m cat2cli download foo/dir2/ds-4d.b2nd
+cat2cli download foo/dir2/ds-4d.b2nd
 ```
 
 ```
-Dataset saved to /.../foo/dir2/ds-4d.b2nd
+Dataset saved to foo/dir2/ds-4d.b2nd
 ```
 
 ## Tools
@@ -188,7 +178,7 @@ Dataset saved to /.../foo/dir2/ds-4d.b2nd
 Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may invoke it like:
 
 ```sh
-python -m cat2import existing-hdf5-file.h5 new-caterva2-root
+cat2import existing-hdf5-file.h5 new-caterva2-root
 ```
 
 The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information.
@@ -201,18 +191,24 @@ The tests can be run as follows:
 pytest -v
 ```
 
-Also, the tests comes with the package, so you can always run them as:
+In case you want to run the tests with existing running daemons (as we did above), you can do:
+
+```shell
+env CATERVA2_USE_EXTERNAL=1 pytest -v
+```
+
+Also, the tests suite comes with the package, so you can always run it as:
 
 ```sh
 python -c "import caterva2 as cat2; cat2.test(verbose=True)"
 ```
 
-The test publisher will use the files under `root-example`.  After tests finish, state files will be left under `_caterva2_tests` in case you want to inspect them.
+The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.
 
 
 ## Use with caution
 
-Currently, this project is just a proof of concept.  It is not meant for production use yet.
+Currently, this project is in early alpha stage, and it is not meant for production use yet.
 In case you are interested in Caterva2, please contact us at contact@blosc.org.
 
 That's all folks!
