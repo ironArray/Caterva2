@@ -2,9 +2,9 @@
 
 # Caterva2 - On demand access to remote Blosc2 data repositories
 
-Caterva2 is a distributed system written in Python and meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker.  Also, every publisher exposes a REST interface that allows subscribers/clients to access the datasets.
+Caterva2 is a distributed system written in Python meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
 
-Subscribers can access datasets on-demand and cache them locally. Additionally, cached data from a subscriber can be republished by another publisher. This is particularly useful for accessing remote datasets and sharing them within a local network, thereby optimizing communication and storage resources within work groups.
+Subscribers can access datasets of publishers on-demand on behalf of clients, and cache them locally. Additionally, cached data from a subscriber can be republished by another publisher. This could be particularly useful for accessing remote datasets and sharing them within a local network, thereby optimizing communication and storage resources within work groups.
 
 
 ## Components of Caterva2
