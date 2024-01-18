@@ -44,21 +44,21 @@ There should be a configuration file (by default $CWD/caterva2.toml) where the c
 
 ```
 [broker]
-http = localhost:8000
-statedir = _caterva2/bro
-loglevel = warning
+http = "localhost:8000"
+statedir = "_caterva2/bro"
+loglevel = "warning"
 
 [publisher.1]
-http = localhost:8001
-statedir = _caterva2/pub
-loglevel = warning
-name = foo
-root = root-examples
+http = "localhost:8001"
+statedir = "_caterva2/pub"
+loglevel = "warning"
+name = "foo"
+root = "root-examples"
 
 [subscriber.1]
-http = localhost:8002
-statedir = _caterva2/sub
-loglevel = warning
+http = "localhost:8002"
+statedir = "_caterva2/sub"
+loglevel = "warning"
 ```
 
 

@@ -13,7 +13,14 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from .services import TEST_PUBLISHED_ROOT as root_default
+
+
+@pytest.fixture
+def pub_host(configuration):
+    return configuration.get('publisher.http', cat2.pub_host_default)
 
 
 def cli(args, binary=False):
@@ -27,15 +34,15 @@ def cli(args, binary=False):
     return out if binary else json.loads(out)
 
 
-def test_roots(services):
+def test_roots(services, pub_host):
     roots = cli(['roots'])
     assert roots[root_default]['name'] == root_default
-    assert roots[root_default]['http'] == cat2.pub_host_default
+    assert roots[root_default]['http'] == pub_host
 
 
-def test_url(services):
+def test_url(services, pub_host):
     out = cli(['url', root_default])
-    assert out == ['http://localhost:8001']
+    assert out == [f'http://{pub_host}']
 
 
 def test_subscribe(services):

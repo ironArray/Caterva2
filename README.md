@@ -173,6 +173,10 @@ cat2cli download foo/dir2/ds-4d.b2nd
 Dataset saved to foo/dir2/ds-4d.b2nd
 ```
 
+### Using a configuration file
+
+All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory.  Please see the `caterva2.sample.toml` file for more information.
+
 ## Tools
 
 Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may invoke it like:

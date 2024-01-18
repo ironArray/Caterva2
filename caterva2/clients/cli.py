@@ -134,8 +134,10 @@ def cmd_download(args):
 
 
 def main():
+    conf = utils.get_conf()
     parser = utils.get_parser()
-    parser.add_argument('--host', default='localhost:8002')
+    parser.add_argument('--host',
+                        default=conf.get('subscriber.http', 'localhost:8002'))
     subparsers = parser.add_subparsers(required=True)
 
     # roots

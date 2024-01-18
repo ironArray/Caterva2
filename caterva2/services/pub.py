@@ -193,11 +193,19 @@ async def get_download(path: str, nchunk: int = -1):
 
 
 def main():
-    parser = utils.get_parser(broker='localhost:8000', http='localhost:8001')
-    parser.add_argument('--statedir', default='_caterva2/pub', type=pathlib.Path)
-    parser.add_argument('name')
-    parser.add_argument('root', default='data')
+    conf = utils.get_conf('publisher', allow_id=True)
+    _stdir = '_caterva2/pub' + (f'.{conf.id}' if conf.id else '')
+    parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
+                              http=conf.get('.http', 'localhost:8001'),
+                              loglevel=conf.get('.loglevel', 'warning'),
+                              statedir=conf.get('.statedir', _stdir),
+                              id=conf.id)
+    parser.add_argument('name', nargs='?', default=conf.get('.name'))
+    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'))
     args = utils.run_parser(parser)
+    if args.name is None:  # because optional positional arg w/o conf default
+        raise RuntimeError(
+            "root name was not specified in configuration nor in arguments")
 
     # Global configuration
     global broker, name, root

@@ -57,21 +57,34 @@ TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_PUBLISHED_ROOT = 'foo'
 
 
-def get_local_http(port, path='/'):
+def get_http(host, path='/'):
     def check():
-        url = f'http://localhost:{port:d}{path}'
+        url = f'http://{host}{path}'
         try:
             r = httpx.get(url, timeout=0.5)
             return r.status_code == 200
         except httpx.ConnectError:
             return False
-    check.__name__ = f'get_local_http_{port:d}'  # more descriptive
+    check.__name__ = f'get_http_{host}'  # more descriptive
     return check
 
 
-bro_check = get_local_http(8000, '/api/roots')
-pub_check = get_local_http(8001, '/api/list')
-sub_check = get_local_http(8002, '/api/roots')
+def http_service_check(conf, conf_sect, def_local_port, path):
+    return get_http(conf.get(f'{conf_sect}.http',
+                             f'localhost:{def_local_port:d}'),
+                    path)
+
+
+def bro_check(conf):
+    return http_service_check(conf, 'broker', 8000, '/api/roots')
+
+
+def pub_check(conf):
+    return http_service_check(conf, 'publisher', 8001, '/api/list')
+
+
+def sub_check(conf):
+    return http_service_check(conf, 'subscriber', 8002, '/api/roots')
 
 
 class Services:
@@ -80,10 +93,11 @@ class Services:
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True,
-                 examples_dir=None):
+                 examples_dir=None, configuration=None):
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
         self.examples_dir = examples_dir
+        self.configuration = configuration
 
         self.data_dir = self.state_dir / 'data'
 
@@ -133,10 +147,10 @@ class ManagedServices(Services):
     def start_all(self):
         self._setup()
 
-        self._start_proc('bro', check=bro_check)
+        self._start_proc('bro', check=bro_check(self.configuration))
         self._start_proc('pub', TEST_PUBLISHED_ROOT, self.data_dir,
-                         check=pub_check)
-        self._start_proc('sub', check=sub_check)
+                         check=pub_check(self.configuration))
+        self._start_proc('sub', check=sub_check(self.configuration))
 
     def stop_all(self):
         for proc in self._procs.values():
@@ -153,7 +167,9 @@ class ManagedServices(Services):
 
 
 class ExternalServices(Services):
-    _checks = [bro_check, pub_check, sub_check]
+    def __init__(self, configuration=None):
+        self.configuration = conf = configuration
+        self._checks = [bro_check(conf), pub_check(conf), sub_check(conf)]
 
     def start_all(self):
         failed = [check.__name__ for check in self._checks if not check()]
@@ -169,11 +185,15 @@ class ExternalServices(Services):
 
 
 @pytest.fixture(scope='session')
-def services(examples_dir):
-    srvs = (ExternalServices()
+def services(examples_dir, configuration):
+    # TODO: Consider using a temporary directory to avoid
+    # polluting the current directory with test files
+    # and tests being influenced by the presence of a configuration file.
+    srvs = (ExternalServices(configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 examples_dir=examples_dir))
+                                 examples_dir=examples_dir,
+                                 configuration=configuration))
     try:
         srvs.start_all()
         yield srvs
@@ -187,12 +207,15 @@ def main():
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\"]")
         return
 
-    from . import files
+    from . import files, conf
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     examples_dir = files.get_examples_dir()
+    # TODO: Consider allowing path to configuration file, pass here.
+    configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           examples_dir=examples_dir)
+                           examples_dir=examples_dir,
+                           configuration=configuration)
     try:
         srvs.start_all()
         srvs.wait_for_all()
