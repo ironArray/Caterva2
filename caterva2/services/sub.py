@@ -22,6 +22,7 @@ from fastapi.templating import Jinja2Templates
 
 # Requirements
 import blosc2
+import furl
 import numpy as np
 import httpx
 import uvicorn
@@ -461,6 +462,8 @@ templates = Jinja2Templates(directory=BASE / "templates")
 
 app.mount("/static", StaticFiles(directory=BASE / "static"))
 
+HeaderType = typing.Annotated[str | None, Header()]
+
 
 def home(request, context=None):
     return templates.TemplateResponse(request, "home.html", context or {})
@@ -478,8 +481,16 @@ async def htmx_sidebar(request: Request):
 
 
 @app.get("/roots/{root}/", response_class=HTMLResponse)
-async def html_root(request: Request, root: str, search: str = '',
-                    hx_request: typing.Annotated[str | None, Header()] = None):
+async def html_root(
+    request: Request,
+    # Path parameters
+    root: str,
+    # Query parameters
+    search: str = '',
+    # Headers
+    hx_request: HeaderType = None,
+    hx_current_url: HeaderType = None,
+):
 
     if not hx_request:
         context = {
@@ -495,17 +506,31 @@ async def html_root(request: Request, root: str, search: str = '',
         if search in str(relpath)
     ]
     context = {"root": root, "paths": paths, "search": search}
-    return templates.TemplateResponse(request, "paths.html", context)
+    response = templates.TemplateResponse(request, "paths.html", context)
+    if search:
+        url = furl.furl(hx_current_url)
+        response.headers['HX-Push-Url'] = url.set({'search': search}).url
+    return response
 
 
 @app.get("/roots/{root}/{path:path}", response_class=HTMLResponse)
-async def html_path(request: Request, root: str, path: str,
-                    hx_request: typing.Annotated[str | None, Header()] = None):
+async def html_path(
+    request: Request,
+    # Path parameters
+    root: str,
+    path: str,
+    # Query parameters
+    search: str = '',
+    # Headers
+    hx_request: HeaderType = None,
+    hx_current_url: HeaderType = None,
+):
 
     if not hx_request:
         context = {
-            'content_url': request.url_for('html_root', root=root),
-            'meta_url': request.url_for('html_path', root=root, path=path),
+            "content_url": request.url_for('html_root', root=root),
+            "meta_url": request.url_for('html_path', root=root, path=path),
+            "search": search,
         }
         return home(request, context)
 
@@ -514,7 +539,12 @@ async def html_path(request: Request, root: str, path: str,
     meta = srv_utils.read_metadata(abspath)
 
     context = {"path": pathlib.Path(root) / path, "meta": meta}
-    return templates.TemplateResponse(request, "meta.html", context=context)
+    response = templates.TemplateResponse(request, "meta.html", context=context)
+
+    current_url = furl.furl(hx_current_url)
+    request_url = furl.furl(request.url)
+    response.headers['HX-Push-Url'] = request_url.set(current_url.query.params).url
+    return response
 
 
 #

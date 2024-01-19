@@ -47,6 +47,7 @@ services = [
     "blosc2>=2.4.0",
     "fastapi",
     "fastapi_websocket_pubsub",
+    "furl",
     "jinja2",
     "pydantic>=2",
     "python-multipart",
