@@ -11,11 +11,10 @@ import asyncio
 import contextlib
 import logging
 import pathlib
-import typing
 
 # Requirements
 import blosc2
-from fastapi import FastAPI, Header, Response, responses
+from fastapi import FastAPI, Response, responses
 import uvicorn
 from watchfiles import awatch
 
@@ -150,7 +149,7 @@ async def get_list():
 async def get_info(
     path: str,
     response: Response,
-    if_none_match: typing.Annotated[str | None, Header()] = None
+    if_none_match: srv_utils.HeaderType = None,
 ):
     abspath = srv_utils.get_abspath(root, path)
 

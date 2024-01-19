@@ -10,7 +10,3 @@ function activate(selector) {
         }
     }
 }
-
-function clearcontent(elementID) {
-    document.getElementById(elementID).innerHTML = "";
-}

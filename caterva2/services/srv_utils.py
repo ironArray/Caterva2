@@ -10,13 +10,14 @@
 import asyncio
 import json
 import pathlib
-import safer
+import typing
 
 # Requirements
 import blosc2
 import fastapi
 import fastapi_websocket_pubsub
 import numpy as np
+import safer
 
 # Project
 from caterva2 import models
@@ -92,6 +93,9 @@ async def disconnect_client(client, timeout=5):
 #
 # HTTP server helpers
 #
+
+HeaderType = typing.Annotated[str | None, fastapi.Header()]
+
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
 

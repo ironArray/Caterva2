@@ -12,7 +12,7 @@
 
 <!-- Main section -->
 <div class="p-4 d-flex gap-5 h-100">
-    <div id="sidebar" hx-get="/htmx/sidebar/" hx-trigger="load" onclick="clearcontent('meta')"></div>
+    <div hx-get="/htmx/root-list/" hx-trigger="load"></div>
     <div id="content"{% if content_url %} hx-get="{{ content_url }}?search={{ search }}" hx-trigger="load"{% endif %}>
     </div>
     <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>

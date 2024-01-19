@@ -12,10 +12,9 @@ import contextlib
 import logging
 import pathlib
 import pickle
-import typing
 
 # FastAPI
-from fastapi import FastAPI, Header, responses, Request
+from fastapi import FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -31,6 +30,8 @@ import uvicorn
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
 
+
+BASE_DIR = pathlib.Path(__file__).resolve().parent
 
 # Logging
 logger = logging.getLogger('sub')
@@ -191,7 +192,10 @@ async def lifespan(app: FastAPI):
     if client is not None:
         await srv_utils.disconnect_client(client)
 
+
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 @app.get('/api/roots')
@@ -457,14 +461,6 @@ async def download_data(path: str):
     return f'http://{host}:{port}/files/{path}'
 
 
-BASE = pathlib.Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=BASE / "templates")
-
-app.mount("/static", StaticFiles(directory=BASE / "static"))
-
-HeaderType = typing.Annotated[str | None, Header()]
-
-
 def home(request, context=None):
     return templates.TemplateResponse(request, "home.html", context or {})
 
@@ -474,27 +470,27 @@ async def html_home(request: Request):
     return home(request)
 
 
-@app.get("/htmx/sidebar/")
-async def htmx_sidebar(request: Request):
+@app.get("/htmx/root-list/")
+async def htmx_root_list(request: Request):
     context = {"roots": database.roots}
-    return templates.TemplateResponse(request, "sidebar.html", context)
+    return templates.TemplateResponse(request, "root_list.html", context)
 
 
 @app.get("/roots/{root}/", response_class=HTMLResponse)
-async def html_root(
+async def html_path_list(
     request: Request,
     # Path parameters
     root: str,
     # Query parameters
     search: str = '',
     # Headers
-    hx_request: HeaderType = None,
-    hx_current_url: HeaderType = None,
+    hx_request: srv_utils.HeaderType = None,
+    hx_current_url: srv_utils.HeaderType = None,
 ):
 
     if not hx_request:
         context = {
-            "content_url": request.url_for('html_root', root=root),
+            "content_url": request.url_for('html_path_list', root=root),
             "search": search,
         }
         return home(request, context)
@@ -506,7 +502,7 @@ async def html_root(
         if search in str(relpath)
     ]
     context = {"root": root, "paths": paths, "search": search}
-    response = templates.TemplateResponse(request, "paths.html", context)
+    response = templates.TemplateResponse(request, "path_list.html", context)
     if search:
         url = furl.furl(hx_current_url)
         response.headers['HX-Push-Url'] = url.set({'search': search}).url
@@ -514,7 +510,7 @@ async def html_root(
 
 
 @app.get("/roots/{root}/{path:path}", response_class=HTMLResponse)
-async def html_path(
+async def html_path_info(
     request: Request,
     # Path parameters
     root: str,
@@ -522,14 +518,14 @@ async def html_path(
     # Query parameters
     search: str = '',
     # Headers
-    hx_request: HeaderType = None,
-    hx_current_url: HeaderType = None,
+    hx_request: srv_utils.HeaderType = None,
+    hx_current_url: srv_utils.HeaderType = None,
 ):
 
     if not hx_request:
         context = {
-            "content_url": request.url_for('html_root', root=root),
-            "meta_url": request.url_for('html_path', root=root, path=path),
+            "content_url": request.url_for('html_path_list', root=root),
+            "meta_url": request.url_for('html_path_info', root=root, path=path),
             "search": search,
         }
         return home(request, context)
