@@ -459,6 +459,8 @@ async def download_data(path: str):
 BASE = pathlib.Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=BASE / "templates")
 
+app.mount("/static", StaticFiles(directory=BASE / "static"))
+
 
 def home(request, context=None):
     return templates.TemplateResponse(request, "home.html", context or {})

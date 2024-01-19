@@ -1,10 +1,12 @@
-<div class="list-group">
-
-{% for root in roots %}
-    <a href="/roots/{{root}}/" hx-boost="true" hx-target="#content"
-       class="list-group-item list-group-item-action">
-        {{root}}
-    </a>
-{% endfor %}
-
+<div id="root-list" class="list-group">
+    {% for root in roots %}
+        <a href="/roots/{{root}}/" class="list-group-item list-group-item-action"
+           hx-boost="true" hx-target="#content" hx-on:htmx:after-request="activate('#root-list a')">
+            {{root}}
+        </a>
+    {% endfor %}
 </div>
+
+<script>
+activate('#root-list a')
+</script>
