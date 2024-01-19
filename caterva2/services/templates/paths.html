@@ -5,10 +5,11 @@
     <button class="btn btn-outline-success" type="submit" onclick="search()">Search</button>
 </form>
 
-<div class="h-75 overflow-scroll">
+<div class="h-75 overflow-scroll mt-1 list-group">
     {% for path in paths %}
-    <div>
-        <a href="/roots/{{root}}/{{path}}/" hx-boost="true" hx-target="#meta">{{path}}</a>
-    </div>
+        <a href="/roots/{{root}}/{{path}}/" hx-boost="true" hx-target="#meta"
+           class="list-group-item list-group-item-action">
+            {{path}}
+        </a>
     {% endfor %}
 </div>

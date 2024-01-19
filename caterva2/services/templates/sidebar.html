@@ -1,5 +1,10 @@
+<div class="list-group">
+
 {% for root in roots %}
-<div>
-    <a href="/roots/{{root}}/" hx-boost="true" hx-target="#content" >{{root}}</a>
-</div>
+    <a href="/roots/{{root}}/" hx-boost="true" hx-target="#content"
+       class="list-group-item list-group-item-action">
+        {{root}}
+    </a>
 {% endfor %}
+
+</div>
