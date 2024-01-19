@@ -19,7 +19,7 @@
 <nav id="sidebarMenu" class="collapse d-lg-block sidebar collapse bg-white">
     <div class="position-sticky">
         <div class="list-group list-group-flush mx-3 mt-4">
-            <div id="sidebar2" hx-get="/html/sidebar/" hx-trigger="load"></div>
+            <div id="sidebar2" hx-get="/htmx/sidebar/" hx-trigger="load"></div>
         </div>
     </div>
 </nav>
@@ -27,7 +27,7 @@
 
 <!-- Main section -->
 <div class="m-5 d-flex gap-5">
-    <div id="sidebar" hx-get="/html/sidebar/" hx-trigger="load" onclick="clearcontent('meta')"></div>
+    <div id="sidebar" hx-get="/htmx/sidebar/" hx-trigger="load" onclick="clearcontent('meta')"></div>
     <div id="content"{% if content_url %} hx-get="{{ content_url }}?search={{ search }}" hx-trigger="load"{% endif %}>
     </div>
     <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>

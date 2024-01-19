@@ -464,18 +464,18 @@ def home(request, context=None):
     return templates.TemplateResponse(request, "home.html", context or {})
 
 
-@app.get("/html/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
 async def html_home(request: Request):
     return home(request)
 
 
-@app.get("/html/sidebar/")
+@app.get("/htmx/sidebar/")
 async def htmx_sidebar(request: Request):
     context = {"roots": database.roots}
     return templates.TemplateResponse(request, "sidebar.html", context)
 
 
-@app.get("/html/{root}/", response_class=HTMLResponse)
+@app.get("/roots/{root}/", response_class=HTMLResponse)
 async def html_root(request: Request, root: str, search: str = '',
                     hx_request: typing.Annotated[str | None, Header()] = None):
 
@@ -496,7 +496,7 @@ async def html_root(request: Request, root: str, search: str = '',
     return templates.TemplateResponse(request, "paths.html", context)
 
 
-@app.get("/html/{root}/{path:path}", response_class=HTMLResponse)
+@app.get("/roots/{root}/{path:path}", response_class=HTMLResponse)
 async def html_path(request: Request, root: str, path: str,
                     hx_request: typing.Annotated[str | None, Header()] = None):
 
