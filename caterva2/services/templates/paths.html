@@ -1,3 +1,10 @@
+<!--- Search box --->
+<form class="d-flex" method="get" action="/html/{{root}}/" hx-boost="true" hx-target="#content">
+    <input class="form-control me-2" id="autocomplete" name="search" type="search"
+           placeholder="Search" aria-label="Search" value="{{ search }}">
+    <button class="btn btn-outline-success" type="submit" onclick="search()">Search</button>
+</form>
+
 {% for path in paths %}
 <div>
     <a href="/html/{{root}}/{{path}}/" hx-boost="true" hx-target="#meta">{{path}}</a>

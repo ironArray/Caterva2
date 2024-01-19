@@ -15,7 +15,7 @@ import pickle
 import typing
 
 # FastAPI
-from fastapi import FastAPI, Header, responses, Request, Form
+from fastapi import FastAPI, Header, responses, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -463,22 +463,26 @@ templates = Jinja2Templates(directory=BASE / "templates")
 def home(request, context=None):
     return templates.TemplateResponse(request, "home.html", context or {})
 
+
 @app.get("/html/", response_class=HTMLResponse)
 async def html_home(request: Request):
     return home(request)
+
 
 @app.get("/html/sidebar/")
 async def htmx_sidebar(request: Request):
     context = {"roots": database.roots}
     return templates.TemplateResponse(request, "sidebar.html", context)
 
+
 @app.get("/html/{root}/", response_class=HTMLResponse)
-async def html_root(request: Request, root: str,
+async def html_root(request: Request, root: str, search: str = '',
                     hx_request: typing.Annotated[str | None, Header()] = None):
 
     if not hx_request:
         context = {
-            'content_url': request.url_for('html_root', root=root),
+            "content_url": request.url_for('html_root', root=root),
+            "search": search,
         }
         return home(request, context)
 
@@ -486,9 +490,11 @@ async def html_root(request: Request, root: str,
     paths = [
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
         for path, relpath in utils.walk_files(rootdir)
+        if search in str(relpath)
     ]
-    context = {"root": root, "paths": paths}
+    context = {"root": root, "paths": paths, "search": search}
     return templates.TemplateResponse(request, "paths.html", context)
+
 
 @app.get("/html/{root}/{path:path}", response_class=HTMLResponse)
 async def html_path(request: Request, root: str, path: str,
@@ -507,17 +513,6 @@ async def html_path(request: Request, root: str, path: str,
 
     context = {"path": pathlib.Path(root) / path, "meta": meta}
     return templates.TemplateResponse(request, "meta.html", context=context)
-
-
-@app.post("/search")
-async def search(path_search: str = Form(...)):
-    search_paths = []
-    for path, relpath in utils.walk_files(cache):
-        # Do not take into account ".b2" suffix when searching, but take .b2frame and .b2nd
-        relpath = relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
-        if path_search in str(relpath):
-            search_paths.append(relpath)
-    return search_paths
 
 
 #

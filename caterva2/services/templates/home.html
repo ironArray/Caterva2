@@ -25,17 +25,11 @@
 </nav>
 #}
 
-<!--- Search box --->
-<form class="d-flex" method="post" action="/search">
-    <input class="form-control me-2" id="autocomplete" name="path_search" type="search"
-           placeholder="Search" aria-label="Search">
-    <button class="btn btn-outline-success" type="submit" onclick="search()">Search</button>
-</form>
-
 <!-- Main section -->
 <div class="m-5 d-flex gap-5">
     <div id="sidebar" hx-get="/html/sidebar/" hx-trigger="load" onclick="clearcontent('meta')"></div>
-    <div id="content"{% if content_url %} hx-get="{{ content_url }}" hx-trigger="load"{% endif %}></div>
+    <div id="content"{% if content_url %} hx-get="{{ content_url }}?search={{ search }}" hx-trigger="load"{% endif %}>
+    </div>
     <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
 </div>
 
