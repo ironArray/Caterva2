@@ -12,21 +12,10 @@
     </script>
 </head>
 
-<body>
-
-{#
-<!-- Sidebar -->
-<nav id="sidebarMenu" class="collapse d-lg-block sidebar collapse bg-white">
-    <div class="position-sticky">
-        <div class="list-group list-group-flush mx-3 mt-4">
-            <div id="sidebar2" hx-get="/htmx/sidebar/" hx-trigger="load"></div>
-        </div>
-    </div>
-</nav>
-#}
+<body class="vh-100">
 
 <!-- Main section -->
-<div class="m-5 d-flex gap-5">
+<div class="p-4 d-flex gap-5 h-100">
     <div id="sidebar" hx-get="/htmx/sidebar/" hx-trigger="load" onclick="clearcontent('meta')"></div>
     <div id="content"{% if content_url %} hx-get="{{ content_url }}?search={{ search }}" hx-trigger="load"{% endif %}>
     </div>
