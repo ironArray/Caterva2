@@ -74,3 +74,14 @@ the current services, you can do:
 ```shell
 env CATERVA2_USE_EXTERNAL=1 python -c "import caterva2 as cat2; cat2.test(verbose=True)"
 ```
+
+## Create docs
+
+For creating the docs, you can run:
+
+```shell
+pip install -r doc/requirements.txt
+sphinx-build doc doc/html
+```
+
+and the docs will appear in `doc/html`.
