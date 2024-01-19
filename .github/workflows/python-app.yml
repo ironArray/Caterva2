@@ -30,3 +30,7 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+    - name: Test building docs
+      run: |
+        pip install -r doc/requirements.txt
+        sphinx-build doc doc/html
