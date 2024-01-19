@@ -4,11 +4,10 @@ Caterva2 documentation
 On demand access to remote Blosc2 data repositories.
 
 
-.. panels::
-    :card: + intro-card text-center
-    :column: col-lg-6 col-md-12 col-sm-12 col-xs-12 d-flex
+.. grid:: 2
 
-    ---
+  .. grid-item-card::
+    :img-top: _static/index_getting_started.svg
 
     Getting Started
     ^^^^^^^^^^^^^^^
@@ -18,29 +17,32 @@ On demand access to remote Blosc2 data repositories.
 
     +++
 
-    .. link-button:: getting_started/index
-            :type: ref
-            :text: To the getting started guides
-            :classes: btn-info
+    .. button-ref:: getting_started/index
+      :expand:
+      :color: dark
+      :click-parent:
 
-    ---
+      To the getting started guide
+
+  .. grid-item-card::
+    :img-top: _static/index_api.svg
 
     API Reference
     ^^^^^^^^^^^^^
 
     The reference guide contains a detailed description of the Caterva2 API.
-    The reference describes how the functions work and which parameters can
-    be used.
 
     +++
 
-    .. link-button:: reference/index
-            :type: ref
-            :text: To the reference guide
-            :classes: btn-info
+    .. button-ref:: reference/index
+      :expand:
+      :color: dark
+      :click-parent:
 
+      To the API reference
 
-    ---
+  .. grid-item-card::
+    :img-top: _static/index_contribute.svg
 
     Development
     ^^^^^^^^^^^
@@ -51,12 +53,15 @@ On demand access to remote Blosc2 data repositories.
 
     +++
 
-    .. link-button:: development/index
-            :type: ref
-            :text: To the development guide
-            :classes: btn-info
+    .. button-ref:: development/index
+      :expand:
+      :color: dark
+      :click-parent:
 
-    ---
+      To the contributor's guide
+
+  .. grid-item-card::
+    :img-top: _static/index_user_guide.svg
 
     Release Notes
     ^^^^^^^^^^^^^
@@ -65,11 +70,12 @@ On demand access to remote Blosc2 data repositories.
 
     +++
 
-    .. link-button:: release_notes/index
-            :type: ref
-            :text: To the release notes
-            :classes: btn-info
+    .. button-ref:: release_notes/index
+      :expand:
+      :color: dark
+      :click-parent:
 
+      To the release notes
 
 ..  toctree::
     :maxdepth: 1

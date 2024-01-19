@@ -5,13 +5,9 @@ Root API
 
 A root is a remote repository that can be subscribed to.
 
-.. currentmodule:: caterva2.Root
-
-Methods
--------
-
+.. currentmodule:: caterva2.api
 .. autosummary::
-    :toctree: autofiles/root
-    :nosignatures:
+    :toctree: autofiles
 
-    __getitem__
+    Root
+    Root.__getitem__
