@@ -1,6 +1,6 @@
 Installation
 ============
-You can install Python-Blosc2 wheels via PyPI using Pip or clone the GitHub repository.
+You can install Caterva2 wheels via PyPI using Pip or clone the GitHub repository.
 
 Pip
 +++
