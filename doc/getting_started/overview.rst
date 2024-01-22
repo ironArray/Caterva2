@@ -10,7 +10,11 @@ A Caterva2 deployment includes:
 - Several **subscribers**, each one tracking changes in multiple roots and datasets, and caching their data locally for efficient reuse.
 - Several **clients**, each one asking a subscriber to track roots and datasets, and accessing dataset data and metadata.
 
-Usually, publishers and subscribers will be apart, maybe in different networks with limited bandwidth between them, while subscribers and clients will be close enough to have very fast connectivity.
+Usually, publishers and subscribers will be apart, maybe in different networks with limited bandwidth between them, while subscribers and clients will be close enough to have very fast connectivity.  Such a setup ensures that:
+
+- Data can be efficiently distributed among different machines or networks.
+- Data is only requested from their sources on demand.
+- Data is cached when possible, close to interested parties.
 
 **Note:** Currently, this project is in early alpha stage, and it is not meant for production use yet.
 In case you are interested in Caterva2, please contact us at contact@blosc.org.
