@@ -21,7 +21,6 @@ class CParams(pydantic.BaseModel):
 
 
 class SChunk(pydantic.BaseModel):
-    blocksize: int
     cbytes: int
     chunkshape: int
     chunksize: int
@@ -31,22 +30,16 @@ class SChunk(pydantic.BaseModel):
 #   dparams
 #   meta
     nbytes: int
-    typesize: int
     urlpath: str
 #   vlmeta
     nchunks: int
 
 
 class Metadata(pydantic.BaseModel):
-    dtype: str
-    ndim: int
     shape: list[int]
-    ext_shape: list[int]
     chunks: list[int]
-    ext_chunks: list[int]
     blocks: list[int]
-    blocksize: int
-    chunksize: int
+    dtype: str
     schunk: SChunk
     size: int
 

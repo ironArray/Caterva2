@@ -9,10 +9,12 @@
         {% for key, value in meta %}
             {% if key == 'schunk' %}
                 {% for key2, value2 in meta.schunk %}
-                    <tr>
-                        <th scope="row">{{ key2 }}</th>
-                        <td>{{ value2 }}</td>
-                    </tr>
+                    {% if key2 not in ['chunkshape', 'chunksize'] %}
+                        <tr>
+                            <th scope="row">{{ key2 }}</th>
+                            <td>{{ value2 }}</td>
+                        </tr>
+                    {% endif %}
                 {% endfor %}
             {% else %}
                 <tr>
