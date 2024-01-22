@@ -45,7 +45,7 @@ path = "caterva2/__init__.py"
 [project.optional-dependencies]
 services = [
     "blosc2>=2.4.0",
-    "fastapi",
+    "fastapi>=0.109",
     "fastapi_websocket_pubsub",
     "furl",
     "jinja2",
