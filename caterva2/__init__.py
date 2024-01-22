@@ -10,6 +10,7 @@
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
 
 __version__ = "0.1"
+"""The version in use of the Caterva2 package."""
 
 from .api import bro_host_default, pub_host_default, sub_host_default
 from .api import get_roots, subscribe, get_list, get_info, fetch, download
