@@ -77,7 +77,7 @@ env CATERVA2_USE_EXTERNAL=1 python -c "import caterva2 as cat2; cat2.test(verbos
 
 ## Create docs
 
-For creating the docs, you can run:
+For creating the docs, once you have installed Caterva2 you can run:
 
 ```shell
 pip install -r doc/requirements.txt
