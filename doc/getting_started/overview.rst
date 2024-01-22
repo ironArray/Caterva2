@@ -16,6 +16,8 @@ Usually, publishers and subscribers will be apart, maybe in different networks w
 - Data is only requested from their sources on demand.
 - Data is cached when possible, close to interested parties.
 
+The Caterva2 package includes all the aforementioned components, although its main role is to provide a very simple and lightweight library to build your own Caterva2 clients.
+
 **Note:** Currently, this project is in early alpha stage, and it is not meant for production use yet.
 In case you are interested in Caterva2, please contact us at contact@blosc.org.
 
