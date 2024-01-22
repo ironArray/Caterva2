@@ -10,7 +10,7 @@ A Caterva2 deployment includes:
 - Several **subscribers**, each one tracking changes in multiple roots and datasets, and caching their data locally for efficient reuse.
 - Several **clients**, each one asking a subscriber to track roots and datasets, and accessing dataset data and metadata.
 
-Usually, publishers and subscribers will be apart, maybe in different networks with limited bandwidth between them, while subscribers and clients will be close enough to have very fast connectivity.  Such a setup ensures that:
+Usually, publishers and subscribers will be apart, maybe in different networks with limited or expensive connectivity between them, while subscribers and clients will be close enough to have very fast and cheap connectivity.  Such a setup ensures that:
 
 - Data can be efficiently distributed among different machines or networks.
 - Data is only requested from their sources on demand.
