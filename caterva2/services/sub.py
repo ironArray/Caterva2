@@ -499,7 +499,7 @@ async def html_path_list(
     paths = [
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
         for path, relpath in utils.walk_files(rootdir)
-        if search in str(relpath)
+        if search in str(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
     ]
     context = {"root": root, "paths": paths, "search": search}
     response = templates.TemplateResponse(request, "path_list.html", context)
