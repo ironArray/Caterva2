@@ -210,7 +210,7 @@ env CATERVA2_USE_EXTERNAL=1 pytest -v
 Also, the tests suite comes with the package, so you can always run it as:
 
 ```sh
-python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+pytest --pyargs caterva2.tests -v  # or "python -m caterva2.tests -v"
 ```
 
 The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.

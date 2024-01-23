@@ -37,4 +37,4 @@ running the tests:
 
 .. code-block:: console
 
-    python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+    pytest --pyargs caterva2.tests -v  # or "python -m caterva2.tests -v"
