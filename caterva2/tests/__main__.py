@@ -1,4 +1,5 @@
 import pathlib
+import sys
 
 import pytest
 
@@ -22,4 +23,4 @@ def main(verbose=False):
 
 
 if __name__ == '__main__':
-    main()
+    main(verbose=('--verbose' in sys.argv or '-v' in sys.argv))
