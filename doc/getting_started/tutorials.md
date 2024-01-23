@@ -20,9 +20,9 @@ This will run a broker, a publisher and a subscriber listening for HTTP requests
 
 Since this terminal will be used by services to output their logs, you will need to run other commands in other terminals.  When you want to stop the services, go back to their terminal and press Ctrl+C.
 
-## Using the Caterva2 client API
+## Using the plain client API
 
-Let's try Caterva2's simple client API.  After starting Caterva2 services (see above), run your Python interpreter and enter:
+Let's try Caterva2's plain client API.  After starting Caterva2 services (see above), run your Python interpreter and enter:
 
 ```python
 import caterva2
