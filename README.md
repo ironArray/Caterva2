@@ -189,7 +189,13 @@ The tool is still pretty limited in its supported input and generated output, pl
 
 ## Tests
 
-The tests can be run as follows:
+Tests need some extra dependencies that you need to install:
+
+```sh
+pip install -e .[tests]
+```
+
+Then tests can be run as follows:
 
 ```sh
 pytest -v

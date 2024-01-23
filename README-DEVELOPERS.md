@@ -7,6 +7,12 @@ There is a `caterva2.tests.services` script that does this.
 
 ## Running the tests
 
+Testing needs Caterva2 to be installed with the `tests` extra:
+
+```sh
+pip install -e .[tests]
+```
+
 ### With managed daemons
 
 This will start the daemons, run the tests, and shut the daemons down:
