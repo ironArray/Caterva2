@@ -313,7 +313,7 @@ name = "bar"
 root = "./bar-root"
 ```
 
-Then we can run subscribers like this (in different shells, both from the directory where `caterva2.toml` is):
+We also chose arbitrary ports and state directories like those we used with the broker.  Now we can run subscribers like this (in different shells, both from the directory where `caterva2.toml` is):
 
 ```sh
 cat2pub --id foo
