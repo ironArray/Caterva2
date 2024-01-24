@@ -18,7 +18,7 @@ python -m caterva2.tests.services
 
 This will run a broker, a publisher and a subscriber listening for HTTP requests on `localhost:8000`, `localhost:8001` and `localhost:8002` respectively.  They will put their private files under the `_caterva2` directory, respectively in `bro`, `pub` and `sub`.  Moreover, the publisher will be serving a root called `foo`, whose datasets sit in `_caterva2/data`.  You may want to browse that directory.
 
-Since this terminal will be used by services to output their logs, you will need to run other commands in other terminals.  When you want to stop the services, go back to their terminal and press Ctrl+C.
+Since this terminal will be used by services to output their logs, you will need to run other commands in other terminals.  When you want to stop the services, go back to their terminal and press Ctrl+C (this should work for any service in sections below).
 
 ## Using the plain client API
 
