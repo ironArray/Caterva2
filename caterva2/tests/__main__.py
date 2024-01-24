@@ -1,4 +1,3 @@
-import pathlib
 import sys
 
 import pytest
@@ -20,7 +19,8 @@ def main(verbose=False):
     args = sys.argv.copy()
     if verbose:
         args.append("-v")
-    args.append(pathlib.Path(__file__).parent)
+    args.append("--pyargs")
+    args.append(__package__)
     return pytest.main(args)
 
 
