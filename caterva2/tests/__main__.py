@@ -21,6 +21,9 @@ def main(verbose=False, args=None):
     args = [] if args is None else args.copy()
     if verbose:
         args.append("-v")
+    # This only happens when using this script mechanism to run tests,
+    # using ``pytest --pyargs caterva2.tests`` is not affected.
+    args.append("-Wignore::pytest.PytestAssertRewriteWarning")
     args.append("--pyargs")
     args.append(__package__)
     return pytest.main(args)
