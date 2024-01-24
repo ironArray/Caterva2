@@ -252,7 +252,7 @@ python -m pip install caterva2[clients]
 
 (If you're going to try this tutorial on a single machine, just install `caterva2[services,clients]`.)
 
-### Broker setup
+### Broker
 
 Our example broker shall listen on port 3104 of host `broker.example.org`.  In that host, it may be run like this:
 
