@@ -233,9 +233,9 @@ The services that we used til now are enough for testing, but not for a real dep
 
 In this section we'll setup a more realistic deployment for a fictional organization:
 
-- A broker in host `broker.example.org`.
-- Two publishers in host `pub.lab.example.org` at a data collection laboratory, serving a different root each.
-- A subscriber in host `sub.edu.example.org` at a research & education branch.
+- A broker at host `broker.example.org`.
+- Two publishers at host `pub.lab.example.org` at a data collection laboratory, serving a different root each.
+- A subscriber at host `sub.edu.example.org` at a research & education branch.
 - A custom API client in a workstation at the latter branch.
 
 The broker, publisher and subscriber hosts need a Caterva2 installation with the `services` extra:
@@ -254,7 +254,7 @@ python -m pip install caterva2[clients]
 
 ### Broker
 
-Our example broker shall listen on port 3104 of host `broker.example.org`.  In that host, it may be run like this:
+Our example broker shall listen on port 3104 of host `broker.example.org`.  At that host, it may be run like this:
 
 ```sh
 cat2bro --http *:3104
@@ -286,7 +286,7 @@ The configuration allows other settings like `loglevel`.  See [caterva2.sample.t
 
 ### Publishers
 
-Here we will setup in the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
+Here we will setup at the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
 
 ```sh
 mkdir foo-root
@@ -333,9 +333,9 @@ The publishers will now work and register their respective roots at the broker.
 
 ### Subscriber
 
-The subscriber in host `sub.edu.example.org` shall cache data from remote publishers for fast access from the research & education local network.
+The subscriber at host `sub.edu.example.org` shall cache data from remote publishers for fast access from the research & education local network.
 
-Subscribers also support `caterva2.toml` and arbitrary identifiers, but our setup won't use the latter as there will only be one subscriber in the host.  Use this configuration in the `caterva2.toml` file at the subscriber host:
+Subscribers also support `caterva2.toml` and arbitrary identifiers, but our setup won't use the latter as there will only be one subscriber at the host.  Use this configuration in the `caterva2.toml` file at the subscriber host:
 
 ```toml
 [subscriber]
@@ -356,7 +356,7 @@ cat2sub
 
 ### Client
 
-Clients in the example workstation need to know the address of the subscriber that they will use.
+Clients at the example workstation need to know the address of the subscriber that they will use.
 
 The command-line client `cat2cli` provides the `--host` option for that.  Running this at the workstation:
 
