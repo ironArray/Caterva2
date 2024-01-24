@@ -175,7 +175,7 @@ def init_b2frame(metadata, urlpath=None):
         dparams={},
         urlpath=urlpath,
     )
-    sc.fill_special(metadata.nbytes / metadata.typesize,
+    sc.fill_special(metadata.nbytes / sc.typesize,
                     special_value=blosc2.SpecialValue.UNINIT)
     return sc
 

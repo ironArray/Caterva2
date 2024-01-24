@@ -159,7 +159,8 @@ async def lifespan(app: FastAPI):
     else:
         changed = False
         # Deleted
-        for name, root in database.roots.items():
+        d = list(database.roots.items())
+        for name, root in d:
             if name not in data:
                 del database.roots[name]
                 changed = True
