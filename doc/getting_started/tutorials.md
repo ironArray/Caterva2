@@ -286,7 +286,50 @@ The configuration allows other settings like `loglevel`.  See [caterva2.sample.t
 
 ### Publishers
 
-TODO
+Here we will setup in the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
+
+```sh
+mkdir foo-root
+echo "This is the foo root." > foo-root/readme.txt
+mkdir bar-root
+echo "This is the bar root." > bar-root/readme.txt
+```
+
+Here we want to run both publishers from the same directory to keep things at hand.  Publishers also support a `caterva2.toml` configuration file, and we may use a `[publisher]` section in the file.  But which publisher would use it?  We can't share the same settings for both!
+
+Fortunately we may add an arbitrary identifier to distinguish services of the same category.  With that, we may have a `caterva2.toml` file like this:
+
+```toml
+[publisher.foo]
+http = "pub.lab.example.org:3115"
+statedir = "./cat2-pub.foo"
+name = "foo"
+root = "./foo-root"
+
+[publisher.bar]
+http = "pub.lab.example.org:3116"
+statedir = "./cat2-pub.bar"
+name = "bar"
+root = "./bar-root"
+```
+
+Then we can run subscribers like this (in different shells, both from the directory where `caterva2.toml` is):
+
+```sh
+cat2pub --id foo
+cat2pub --id bar
+```
+
+However they'll fail to connect to the broker (a "Connection refused" error).  You need to specify the correct broker's address, either with the `--broker` option or an `http` setting in the `[broker]` section of `caterva2.toml`.  Let's add this in there and run both publishers again:
+
+```toml
+[broker]
+http = "broker.example.org:3104"
+```
+
+The publishers will now work and register their respective roots at the broker.
+
+(Yes, if you're running the broker and publishers from the same directory of the same machine, the publishers will get the broker's address from its `caterva2.toml` configuration section.)
 
 ### Subscriber
 
