@@ -2,7 +2,7 @@
 
 ## Launching Caterva2 services
 
-To do anything useful with Caterva2, you need at least a running broker, publisher (with some datasets) and subscriber.  For these tutorials we'll run our own services in the local machine, with the publisher serving some example files included in the Caterva2 package.
+To do anything useful with Caterva2, you need at least a running broker, publisher (with some datasets) and subscriber.  For the following tutorials we'll run our own services in the local machine, with the publisher serving some example files included in the Caterva2 package.
 
 First of all, you need to install Caterva2 with the `services` extra:
 
@@ -226,3 +226,44 @@ cat2cli download foo/dir1/ds-2d.b2nd
 ```
 
 Again, the program reports the path of the resulting local file.
+
+## Running independent Caterva2 services
+
+The services that we used til now are enough for testing, but not for a real deployment.  For instance, they only listen to local connections, and they use example data and fixed directories.
+
+In this section we'll setup a more realistic deployment for a fictional organization:
+
+- A broker in host `broker.example.org`.
+- Two publishers in host `pub.lab.example.org` at a data collection laboratory, serving a different root each.
+- A subscriber in host `sub.edu.example.org` at a research & education branch.
+- A custom API client in a workstation at the latter branch.
+
+The broker, publisher and subscriber hosts need a Caterva2 installation with the `services` extra:
+
+```sh
+python -m pip install caterva2[services]
+```
+
+The workstation should be fine with a plain installation, but we'll also install the `clients` extra to perform quick tests with `cat2cli`:
+
+```sh
+python -m pip install caterva2[clients]
+```
+
+(If you're going to try this tutorial on a single machine, just install `caterva2[services,clients]`.)
+
+### Broker setup
+
+TODO
+
+### Publishers
+
+TODO
+
+### Subscriber
+
+TODO
+
+### Client
+
+TODO
