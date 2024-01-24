@@ -17,10 +17,12 @@ def main(verbose=False):
     int
         Exit code of the test suite.
     """
-    test_dir = pathlib.Path(__file__).parent
-    verb = "-v" if verbose else ""
-    return pytest.main([verb, test_dir])
+    args = sys.argv.copy()
+    if verbose:
+        args.append("-v")
+    args.append(pathlib.Path(__file__).parent)
+    return pytest.main(args)
 
 
 if __name__ == '__main__':
-    main(verbose=('--verbose' in sys.argv or '-v' in sys.argv))
+    main()
