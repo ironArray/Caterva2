@@ -254,7 +254,35 @@ python -m pip install caterva2[clients]
 
 ### Broker setup
 
-TODO
+Our example broker shall listen on port 3104 of host `broker.example.org`.  In that host, it may be run like this:
+
+```sh
+cat2bro --http *:3104
+```
+
+The broker will create a `_caterva2/bro` directory for its state files and listen in all network interfaces.  Let's restrict that to just the public interface, and set the directory to `cat2-bro`.  Stop the broker with Ctrl+C and run this (using the host name of your machine or `localhost`):
+
+```sh
+cat2bro --http broker.example.org:3104 --statedir ./cat2-bro
+```
+
+(The ``./`` is not needed, but it shows that the `--statedir` option allows both relative and absolute paths, not necessarily under the current directory.)
+
+Caterva2 tools allow you to store settings in a TOML configuration file called `caterva2.toml` in the current directory.  Create that file and enter the equivalent configuration:
+
+```toml
+[broker]
+http = "broker.example.org:3104"
+statedir = "./cat2-bro"
+```
+
+You may now stop the broker and run it with just:
+
+```sh
+cat2bro
+```
+
+The configuration allows other settings like `loglevel`.  See [caterva2.sample.toml](https://github.com/Blosc/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
 
 ### Publishers
 
