@@ -356,4 +356,39 @@ cat2sub
 
 ### Client
 
-TODO
+Clients in the example workstation need to know the address of the subscriber that they will use.
+
+The command-line client `cat2cli` provides the `--host` option for that.  Running this at the workstation:
+
+```sh
+cat2cli --host sub.edu.example.org:3126 roots
+```
+
+Will retrieve the list of known roots from the subscriber that we set up above.  In fact, `cat2cli` also supports `caterva2.toml`, and this configuration in the current directory:
+
+```toml
+[subscriber]
+http = "sub.edu.example.org:3126"
+```
+
+Should allow you to run the previous command just like this:
+
+```sh
+cat2cli roots
+```
+
+When using the programmatic API, you need to provide the subscriber address explicitly:
+
+```python
+roots = caterva2.get_roots(host='sub.edu.example.org:3126')
+foo = caterva2.Root('foo', host='sub.edu.example.org:3126')
+```
+
+Since parsing TOML is very easy with Python, your API client may just access the needed configuration like this:
+
+``` python
+from tomllib import load as toml_load  # "from tomli" on Python < 3.11
+with open('caterva2.toml', 'rb') as conf_file:
+    conf = toml_load(conf_file)
+foo = caterva2.Root('foo', host=conf['subscriber']['http'])
+```
