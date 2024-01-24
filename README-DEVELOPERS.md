@@ -71,14 +71,14 @@ Then, you can run the tests:
 
 ```shell
 cd ..   # to avoid using the source code
-pytest --pyargs caterva2.tests -v  # or "python -m caterva2.tests -v"
+python -m caterva2.tests -v
 ```
 
 Please note that the services should be not running at this point.  In case you want to check against
 the current services, you can do:
 
 ```shell
-env CATERVA2_USE_EXTERNAL=1 pytest --pyargs caterva2.tests -v
+env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
 ```
 
 ## Create docs

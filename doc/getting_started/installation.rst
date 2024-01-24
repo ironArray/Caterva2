@@ -37,4 +37,4 @@ running the tests:
 
 .. code-block:: console
 
-    pytest --pyargs caterva2.tests -v  # or "python -m caterva2.tests -v"
+    python -m caterva2.tests -v
