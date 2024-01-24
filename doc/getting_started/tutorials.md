@@ -333,7 +333,26 @@ The publishers will now work and register their respective roots at the broker.
 
 ### Subscriber
 
-TODO
+The subscriber in host `sub.edu.example.org` shall cache data from remote publishers for fast access from the research & education local network.
+
+Subscribers also support `caterva2.toml` and arbitrary identifiers, but our setup won't use the latter as there will only be one subscriber in the host.  Use this configuration in the `caterva2.toml` file at the subscriber host:
+
+```toml
+[subscriber]
+http = "sub.edu.example.org:3126"
+statedir = "./cat2-sub"
+
+[broker]
+http = "broker.example.org:3104"
+```
+
+By now, everything should look familiar to you (including the custom port and state directory, and the broker address).  Please note that subscribers are configured with a broker address instead of publishers': a subscriber gets publisher addresses from their common broker as needed.
+
+To start the subscriber, just run:
+
+```sh
+cat2sub
+```
 
 ### Client
 
