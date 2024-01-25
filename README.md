@@ -175,7 +175,7 @@ Dataset saved to foo/dir2/ds-4d.b2nd
 
 ### Using a configuration file
 
-All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory.  Please see the `caterva2.sample.toml` file for more information.
+All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory (though an alternative file may be given with the `--conf` option).  Please see the `caterva2.sample.toml` file for more information.
 
 ## Tools
 
