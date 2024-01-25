@@ -1,0 +1,27 @@
+<div class="card">
+
+    <div class="card-header">
+        {{ path }}
+    </div>
+
+    <div class="card-body">
+        <table class="table table-sm">
+        {% for key, value in meta %}
+            {% if key == 'schunk' %}
+                {% for key2, value2 in meta.schunk %}
+                    <tr>
+                        <th scope="row">{{ key2 }}</th>
+                        <td>{{ value2 }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <th scope="row">{{ key }}</th>
+                    <td>{{ value }}</td>
+                </tr>
+            {% endif %}
+        {% endfor %}
+        </table>
+    </div>
+
+</div>

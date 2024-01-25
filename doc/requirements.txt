@@ -1,0 +1,9 @@
+sphinx
+pydata-sphinx-theme
+numpydoc
+myst-parser
+ninja
+sphinx-paramlinks
+sphinx-design
+nbsphinx
+pandoc

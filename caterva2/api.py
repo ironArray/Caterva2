@@ -179,7 +179,7 @@ class Root:
 
 class File:
     """
-    A file is either a Blosc2 dataset or a regular file.
+    A file is either a Blosc2 dataset or a regular file on a root repository.
 
     Parameters
     ----------

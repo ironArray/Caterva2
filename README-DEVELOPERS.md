@@ -7,6 +7,12 @@ There is a `caterva2.tests.services` script that does this.
 
 ## Running the tests
 
+Testing needs Caterva2 to be installed with the `tests` extra:
+
+```sh
+pip install -e .[tests]
+```
+
 ### With managed daemons
 
 This will start the daemons, run the tests, and shut the daemons down:
@@ -52,3 +58,36 @@ package sources you can run:
 ```shell
 hatch build
 ```
+
+## Install wheels
+
+For installing the wheels, you can run:
+
+```shell
+hatch install
+```
+
+Then, you can run the tests:
+
+```shell
+cd ..   # to avoid using the source code
+python -m caterva2.tests -v
+```
+
+Please note that the services should be not running at this point.  In case you want to check against
+the current services, you can do:
+
+```shell
+env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
+```
+
+## Create docs
+
+For creating the docs, you can run:
+
+```shell
+pip install -r doc/requirements.txt
+sphinx-build doc doc/html
+```
+
+and the docs will appear in `doc/html`.

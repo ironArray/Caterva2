@@ -2,9 +2,9 @@
 
 # Caterva2 - On demand access to remote Blosc2 data repositories
 
-Caterva2 is a distributed system written in Python and meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker.  Also, every publisher exposes a REST interface that allows subscribers/clients to access the datasets.
+Caterva2 is a distributed system written in Python meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
 
-Subscribers can access datasets on-demand and cache them locally. Additionally, cached data from a subscriber can be republished by another publisher. This is particularly useful for accessing remote datasets and sharing them within a local network, thereby optimizing communication and storage resources within work groups.
+Subscribers can access datasets of publishers on-demand on behalf of clients, and cache them locally. Additionally, cached data from a subscriber can be republished by another publisher. This could be particularly useful for accessing remote datasets and sharing them within a local network, thereby optimizing communication and storage resources within work groups.
 
 
 ## Components of Caterva2
@@ -189,7 +189,13 @@ The tool is still pretty limited in its supported input and generated output, pl
 
 ## Tests
 
-The tests can be run as follows:
+Tests need some extra dependencies that you need to install:
+
+```sh
+pip install -e .[tests]
+```
+
+Then tests can be run as follows:
 
 ```sh
 pytest -v
@@ -204,7 +210,7 @@ env CATERVA2_USE_EXTERNAL=1 pytest -v
 Also, the tests suite comes with the package, so you can always run it as:
 
 ```sh
-python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+python -m caterva2.tests -v
 ```
 
 The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.

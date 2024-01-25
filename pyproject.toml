@@ -35,7 +35,6 @@ classifiers = [
 dependencies = [
     "httpx",
     "numpy",
-    "pytest",
     "tomli>=2;python_version<\"3.11\"",
 ]
 
@@ -45,9 +44,12 @@ path = "caterva2/__init__.py"
 [project.optional-dependencies]
 services = [
     "blosc2>=2.4.0",
-    "pydantic>=2",
-    "fastapi",
+    "fastapi>=0.109",
     "fastapi_websocket_pubsub",
+    "furl",
+    "jinja2",
+    "pydantic>=2",
+    "python-multipart",
     "safer",
     "uvicorn",
     "watchfiles",
@@ -61,6 +63,11 @@ tools = [
     "h5py",
     "hdf5plugin",
     "msgpack",
+]
+tests = [
+    "caterva2[clients]",
+    "caterva2[services]",
+    "pytest",
 ]
 
 [tool.hatch.build.targets.wheel]

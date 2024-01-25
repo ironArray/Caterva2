@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <script src="/static/main.js"></script>
+</head>
+
+<body class="vh-100">
+
+<!-- Main section -->
+<div class="p-4 d-flex gap-5 h-100">
+    <div hx-get="/htmx/root-list/" hx-trigger="load"></div>
+    <div id="content"{% if content_url %} hx-get="{{ content_url }}?search={{ search }}" hx-trigger="load"{% endif %}>
+    </div>
+    <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
+</div>
+
+</body>
+</html>

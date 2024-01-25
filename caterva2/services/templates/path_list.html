@@ -1,0 +1,19 @@
+<!--- Search box --->
+<form class="d-flex" hx-get="/roots/{{root}}/" hx-target="#content">
+    <input class="form-control me-2" id="autocomplete" name="search" type="search"
+           placeholder="Search" aria-label="Search" value="{{ search }}">
+    <button class="btn btn-outline-success" type="submit" onclick="search()">Search</button>
+</form>
+
+<div id="path-list" class="h-75 overflow-scroll mt-1 list-group">
+    {% for path in paths %}
+        <a href="/roots/{{root}}/{{path}}/" class="list-group-item list-group-item-action"
+           hx-boost="true" hx-target="#meta" hx-on:htmx:after-request="activate('#path-list a')">
+            {{path}}
+        </a>
+    {% endfor %}
+</div>
+
+<script>
+activate('#path-list a')
+</script>

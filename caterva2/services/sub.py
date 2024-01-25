@@ -13,17 +13,25 @@ import logging
 import pathlib
 import pickle
 
+# FastAPI
+from fastapi import FastAPI, Request, responses
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 # Requirements
 import blosc2
+import furl
 import numpy as np
-from fastapi import FastAPI, responses
-from fastapi.staticfiles import StaticFiles
 import httpx
 import uvicorn
 
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
+
+
+BASE_DIR = pathlib.Path(__file__).resolve().parent
 
 # Logging
 logger = logging.getLogger('sub')
@@ -184,7 +192,10 @@ async def lifespan(app: FastAPI):
     if client is not None:
         await srv_utils.disconnect_client(client)
 
+
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 @app.get('/api/roots')
@@ -448,6 +459,88 @@ async def download_data(path: str):
     if abspath.suffix == '.b2':
         path = f'{path}.b2'
     return f'http://{host}:{port}/files/{path}'
+
+
+def home(request, context=None):
+    return templates.TemplateResponse(request, "home.html", context or {})
+
+
+@app.get("/", response_class=HTMLResponse)
+async def html_home(request: Request):
+    return home(request)
+
+
+@app.get("/htmx/root-list/")
+async def htmx_root_list(request: Request):
+    context = {"roots": database.roots}
+    return templates.TemplateResponse(request, "root_list.html", context)
+
+
+@app.get("/roots/{root}/", response_class=HTMLResponse)
+async def html_path_list(
+    request: Request,
+    # Path parameters
+    root: str,
+    # Query parameters
+    search: str = '',
+    # Headers
+    hx_request: srv_utils.HeaderType = None,
+    hx_current_url: srv_utils.HeaderType = None,
+):
+
+    if not hx_request:
+        context = {
+            "content_url": request.url_for('html_path_list', root=root),
+            "search": search,
+        }
+        return home(request, context)
+
+    rootdir = cache / root
+    paths = [
+        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
+        for path, relpath in utils.walk_files(rootdir)
+        if search in str(relpath)
+    ]
+    context = {"root": root, "paths": paths, "search": search}
+    response = templates.TemplateResponse(request, "path_list.html", context)
+    if search:
+        url = furl.furl(hx_current_url)
+        response.headers['HX-Push-Url'] = url.set({'search': search}).url
+    return response
+
+
+@app.get("/roots/{root}/{path:path}", response_class=HTMLResponse)
+async def html_path_info(
+    request: Request,
+    # Path parameters
+    root: str,
+    path: str,
+    # Query parameters
+    search: str = '',
+    # Headers
+    hx_request: srv_utils.HeaderType = None,
+    hx_current_url: srv_utils.HeaderType = None,
+):
+
+    if not hx_request:
+        context = {
+            "content_url": request.url_for('html_path_list', root=root),
+            "meta_url": request.url_for('html_path_info', root=root, path=path),
+            "search": search,
+        }
+        return home(request, context)
+
+    filepath = cache / root / path
+    abspath = lookup_path(filepath)
+    meta = srv_utils.read_metadata(abspath)
+
+    context = {"path": pathlib.Path(root) / path, "meta": meta}
+    response = templates.TemplateResponse(request, "meta.html", context=context)
+
+    current_url = furl.furl(hx_current_url)
+    request_url = furl.furl(request.url)
+    response.headers['HX-Push-Url'] = request_url.set(current_url.query.params).url
+    return response
 
 
 #
