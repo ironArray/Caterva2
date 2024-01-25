@@ -243,6 +243,25 @@ Choosing a dataset will show its metadata.  Click on `dir1/ds-2d.b2nd`, and you 
 
 TODO: Capture of a metadata table.
 
+## The `caterva2.toml` configuration file
+
+We've seen that the `cat2cli` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).
+
+The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.
+
+The configuration file may also hold settings for different instances of the same program (e.g. services of the same category).  To distinguish them, an arbitrary identifier may be provided to the program using the `--id` option (empty by default).  For instance:
+
+```toml
+[publisher]
+# Settings for publisher with default ID.
+[publisher.foo]
+# Settings for publisher with `--id foo`.
+[publisher.bar]
+# Settings for publisher with `--id bar`.
+```
+
+Some of the supported settings will be explained in the sections below.  See [caterva2.sample.toml](https://github.com/Blosc/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
+
 ## Running independent Caterva2 services
 
 The services that we used til now are enough for testing, but not for a real deployment.  For instance, they only listen to local connections, and they use example data and fixed directories.
@@ -284,7 +303,7 @@ cat2bro --http broker.example.org:3104 --statedir ./cat2-bro
 
 (The ``./`` is not needed, but it shows that the `--statedir` option allows both relative and absolute paths, not necessarily under the current directory.)
 
-Caterva2 tools allow you to store settings in a TOML configuration file called `caterva2.toml` in the current directory.  Create that file and enter the equivalent configuration:
+Let's put those options in the `caterva2.toml` configuration file:
 
 ```toml
 [broker]
@@ -298,8 +317,6 @@ You may now stop the broker and run it with just:
 cat2bro
 ```
 
-The configuration allows other settings like `loglevel`.  See [caterva2.sample.toml](https://github.com/Blosc/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
-
 ### Publishers
 
 Here we will setup at the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
@@ -311,9 +328,7 @@ mkdir bar-root
 echo "This is the bar root." > bar-root/readme.txt
 ```
 
-Here we want to run both publishers from the same directory to keep things at hand.  Publishers also support a `caterva2.toml` configuration file, and we may use a `[publisher]` section in the file.  But which publisher would use it?  We can't share the same settings for both!
-
-Fortunately we may add an arbitrary identifier to distinguish services of the same category.  With that, we may have a `caterva2.toml` file like this:
+Here we want to run both publishers from the same directory to keep things at hand.  To be able to share a common configuration file, we shall give different identifiers to the publishers (`foo` and `bar` for simplicity).  With that, we may have a `caterva2.toml` file like this:
 
 ```toml
 [publisher.foo]
@@ -351,7 +366,7 @@ The publishers will now work and register their respective roots at the broker.
 
 The subscriber at host `sub.edu.example.org` shall cache data from remote publishers for fast access from the research & education local network.
 
-Subscribers also support `caterva2.toml` and arbitrary identifiers, but our setup won't use the latter as there will only be one subscriber at the host.  Use this configuration in the `caterva2.toml` file at the subscriber host:
+Subscribers also support arbitrary identifiers, but our setup won't use them as there will only be one subscriber at the host.  Use this configuration in the `caterva2.toml` file at the subscriber host:
 
 ```toml
 [subscriber]
