@@ -370,7 +370,7 @@ To start the subscriber, just run:
 cat2sub
 ```
 
-### Client
+### Client setup
 
 Clients at the example workstation need to know the address of the subscriber that they will use.
 
