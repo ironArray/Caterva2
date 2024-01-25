@@ -63,6 +63,7 @@ def get_parser(loglevel='warning', statedir=None, id=None,
         parser.add_argument('--broker', default=broker)
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
+    # Preliminary, just for help purposes.
     if id is not None:  # the empty string is a valid (default) ID
         parser.add_argument('--id', default=id,
                             help=("a string to distinguish services "
@@ -71,6 +72,7 @@ def get_parser(loglevel='warning', statedir=None, id=None,
         parser.add_argument('--statedir', default=statedir,
                             type=pathlib.Path)
     parser.add_argument('--loglevel', default=loglevel)
+    # Preliminary, just for help purposes.
     parser.add_argument('--conf', default=conf_file_name,
                         type=pathlib.Path,
                         help=("path to alternative configuration file "
