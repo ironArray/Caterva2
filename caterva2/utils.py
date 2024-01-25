@@ -12,7 +12,6 @@ import contextlib
 import os
 import pathlib
 import sys
-import re
 import logging
 
 try:
@@ -120,6 +119,13 @@ class Conf:
         return conf
 
 
+def _parse_preliminary_args(allow_id):
+    parser = argparse.ArgumentParser(add_help=False)
+    if allow_id:
+        parser.add_argument('--id', default='')
+    return parser.parse_known_args()[0]
+
+
 def get_conf(prefix=None, allow_id=False):
     """Get settings from the configuration file, if existing.
 
@@ -135,16 +141,11 @@ def get_conf(prefix=None, allow_id=False):
     For instance, with ``conf = get_conf('foo')`` and ``--id=bar``,
     ``conf.get('.item')`` is equivalent to ``conf.get('foo.bar.item')``.
     """
-    id_ = None
-    if allow_id:  # quick'n'dirty argument parsing before full one
-        opts = '#'.join(sys.argv)
-        match_ = re.search(r'#--id[=#]([^#]+)', opts)
-        if match_ is not None:
-            id_ = match_.group(1)
-            if any(p in id_ for p in [os.curdir, os.pardir, os.sep]):
-                raise ValueError("invalid identifier", id_)
-        else:
-            id_ = ''
+    opts = _parse_preliminary_args(allow_id)
+    if allow_id and opts.id:
+        if any(p in opts.id for p in [os.curdir, os.pardir, os.sep]):
+            raise ValueError("invalid identifier", opts.id)
+    id_ = opts.id if allow_id else None
     try:
         with open(conf_file_name, 'rb') as conf_file:
             conf = toml.load(conf_file)
