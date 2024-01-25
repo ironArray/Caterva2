@@ -16,14 +16,14 @@
 # The configuration of the broker service.
 # Only one of these is allowed for the moment.
 [broker]
-http = "localhost:8000"  # The ``host:port`` endpoint where the service listens for HTTP requests. Other programs may look ``broker.http`` up to find how to connect to a broker.
+http = "localhost:8000"  # The ``host:port`` endpoint where the service listens for HTTP requests. Other programs may look ``broker.http`` up to find how to connect to a broker. Use ``*`` as a host to listen on all addresses.
 statedir = "_caterva2/bro"  # The directory where the service will place state files.
 loglevel = "warning"  # All service messages having this severity or worse will be logged.
 
 # The configuration of the publisher service.
 # Several of these are allowed, each with a different ID (the string after the dot). A publisher invoked with ``--id=something`` will look its configuration up in the ``publisher.something`` section.
 [publisher.1]
-http = "localhost:8001"  # The ``host:port`` endpoint where the service listens for HTTP requests.
+http = "localhost:8001"  # The ``host:port`` endpoint where the service listens for HTTP requests. Use ``*`` as a host to listen on all addresses.
 statedir = "_caterva2/pub"  # The directory where the service will place state files.
 loglevel = "warning"  # All service messages having this severity or worse will be logged.
 name = "foo"  # The name given to the root to be registered at the broker. This setting has no default, if it is not defined here, you need to give it to the publisher as an argument.
@@ -37,7 +37,7 @@ http = "localhost:8001"
 # The configuration of the subscriber service.
 # Several of these are allowed, each with a different ID (the string after the dot). A subscriber invoked with ``--id=something`` will look its configuration up in the ``subscriber.something`` section.
 [subscriber.1]
-http = "localhost:8002"  # The ``host:port`` endpoint where the service listens for HTTP requests.
+http = "localhost:8002"  # The ``host:port`` endpoint where the service listens for HTTP requests. Use ``*`` as a host to listen on all addresses.
 statedir = "_caterva2/sub"  # The directory where the service will place state files.
 loglevel = "warning"  # All service messages having this severity or worse will be logged.
 

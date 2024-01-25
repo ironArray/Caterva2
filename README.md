@@ -175,7 +175,7 @@ Dataset saved to foo/dir2/ds-4d.b2nd
 
 ### Using a configuration file
 
-All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory.  Please see the `caterva2.sample.toml` file for more information.
+All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory (though an alternative file may be given with the `--conf` option).  Please see the `caterva2.sample.toml` file for more information.
 
 ## Tools
 
@@ -189,7 +189,13 @@ The tool is still pretty limited in its supported input and generated output, pl
 
 ## Tests
 
-The tests can be run as follows:
+Tests need some extra dependencies that you need to install:
+
+```sh
+pip install -e .[tests]
+```
+
+Then tests can be run as follows:
 
 ```sh
 pytest -v
@@ -204,7 +210,7 @@ env CATERVA2_USE_EXTERNAL=1 pytest -v
 Also, the tests suite comes with the package, so you can always run it as:
 
 ```sh
-python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+python -m caterva2.tests -v
 ```
 
 The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.

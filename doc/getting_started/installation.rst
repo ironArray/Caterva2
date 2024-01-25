@@ -9,11 +9,13 @@ Pip
 
     python -m pip install caterva2
 
-If you intend to run Caterva2 service or client programs, or the test suite, you may enable those extra features like:
+If you intend to run Caterva2 service or client programs, you may enable those extra features like:
 
 .. code-block::
 
     python -m pip install caterva2[services,clients]
+
+For running the test suite, you may add ``tests`` to the extras list.
 
 Source code
 +++++++++++
@@ -25,9 +27,9 @@ Source code
     python -m build
     python -m pip install dist/caterva2-*.whl
 
-You may also enable extra features after the wheel file name.
+You may also enable extra features after the wheel file name (for instance, ``[tests]`` to run tests).
 
-That's all. You can proceed with testing now.
+That's all. You can proceed with testing section now.
 
 Testing
 -------
@@ -37,4 +39,4 @@ running the tests:
 
 .. code-block:: console
 
-    python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+    python -m caterva2.tests -v

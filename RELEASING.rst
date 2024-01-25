@@ -22,14 +22,14 @@ Follow the steps in README-DEVELOPERS.md file for locally creating and
 installing the wheel, then test it::
 
   $ cd ..   # to avoid using the source code
-  $ python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+  $ python -m caterva2.tests -v
   $ cd -
 
 
 You may want to use the existing services for testing the wheel::
 
   $ cd ..   # to avoid using the source code
-  $ env CATERVA2_USE_EXTERNAL=1 python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+  $ env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
   $ cd -
 
 
@@ -64,7 +64,7 @@ Tagging and releasing
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::
 
   $ pip install caterva2
-  $ python -c "import caterva2 as cat2; cat2.test(verbose=True)"
+  $ python -m caterva2.tests -v
 
 
 Announcing

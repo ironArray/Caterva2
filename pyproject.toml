@@ -35,7 +35,6 @@ classifiers = [
 dependencies = [
     "httpx",
     "numpy",
-    "pytest",
     "tomli>=2;python_version<\"3.11\"",
 ]
 
@@ -64,6 +63,11 @@ tools = [
     "h5py",
     "hdf5plugin",
     "msgpack",
+]
+tests = [
+    "caterva2[clients]",
+    "caterva2[services]",
+    "pytest",
 ]
 
 [tool.hatch.build.targets.wheel]
