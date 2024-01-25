@@ -59,24 +59,15 @@ def socket_type(string):
 def get_parser(loglevel='warning', statedir=None, id=None,
                http=None, broker=None):
     parser = argparse.ArgumentParser()
+    _add_preliminary_args(parser, id=id)  # just for help purposes
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
-    # Preliminary, just for help purposes.
-    if id is not None:  # the empty string is a valid (default) ID
-        parser.add_argument('--id', default=id,
-                            help=("a string to distinguish services "
-                                  "of the same category"))
     if statedir:
         parser.add_argument('--statedir', default=statedir,
                             type=pathlib.Path)
     parser.add_argument('--loglevel', default=loglevel)
-    # Preliminary, just for help purposes.
-    parser.add_argument('--conf', default=conf_file_name,
-                        type=pathlib.Path,
-                        help=("path to alternative configuration file "
-                              "(may not exist)"))
     return parser
 
 
@@ -125,12 +116,20 @@ class Conf:
         return conf
 
 
+def _add_preliminary_args(parser, id=None):
+    parser.add_argument('--conf', default=conf_file_name,
+                        type=pathlib.Path,
+                        help=("path to alternative configuration file "
+                              "(may not exist)"))
+    if id is not None:  # the empty string is a valid (default) ID
+        parser.add_argument('--id', default=id,
+                            help=("a string to distinguish services "
+                                  "of the same category"))
+
+
 def _parse_preliminary_args(allow_id):
     parser = argparse.ArgumentParser(add_help=False)
-    if allow_id:
-        parser.add_argument('--id', default='')
-    parser.add_argument('--conf', default=conf_file_name,
-                        type=pathlib.Path)
+    _add_preliminary_args(parser, id='' if allow_id else None)
     return parser.parse_known_args()[0]
 
 
