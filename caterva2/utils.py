@@ -71,6 +71,10 @@ def get_parser(loglevel='warning', statedir=None, id=None,
         parser.add_argument('--statedir', default=statedir,
                             type=pathlib.Path)
     parser.add_argument('--loglevel', default=loglevel)
+    parser.add_argument('--conf', default=conf_file_name,
+                        type=pathlib.Path,
+                        help=("path to alternative configuration file "
+                              "(may not exist)"))
     return parser
 
 
@@ -123,6 +127,8 @@ def _parse_preliminary_args(allow_id):
     parser = argparse.ArgumentParser(add_help=False)
     if allow_id:
         parser.add_argument('--id', default='')
+    parser.add_argument('--conf', default=conf_file_name,
+                        type=pathlib.Path)
     return parser.parse_known_args()[0]
 
 
@@ -147,7 +153,7 @@ def get_conf(prefix=None, allow_id=False):
             raise ValueError("invalid identifier", opts.id)
     id_ = opts.id if allow_id else None
     try:
-        with open(conf_file_name, 'rb') as conf_file:
+        with open(opts.conf, 'rb') as conf_file:
             conf = toml.load(conf_file)
             return Conf(conf, prefix=prefix, id=id_)
     except FileNotFoundError:
