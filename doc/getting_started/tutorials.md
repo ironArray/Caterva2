@@ -168,13 +168,15 @@ For quick queries to a subscriber or for use in shell scripts, Caterva2 ships th
 python -m pip install caterva2[clients]
 ```
 
-To ask the default subscriber (use the `--host` option for a different one) about all roots known by the broker, use the `roots` command:
+To ask the default subscriber about all roots known by the broker, use the `roots` command:
 
 ```sh
 cat2cli roots  # -> foo (subscribed)
 ```
 
-Though it reports `foo` as subscribed (from previous sections), you may still use `subscribe` to subscribe to it (again):
+**Note:** To choose a different subscriber, you may use the `--host` command-line option. To learn about the options and arguments supported by *any* Caterva2 program, just invoke it with `--help`, e.g. `cat2cli --help`.
+
+Though the previous command reports `foo` as subscribed (from previous sections), you may still use `subscribe` to subscribe to it (again):
 
 ```sh
 cat2cli subscribe foo  # -> Ok
