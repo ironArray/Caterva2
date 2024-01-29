@@ -17,7 +17,6 @@ Getting roots, subscribing and listing datasets
    subscribe
    get_list
    get_info
-   test
 
 
 Fetch / download datasets
