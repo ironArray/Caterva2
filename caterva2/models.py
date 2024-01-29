@@ -16,11 +16,12 @@ import pydantic
 
 class CParams(pydantic.BaseModel):
     codec: blosc2.Codec
+    filters: list[blosc2.Filter]
     typesize: int
     blocksize: int
 
 
-class SChunk(pydantic.BaseModel):
+class SChunk(pydantic.BaseModel, extra=pydantic.Extra.allow):
     cbytes: int
     chunkshape: int
     chunksize: int
@@ -36,12 +37,11 @@ class SChunk(pydantic.BaseModel):
 
 
 class Metadata(pydantic.BaseModel):
-    shape: list[int]
-    chunks: list[int]
-    blocks: list[int]
+    shape: tuple
+    chunks: tuple
+    blocks: tuple
     dtype: str
     schunk: SChunk
-    size: int
 
 
 class File(pydantic.BaseModel):

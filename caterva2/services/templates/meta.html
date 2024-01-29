@@ -1,4 +1,5 @@
-<h3>Attributes</h3>
+<h3>Metadata</h3>
+
 
 <div class="card">
 
@@ -8,22 +9,73 @@
 
     <div class="card-body">
         <table class="table table-sm">
+        <!---  Adapt meta to desired output --->
+        {% if meta.schunk %}
+            {% set shape = meta.shape | string() %}
+            {% set shape = shape + ' items ' %}
+            {% set shape = shape + '(' + (meta.schunk.nbytes | string()) + ' bytes)' %}
+            {% set _ = meta.__setattr__('shape', shape) %}
+
+            {% set chunks = meta.chunks | string() %}
+            {% set chunks = chunks + ' items ' %}
+            {% set chunks = chunks + '(' + (meta.schunk.chunksize | string()) + ' bytes)' %}
+            {% set _ = meta.__setattr__('chunks', chunks) %}
+
+            {% set cparams = meta.schunk.cparams %}
+            {% set schunk = meta.schunk %}
+            {% for key, value in cparams %}
+                {% set _ = schunk.__setattr__(key, value) %}
+            {% endfor %}
+            {% set _ = schunk.__delattr__('cparams') %}
+            {% set _ = meta.__setattr__('schunk', schunk) %}
+
+            {% set blocks = meta.blocks | string() %}
+            {% set blocks = blocks + ' items ' %}
+            {% set blocks = blocks + '(' + (meta.schunk.blocksize | string()) + ' bytes)' %}
+            {% set _ = meta.__setattr__('blocks', blocks) %}
+
+            {% set nbytes_value = meta.schunk.nbytes | string() %}
+            {% set nbytes_value = nbytes_value + ' cbytes: ' %}
+            {% set nbytes_value = nbytes_value + meta.schunk.cbytes | string() %}
+            {% set nbytes_value = nbytes_value + ' cratio: ' %}
+            {% set nbytes_value = nbytes_value + meta.schunk.cratio | string() %}
+            {% set _ = meta.schunk.__setattr__('nbytes', nbytes_value) %}
+            {% set _ = meta.schunk.__delattr__('cbytes') %}
+            {% set _ = meta.schunk.__delattr__('cratio') %}
+
+        {% else %}
+            {% set nbytes_value = meta.nbytes | string() %}
+            {% set nbytes_value = nbytes_value + ' cbytes: ' %}
+            {% set nbytes_value = nbytes_value + meta.cbytes | string() %}
+            {% set nbytes_value = nbytes_value + ' cratio: ' %}
+            {% set nbytes_value = nbytes_value + meta.cratio | string() %}
+            {% set _ = meta.__setattr__('nbytes', nbytes_value) %}
+            {% set _ = meta.__delattr__('cbytes') %}
+            {% set _ = meta.__delattr__('cratio') %}
+        {% endif %}
+
         {% for key, value in meta %}
-            {% if key == 'schunk' %}
-                {% for key2, value2 in meta.schunk %}
-                    {% if key2 not in ['chunkshape', 'chunksize'] %}
-                        <tr>
-                            <th scope="row">{{ key2 }}</th>
-                            <td>{{ value2 }}</td>
-                        </tr>
+                {% if key in ['schunk', 'cparams'] %}
+                    {% for key2, value2 in meta[key] %}
+                        {% if key2 not in ['chunkshape', 'chunksize'] %}
+                            {% if key2 == 'urlpath' %}
+                                {% set key2 = 'cachepath' %}
+                            {% endif %}
+                            <tr>
+                                <th scope="row">{{ key2 }}</th>
+                                <td>{{ value2 }}</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    {% if key == 'urlpath' %}
+                        {% set key = 'cachepath' %}
                     {% endif %}
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <th scope="row">{{ key }}</th>
-                    <td>{{ value }}</td>
-                </tr>
-            {% endif %}
+                    <tr>
+                        <th scope="row">{{ key }}</th>
+                        <td>{{ value }}</td>
+                    </tr>
+                {% endif %}
         {% endfor %}
         </table>
     </div>
