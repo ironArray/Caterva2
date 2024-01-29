@@ -13,7 +13,7 @@ On demand access to remote Blosc2 data repositories.
     ^^^^^^^^^^^^^^^
 
     New to Caterva2? Check out the getting started guides. They contain an
-    introduction to Caterva2 main concepts and different tutorials.
+    introduction to Caterva2 main concepts.
 
     +++
 
@@ -23,6 +23,23 @@ On demand access to remote Blosc2 data repositories.
       :click-parent:
 
       To the getting started guide
+
+  .. grid-item-card::
+    :img-top: _static/index_user_guide.svg
+
+    Tutorial
+    ^^^^^^^^
+
+    A step-by-step guide to deploying Caterva2, and developing your own clients.
+
+    +++
+
+    .. button-ref:: tutorial/index
+      :expand:
+      :color: dark
+      :click-parent:
+
+      To the tutorial
 
   .. grid-item-card::
     :img-top: _static/index_api.svg
@@ -82,6 +99,7 @@ On demand access to remote Blosc2 data repositories.
     :hidden:
 
     Getting Started <getting_started/index>
+    Tutorial <tutorial/index>
     API Reference <reference/index>
     Development <development/index>
     Release Notes <release_notes/index>
