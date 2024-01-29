@@ -261,6 +261,7 @@ The configuration file may also hold settings for different instances of the sam
 
 Some of the supported settings will be explained in the sections below.  See [caterva2.sample.toml](https://github.com/Blosc/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
 
+(Running-independent-Caterva2-services)=
 ## Running independent Caterva2 services
 
 The services that we used til now are enough for testing, but not for a real deployment.  For instance, they only listen to local connections, and they use example data and fixed directories.
