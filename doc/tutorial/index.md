@@ -194,24 +194,22 @@ Please note that dataset names are already prefixed with the root name, so that 
 cat2cli info foo/dir1/ds-2d.b2nd
 ```
 
-This shows the familiar metadata, in JSON format:
+This shows the familiar metadata, in Python format:
 
-```json
-{
-    'dtype': 'uint16',
-    'ndim': 2,
-    'shape': [10, 20],
-    // ...
-    'size': 400
-}
+```python
+{'dtype': 'uint16',
+ 'ndim': 2,
+ 'shape': [10, 20],
+ # ...
+ 'size': 400}
 ```
 
-In fact, the `--json` option after most commands forces JSON output, in case you need it.
+(Many `cat2cli` commands like `info` accept a `--json` option after them to force JSON output, in case you prefer it.)
 
 To show a (part of) a dataset, you may use the `show` command, which accepts a Python-like slice after the dataset name (without spaces).  For the same slice of `ds-2d.b2nd` from previous examples, you may run:
 
 ```sh
-cat2cli show --json foo/dir1/ds-2d.b2nd[0:2,4:8]
+cat2cli show foo/dir1/ds-2d.b2nd[0:2,4:8]
 ```
 
 And you'll get a textual representation of the slice:
