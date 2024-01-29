@@ -27,19 +27,19 @@ On demand access to remote Blosc2 data repositories.
   .. grid-item-card::
     :img-top: _static/index_user_guide.svg
 
-    Tutorial
-    ^^^^^^^^
+    Tutorials
+    ^^^^^^^^^
 
-    A step-by-step guide to deploying Caterva2, and developing your own clients.
+    Step-by-step guides to deploying Caterva2, using it and developing your own clients.
 
     +++
 
-    .. button-ref:: tutorial/index
+    .. button-ref:: tutorials/index
       :expand:
       :color: dark
       :click-parent:
 
-      To the tutorial
+      To tutorials
 
   .. grid-item-card::
     :img-top: _static/index_api.svg
@@ -99,7 +99,7 @@ On demand access to remote Blosc2 data repositories.
     :hidden:
 
     Getting Started <getting_started/index>
-    Tutorial <tutorial/index>
+    Tutorials <tutorials/index>
     API Reference <reference/index>
     Utilities <utilities/index>
     Development <development/index>
