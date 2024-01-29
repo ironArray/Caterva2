@@ -101,5 +101,6 @@ On demand access to remote Blosc2 data repositories.
     Getting Started <getting_started/index>
     Tutorial <tutorial/index>
     API Reference <reference/index>
+    Utilities <utilities/index>
     Development <development/index>
     Release Notes <release_notes/index>
