@@ -80,8 +80,8 @@ def reformat_cparams(cparams):
     cparams.__setattr__('(filters, meta)', [(cparams.filters[i], cparams.filters_meta[i])
                                             for i in range(len(cparams.filters))
                                             if cparams.filters[i] != blosc2.Filter.NOFILTER])
-    delattr(cparams, 'filters')
-    delattr(cparams, 'filters_meta')
+#   delattr(cparams, 'filters')
+#   delattr(cparams, 'filters_meta')
     return cparams
 
 

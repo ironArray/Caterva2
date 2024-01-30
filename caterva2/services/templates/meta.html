@@ -24,7 +24,9 @@
             {% set cparams = meta.schunk.cparams %}
             {% set schunk = meta.schunk %}
             {% for key, value in cparams %}
-                {% set _ = schunk.__setattr__(key, value) %}
+                {% if key not in ['filters', 'filters_meta'] %}
+                    {% set _ = schunk.__setattr__(key, value) %}
+                {% endif %}
             {% endfor %}
             {% set _ = schunk.__delattr__('cparams') %}
             {% set _ = meta.__setattr__('schunk', schunk) %}
