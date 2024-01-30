@@ -77,23 +77,6 @@ On demand access to remote Blosc2 data repositories.
 
       To the contributor's guide
 
-  .. grid-item-card::
-    :img-top: _static/index_user_guide.svg
-
-    Release Notes
-    ^^^^^^^^^^^^^
-
-    Want to see what's new in the latest release? Check out the release notes to find out!
-
-    +++
-
-    .. button-ref:: release_notes/index
-      :expand:
-      :color: dark
-      :click-parent:
-
-      To the release notes
-
 ..  toctree::
     :maxdepth: 1
     :hidden:
