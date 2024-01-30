@@ -14,9 +14,10 @@ import blosc2
 import pydantic
 
 
-class CParams(pydantic.BaseModel):
+class CParams(pydantic.BaseModel, extra=pydantic.Extra.allow):
     codec: blosc2.Codec
     filters: list[blosc2.Filter]
+    filters_meta: list[int]
     typesize: int
     blocksize: int
 
