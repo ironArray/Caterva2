@@ -63,15 +63,26 @@ def read_metadata(obj):
     if isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
+        cparams = reformat_cparams(cparams)
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
         return get_model_from_obj(array, models.Metadata, schunk=schunk)
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
+        cparams = reformat_cparams(cparams)
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     else:
         raise TypeError(f'unexpected {type(obj)}')
+
+
+def reformat_cparams(cparams):
+    cparams.__setattr__('(filters, meta)', [(cparams.filters[i], cparams.filters_meta[i])
+                                            for i in range(len(cparams.filters))
+                                            if cparams.filters[i] != blosc2.Filter.NOFILTER])
+    delattr(cparams, 'filters')
+    delattr(cparams, 'filters_meta')
+    return cparams
 
 
 #
@@ -175,7 +186,7 @@ def init_b2frame(metadata, urlpath=None):
         dparams={},
         urlpath=urlpath,
     )
-    sc.fill_special(metadata.nbytes / metadata.typesize,
+    sc.fill_special(metadata.nbytes / sc.typesize,
                     special_value=blosc2.SpecialValue.UNINIT)
     return sc
 

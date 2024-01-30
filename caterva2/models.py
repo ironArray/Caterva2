@@ -14,14 +14,15 @@ import blosc2
 import pydantic
 
 
-class CParams(pydantic.BaseModel):
+class CParams(pydantic.BaseModel, extra=pydantic.Extra.allow):
     codec: blosc2.Codec
+    filters: list[blosc2.Filter]
+    filters_meta: list[int]
     typesize: int
     blocksize: int
 
 
-class SChunk(pydantic.BaseModel):
-    blocksize: int
+class SChunk(pydantic.BaseModel, extra=pydantic.Extra.allow):
     cbytes: int
     chunkshape: int
     chunksize: int
@@ -31,24 +32,17 @@ class SChunk(pydantic.BaseModel):
 #   dparams
 #   meta
     nbytes: int
-    typesize: int
     urlpath: str
 #   vlmeta
     nchunks: int
 
 
 class Metadata(pydantic.BaseModel):
+    shape: tuple
+    chunks: tuple
+    blocks: tuple
     dtype: str
-    ndim: int
-    shape: list[int]
-    ext_shape: list[int]
-    chunks: list[int]
-    ext_chunks: list[int]
-    blocks: list[int]
-    blocksize: int
-    chunksize: int
     schunk: SChunk
-    size: int
 
 
 class File(pydantic.BaseModel):
