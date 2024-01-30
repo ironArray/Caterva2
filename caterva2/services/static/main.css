@@ -1,6 +1,7 @@
 #page {
     display: grid;
     padding: 0.5rem;
+    margin-top: 1rem;
     grid-template-columns: auto;
 }
 
@@ -21,6 +22,13 @@
 
 #page > div {
     padding: 0.5rem;
+}
+
+#logo {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    width: 53px;
 }
 
 .htmx-indicator{
