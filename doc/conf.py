@@ -40,3 +40,25 @@ html_theme = "pydata_sphinx_theme"
 html_css_files = [
     "css/custom.css",
 ]
+html_favicon = "_static/logo-caterva2-16x16.png"
+
+# Theme options are theme-specific and customize the look and feel of a theme
+# further.  For a list of options available for each theme, see the
+# documentation.
+html_theme_options = {
+    "github_url": "https://github.com/Blosc/Caterva2",
+    "icon_links": [
+        {
+            "name": "Blosc Web Site",
+            "url": "https://blosc.org/",
+            "icon": "_static/blosc-logo_128.png",
+            "type": "local",
+        },
+    ],
+    "collapse_navigation": True,
+    "navigation_with_keys": False,
+}
+
+# The name of an image file (relative to this directory) to place at the top
+# of the sidebar.
+html_logo = "_static/Caterva2-logo.png"
