@@ -1,3 +1,28 @@
+#page {
+    display: grid;
+    padding: 0.5rem;
+    grid-template-columns: auto;
+}
+
+@media (min-width: 800px) and (max-width: 1300px) {
+    #page {
+        grid-template-columns: 10rem auto;
+    }
+    #meta-wrapper {
+        grid-column: 1 / span 2;
+    }
+}
+
+@media (min-width: 1300px) {
+    #page {
+        grid-template-columns: 10rem 30rem auto;
+    }
+}
+
+#page > div {
+    padding: 0.5rem;
+}
+
 .htmx-indicator{
     display: none;
 }
@@ -6,4 +31,9 @@
 }
 .htmx-request.htmx-indicator{
     display: block;
+}
+
+.list-group-item.active {
+    background-color: #008287;
+    border-color: #008287;
 }

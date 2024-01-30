@@ -12,7 +12,7 @@
 <body class="vh-100">
 
 <!-- Main section -->
-<div class="p-4 d-flex flex-wrap gap-5 h-100">
+<div id="page">
     <div hx-get="/htmx/root-list/" hx-trigger="load"></div>
     <div id="path-list-wrapper">
         {% include 'loading.html' %}

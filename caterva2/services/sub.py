@@ -472,7 +472,7 @@ async def html_home(request: Request):
 
 @app.get("/htmx/root-list/")
 async def htmx_root_list(request: Request):
-    context = {"roots": database.roots}
+    context = {"roots": database.roots.values()}
     return templates.TemplateResponse(request, "root_list.html", context)
 
 
@@ -494,6 +494,9 @@ async def html_path_list(
             "search": search,
         }
         return home(request, context)
+
+    if not get_root(root).subscribed:
+        follow(root)
 
     rootdir = cache / root
     paths = [
