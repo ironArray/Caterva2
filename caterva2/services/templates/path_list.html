@@ -8,7 +8,10 @@
 <div id="path-list" class="h-75 overflow-scroll mt-1 list-group">
     {% for path in paths %}
         <a href="/roots/{{root}}/{{path}}/" class="list-group-item list-group-item-action"
-           hx-boost="true" hx-target="#meta" hx-on:htmx:after-request="activate('#path-list a')">
+           hx-boost="true" hx-target="#meta"
+           hx-indicator="#meta-wrapper .htmx-indicator"
+           hx-on:htmx:after-request="activate('#path-list a', this)"
+           >
             {{path}}
         </a>
     {% endfor %}

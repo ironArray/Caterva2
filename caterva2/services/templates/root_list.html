@@ -1,7 +1,10 @@
 <div id="root-list" class="list-group">
     {% for root in roots %}
         <a href="/roots/{{root}}/" class="list-group-item list-group-item-action"
-           hx-boost="true" hx-target="#content" hx-on:htmx:after-request="activate('#root-list a')">
+           hx-boost="true" hx-target="#path-list"
+           hx-indicator="#path-list-wrapper .htmx-indicator"
+           hx-on:htmx:before-request="activate('#root-list a', this); clearContent('path-list'); clearContent('meta')"
+           >
             {{root}}
         </a>
     {% endfor %}

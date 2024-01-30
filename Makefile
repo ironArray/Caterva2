@@ -7,7 +7,7 @@ install:
 	${BIN}/pip install -U pip
 	${BIN}/pip install -e .
 	${BIN}/pip install -e .[services,clients]
-	${BIN}/pip install -e .[test]
+	${BIN}/pip install -e .[tests]
 
 bro:
 	${BIN}/python -m caterva2.services.bro --statedir=var/bro
