@@ -17,8 +17,13 @@ from caterva2 import api_utils
 
 # Defaults
 bro_host_default = 'localhost:8000'
+"""The default HTTP endpoint for the broker (URL host & port)."""
+
 pub_host_default = 'localhost:8001'
+"""The default HTTP endpoint for the publisher (URL host & port)."""
+
 sub_host_default = 'localhost:8002'
+"""The default HTTP endpoint for the subscriber (URL host & port)."""
 
 
 def get_roots(host=sub_host_default):

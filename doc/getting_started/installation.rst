@@ -1,6 +1,6 @@
 Installation
 ============
-You can install Python-Blosc2 wheels via PyPI using Pip or clone the GitHub repository.
+You can install Caterva2 wheels via PyPI using Pip or clone the GitHub repository.
 
 Pip
 +++
@@ -9,11 +9,13 @@ Pip
 
     python -m pip install caterva2
 
-If you plan to run tests, you may install with the ``tests`` extra:
+If you intend to run Caterva2 service or client programs, you may enable those extra features like:
 
 .. code-block::
 
-    python -m pip install caterva2[tests]
+    python -m pip install caterva2[services,clients]
+
+For running the test suite, you may add ``tests`` to the extras list.
 
 Source code
 +++++++++++
@@ -25,7 +27,7 @@ Source code
     python -m build
     python -m pip install dist/caterva2-*.whl
 
-If you plan to run tests, you may also add ``[tests]`` right after the wheel name.
+You may also enable extra features after the wheel file name (for instance, ``[tests]`` to run tests).
 
 That's all. You can proceed with testing section now.
 

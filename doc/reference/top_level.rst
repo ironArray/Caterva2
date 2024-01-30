@@ -17,7 +17,6 @@ Getting roots, subscribing and listing datasets
    subscribe
    get_list
    get_info
-   test
 
 
 Fetch / download datasets
@@ -34,10 +33,12 @@ Fetch / download datasets
 Utility variables
 -----------------
 
+Variables listed below as coming from the ``api`` module are available from the top level module too.
+
 .. autosummary::
    :toctree: autofiles/top_level/
 
     __version__
-    bro_host_default
-    pub_host_default
-    sub_host_default
+    api.bro_host_default
+    api.pub_host_default
+    api.sub_host_default

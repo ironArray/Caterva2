@@ -83,7 +83,7 @@ env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
 
 ## Create docs
 
-For creating the docs, you can run:
+For creating the docs, once you have installed Caterva2 you can run:
 
 ```shell
 pip install -r doc/requirements.txt
