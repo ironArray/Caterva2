@@ -63,11 +63,15 @@ def read_metadata(obj):
     if isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
+        cparams.filters = [filter for filter in cparams.filters
+                           if filter != blosc2.Filter.NOFILTER]
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
         return get_model_from_obj(array, models.Metadata, schunk=schunk)
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
+        cparams.filters = [filter for filter in cparams.filters
+                           if filter != blosc2.Filter.NOFILTER]
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     else:
