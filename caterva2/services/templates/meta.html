@@ -54,6 +54,8 @@
             {% set _ = meta.__setattr__('nbytes', nbytes_value) %}
             {% set _ = meta.__delattr__('cbytes') %}
             {% set _ = meta.__delattr__('cratio') %}
+            {% set _ = meta.cparams.__delattr__('filters') %}
+            {% set _ = meta.cparams.__delattr__('filters_meta') %}
         {% endif %}
 
         {% for key, value in meta %}
