@@ -37,20 +37,22 @@
             {% set _ = meta.__setattr__('blocks', blocks) %}
 
             {% set nbytes_value = meta.schunk.nbytes | string() %}
-            {% set nbytes_value = nbytes_value + ' cbytes: ' %}
+            {% set nbytes_value = nbytes_value + ' (cbytes: ' %}
             {% set nbytes_value = nbytes_value + meta.schunk.cbytes | string() %}
-            {% set nbytes_value = nbytes_value + ' cratio: ' %}
-            {% set nbytes_value = nbytes_value + meta.schunk.cratio | string() %}
+            {% set nbytes_value = nbytes_value + '; cratio: ' %}
+            {% set nbytes_value = nbytes_value + '%.2f'|format(meta.schunk.cratio) %}
+            {% set nbytes_value = nbytes_value + ')' %}
             {% set _ = meta.schunk.__setattr__('nbytes', nbytes_value) %}
             {% set _ = meta.schunk.__delattr__('cbytes') %}
             {% set _ = meta.schunk.__delattr__('cratio') %}
 
         {% else %}
             {% set nbytes_value = meta.nbytes | string() %}
-            {% set nbytes_value = nbytes_value + ' cbytes: ' %}
+            {% set nbytes_value = nbytes_value + ' (cbytes: ' %}
             {% set nbytes_value = nbytes_value + meta.cbytes | string() %}
-            {% set nbytes_value = nbytes_value + ' cratio: ' %}
-            {% set nbytes_value = nbytes_value + meta.cratio | string() %}
+            {% set nbytes_value = nbytes_value + '; cratio: ' %}
+            {% set nbytes_value = nbytes_value + '%.2f'|format(meta.cratio) %}
+            {% set nbytes_value = nbytes_value + ')' %}
             {% set _ = meta.__setattr__('nbytes', nbytes_value) %}
             {% set _ = meta.__delattr__('cbytes') %}
             {% set _ = meta.__delattr__('cratio') %}
