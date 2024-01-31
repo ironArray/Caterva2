@@ -67,7 +67,7 @@ tools = [
 tests = [
     "caterva2[clients]",
     "caterva2[services]",
-    "pytest",
+    "pytest<8",
 ]
 
 [tool.hatch.build.targets.wheel]
