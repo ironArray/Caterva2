@@ -11,14 +11,10 @@
         <table class="table table-sm">
         <!---  Adapt meta to desired output --->
         {% if meta.schunk %}
-            {% set shape = meta.shape | string() %}
-            {% set shape = shape + ' items ' %}
-            {% set shape = shape + '(' + (meta.schunk.nbytes | string()) + ' bytes)' %}
+            {% set shape = '%s items (%d bytes)' % (meta.shape, meta.schunk.nbytes) %}
             {% set _ = meta.__setattr__('shape', shape) %}
 
-            {% set chunks = meta.chunks | string() %}
-            {% set chunks = chunks + ' items ' %}
-            {% set chunks = chunks + '(' + (meta.schunk.chunksize | string()) + ' bytes)' %}
+            {% set chunks = '%s items (%d bytes)' % (meta.chunks, meta.schunk.chunksize) %}
             {% set _ = meta.__setattr__('chunks', chunks) %}
 
             {% set cparams = meta.schunk.cparams %}
@@ -31,28 +27,18 @@
             {% set _ = schunk.__delattr__('cparams') %}
             {% set _ = meta.__setattr__('schunk', schunk) %}
 
-            {% set blocks = meta.blocks | string() %}
-            {% set blocks = blocks + ' items ' %}
-            {% set blocks = blocks + '(' + (meta.schunk.blocksize | string()) + ' bytes)' %}
+            {% set blocks = '%s items (%d bytes)' % (meta.blocks, meta.schunk.blocksize) %}
             {% set _ = meta.__setattr__('blocks', blocks) %}
 
-            {% set nbytes_value = meta.schunk.nbytes | string() %}
-            {% set nbytes_value = nbytes_value + ' (cbytes: ' %}
-            {% set nbytes_value = nbytes_value + meta.schunk.cbytes | string() %}
-            {% set nbytes_value = nbytes_value + '; cratio: ' %}
-            {% set nbytes_value = nbytes_value + '%.2f'|format(meta.schunk.cratio) %}
-            {% set nbytes_value = nbytes_value + ')' %}
+            {% set nbytes_value = '%d (cbytes: %d ; cratio: %.2f)' %
+                (meta.schunk.nbytes, meta.schunk.cbytes, meta.schunk.cratio) %}
             {% set _ = meta.schunk.__setattr__('nbytes', nbytes_value) %}
             {% set _ = meta.schunk.__delattr__('cbytes') %}
             {% set _ = meta.schunk.__delattr__('cratio') %}
 
         {% else %}
-            {% set nbytes_value = meta.nbytes | string() %}
-            {% set nbytes_value = nbytes_value + ' (cbytes: ' %}
-            {% set nbytes_value = nbytes_value + meta.cbytes | string() %}
-            {% set nbytes_value = nbytes_value + '; cratio: ' %}
-            {% set nbytes_value = nbytes_value + '%.2f'|format(meta.cratio) %}
-            {% set nbytes_value = nbytes_value + ')' %}
+            {% set nbytes_value = '%d (cbytes: %d ; cratio: %.2f)' %
+                (meta.nbytes, meta.cbytes, meta.cratio) %}
             {% set _ = meta.__setattr__('nbytes', nbytes_value) %}
             {% set _ = meta.__delattr__('cbytes') %}
             {% set _ = meta.__delattr__('cratio') %}
