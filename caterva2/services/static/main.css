@@ -45,3 +45,13 @@
     background-color: #008287;
     border-color: #008287;
 }
+
+.btn-outline-success {
+    color: #008287;
+    border-color: #008287;
+}
+
+.btn-outline-success:hover {
+    color: whitesmoke;
+    background-color: #008287;
+}
