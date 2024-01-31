@@ -1,4 +1,4 @@
-## Launching Caterva2 services
+# Launching Caterva2 services
 
 To do anything useful with Caterva2, you need at least a running broker, publisher (with some datasets) and subscriber.  For the following tutorials we'll run our own services in the local machine, with the publisher serving some example files included in the Caterva2 package.
 

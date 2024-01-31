@@ -1,4 +1,6 @@
-## Using the plain client API
+# Using the client APIs
+
+## The plain client API
 
 Let's try Caterva2's plain client API.  After starting Caterva2 services (see above), run your Python interpreter and enter:
 
@@ -75,7 +77,7 @@ caterva2.download('foo/dir1/ds-2d.b2nd')
 
 The call downloads the dataset as a file and returns its local path `PosixPath('foo/dir1/ds-2d.b2nd')`, which should be similar to the dataset name.
 
-## Using the object-oriented client API
+## The object-oriented client API
 
 The plain client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (similar to that of h5py).
 

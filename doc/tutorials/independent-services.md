@@ -1,5 +1,5 @@
 (Running-independent-Caterva2-services)=
-## Running independent Caterva2 services
+# Running independent Caterva2 services
 
 The services that we used til now are enough for testing, but not for a real deployment.  For instance, they only listen to local connections, and they use example data and fixed directories.
 
@@ -24,7 +24,7 @@ python -m pip install caterva2[clients]
 
 (If you're going to try this tutorial on a single machine, just install `caterva2[services,clients]`.)
 
-### Broker
+## Broker
 
 Our example broker shall listen on port 3104 of host `broker.example.org`.  At that host, it may be run like this:
 
@@ -54,7 +54,7 @@ You may now stop the broker and run it with just:
 cat2bro
 ```
 
-### Publishers
+## Publishers
 
 Here we will setup at the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
 
@@ -99,7 +99,7 @@ The publishers will now work and register their respective roots at the broker.
 
 (Yes, if you're running the broker and publishers from the same directory of the same machine, the publishers will get the broker's address from its `caterva2.toml` configuration section.)
 
-### Subscriber
+## Subscriber
 
 The subscriber at host `sub.edu.example.org` shall cache data from remote publishers for fast access from the research & education local network.
 
@@ -122,7 +122,7 @@ To start the subscriber, just run:
 cat2sub
 ```
 
-### Client setup
+## Client setup
 
 Clients at the example workstation need to know the address of the subscriber that they will use.
 

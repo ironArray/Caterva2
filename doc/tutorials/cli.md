@@ -1,5 +1,5 @@
 (Using-the-command-line-client)=
-## Using the command-line client
+# Using the command-line client
 
 For quick queries to a subscriber or for use in shell scripts, Caterva2 ships the `cat2cli` program.  To use it, you need to install Caterva2 with the `clients` extra:
 
