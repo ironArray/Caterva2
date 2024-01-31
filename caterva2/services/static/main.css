@@ -21,14 +21,14 @@
 }
 
 #page > div {
-    padding: 0.5rem;
+    padding: 1rem;
 }
 
 #logo {
     position: absolute;
-    top: 0.5rem;
+    top: 1rem;
     right: 1rem;
-    width: 53px;
+    width: 64px;
 }
 
 .htmx-indicator{
