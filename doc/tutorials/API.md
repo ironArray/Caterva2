@@ -1,8 +1,10 @@
 # Using the client APIs
 
+To follow these instructions, make sure that you have started test Caterva2 services (see [](Launching-Caterva2-services)).
+
 ## The plain client API
 
-Let's try Caterva2's plain client API.  After starting Caterva2 services (see above), run your Python interpreter and enter:
+Let's try Caterva2's plain client API.  Run your Python interpreter and enter:
 
 ```python
 import caterva2

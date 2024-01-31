@@ -7,7 +7,7 @@ For quick queries to a subscriber or for use in shell scripts, Caterva2 ships th
 python -m pip install caterva2[clients]
 ```
 
-To ask the default subscriber about all roots known by the broker, use the `roots` command:
+Start test Caterva2 services (see [](Launching-Caterva2-services)) first.  To ask the default subscriber about all roots known by the broker, use the `roots` command:
 
 ```sh
 cat2cli roots  # -> foo (subscribed)
