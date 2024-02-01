@@ -12,7 +12,7 @@ Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] 
 [publish–subscribe]: https://en.wikipedia.org/wiki/Publish–subscribe_pattern
     "Publish–subscribe pattern (Wikipedia)"
 
-Caterva2 enables on demand data access with local caching and re-publishing, which can be particularly useful for the efficient sharing of remote datasets locally, thus optimizing communication and storage resources within work groups.
+Caterva2 subscribers perform on demand data access with local caching (fit for re-publishing), which can be particularly useful for the efficient sharing of remote datasets locally, thus optimizing communication and storage resources within work groups.
 
 ## Components of Caterva2
 
