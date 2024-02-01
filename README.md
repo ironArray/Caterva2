@@ -35,16 +35,61 @@ The Caterva2 package includes all the aforementioned components, although its ma
 
 Currently, this project is in early alpha stage, and it is not meant for production use yet.  In case you are interested in Caterva2, please contact us at <contact@blosc.org>.
 
-## Quick start
+## Installation
 
-Caterva2 components have a number of requirements, which are all in the `pyproject.toml`
-file, so just create a virtual environment and install:
+You may install Caterva2 in several ways, listed below.  In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands below.  For instance, to enable all extra features append `[services,clients,tests]`.
+
+- Pre-built wheel from PyPI:
+
+  ```sh
+  python -m pip install caterva2
+  ```
+
+- Wheel built from source code:
+
+  ```sh
+  git clone https://github.com/Blosc/Caterva2
+  cd Caterva2
+  python -m build
+  python -m pip install dist/caterva2-*.whl
+  ```
+
+- Developer setup:
+
+  ```sh
+  git clone https://github.com/Blosc/Caterva2
+  cd Caterva2
+  python -m pip install -e .
+  ```
+
+### Testing
+
+After installing with the `[tests]` extra, you can quickly check that the package is sane by running the test suite (that comes with the package):
 
 ```sh
-pip install -e .[services,clients]
+python -m caterva2.tests -v
 ```
 
-Start the broker:
+You may also run tests from source code:
+
+```sh
+cd Caterva2
+python -m pytest -v
+```
+
+The publisher run by tests will use the files under Caterva2's `root-example` directory.  After tests finish, state files will be left under the `_caterva2_tests` directory in case you want to inspect them (it will be removed and re-created when tests are run again).
+
+In case you want to run the tests with your own running daemons, you can do:
+
+```shell
+env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
+```
+
+Neither `root-example` nor `_caterva2_tests` will be used in this case.
+
+## Quick start
+
+First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then start the broker:
 
 ```sh
 cat2bro &
@@ -204,33 +249,5 @@ cat2import existing-hdf5-file.h5 new-caterva2-root
 ```
 
 The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information.
-
-## Tests
-
-Tests need some extra dependencies that you need to install:
-
-```sh
-pip install -e .[tests]
-```
-
-Then tests can be run as follows:
-
-```sh
-pytest -v
-```
-
-In case you want to run the tests with existing running daemons (as we did above), you can do:
-
-```shell
-env CATERVA2_USE_EXTERNAL=1 pytest -v
-```
-
-Also, the tests suite comes with the package, so you can always run it as:
-
-```sh
-python -m caterva2.tests -v
-```
-
-The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.
 
 That's all folks!
