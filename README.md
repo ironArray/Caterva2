@@ -37,7 +37,7 @@ Currently, this project is in early alpha stage, and it is not meant for product
 
 ## Installation
 
-You may install Caterva2 in several ways, listed below.  In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands below.  For instance, to enable all extra features append `[services,clients,tests]`.
+You may install Caterva2 in several ways:.
 
 - Pre-built wheel from PyPI:
 
@@ -61,6 +61,8 @@ You may install Caterva2 in several ways, listed below.  In any case, if you int
   cd Caterva2
   python -m pip install -e .
   ```
+
+In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  For instance, to enable all extras append `[services,clients,tests]`.
 
 ### Testing
 
