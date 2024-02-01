@@ -79,7 +79,7 @@ cd Caterva2
 python -m pytest -v
 ```
 
-The publisher run by tests will use the files under Caterva2's `root-example` directory.  After tests finish, state files will be left under the `_caterva2_tests` directory in case you want to inspect them (it will be removed and re-created when tests are run again).
+Tests will use a copy of Caterva2's `root-example` directory.  After they finish, state files will be left under the `_caterva2_tests` directory for inspection (it will be re-created when tests are run again).
 
 In case you want to run the tests with your own running daemons, you can do:
 
