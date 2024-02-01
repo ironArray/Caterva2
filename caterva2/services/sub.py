@@ -410,14 +410,14 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     # Optimizations for small data. If too small, we pickle it instead of compressing it.
     # Some measurements have been done and it looks like this has no effect on performance.
     # TODO: do more measurements and decide whether to keep this or not.
-    SMALL_DATA = 128  # length in bytes
+    small_data = 128  # length in bytes
     if isinstance(array, np.ndarray):
         if array.size == 0:
             # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
             prefer_schunk = False
-        elif array.size * array.itemsize < SMALL_DATA:
+        elif array.size * array.itemsize < small_data:
             prefer_schunk = False
-    if isinstance(data, bytes) and len(data) < SMALL_DATA:
+    if isinstance(data, bytes) and len(data) < small_data:
         prefer_schunk = False
 
     if prefer_schunk:

@@ -121,7 +121,7 @@ class ManagedServices(Services):
 
         start_timeout_secs = 10
         start_sleep_secs = 1
-        for retry in range(int(start_timeout_secs / start_sleep_secs)):
+        for _ in range(int(start_timeout_secs / start_sleep_secs)):
             time.sleep(start_sleep_secs)
             if check():
                 break

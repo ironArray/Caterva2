@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
     # Create queue and start workers
     queue = asyncio.Queue()
     tasks = []
-    for i in range(nworkers):
+    for _ in range(nworkers):
         task = asyncio.create_task(worker(queue))
         tasks.append(task)
 
