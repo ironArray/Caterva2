@@ -1,3 +1,4 @@
+(caterva2.toml)=
 # The `caterva2.toml` configuration file
 
 We've seen that the `cat2cli` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).

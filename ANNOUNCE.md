@@ -20,7 +20,7 @@ datasets among different hosts by using a publish–subscribe messaging pattern
 publishers categorize datasets into root groups that are announced to the
 broker and propagated to subscribers.
 
-Subscribers can access datasets of publishers on-demand on behalf of clients,
+Subscribers can access datasets of publishers on demand on behalf of clients,
 and cache them locally. Additionally, cached data from a subscriber can be
 republished by another publisher. This could be particularly useful for
 accessing remote datasets and sharing them within a local network, thereby

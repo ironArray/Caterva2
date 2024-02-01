@@ -1,69 +1,119 @@
-![Figure: Caterva2 sequence diagram](./doc/_static/logo-caterva-small.png)
+![Figure: Caterva2 logo](./doc/_static/logo-caterva-small.png)
 
 # Caterva2 - On demand access to remote Blosc2 data repositories
 
-Caterva2 is a distributed system written in Python meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
+## What is it?
 
-Subscribers can access datasets of publishers on-demand on behalf of clients, and cache them locally. Additionally, cached data from a subscriber can be republished by another publisher. This could be particularly useful for accessing remote datasets and sharing them within a local network, thereby optimizing communication and storage resources within work groups.
+Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
 
+[Blosc2]: https://www.blosc.org/pages/blosc-in-depth/
+    "What Is Blosc? (Blosc blog)"
+
+[publish–subscribe]: https://en.wikipedia.org/wiki/Publish–subscribe_pattern
+    "Publish–subscribe pattern (Wikipedia)"
+
+Caterva2 subscribers perform on demand data access with local caching (fit for re-publishing), which can be particularly useful for the efficient sharing of remote datasets locally, thus optimizing communication and storage resources within work groups.
 
 ## Components of Caterva2
 
-There are 4 elements:
+A Caterva2 deployment includes:
 
-- The broker. Enables communication between publishers and subscribers.
-- The publisher(s). Makes datasets available to subscribers.
-- The subscriber(s). Follows changes and allows the download of datasets from publishers.
-- The client(s). A command line interface for the user to access the datasets, it connects
-  to a subscriber.
+- One **broker** service to enable the communication between publishers and subscribers.
+- Several **publishers**, each one providing subscribers with access to one root and the datasets that it contains.
+- Several **subscribers**, each one tracking changes in multiple roots and datasets from publishers, and caching them locally for efficient reuse.
+- Several **clients**, each one asking a subscriber to track roots and datasets, and provide access to their data and metadata.
 
-These components have a number of requirements, which are all in the `pyproject.toml`
-file, so just create a virtual environment and install:
+Publishers and subscribers may be apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).
+
+The Caterva2 package includes all the aforementioned components, although its main role is to provide a very simple and lightweight library to build your own Caterva2 clients.
+
+## Use with caution
+
+Currently, this project is in early alpha stage, and it is not meant for production use yet.  In case you are interested in Caterva2, please contact us at <contact@blosc.org>.
+
+## Installation
+
+You may install Caterva2 in several ways:.
+
+- Pre-built wheel from PyPI:
+
+  ```sh
+  python -m pip install caterva2
+  ```
+
+- Wheel built from source code:
+
+  ```sh
+  git clone https://github.com/Blosc/Caterva2
+  cd Caterva2
+  python -m build
+  python -m pip install dist/caterva2-*.whl
+  ```
+
+- Developer setup:
+
+  ```sh
+  git clone https://github.com/Blosc/Caterva2
+  cd Caterva2
+  python -m pip install -e .
+  ```
+
+In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  For instance, to enable all extras append `[services,clients,tests]`.
+
+### Testing
+
+After installing with the `[tests]` extra, you can quickly check that the package is sane by running the test suite (that comes with the package):
 
 ```sh
-pip install -e .[services,clients]
+python -m caterva2.tests -v
 ```
+
+You may also run tests from source code:
+
+```sh
+cd Caterva2
+python -m pytest -v
+```
+
+Tests will use a copy of Caterva2's `root-example` directory.  After they finish, state files will be left under the `_caterva2_tests` directory for inspection (it will be re-created when tests are run again).
+
+In case you want to run the tests with your own running daemons, you can do:
+
+```shell
+env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
+```
+
+Neither `root-example` nor `_caterva2_tests` will be used in this case.
 
 ## Quick start
 
-Start the broker:
-
-```sh
-cat2bro &
-```
+(Find more detailed step-by-step [tutorials](Tutorials) in Caterva2 documentation.)
 
 For the purpose of this quick start, let's use the datasets within the `root-example` folder:
 
 ```sh
-ls -R root-example/
+cd Caterva2
+ls -F root-example/
 ```
 
 ```
-README.md         dir1/             dir2/             ds-1d.b2nd        ds-hello.b2frame
-
-root-example//dir1:
-ds-2d.b2nd  ds-3d.b2nd
-
-root-example//dir2:
-ds-4d.b2nd
+README.md  dir1/  dir2/  ds-1d-b.b2nd  ds-1d.b2nd  ds-hello.b2frame
 ```
 
-Start publishing `root-example` datasets:
+First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then fire up the broker, start publishing a root named `foo` with `root-example` datasets, and create a subscriber:
 
 ```sh
-cat2pub foo root-example &
+cat2bro &  # broker
+cat2pub foo root-example &  # publisher
+cat2sub &  # subscriber
 ```
 
-Now, let's create a subscriber:
-
-```sh
-cat2sub &
-```
+(To stop them later on, bring each one to the foreground with `fg` and press Ctrl+C.)
 
 ### The command line client
 
-Now that we have the services running, we can start using a script (called `cat2cli`) that talks
-to the subscriber. Now, in another shell, let's list all the available roots in the system:
+Now that the services are running, we can use the `cat2cli` client to talk
+to the subscriber. In another shell, let's list all the available roots in the system:
 
 ```sh
 cat2cli roots
@@ -73,13 +123,13 @@ cat2cli roots
 foo
 ```
 
-We only have a root called `foo` (the one we started publishing). If other publishers were running,
+We only have the `foo` root that we started publishing. If other publishers were running,
 we would see them listed here too.
 
 Let's ask our local subscriber to subscribe to the `foo` root:
 
 ```sh
-cat2cli subscribe foo
+cat2cli subscribe foo  # -> Ok
 ```
 
 Now, one can list the datasets in the `foo` root:
@@ -89,17 +139,14 @@ cat2cli list foo
 ```
 
 ```
-foo/ds-hello.b2frame
 foo/README.md
-foo/ds-1d.b2nd
+...
+foo/ds-hello.b2frame
+...
 foo/dir2/ds-4d.b2nd
-foo/dir1/ds-3d.b2nd
-foo/dir1/ds-2d.b2nd
 ```
 
-We can see how the client has subscribed successfully, and the datasets appear listed in the subscriptions.
-
-Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
+Let's ask the subscriber for more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
 ```sh
 cat2cli info foo/dir2/ds-4d.b2nd
@@ -107,50 +154,20 @@ cat2cli info foo/dir2/ds-4d.b2nd
 
 ```
 {
-    'dtype': 'complex128',
-    'ndim': 4,
     'shape': [2, 3, 4, 5],
-    'ext_shape': [2, 3, 4, 5],
-    'chunks': [2, 3, 4, 5],
-    'ext_chunks': [2, 3, 4, 5],
-    'blocks': [2, 3, 4, 5],
-    'blocksize': 1920,
-    'chunksize': 1920,
+    'chunks': [1, 2, 3, 4],
+    'blocks': [1, 2, 2, 2],
+    'dtype': 'complex128',
     'schunk': {
-        'blocksize': 1920,
-        'cbytes': 0,
-        'chunkshape': 120,
-        'chunksize': 1920,
-        'contiguous': True,
-        'cparams': {'codec': 5, 'typesize': 16},
-        'cratio': 0.0,
-        'nbytes': 1920,
-        'typesize': 16,
-        'urlpath': '/Users/faltet/blosc/Caterva2/_caterva2/sub/cache/foo/dir2/ds-4d.b2nd',
-        'nchunks': 1
-    },
-    'size': 1920
+        # ...
+    }
 }
-```
-
-Also, we can ask for the url of a root:
-
-```sh
-cat2cli url foo
-```
-
-```
-http://localhost:8001
 ```
 
 Let's print data from a specified dataset:
 
 ```sh
-cat2cli show foo/ds-hello.b2frame[:12]
-```
-
-```
-Hello world!
+cat2cli show foo/ds-hello.b2frame[:12]  # -> Hello world!
 ```
 
 It allows printing slices instead of the whole dataset too:
@@ -175,50 +192,16 @@ Dataset saved to foo/dir2/ds-4d.b2nd
 
 ### Using a configuration file
 
-All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory (though an alternative file may be given with the `--conf` option).  Please see the `caterva2.sample.toml` file for more information.
+All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).  Caterva2 source code includes a fully documented `caterva2.sample.toml` file (see also [caterva2.toml](caterva2.toml) in Caterva2 tutorials).
 
 ## Tools
 
-Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may invoke it like:
+Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may use it like:
 
 ```sh
 cat2import existing-hdf5-file.h5 new-caterva2-root
 ```
 
-The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information.
-
-## Tests
-
-Tests need some extra dependencies that you need to install:
-
-```sh
-pip install -e .[tests]
-```
-
-Then tests can be run as follows:
-
-```sh
-pytest -v
-```
-
-In case you want to run the tests with existing running daemons (as we did above), you can do:
-
-```shell
-env CATERVA2_USE_EXTERNAL=1 pytest -v
-```
-
-Also, the tests suite comes with the package, so you can always run it as:
-
-```sh
-python -m caterva2.tests -v
-```
-
-The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.
-
-
-## Use with caution
-
-Currently, this project is in early alpha stage, and it is not meant for production use yet.
-In case you are interested in Caterva2, please contact us at contact@blosc.org.
+The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information (see also [cat2import](cat2import) in Caterva2 utilities documentation).
 
 That's all folks!
