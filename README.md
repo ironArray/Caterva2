@@ -93,18 +93,11 @@ For the purpose of this quick start, let's use the datasets within the `root-exa
 
 ```sh
 cd Caterva2
-ls -R root-example/
+ls -F root-example/
 ```
 
 ```
-root-example/:
-README.md  dir1  dir2  ds-1d-b.b2nd  ds-1d.b2nd  ds-hello.b2frame
-
-root-example/dir1:
-ds-2d.b2nd  ds-3d.b2nd
-
-root-example/dir2:
-ds-4d.b2nd
+README.md  dir1/  dir2/  ds-1d-b.b2nd  ds-1d.b2nd  ds-hello.b2frame
 ```
 
 First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then fire up the broker, start publishing a root named `foo` with `root-example` datasets, and create a subscriber:
