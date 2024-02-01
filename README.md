@@ -115,6 +115,8 @@ cat2pub foo root-example &  # publisher
 cat2sub &  # subscriber
 ```
 
+(To stop them later on, bring each one to the foreground with `fg` and press Ctrl+C.)
+
 ### The command line client
 
 Now that the services are running, we can use the `cat2cli` client to talk
