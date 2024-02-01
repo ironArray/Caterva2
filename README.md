@@ -242,12 +242,12 @@ All the services mentioned above (and clients, to some limited extent) may get t
 
 ## Tools
 
-Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may invoke it like:
+Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may use it like:
 
 ```sh
 cat2import existing-hdf5-file.h5 new-caterva2-root
 ```
 
-The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information.
+The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information (see also [cat2import](cat2import) in Caterva2 utilities documentation).
 
 That's all folks!

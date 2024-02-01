@@ -24,6 +24,7 @@ A relevant command option is `--help`, which shows the options and arguments acc
 
 For a short tutorial on `cat2cli`, see [](Using-the-command-line-client).
 
+(cat2import)=
 ## `cat2import` -- Convert HDF5 files to Caterva2 roots
 
 In the ecosystem where Caterva2 belongs, it is common to work with HDF5 files containing multidimensional numerical data stored as datasets arranged in arbitrary hierarchies.  Caterva2 is designed to distribute such type of datasets (and some others), with similar features such as compression, chunking and arbitrary attributes, and also grouped in hierarchies.
