@@ -23,7 +23,7 @@ def pub_host(configuration):
     return configuration.get('publisher.http', cat2.pub_host_default)
 
 
-def cli(args, binary=False):
+def cli(args, binary=False) -> str or dict:
     cli_path = 'caterva2.clients.cli'
     args = [sys.executable, '-m' + str(cli_path)] + args
     if not binary:

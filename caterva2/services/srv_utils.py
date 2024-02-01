@@ -78,8 +78,8 @@ def read_metadata(obj):
 
 def reformat_cparams(cparams):
     cparams.__setattr__('filters, meta', [(cparams.filters[i], cparams.filters_meta[i])
-                                            for i in range(len(cparams.filters))
-                                            if cparams.filters[i] != blosc2.Filter.NOFILTER])
+                        for i in range(len(cparams.filters))
+                        if cparams.filters[i] != blosc2.Filter.NOFILTER])
 #   delattr(cparams, 'filters')
 #   delattr(cparams, 'filters_meta')
     return cparams
@@ -106,6 +106,7 @@ async def disconnect_client(client, timeout=5):
 #
 
 HeaderType = typing.Annotated[str | None, fastapi.Header()]
+
 
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
