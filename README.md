@@ -23,11 +23,7 @@ A Caterva2 deployment includes:
 - Several **subscribers**, each one tracking changes in multiple roots and datasets from publishers, and caching them locally for efficient reuse.
 - Several **clients**, each one asking a subscriber to track roots and datasets, and provide access to their data and metadata.
 
-Publishers and subscribers may be apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).  Such a setup ensures that:
-
-- Data can be efficiently distributed among different machines or networks.
-- Data is only requested from their sources on demand.
-- Data is cached when possible, close to interested parties.
+Publishers and subscribers may be apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).
 
 The Caterva2 package includes all the aforementioned components, although its main role is to provide a very simple and lightweight library to build your own Caterva2 clients.
 
