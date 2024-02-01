@@ -2,29 +2,47 @@
 
 # Caterva2 - On demand access to remote Blosc2 data repositories
 
-Caterva2 is a distributed system written in Python meant for sharing Blosc2 datasets among different hosts by using a [publish–subscribe](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
+## What is it?
 
-Subscribers can access datasets of publishers on-demand on behalf of clients, and cache them locally. Additionally, cached data from a subscriber can be republished by another publisher. This could be particularly useful for accessing remote datasets and sharing them within a local network, thereby optimizing communication and storage resources within work groups.
+Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
 
+[Blosc2]: https://www.blosc.org/pages/blosc-in-depth/
+    "What Is Blosc? (Blosc blog)"
+
+[publish–subscribe]: https://en.wikipedia.org/wiki/Publish–subscribe_pattern
+    "Publish–subscribe pattern (Wikipedia)"
+
+Caterva2 enables on-demand data access with local caching and re-publishing, which can be particularly useful for the efficient sharing of remote datasets locally, thus optimizing communication and storage resources within work groups.
 
 ## Components of Caterva2
 
-There are 4 elements:
+A Caterva2 deployment includes:
 
-- The broker. Enables communication between publishers and subscribers.
-- The publisher(s). Makes datasets available to subscribers.
-- The subscriber(s). Follows changes and allows the download of datasets from publishers.
-- The client(s). A command line interface for the user to access the datasets, it connects
-  to a subscriber.
+- One **broker** service to enable the communication between publishers and subscribers.
+- Several **publishers**, each one providing subscribers with access to one root and the datasets that it contains.
+- Several **subscribers**, each one tracking changes in multiple roots and datasets from publishers, and caching them locally for efficient reuse.
+- Several **clients**, each one asking a subscriber to track roots and datasets, and provide access to their data and metadata.
 
-These components have a number of requirements, which are all in the `pyproject.toml`
+Publishers and subscribers may be apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).  Such a setup ensures that:
+
+- Data can be efficiently distributed among different machines or networks.
+- Data is only requested from their sources on demand.
+- Data is cached when possible, close to interested parties.
+
+The Caterva2 package includes all the aforementioned components, although its main role is to provide a very simple and lightweight library to build your own Caterva2 clients.
+
+## Use with caution
+
+Currently, this project is in early alpha stage, and it is not meant for production use yet.  In case you are interested in Caterva2, please contact us at <contact@blosc.org>.
+
+## Quick start
+
+Caterva2 components have a number of requirements, which are all in the `pyproject.toml`
 file, so just create a virtual environment and install:
 
 ```sh
 pip install -e .[services,clients]
 ```
-
-## Quick start
 
 Start the broker:
 
@@ -214,11 +232,5 @@ python -m caterva2.tests -v
 ```
 
 The test publisher will use the files under `root-example`.  After tests finish, state files will be stored under `_caterva2_tests` in case you want to inspect them.
-
-
-## Use with caution
-
-Currently, this project is in early alpha stage, and it is not meant for production use yet.
-In case you are interested in Caterva2, please contact us at contact@blosc.org.
 
 That's all folks!
