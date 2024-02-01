@@ -107,22 +107,12 @@ root-example/dir2:
 ds-4d.b2nd
 ```
 
-First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then start the broker:
+First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then fire up the broker, start publishing a root named `foo` with `root-example` datasets, and create a subscriber:
 
 ```sh
-cat2bro &
-```
-
-Start publishing `root-example` datasets:
-
-```sh
-cat2pub foo root-example &
-```
-
-Now, let's create a subscriber:
-
-```sh
-cat2sub &
+cat2bro &  # broker
+cat2pub foo root-example &  # publisher
+cat2sub &  # subscriber
 ```
 
 ### The command line client
