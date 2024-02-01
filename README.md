@@ -1,4 +1,4 @@
-![Figure: Caterva2 sequence diagram](./doc/_static/logo-caterva-small.png)
+![Figure: Caterva2 logo](./doc/_static/logo-caterva-small.png)
 
 # Caterva2 - On demand access to remote Blosc2 data repositories
 
