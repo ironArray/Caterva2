@@ -127,8 +127,8 @@ cat2sub &
 
 ### The command line client
 
-Now that we have the services running, we can start using a script (called `cat2cli`) that talks
-to the subscriber. Now, in another shell, let's list all the available roots in the system:
+Now that the services are running, we can use the `cat2cli` client to talk
+to the subscriber. In another shell, let's list all the available roots in the system:
 
 ```sh
 cat2cli roots
@@ -138,13 +138,13 @@ cat2cli roots
 foo
 ```
 
-We only have a root called `foo` (the one we started publishing). If other publishers were running,
+We only have the `foo` root that we started publishing. If other publishers were running,
 we would see them listed here too.
 
 Let's ask our local subscriber to subscribe to the `foo` root:
 
 ```sh
-cat2cli subscribe foo
+cat2cli subscribe foo  # -> Ok
 ```
 
 Now, one can list the datasets in the `foo` root:
@@ -163,9 +163,7 @@ foo/dir1/ds-2d.b2nd
 foo/dir2/ds-4d.b2nd
 ```
 
-We can see how the client has subscribed successfully, and the datasets appear listed in the subscriptions.
-
-Let's ask the subscriber more info about the `foo/dir2/ds-4d.b2nd` dataset:
+Let's ask the subscriber for more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
 ```sh
 cat2cli info foo/dir2/ds-4d.b2nd
@@ -195,7 +193,7 @@ cat2cli info foo/dir2/ds-4d.b2nd
 }
 ```
 
-Also, we can ask for the url of a root:
+Also, we can ask for the URL of a root:
 
 ```sh
 cat2cli url foo
