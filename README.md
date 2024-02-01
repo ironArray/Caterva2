@@ -155,11 +155,9 @@ cat2cli list foo
 
 ```
 foo/README.md
-foo/ds-1d.b2nd
-foo/ds-1d-b.b2nd
+...
 foo/ds-hello.b2frame
-foo/dir1/ds-3d.b2nd
-foo/dir1/ds-2d.b2nd
+...
 foo/dir2/ds-4d.b2nd
 ```
 
@@ -176,41 +174,15 @@ cat2cli info foo/dir2/ds-4d.b2nd
     'blocks': [1, 2, 2, 2],
     'dtype': 'complex128',
     'schunk': {
-        'cbytes': 0,
-        'chunkshape': 32,
-        'chunksize': 512,
-        'contiguous': True,
-        'cparams': {'codec': 5,
-                    'filters': [0, 0, 0, 0, 0, 1],
-                    'filters_meta': [0, 0, 0, 0, 0, 0],
-                    'typesize': 16, 'blocksize': 128,
-                    'filters, meta': [[1, 0]]},
-        'cratio': 0.0,
-        'nbytes': 8192,
-        'urlpath': '.../_caterva2/sub/cache/foo/dir2/ds-4d.b2nd',
-        'nchunks': 16
+        # ...
     }
 }
-```
-
-Also, we can ask for the URL of a root:
-
-```sh
-cat2cli url foo
-```
-
-```
-http://localhost:8001
 ```
 
 Let's print data from a specified dataset:
 
 ```sh
-cat2cli show foo/ds-hello.b2frame[:12]
-```
-
-```
-Hello world!
+cat2cli show foo/ds-hello.b2frame[:12]  # -> Hello world!
 ```
 
 It allows printing slices instead of the whole dataset too:
