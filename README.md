@@ -89,15 +89,10 @@ Neither `root-example` nor `_caterva2_tests` will be used in this case.
 
 ## Quick start
 
-First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then start the broker:
-
-```sh
-cat2bro &
-```
-
 For the purpose of this quick start, let's use the datasets within the `root-example` folder:
 
 ```sh
+cd Caterva2
 ls -R root-example/
 ```
 
@@ -110,6 +105,12 @@ ds-2d.b2nd  ds-3d.b2nd
 
 root-example/dir2:
 ds-4d.b2nd
+```
+
+First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then start the broker:
+
+```sh
+cat2bro &
 ```
 
 Start publishing `root-example` datasets:
