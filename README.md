@@ -1,6 +1,6 @@
 
 
-# <img src="./doc/_static/logo-caterva2-horizontal-small.png" alt="Caterva2"/> On-demand access to remote Blosc2 data repositories
+# <img src="./doc/_static/logo-caterva2-horizontal-small.png" alt="Caterva2" width="200"/> On-demand access to remote Blosc2 data repositories
 
 ## What is it?
 
