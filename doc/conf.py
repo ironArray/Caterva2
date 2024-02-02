@@ -61,4 +61,4 @@ html_theme_options = {
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "_static/Caterva2-logo.png"
+html_logo = "_static/logo-caterva2-horizontal-half.png"
