@@ -21,10 +21,9 @@ publishers categorize datasets into root groups that are announced to the
 broker and propagated to subscribers.
 
 Subscribers can access datasets of publishers on demand on behalf of clients,
-and cache them locally. Additionally, cached data from a subscriber can be
-republished by another publisher. This could be particularly useful for
-accessing remote datasets and sharing them within a local network, thereby
-optimizing communication and storage resources within work groups.
+and cache them locally. This could be particularly useful for accessing remote
+datasets and sharing them within a local network, thereby optimizing
+communication and storage resources within work groups.
 
 Caterva2 is distributed using the AGPL license, see
 https://github.com/Blosc/Caterva2/blob/main/LICENSE.txt
