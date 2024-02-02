@@ -1,7 +1,7 @@
 [//]: # (Including the logo here is not a good idea, as this file is also used in the PyPI page.
     The logo is already included in the documentation, so it is not necessary to include it here.)
 <!-- img src="./doc/_static/logo-caterva2-horizontal-small.png" alt="Caterva2" width="200"/> -->
-# Caterva2: On-demand access to remote Blosc2 data repositories
+# Caterva2: On-demand access to Blosc2 data repositories
 
 ## What is it?
 
