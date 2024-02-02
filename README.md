@@ -1,6 +1,6 @@
-![Figure: Caterva2 logo](./doc/_static/logo-caterva-small.png)
 
-# Caterva2 - On demand access to remote Blosc2 data repositories
+
+# <img src="./doc/_static/logo-caterva-small.png" alt="Caterva2" width="100"/> On-demand access to remote Blosc2 data repositories
 
 ## What is it?
 
