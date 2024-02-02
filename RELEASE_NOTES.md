@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 0.1 to 0.1.1
+
+#XXX version-specific blurb XXX#
+
 ## Initial 0.1 release
 
 * First public release.

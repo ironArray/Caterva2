@@ -21,16 +21,12 @@ Testing
 Follow the steps in README-DEVELOPERS.md file for locally creating and
 installing the wheel, then test it::
 
+  $ python -m pip install -e .[test]
   $ cd ..   # to avoid using the source code
   $ python -m caterva2.tests -v
   $ cd -
 
-
-You may want to use the existing services for testing the wheel::
-
-  $ cd ..   # to avoid using the source code
-  $ env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
-  $ cd -
+If the tests pass, you are ready to release.
 
 
 Check documentation

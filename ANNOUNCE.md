@@ -1,8 +1,8 @@
 Announcing Caterva2 0.1
 =======================
 
-This is the first public release of Caterva2, a high-performance storage
-system for sharing multidimensional arrays compressed with Blosc2.
+This is the first public release of Caterva2, a high-performance storage and
+communication system for on-demand access to Blosc2 data repositories.
 
 For more info, you can have a look at the release notes in:
 
