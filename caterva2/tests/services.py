@@ -88,12 +88,15 @@ def sub_check(conf):
 
 
 class Services:
-    pass
+    def __init__(self):  # mostly to appease QA
+        pass
 
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True,
                  examples_dir=None, configuration=None):
+        super().__init__()
+
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
         self.examples_dir = examples_dir
@@ -168,6 +171,7 @@ class ManagedServices(Services):
 
 class ExternalServices(Services):
     def __init__(self, configuration=None):
+        super().__init__()
         self.configuration = conf = configuration
         self._checks = [bro_check(conf), pub_check(conf), sub_check(conf)]
 
