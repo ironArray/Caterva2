@@ -1,7 +1,7 @@
 .. _ref-API-Root:
 
-Root API
-========
+Root class
+==========
 
 A root is a remote repository that can be subscribed to.
 
