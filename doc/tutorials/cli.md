@@ -13,7 +13,7 @@ Start test Caterva2 services (see [](Launching-Caterva2-services)) first.  To as
 cat2cli roots  # -> foo (subscribed)
 ```
 
-**Note:** To choose a different subscriber, you may use the `--host` command-line option. To learn about the options and arguments supported by *any* Caterva2 program, just invoke it with `--help`, e.g. `cat2cli --help`.
+**Note:** To choose a different subscriber, you may use the `--host` command-line option. To learn about the options and arguments supported by *any* Caterva2 program, just invoke it with `--help`, e.g. `cat2cli --help`.  You may also use a configuration file (see [](caterva2.toml)).
 
 Though the previous command reports `foo` as subscribed (from previous sections), you may still use `subscribe` to subscribe to it (again):
 

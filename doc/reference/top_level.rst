@@ -1,3 +1,5 @@
+.. _ref-API-top-level:
+
 Top level API
 =============
 

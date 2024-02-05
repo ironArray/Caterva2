@@ -6,12 +6,15 @@ possible.
 
 Our Development Process
 -----------------------
-New versions are being developed in the "main" branch,
+Caterva2 development takes place around its Git repository hosted on GitHub:
+<https://github.com/Blosc/Caterva2>.
+
+New versions are being developed in the `main` branch,
 or in their own feature branch.
-When they are deemed ready for a release, they are merged back into "main"
+When they are deemed ready for a release, they are merged back into `main`
 again.
 
-So all contributions must stage first through "main"
+So all contributions must stage first through `main`
 or their own feature branch.
 
 Pull Requests

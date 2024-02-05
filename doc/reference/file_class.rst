@@ -1,11 +1,11 @@
-.. _File:
+.. _ref-API-File:
 
-File API
-========
+File class
+==========
 
 A file is either a Blosc2 dataset or a regular file on a root repository.
 
-.. currentmodule:: caterva2.api
+.. currentmodule:: caterva2
 .. autosummary::
     :toctree: autofiles
 
