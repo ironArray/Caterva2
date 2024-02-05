@@ -6,6 +6,9 @@ possible.
 
 Our Development Process
 -----------------------
+Caterva2 development takes place around its Git repository hosted on GitHub:
+<https://github.com/Blosc/Caterva2>.
+
 New versions are being developed in the "main" branch,
 or in their own feature branch.
 When they are deemed ready for a release, they are merged back into "main"
