@@ -12,6 +12,15 @@
 import os
 import sys
 
+import h5py
+
+
+def export(cat2_path, hdf5_path):
+    """Export Caterva2 root at `cat2_path` to new HDF5 file in `hdf5_path`."""
+    with os.scandir(cat2_path) as c2i:  # keeps directory open
+        with h5py.File(hdf5_path, 'x') as h5f:  # create, fail if existing
+            export_root(c2i, h5f)
+
 
 def main():
     try:
