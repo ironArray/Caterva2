@@ -4,7 +4,7 @@ To follow these instructions, make sure that you have started test Caterva2 serv
 
 ## The top level client API
 
-Let's try Caterva2's top level client API.  Run your Python interpreter and enter:
+Let's try Caterva2's top level client API (fully described in [](ref-API-top-level)).  Run your Python interpreter and enter:
 
 ```python
 import caterva2
@@ -81,7 +81,7 @@ The call downloads the dataset as a file and returns its local path `PosixPath('
 
 ## The object-oriented client API
 
-The top level client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (similar to that of h5py).
+The top level client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (fully described in [](ref-API-Root) and [](ref-API-File)), similar to that of h5py.
 
 First, let's create a `caterva2.Root` instance for the `foo` root (using the default subscriber -- remember to start your Caterva2 services first):
 

@@ -1,4 +1,4 @@
-.. _Root:
+.. _ref-API-Root:
 
 Root API
 ========
