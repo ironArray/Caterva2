@@ -133,8 +133,8 @@ def main():
                "into the new CATERVA2_ROOT directory.")
         eprint('\n'.join(__doc__.splitlines()[1:]))
         sys.exit(1)
-
-    export(hdf5_path, cat2_path)
+    else:
+        export(hdf5_path, cat2_path)
 
 
 if __name__ == '__main__':
