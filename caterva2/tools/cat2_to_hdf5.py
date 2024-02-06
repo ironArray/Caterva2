@@ -15,16 +15,21 @@ import sys
 
 import h5py
 
+if sys.version_info >= (3, 9):
+    from collections.abc import Iterator
+else:
+    from typing import Iterator
 
-def export_dataset(c2ds_entry, h5_group):
-    """Export Caterva2 dataset `c2ds_entry` into
+
+def export_dataset(c2_dataset: os.DirEntry, h5_group: h5py.Group) -> None:
+    """Export Caterva2 dataset entry `c2_dataset` into
     open HDF5 group `h5_group`.
     """
-    logging.info(f"Export dataset: {c2ds_entry.name!r} => {h5_group.name!r}")
+    logging.info(f"Export dataset: {c2_dataset.name!r} => {h5_group.name!r}")
     pass   # TODO
 
 
-def export_root(c2_iter, h5_group):
+def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
     """Export existing Caterva2 root/directory iterator `c2_iter` into
     open HDF5 group `h5_group`.
     """
