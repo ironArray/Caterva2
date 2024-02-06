@@ -28,7 +28,7 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     # TODO: distinguish array / frame / compressed file
     try:
         b2_dataset = blosc2.open(c2_leaf.path)
-        data = b2_dataset[:]
+        data = b2_dataset[()]
     except Exception as e:
         logging.error(f"Failed to read Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
