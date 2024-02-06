@@ -21,11 +21,11 @@ else:
     from typing import Iterator
 
 
-def export_dataset(c2_dataset: os.DirEntry, h5_group: h5py.Group) -> None:
-    """Export Caterva2 dataset entry `c2_dataset` into
+def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
+    """Export Caterva2 leaf entry `c2_leaf` into
     open HDF5 group `h5_group`.
     """
-    logging.info(f"Export dataset: {c2_dataset.name!r} => {h5_group.name!r}")
+    logging.info(f"Export leaf: {c2_leaf.name!r} => {h5_group.name!r}")
     pass   # TODO
 
 
@@ -39,7 +39,7 @@ def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
                 h5g = h5_group.create_group(entry.name)
                 export_root(c2i, h5g)
         else:
-            export_dataset(entry, h5_group)
+            export_leaf(entry, h5_group)
 
 
 def export(cat2_path, hdf5_path):
