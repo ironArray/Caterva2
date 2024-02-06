@@ -12,8 +12,10 @@
 import logging
 import os
 import pathlib
+import re
 import sys
 
+import blosc2
 import h5py
 
 if sys.version_info >= (3, 9):
@@ -23,8 +25,26 @@ else:
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
-    # TODO: distinguish array / frame / file
-    pass  # TODO
+    # TODO: distinguish array / frame / compressed file
+    try:
+        b2_dataset = blosc2.open(c2_leaf.path)
+        data = b2_dataset[:]
+    except Exception as e:
+        logging.error(f"Failed to read Blosc2 dataset: "
+                      f"{c2_leaf.path!r} -> {e!r}")
+        return
+
+    assert re.match(r'.*\.b2[^.]*$', c2_leaf.name)
+    c2_leaf_stem = pathlib.Path(c2_leaf.name).stem
+    try:
+        h5_dataset = h5_group.create_dataset(c2_leaf_stem, data=data)
+    except Exception as e:
+        logging.error(f"Failed to create dataset {c2_leaf_stem!r} in HDF5 group: "
+                      f"{h5_group.name!r} -> {e!r}")
+        return
+
+    # TODO: export attributes
+    logging.info(f"Exported dataset: {c2_leaf.path!r} => {h5_dataset.name!r}")
 
 
 def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
