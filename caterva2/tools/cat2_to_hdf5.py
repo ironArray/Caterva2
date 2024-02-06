@@ -43,7 +43,16 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
                       f"{h5_group.name!r} -> {e!r}")
         return
 
-    # TODO: export attributes
+    b2_attrs = getattr(b2_dataset, 'schunk', b2_dataset).vlmeta
+    for (aname, avalue) in b2_attrs.items():
+        try:
+            h5_dataset.attrs[aname] = avalue
+            logging.info(f"Exported dataset attribute "
+                         f"{aname!r}: {h5_dataset.name!r}")
+        except Exception as e:
+            logging.error(f"Failed to export dataset attribute "
+                          f"{aname!r}: {h5_dataset.name!r} -> {e!r}")
+
     logging.info(f"Exported dataset: {c2_leaf.path!r} => {h5_dataset.name!r}")
 
 
