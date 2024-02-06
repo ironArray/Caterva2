@@ -51,7 +51,6 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     """Export Caterva2 leaf entry `c2_leaf` into
     open HDF5 group `h5_group`.
     """
-    logging.info(f"Export leaf: {c2_leaf.name!r} => {h5_group.name!r}")
     c2_leaf_name = pathlib.Path(c2_leaf.name)
     if c2_leaf_name.suffix in ['.b2nd', '.b2frame', '.b2']:
         export_dataset(c2_leaf, h5_group)
