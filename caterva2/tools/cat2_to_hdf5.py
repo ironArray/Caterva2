@@ -9,10 +9,32 @@
 
 """Export a Caterva2 root to datasets in an HDF5 file."""
 
+import logging
 import os
 import sys
 
 import h5py
+
+
+def export_dataset(c2ds_entry, h5_group):
+    """Export Caterva2 dataset `c2ds_entry` into
+    open HDF5 group `h5_group`.
+    """
+    logging.info(f"Export dataset: {c2ds_entry.name!r} => {h5_group.name!r}")
+    pass   # TODO
+
+
+def export_root(c2_iter, h5_group):
+    """Export existing Caterva2 root/directory iterator `c2_iter` into
+    open HDF5 group `h5_group`.
+    """
+    for entry in c2_iter:
+        if entry.is_dir(follow_symlinks=True):
+            with os.scandir(entry) as c2i:
+                h5g = h5_group.create_group(entry.name)
+                export_root(c2i, h5g)
+        else:
+            export_dataset(entry, h5_group)
 
 
 def export(cat2_path, hdf5_path):
