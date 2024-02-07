@@ -19,10 +19,7 @@ import blosc2
 import h5py
 import numpy
 
-if sys.version_info >= (3, 9):
-    from collections.abc import Callable, Iterator, Mapping
-else:
-    from typing import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
