@@ -28,7 +28,9 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     # TODO: mark array / frame / compressed file distinguishably
     try:
         b2_dataset = blosc2.open(c2_leaf.path)
-        data = b2_dataset[()]
+        b2_schunk = getattr(b2_dataset, 'schunk', b2_dataset)
+        data = (b2_schunk[:] if b2_schunk is b2_dataset
+                else b2_dataset[()])  # ok for arrays & scalars
     except Exception as e:
         logging.error(f"Failed to read Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
@@ -45,7 +47,7 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
                       f"{h5_group.name!r} -> {e!r}")
         return
 
-    b2_attrs = getattr(b2_dataset, 'schunk', b2_dataset).vlmeta
+    b2_attrs = b2_schunk.vlmeta
     for (aname, avalue) in b2_attrs.items():
         try:
             h5_dataset.attrs[aname] = avalue
