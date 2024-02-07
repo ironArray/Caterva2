@@ -72,6 +72,7 @@ def copy_dataset(name, node, c2_root):
             # (e.g. for Fortran-style string attributes added by PyTables).
             pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
             b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
+            logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
         except Exception as e:
             logging.error(f"Failed to export dataset attribute "
                           f"{aname!r}: {name!r} -> %r", e)
