@@ -17,20 +17,18 @@ import sys
 
 import blosc2
 import h5py
+import numpy
 
 if sys.version_info >= (3, 9):
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator, Mapping
 else:
-    from typing import Iterator
+    from typing import Callable, Iterator, Mapping
 
 
-def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
-    # TODO: mark array / frame / compressed file distinguishably
+def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
+                   read: Callable[[str], tuple[Mapping, Mapping]]) -> None:
     try:
-        b2_dataset = blosc2.open(c2_leaf.path)
-        b2_schunk = getattr(b2_dataset, 'schunk', b2_dataset)
-        data = (b2_schunk[:] if b2_schunk is b2_dataset
-                else b2_dataset[()])  # ok for arrays & scalars
+        (kwds, attrs) = read(c2_leaf.path)
     except Exception as e:
         logging.error(f"Failed to read Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
@@ -41,14 +39,13 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     try:
         # TODO: carry chunk/block shapes
         # TODO: carry compression parameters
-        h5_dataset = h5_group.create_dataset(c2_leaf_stem, data=data)
+        h5_dataset = h5_group.create_dataset(c2_leaf_stem, **kwds)
     except Exception as e:
         logging.error(f"Failed to create dataset {c2_leaf_stem!r} in HDF5 group: "
                       f"{h5_group.name!r} -> {e!r}")
         return
 
-    b2_attrs = b2_schunk.vlmeta
-    for (aname, avalue) in b2_attrs.items():
+    for (aname, avalue) in attrs.items():
         try:
             h5_dataset.attrs[aname] = avalue
             logging.info(f"Exported dataset attribute "
@@ -60,14 +57,34 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     logging.info(f"Exported dataset: {c2_leaf.path!r} => {h5_dataset.name!r}")
 
 
+def read_array(path: str) -> tuple[Mapping, Mapping]:
+    b2_array = blosc2.open(path)
+    kwds = dict(
+        data=b2_array[()],  # ok for arrays & scalars
+    )
+    # TODO: mark array distinguishably
+    return (kwds, b2_array.schunk.vlmeta)
+
+
+def read_frame(path: str) -> tuple[Mapping, Mapping]:
+    b2_schunk = blosc2.open(path)
+    kwds = dict(
+        data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
+    )
+    # TODO: mark frame / compressed file distinguishably
+    return (kwds, b2_schunk.vlmeta)
+
+
 def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     """Export Caterva2 leaf entry `c2_leaf` into
     open HDF5 group `h5_group`.
     """
     # TODO: handle symlinks safely
     c2_leaf_name = pathlib.Path(c2_leaf.name)
-    if c2_leaf_name.suffix in ['.b2nd', '.b2frame', '.b2']:
-        export_dataset(c2_leaf, h5_group)
+    if c2_leaf_name.suffix == '.b2nd':
+        export_dataset(c2_leaf, h5_group, read_array)
+    elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
+        export_dataset(c2_leaf, h5_group, read_frame)
     else:  # TODO
         logging.warning(f"Exporting plain files "
                         f"is not supported yet: {c2_leaf.path!r}")
