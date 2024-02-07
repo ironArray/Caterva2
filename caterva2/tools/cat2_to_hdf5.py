@@ -35,13 +35,13 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
         return
 
     assert re.match(r'.*\.b2[^.]*$', c2_leaf.name)
-    c2_leaf_stem = pathlib.Path(c2_leaf.name).stem
+    h5_name = pathlib.Path(c2_leaf.name).stem
     try:
         # TODO: carry chunk/block shapes
         # TODO: carry compression parameters
-        h5_dataset = h5_group.create_dataset(c2_leaf_stem, **kwds)
+        h5_dataset = h5_group.create_dataset(h5_name, **kwds)
     except Exception as e:
-        logging.error(f"Failed to create dataset {c2_leaf_stem!r} in HDF5 group: "
+        logging.error(f"Failed to create dataset {h5_name!r} in HDF5 group: "
                       f"{h5_group.name!r} -> {e!r}")
         return
 
