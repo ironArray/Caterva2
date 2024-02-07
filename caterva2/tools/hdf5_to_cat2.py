@@ -48,7 +48,7 @@ def create_directory(name, node, c2_root):
         path.mkdir()  # parent should exist, not itself
     except OSError as ose:
         logging.error(f"Failed to create directory "
-                      f"for node: {name!r} -> %r", ose)
+                      f"for node: {name!r} -> {ose!r}")
         return
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
@@ -61,7 +61,7 @@ def copy_dataset(name, node, c2_root):
         b2_array = blosc2.asarray(node[()])  # ok for arrays & scalars
     except ValueError as ve:
         logging.error(f"Failed to convert dataset "
-                      f"to Blosc2 ND array: {name!r} -> %r", ve)
+                      f"to Blosc2 ND array: {name!r} -> {ve!r}")
         return
 
     b2_attrs = b2_array.schunk.vlmeta
@@ -75,7 +75,7 @@ def copy_dataset(name, node, c2_root):
             logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
         except Exception as e:
             logging.error(f"Failed to export dataset attribute "
-                          f"{aname!r}: {name!r} -> %r", e)
+                          f"{aname!r}: {name!r} -> {e!r}")
 
     b2_path = c2_root / f'{name}.b2nd'
     try:
@@ -84,7 +84,7 @@ def copy_dataset(name, node, c2_root):
     except Exception as e:
         b2_path.unlink(missing_ok=True)
         logging.error(f"Failed to save dataset "
-                      f"as Blosc2 ND array: {name!r} -> %r", e)
+                      f"as Blosc2 ND array: {name!r} -> {e!r}")
         return
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
