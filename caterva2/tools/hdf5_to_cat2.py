@@ -58,7 +58,7 @@ def copy_dataset(name, node, c2_root):
     # TODO: carry chunk/block shapes
     # TODO: carry compression parameters
     try:
-        b2_array = blosc2.asarray(node[:])
+        b2_array = blosc2.asarray(node[()])  # ok for arrays & scalars
     except ValueError as ve:
         logging.error(f"Failed to convert dataset "
                       f"to Blosc2 ND array: {name!r} -> %r", ve)
