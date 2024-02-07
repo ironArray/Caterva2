@@ -34,8 +34,6 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
     assert re.match(r'.*\.b2[^.]*$', c2_leaf.name)
     h5_name = pathlib.Path(c2_leaf.name).stem
     try:
-        # TODO: carry chunk/block shapes
-        # TODO: carry compression parameters
         h5_dataset = h5_group.create_dataset(h5_name, **kwds)
     except Exception as e:
         logging.error(f"Failed to create dataset {h5_name!r} in HDF5 group: "
@@ -58,6 +56,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
     b2_array = blosc2.open(path)
     kwds = dict(
         data=b2_array[()],  # ok for arrays & scalars
+        # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark array distinguishably
     return (kwds, b2_array.schunk.vlmeta)
@@ -67,6 +66,7 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
     b2_schunk = blosc2.open(path)
     kwds = dict(
         data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
+        # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark frame / compressed file distinguishably
     return (kwds, b2_schunk.vlmeta)
