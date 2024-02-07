@@ -25,7 +25,7 @@ else:
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
-    # TODO: distinguish array / frame / compressed file
+    # TODO: mark array / frame / compressed file distinguishably
     try:
         b2_dataset = blosc2.open(c2_leaf.path)
         data = b2_dataset[()]
@@ -37,6 +37,8 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     assert re.match(r'.*\.b2[^.]*$', c2_leaf.name)
     c2_leaf_stem = pathlib.Path(c2_leaf.name).stem
     try:
+        # TODO: carry chunk/block shapes
+        # TODO: carry compression parameters
         h5_dataset = h5_group.create_dataset(c2_leaf_stem, data=data)
     except Exception as e:
         logging.error(f"Failed to create dataset {c2_leaf_stem!r} in HDF5 group: "
@@ -60,6 +62,7 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     """Export Caterva2 leaf entry `c2_leaf` into
     open HDF5 group `h5_group`.
     """
+    # TODO: handle symlinks safely
     c2_leaf_name = pathlib.Path(c2_leaf.name)
     if c2_leaf_name.suffix in ['.b2nd', '.b2frame', '.b2']:
         export_dataset(c2_leaf, h5_group)

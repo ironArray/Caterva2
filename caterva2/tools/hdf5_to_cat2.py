@@ -54,6 +54,9 @@ def create_directory(name, node, c2_root):
 
 
 def copy_dataset(name, node, c2_root):
+    # TODO: handle array / frame / (compressed) file distinctly
+    # TODO: carry chunk/block shapes
+    # TODO: carry compression parameters
     try:
         b2_array = blosc2.asarray(node[:])
     except ValueError as ve:
@@ -110,6 +113,7 @@ def export_group(h5_group, c2_root):
     """Export open HDF5 group `h5_group` to
     existing Caterva2 root at `c2_root`.
     """
+    # TODO: soft & external links (not visited)
     h5_group.visititems(node_exporter(c2_root))
 
 
