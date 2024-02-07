@@ -56,6 +56,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
     b2_array = blosc2.open(path)
     kwds = dict(
         data=b2_array[()],  # ok for arrays & scalars
+        chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark array distinguishably
@@ -66,6 +67,7 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
     b2_schunk = blosc2.open(path)
     kwds = dict(
         data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
+        chunks=(b2_schunk.chunkshape,),
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark frame / compressed file distinguishably
