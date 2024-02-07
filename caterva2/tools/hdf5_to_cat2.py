@@ -38,7 +38,8 @@ import msgpack
 from blosc2 import blosc2_ext
 
 
-def create_directory(name, node, c2_root):
+def create_directory(name: str, node: h5py.Group,
+                     c2_root: pathlib.Path) -> None:
     if len(node.attrs.keys()) > 0:
         logging.warning(f"Exporting group attributes "
                         f"is not supported yet: {name!r}")
@@ -53,7 +54,8 @@ def create_directory(name, node, c2_root):
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
-def copy_dataset(name, node, c2_root):
+def copy_dataset(name: str, node: h5py.Dataset,
+                 c2_root: pathlib.Path) -> None:
     # TODO: handle array / frame / (compressed) file distinctly
     # TODO: carry chunk/block shapes
     # TODO: carry compression parameters
@@ -89,7 +91,7 @@ def copy_dataset(name, node, c2_root):
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
 
-def node_exporter(c2_root):
+def node_exporter(c2_root: pathlib.Path):
     """Return an HDF5 node item visitor to export to
     existing Caterva2 root at `c2_root`.
     """
@@ -110,7 +112,7 @@ def node_exporter(c2_root):
     return export_node
 
 
-def export_group(h5_group, c2_root):
+def export_group(h5_group: h5py.File, c2_root: pathlib.Path) -> None:
     """Export open HDF5 group `h5_group` to
     existing Caterva2 root at `c2_root`.
     """
@@ -118,7 +120,7 @@ def export_group(h5_group, c2_root):
     h5_group.visititems(node_exporter(c2_root))
 
 
-def export(hdf5_path, cat2_path):
+def export(hdf5_path: str, cat2_path: str) -> None:
     """Export HDF5 file in `hdf5_path` to new Caterva2 root at `cat2_path`."""
     with h5py.File(hdf5_path, 'r') as h5f:
         c2r = pathlib.Path(cat2_path).resolve()
