@@ -12,7 +12,6 @@
 import logging
 import os
 import pathlib
-import re
 import sys
 
 import blosc2
@@ -31,13 +30,11 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
                       f"{c2_leaf.path!r} -> {e!r}")
         return
 
-    assert re.match(r'.*\.b2[^.]*$', c2_leaf.name)
-    h5_name = pathlib.Path(c2_leaf.name).stem
     try:
-        h5_dataset = h5_group.create_dataset(h5_name, **kwds)
+        h5_dataset = h5_group.create_dataset(**kwds)
     except Exception as e:
-        logging.error(f"Failed to create dataset {h5_name!r} in HDF5 group: "
-                      f"{h5_group.name!r} -> {e!r}")
+        logging.error(f"Failed to create dataset in HDF5 group {h5_group.name!r}: "
+                      f"{c2_leaf.name!r} -> {e!r}")
         return
 
     for (aname, avalue) in attrs.items():
@@ -55,6 +52,7 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
 def read_array(path: str) -> tuple[Mapping, Mapping]:
     b2_array = blosc2.open(path)
     kwds = dict(
+        name=pathlib.Path(path).stem,
         data=b2_array[()],  # ok for arrays & scalars
         chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
         # TODO: carry compression parameters (including blocks)
@@ -66,6 +64,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
 def read_frame(path: str) -> tuple[Mapping, Mapping]:
     b2_schunk = blosc2.open(path)
     kwds = dict(
+        name=pathlib.Path(path).stem,
         data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
         chunks=(b2_schunk.chunkshape,),
         # TODO: carry compression parameters (including blocks)
