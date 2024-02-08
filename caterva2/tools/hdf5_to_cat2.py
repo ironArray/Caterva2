@@ -21,6 +21,9 @@ they can be serialized with msgpack.  Group attributes are not supported yet.
 Moreover, for the moment datasets get compressed with default Blosc2
 parameters.
 
+Warning: For the moment, the data in each dataset is read and decompressed
+into memory in its entirety.
+
 Datasets or attributes which are unsupported or fail to be converted are
 simply reported and skipped, and they do not cause the program to fail.
 """
@@ -38,7 +41,8 @@ import msgpack
 from blosc2 import blosc2_ext
 
 
-def create_directory(name, node, c2_root):
+def create_directory(name: str, node: h5py.Group,
+                     c2_root: pathlib.Path) -> None:
     if len(node.attrs.keys()) > 0:
         logging.warning(f"Exporting group attributes "
                         f"is not supported yet: {name!r}")
@@ -48,17 +52,21 @@ def create_directory(name, node, c2_root):
         path.mkdir()  # parent should exist, not itself
     except OSError as ose:
         logging.error(f"Failed to create directory "
-                      f"for node: {name!r} -> %r", ose)
+                      f"for node: {name!r} -> {ose!r}")
         return
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
-def copy_dataset(name, node, c2_root):
+def copy_dataset(name: str, node: h5py.Dataset,
+                 c2_root: pathlib.Path) -> None:
+    # TODO: handle array / frame / (compressed) file distinctly
+    # TODO: carry chunk/block shapes
+    # TODO: carry compression parameters
     try:
-        b2_array = blosc2.asarray(node[:])
+        b2_array = blosc2.asarray(node[()])  # ok for arrays & scalars
     except ValueError as ve:
         logging.error(f"Failed to convert dataset "
-                      f"to Blosc2 ND array: {name!r} -> %r", ve)
+                      f"to Blosc2 ND array: {name!r} -> {ve!r}")
         return
 
     b2_attrs = b2_array.schunk.vlmeta
@@ -69,9 +77,10 @@ def copy_dataset(name, node, c2_root):
             # (e.g. for Fortran-style string attributes added by PyTables).
             pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
             b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
+            logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
         except Exception as e:
             logging.error(f"Failed to export dataset attribute "
-                          f"{aname!r}: {name!r} -> %r", e)
+                          f"{aname!r}: {name!r} -> {e!r}")
 
     b2_path = c2_root / f'{name}.b2nd'
     try:
@@ -80,12 +89,12 @@ def copy_dataset(name, node, c2_root):
     except Exception as e:
         b2_path.unlink(missing_ok=True)
         logging.error(f"Failed to save dataset "
-                      f"as Blosc2 ND array: {name!r} -> %r", e)
+                      f"as Blosc2 ND array: {name!r} -> {e!r}")
         return
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
 
-def node_exporter(c2_root):
+def node_exporter(c2_root: pathlib.Path):
     """Return an HDF5 node item visitor to export to
     existing Caterva2 root at `c2_root`.
     """
@@ -106,14 +115,15 @@ def node_exporter(c2_root):
     return export_node
 
 
-def export_group(h5_group, c2_root):
+def export_group(h5_group: h5py.File, c2_root: pathlib.Path) -> None:
     """Export open HDF5 group `h5_group` to
     existing Caterva2 root at `c2_root`.
     """
+    # TODO: soft & external links (not visited)
     h5_group.visititems(node_exporter(c2_root))
 
 
-def export(hdf5_path, cat2_path):
+def export(hdf5_path: str, cat2_path: str) -> None:
     """Export HDF5 file in `hdf5_path` to new Caterva2 root at `cat2_path`."""
     with h5py.File(hdf5_path, 'r') as h5f:
         c2r = pathlib.Path(cat2_path).resolve()
@@ -126,7 +136,8 @@ def main():
     try:
         _, hdf5_path, cat2_path = sys.argv
     except ValueError:
-        eprint = lambda *a: print(*a, file=sys.stderr)
+        def eprint(*args):
+            print(*args, file=sys.stderr)
         prog = os.path.basename(sys.argv[0])
         eprint(f"Usage: {prog} HDF5_FILE CATERVA2_ROOT")
         eprint("Export the hierarchy in the existing HDF5_FILE "
