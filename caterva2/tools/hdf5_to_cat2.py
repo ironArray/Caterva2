@@ -136,7 +136,8 @@ def main():
     try:
         _, hdf5_path, cat2_path = sys.argv
     except ValueError:
-        eprint = lambda *a: print(*a, file=sys.stderr)
+        def eprint(*args):
+            print(*args, file=sys.stderr)
         prog = os.path.basename(sys.argv[0])
         eprint(f"Usage: {prog} HDF5_FILE CATERVA2_ROOT")
         eprint("Export the hierarchy in the existing HDF5_FILE "

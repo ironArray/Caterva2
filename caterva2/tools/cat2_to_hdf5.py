@@ -52,8 +52,8 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
     try:
         h5_dataset = h5_group.create_dataset(**kwds)
     except Exception as e:
-        logging.error(f"Failed to create dataset in HDF5 group {h5_group.name!r}: "
-                      f"{c2_leaf.name!r} -> {e!r}")
+        logging.error(f"Failed to create dataset in HDF5 group "
+                      f"{h5_group.name!r}: {c2_leaf.name!r} -> {e!r}")
         return
 
     for (aname, avalue) in attrs.items():
@@ -143,7 +143,8 @@ def main():
     try:
         _, cat2_path, hdf5_path = sys.argv
     except ValueError:
-        eprint = lambda *a: print(*a, file=sys.stderr)
+        def eprint(*args):
+            print(*args, file=sys.stderr)
         prog = os.path.basename(sys.argv[0])
         eprint(f"Usage: {prog} CATERVA2_ROOT HDF5_FILE")
         eprint("Export the existing CATERVA2_ROOT directory "
