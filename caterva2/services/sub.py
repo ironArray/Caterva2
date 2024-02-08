@@ -257,7 +257,7 @@ async def get_list(name: str):
     """
     root = get_root(name)
 
-    rootdir = cache
+    rootdir = cache / root.name
     if not rootdir.exists():
         srv_utils.raise_not_found(f'Not subscribed to {name}')
 
@@ -499,7 +499,7 @@ async def html_path_list(
     if not get_root(root).subscribed:
         follow(root)
 
-    rootdir = cache
+    rootdir = cache / root
     paths = [
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
         for path, relpath in utils.walk_files(rootdir)
@@ -534,11 +534,11 @@ async def html_path_info(
         }
         return home(request, context)
 
-    filepath = cache / path
+    filepath = cache / root / path
     abspath = lookup_path(filepath)
     meta = srv_utils.read_metadata(abspath)
 
-    context = {"path": pathlib.Path(path), "meta": meta}
+    context = {"path": pathlib.Path(root) / path, "meta": meta}
     response = templates.TemplateResponse(request, "meta.html", context=context)
 
     current_url = furl.furl(hx_current_url)
