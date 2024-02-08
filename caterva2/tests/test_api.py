@@ -54,8 +54,7 @@ def test_root(services, sub_host):
 def test_list(services, examples_dir, sub_host):
     myroot = cat2.Root(TEST_PUBLISHED_ROOT, host=sub_host)
     example = examples_dir
-    nodes = set(str(TEST_PUBLISHED_ROOT / f.relative_to(str(example)))
-                for f in example.rglob("*") if f.is_file())
+    nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
 
 
