@@ -73,6 +73,19 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
     return (kwds, b2_schunk.vlmeta.getall())  # copy avoids SIGSEGV
 
 
+def read_file(path: str) -> tuple[Mapping, Mapping]:
+    with open(path, 'rb') as f:
+        data = f.read()
+    kwds = dict(
+        name=pathlib.Path(path).name,
+        data=numpy.frombuffer(data, dtype=numpy.uint8),
+        chunks=True,
+        # TODO: compression?
+    )
+    # TODO: mark plain file distinguishably
+    return (kwds, {})
+
+
 def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     """Export Caterva2 leaf entry `c2_leaf` into
     open HDF5 group `h5_group`.
@@ -83,9 +96,8 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
         export_dataset(c2_leaf, h5_group, read_array)
     elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
         export_dataset(c2_leaf, h5_group, read_frame)
-    else:  # TODO
-        logging.warning(f"Exporting plain files "
-                        f"is not supported yet: {c2_leaf.path!r}")
+    else:
+        export_dataset(c2_leaf, h5_group, read_file)
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
