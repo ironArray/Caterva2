@@ -18,8 +18,8 @@ For each file or Blosc2 dataset, an HDF5 dataset with the same path name
 Blosc2 arrays (``*.b2nd``), frames (``*.b2frame``) and compressed files
 (``*.b2``) have their chunk sizes respected during conversion, while plain
 files use a default chunk size.  Arrays result in typed multidimensional
-datasets, while the rest result in flat datasets of bytes.  None of the
-exported datasets use compression yet.
+datasets, while the rest result in flat datasets of bytes.  Currently, all
+exported datasets use some default Blosc2 compression parameters.
 
 Warning: For the moment, the data in each file and dataset is read and
 decompressed into memory in its entirety.
@@ -35,9 +35,14 @@ import sys
 
 import blosc2
 import h5py
+import hdf5plugin
 import numpy
 
 from collections.abc import Callable, Iterator, Mapping
+
+
+# Set to an empty mapping to store HDF5 dataset without compression.
+default_h5_cparams = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
@@ -74,6 +79,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
         name=pathlib.Path(path).stem,
         data=b2_array[()],  # ok for arrays & scalars
         chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
+        **default_h5_cparams,
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark array distinguishably
@@ -86,6 +92,7 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
         name=pathlib.Path(path).stem,
         data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
         chunks=(b2_schunk.chunkshape,),
+        **default_h5_cparams,
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark frame / compressed file distinguishably
@@ -99,6 +106,7 @@ def read_file(path: str) -> tuple[Mapping, Mapping]:
         name=pathlib.Path(path).name,
         data=numpy.frombuffer(data, dtype=numpy.uint8),
         chunks=True,
+        **default_h5_cparams,
         # TODO: compression?
     )
     # TODO: mark plain file distinguishably
