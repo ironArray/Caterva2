@@ -21,6 +21,9 @@ they can be serialized with msgpack.  Group attributes are not supported yet.
 Moreover, for the moment datasets get compressed with default Blosc2
 parameters.
 
+Warning: For the moment, the data in each dataset is read and decompressed
+into memory in its entirety.
+
 Datasets or attributes which are unsupported or fail to be converted are
 simply reported and skipped, and they do not cause the program to fail.
 """

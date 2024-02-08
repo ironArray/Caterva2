@@ -21,6 +21,9 @@ files use a default chunk size.  Arrays result in typed multidimensional
 datasets, while the rest result in flat datasets of bytes.  None of the
 exported datasets use compression yet.
 
+Warning: For the moment, the data in each file and dataset is read and
+decompressed into memory in its entirety.
+
 Datasets or attributes which are unsupported or fail to be converted are
 simply reported and skipped, and they do not cause the program to fail.
 """
