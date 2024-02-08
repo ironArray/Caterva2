@@ -182,7 +182,7 @@ You can find an example of a data root in the `root-example` folder.  It contain
 
 - `ds-1d.b2nd`: A 1D array (int64). Constructed as:
 
-      a = np.arange(1000, dtype="int64"))
+      a = np.arange(1000, dtype="int64")
       blosc2.asarray(a, chunks=(100,), blocks=(10,), urlpath="ds-1d.b2nd", mode="w")
 
 - `ds-1d-b.b2nd`: A 1D array (6-byte strings). Constructed as:
