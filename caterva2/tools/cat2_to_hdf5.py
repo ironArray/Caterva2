@@ -77,7 +77,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark array distinguishably
-    return (kwds, b2_array.schunk.vlmeta.getall())  # copy avoids SIGSEGV
+    return kwds, b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
 
 
 def read_frame(path: str) -> tuple[Mapping, Mapping]:
@@ -89,7 +89,7 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark frame / compressed file distinguishably
-    return (kwds, b2_schunk.vlmeta.getall())  # copy avoids SIGSEGV
+    return kwds, b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
 
 
 def read_file(path: str) -> tuple[Mapping, Mapping]:
@@ -102,7 +102,7 @@ def read_file(path: str) -> tuple[Mapping, Mapping]:
         # TODO: compression?
     )
     # TODO: mark plain file distinguishably
-    return (kwds, {})
+    return kwds, {}
 
 
 def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
