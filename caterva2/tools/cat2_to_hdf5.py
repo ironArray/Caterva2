@@ -7,7 +7,23 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-"""Export a Caterva2 root to datasets in an HDF5 file."""
+"""Export a Caterva2 root to datasets in an HDF5 file.
+
+The content of the existing Caterva2 root must be readable, while the HDF5
+file is created anew (it must not exist).  For each directory under the
+Caterva2 root, a group with the same path name is created in the HDF5 file.
+For each file or Blosc2 dataset, an HDF5 dataset with the same path name
+(minus any ``.b2*`` extension) is created in the HDF5 file.
+
+Blosc2 arrays (``*.b2nd``), frames (``*.b2frame``) and compressed files
+(``*.b2``) have their chunk sizes respected during conversion, while plain
+files use a default chunk size.  Arrays result in typed multidimensional
+datasets, while the rest result in flat datasets of bytes.  None of the
+exported datasets use compression yet.
+
+Datasets or attributes which are unsupported or fail to be converted are
+simply reported and skipped, and they do not cause the program to fail.
+"""
 
 import logging
 import os
