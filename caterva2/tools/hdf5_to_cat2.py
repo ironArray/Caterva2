@@ -81,6 +81,21 @@ def b2empty_from_dataset(node: h5py.Dataset,
 
 def b2chunks_from_dataset(node: h5py.Dataset,
                           b2_args: Mapping) -> Iterable[(int, bytes)]:
+    if '32026' in node._filters:  # Blosc2's ID
+        # Blosc2-compressed dataset, just pass chunks as they are.
+        # Support both Blosc2 arrays and frames as HDF5 chunks.
+        b2chunk_idx = 0
+        for h5chunk_idx in range(node.id.get_num_chunks()):
+            h5chunk_info = node.id.get_chunk_info(h5chunk_idx)
+            b2carray = blosc2.open(node.file.filename, mode='r',
+                                   offset=h5chunk_info.byte_offset)
+            # TODO: check if schunk is compatible with created array
+            b2schunk = getattr(b2carray, 'schunk', b2carray)
+            for b2chunk_info in b2schunk.iterchunks_info():
+                yield b2chunk_idx, b2schunk.get_chunk(b2chunk_info.nchunk)
+                b2chunk_idx += 1
+        return
+
     # TODO: do not slurp & re-compress
     src_array = blosc2.asarray(
         node[()],  # ok for arrays & scalars
