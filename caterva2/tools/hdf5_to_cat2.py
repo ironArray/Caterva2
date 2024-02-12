@@ -38,6 +38,8 @@ import h5py
 import hdf5plugin
 import msgpack
 
+from collections.abc import Iterable, Mapping
+
 from blosc2 import blosc2_ext
 
 
@@ -57,38 +59,62 @@ def create_directory(name: str, node: h5py.Group,
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
+def b2args_from_dataset(node: h5py.Dataset) -> Mapping:
+    b2args = dict(
+        chunks=node.chunks,  # None is ok (let Blosc2 decide)
+        # TODO: blocks
+        # TODO: cparams, dparams
+    )
+    return b2args
+
+
+def b2empty_from_dataset(node: h5py.Dataset,
+                         b2_path: pathlib.Path,
+                         b2_args: Mapping) -> blosc2.NDArray:
+    dst_array = blosc2.empty(
+        shape=node.shape, dtype=node.dtype,
+        urlpath=b2_path, mode='w',
+        **b2_args
+    )
+    return dst_array
+
+
+def b2chunks_from_dataset(node: h5py.Dataset,
+                          b2_args: Mapping) -> Iterable[(int, bytes)]:
+    # TODO: do not slurp & re-compress
+    src_array = blosc2.asarray(
+        node[()],  # ok for arrays & scalars
+        **b2_args
+    )
+    schunk = src_array.schunk
+    yield from ((ci.nchunk, schunk.get_chunk(ci.nchunk))
+                for ci in schunk.iterchunks_info())
+
+
 def copy_dataset(name: str, node: h5py.Dataset,
                  c2_root: pathlib.Path) -> None:
     # TODO: handle array / frame / (compressed) file distinctly
-    # TODO: carry blockshape
-    # TODO: carry compression parameters
-    try:
-        b2_array = blosc2.asarray(
-            node[()],  # ok for arrays & scalars
-            chunks=node.chunks,  # None is ok (let Blosc2 decide)
-        )
-    except ValueError as ve:
-        logging.error(f"Failed to convert dataset "
-                      f"to Blosc2 ND array: {name!r} -> {ve!r}")
-        return
-
-    b2_attrs = b2_array.schunk.vlmeta
-    for (aname, avalue) in node.attrs.items():
-        try:
-            # This small workaround avoids Blosc2's strict type packing,
-            # so we can handle value subclasses like `numpy.bytes_`
-            # (e.g. for Fortran-style string attributes added by PyTables).
-            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
-            b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
-            logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
-        except Exception as e:
-            logging.error(f"Failed to export dataset attribute "
-                          f"{aname!r}: {name!r} -> {e!r}")
-
     b2_path = c2_root / f'{name}.b2nd'
     try:
-        with open(b2_path, 'wb') as f:
-            f.write(b2_array.to_cframe())
+        b2_args = b2args_from_dataset(node)
+        b2_array = b2empty_from_dataset(node, b2_path, b2_args)
+        b2_chunks = b2chunks_from_dataset(node, b2_args)
+
+        for (nchunk, chunk) in b2_chunks:
+            b2_array.schunk.insert_chunk(nchunk, chunk)
+
+        b2_attrs = b2_array.schunk.vlmeta
+        for (aname, avalue) in node.attrs.items():
+            try:
+                # This small workaround avoids Blosc2's strict type packing,
+                # so we can handle value subclasses like `numpy.bytes_`
+                # (e.g. for Fortran-style string attributes added by PyTables).
+                pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
+                b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
+                logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
+            except Exception as e:
+                logging.error(f"Failed to export dataset attribute "
+                              f"{aname!r}: {name!r} -> {e!r}")
     except Exception as e:
         b2_path.unlink(missing_ok=True)
         logging.error(f"Failed to save dataset "
