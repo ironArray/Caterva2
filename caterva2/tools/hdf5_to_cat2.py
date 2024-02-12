@@ -100,10 +100,11 @@ def copy_dataset(name: str, node: h5py.Dataset,
         b2_array = b2empty_from_dataset(node, b2_path, b2_args)
         b2_chunks = b2chunks_from_dataset(node, b2_args)
 
+        b2_schunk = b2_array.schunk
         for (nchunk, chunk) in b2_chunks:
-            b2_array.schunk.insert_chunk(nchunk, chunk)
+            b2_schunk.insert_chunk(nchunk, chunk)
 
-        b2_attrs = b2_array.schunk.vlmeta
+        b2_attrs = b2_schunk.vlmeta
         for (aname, avalue) in node.attrs.items():
             try:
                 # This small workaround avoids Blosc2's strict type packing,
@@ -117,8 +118,8 @@ def copy_dataset(name: str, node: h5py.Dataset,
                               f"{aname!r}: {name!r} -> {e!r}")
     except Exception as e:
         b2_path.unlink(missing_ok=True)
-        logging.error(f"Failed to save dataset "
-                      f"as Blosc2 ND array: {name!r} -> {e!r}")
+        logging.error(f"Failed to export dataset "
+                      f"to Blosc2 ND array: {name!r} -> {e!r}")
         return
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
