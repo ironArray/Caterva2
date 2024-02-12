@@ -60,10 +60,13 @@ def create_directory(name: str, node: h5py.Group,
 def copy_dataset(name: str, node: h5py.Dataset,
                  c2_root: pathlib.Path) -> None:
     # TODO: handle array / frame / (compressed) file distinctly
-    # TODO: carry chunk/block shapes
+    # TODO: carry blockshape
     # TODO: carry compression parameters
     try:
-        b2_array = blosc2.asarray(node[()])  # ok for arrays & scalars
+        b2_array = blosc2.asarray(
+            node[()],  # ok for arrays & scalars
+            chunks=node.chunks,  # None is ok (let Blosc2 decide)
+        )
     except ValueError as ve:
         logging.error(f"Failed to convert dataset "
                       f"to Blosc2 ND array: {name!r} -> {ve!r}")
