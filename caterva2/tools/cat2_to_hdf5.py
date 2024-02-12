@@ -79,7 +79,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
         name=pathlib.Path(path).stem,
         data=b2_array[()],  # ok for arrays & scalars
         chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
-        **default_h5_cparams,
+        **(default_h5_cparams if b2_array.ndim > 0 else {}),
         # TODO: carry compression parameters (including blocks)
     )
     # TODO: mark array distinguishably
