@@ -21,6 +21,10 @@ function activate(selector, trigger) {
     }
 }
 
+function toggleActive(el) {
+    el.classList.toggle('active');
+}
+
 function clearContent(elementID) {
     document.getElementById(elementID).innerHTML = "";
 }

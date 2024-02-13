@@ -467,14 +467,48 @@ def home(request, context=None):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def html_home(request: Request):
+async def html_home(
+    request: Request,
+    # Query parameters
+    roots: list[str] = [],
+):
     return home(request)
 
 
 @app.get("/htmx/root-list/")
-async def htmx_root_list(request: Request):
+async def htmx_root_list(
+    request: Request,
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
+):
     context = {"roots": database.roots.values()}
     return templates.TemplateResponse(request, "root_list.html", context)
+
+@app.get("/htmx/path-list/", response_class=HTMLResponse)
+async def htmx_path_list(
+    request: Request,
+    # Query parameters
+    roots: list[str] = [],
+    search: str = '',
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
+):
+    paths = []
+    for root in roots:
+        if not get_root(root).subscribed:
+            follow(root)
+
+        rootdir = cache / root
+        for path, relpath in utils.walk_files(rootdir):
+            if relpath.suffix == '.b2':
+                relpath = relpath.with_suffix('')
+            if search in str(relpath):
+                paths.append(f'{root}/{relpath}')
+
+    url = furl.furl('/htmx/path-list/').set({'roots': roots})
+    context = {"url": url, "paths": paths, "search": search}
+    response = templates.TemplateResponse(request, "path_list.html", context)
+    return response
 
 
 @app.get("/roots/{root}/", response_class=HTMLResponse)
