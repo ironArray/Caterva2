@@ -64,10 +64,24 @@ def create_directory(name: str, node: h5py.Group,
 
 
 def b2args_from_dataset(node: h5py.Dataset) -> Mapping:
+    blocks = cparams = dparams = None
+
+    if BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
+        # Get Blosc2 arguments from the first schunk.
+        # HDF5 filter parameters are less reliable than these.
+        h5chunk_info = node.id.get_chunk_info(0)
+        b2carray = blosc2.open(node.file.filename, mode='r',
+                               offset=h5chunk_info.byte_offset)
+        b2schunk = getattr(b2carray, 'schunk', b2carray)
+        blocks = getattr(b2carray, 'blocks', None)
+        cparams = b2schunk.cparams
+        dparams = b2schunk.dparams
+
     b2args = dict(
         chunks=node.chunks,  # None is ok (let Blosc2 decide)
-        # TODO: blocks
-        # TODO: cparams, dparams
+        blocks=blocks,
+        cparams=cparams,
+        dparams=dparams,
     )
     return b2args
 
