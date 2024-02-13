@@ -43,6 +43,10 @@ from collections.abc import Iterable, Mapping
 from blosc2 import blosc2_ext
 
 
+"""The registered identifier for Blosc2 in HDF5 filters."""
+BLOSC2_HDF5_FID = '32026'
+
+
 def create_directory(name: str, node: h5py.Group,
                      c2_root: pathlib.Path) -> None:
     if len(node.attrs.keys()) > 0:
@@ -81,7 +85,7 @@ def b2empty_from_dataset(node: h5py.Dataset,
 
 def b2chunks_from_dataset(node: h5py.Dataset,
                           b2_args: Mapping) -> Iterable[(int, bytes)]:
-    if '32026' in node._filters:  # Blosc2's ID
+    if BLOSC2_HDF5_FID in node._filters:
         # Blosc2-compressed dataset, just pass chunks as they are.
         # Support both Blosc2 arrays and frames as HDF5 chunks.
         b2chunk_idx = 0
