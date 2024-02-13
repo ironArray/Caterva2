@@ -117,7 +117,7 @@ def copy_dataset(name: str, node: h5py.Dataset,
 
         b2_schunk = b2_array.schunk
         for (nchunk, chunk) in b2_chunks:
-            b2_schunk.insert_chunk(nchunk, chunk)
+            b2_schunk.update_chunk(nchunk, chunk)
 
         b2_attrs = b2_schunk.vlmeta
         for (aname, avalue) in node.attrs.items():
