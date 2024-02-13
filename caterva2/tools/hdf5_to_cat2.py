@@ -63,17 +63,26 @@ def create_directory(name: str, node: h5py.Group,
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
+# Warning: Keep the reference to both returned results.
+# Losing the reference to the array may result in a segmentation fault.
+def b2_from_h5_chunk(node: h5py.Dataset,
+                     chunk_index: int) -> (blosc2.NDArray | None,
+                                           blosc2.SChunk):
+    h5chunk_info = node.id.get_chunk_info(chunk_index)
+    b2 = blosc2.open(node.file.filename, mode='r',
+                     offset=h5chunk_info.byte_offset)
+    return (b2 if hasattr(b2, 'ndim') else None,
+            getattr(b2, 'schunk', b2))
+
+
 def b2args_from_dataset(node: h5py.Dataset) -> Mapping:
     blocks = cparams = dparams = None
 
     if BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
         # Get Blosc2 arguments from the first schunk.
         # HDF5 filter parameters are less reliable than these.
-        h5chunk_info = node.id.get_chunk_info(0)
-        b2carray = blosc2.open(node.file.filename, mode='r',
-                               offset=h5chunk_info.byte_offset)
-        b2schunk = getattr(b2carray, 'schunk', b2carray)
-        blocks = getattr(b2carray, 'blocks', None)
+        b2array, b2schunk = b2_from_h5_chunk(node, 0)
+        blocks = b2array.blocks if b2array else None
         cparams = b2schunk.cparams
         dparams = b2schunk.dparams
 
@@ -104,11 +113,8 @@ def b2chunks_from_dataset(node: h5py.Dataset,
         # Support both Blosc2 arrays and frames as HDF5 chunks.
         b2chunk_idx = 0
         for h5chunk_idx in range(node.id.get_num_chunks()):
-            h5chunk_info = node.id.get_chunk_info(h5chunk_idx)
-            b2carray = blosc2.open(node.file.filename, mode='r',
-                                   offset=h5chunk_info.byte_offset)
+            b2array, b2schunk = b2_from_h5_chunk(node, h5chunk_idx)
             # TODO: check if schunk is compatible with created array
-            b2schunk = getattr(b2carray, 'schunk', b2carray)
             for b2chunk_info in b2schunk.iterchunks_info():
                 yield b2chunk_idx, b2schunk.get_chunk(b2chunk_info.nchunk)
                 b2chunk_idx += 1
