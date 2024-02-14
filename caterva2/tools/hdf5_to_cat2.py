@@ -81,7 +81,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     )
 
     if node.chunks is None:
-        b2chunks_from_dataset = b2chunks_from_nonchunked
+        b2chunkit_from_dataset = b2chunkit_from_nonchunked
     elif BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
         # Get Blosc2 arguments from the first schunk.
         # HDF5 filter parameters are less reliable than these.
@@ -91,11 +91,11 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
             b2_args['blocks'] = b2_array.blocks
         b2_args['cparams'] = b2_schunk.cparams
         b2_args['dparams'] = b2_schunk.dparams
-        b2chunks_from_dataset = b2chunks_from_blosc2
+        b2chunkit_from_dataset = b2chunkit_from_blosc2
     else:
         # TODO: do not slurp, only re-compress
-        b2chunks_from_dataset = b2chunks_from_nonchunked
-        # b2chunks_from_dataset = b2chunks_from_chunked  # TODO
+        b2chunkit_from_dataset = b2chunkit_from_nonchunked
+        # b2chunkit_from_dataset = b2chunkit_from_chunked  # TODO
 
     def b2_make_empty(**kwds) -> blosc2.NDArray:
         b2_empty = blosc2.empty(
@@ -104,12 +104,12 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         )
         return b2_empty
 
-    b2_chunkit = b2chunks_from_dataset(node, b2_args)
+    b2_chunkit = b2chunkit_from_dataset(node, b2_args)
     return b2_make_empty, b2_chunkit
 
 
-def b2chunks_from_blosc2(node: h5py.Dataset,
-                         b2_args: Mapping) -> Iterable[bytes]:
+def b2chunkit_from_blosc2(node: h5py.Dataset,
+                          b2_args: Mapping) -> Iterable[bytes]:
     # Blosc2-compressed dataset, just pass chunks as they are.
     # Support both Blosc2 arrays and frames as HDF5 chunks.
     for h5_chunk_idx in range(node.id.get_num_chunks()):
@@ -120,8 +120,8 @@ def b2chunks_from_blosc2(node: h5py.Dataset,
             yield b2_schunk.get_chunk(b2_chunk_info.nchunk)
 
 
-def b2chunks_from_nonchunked(node: h5py.Dataset,
-                             b2_args: Mapping) -> Iterable[bytes]:
+def b2chunkit_from_nonchunked(node: h5py.Dataset,
+                              b2_args: Mapping) -> Iterable[bytes]:
     # Contiguous or compact dataset,
     # slurp into (hopefully small) Blosc2 array and get chunks from it.
     src_array = blosc2.asarray(
