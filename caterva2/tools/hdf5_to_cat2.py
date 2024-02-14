@@ -107,17 +107,15 @@ def b2empty_from_dataset(node: h5py.Dataset,
 
 
 def b2chunks_from_dataset(node: h5py.Dataset,
-                          b2_args: Mapping) -> Iterable[(int, bytes)]:
+                          b2_args: Mapping) -> Iterable[bytes]:
     if BLOSC2_HDF5_FID in node._filters:
         # Blosc2-compressed dataset, just pass chunks as they are.
         # Support both Blosc2 arrays and frames as HDF5 chunks.
-        b2chunk_idx = 0
         for h5chunk_idx in range(node.id.get_num_chunks()):
             b2array, b2schunk = b2_from_h5_chunk(node, h5chunk_idx)
             # TODO: check if schunk is compatible with created array
             for b2chunk_info in b2schunk.iterchunks_info():
-                yield b2chunk_idx, b2schunk.get_chunk(b2chunk_info.nchunk)
-                b2chunk_idx += 1
+                yield b2schunk.get_chunk(b2chunk_info.nchunk)
         return
 
     # TODO: do not slurp & re-compress
@@ -126,7 +124,7 @@ def b2chunks_from_dataset(node: h5py.Dataset,
         **b2_args
     )
     schunk = src_array.schunk
-    yield from ((ci.nchunk, schunk.get_chunk(ci.nchunk))
+    yield from (schunk.get_chunk(ci.nchunk)
                 for ci in schunk.iterchunks_info())
 
 
@@ -140,7 +138,7 @@ def copy_dataset(name: str, node: h5py.Dataset,
         b2_chunks = b2chunks_from_dataset(node, b2_args)
 
         b2_schunk = b2_array.schunk
-        for (nchunk, chunk) in b2_chunks:
+        for (nchunk, chunk) in enumerate(b2_chunks):
             b2_schunk.update_chunk(nchunk, chunk)
 
         b2_attrs = b2_schunk.vlmeta
