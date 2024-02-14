@@ -93,9 +93,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         b2_args['dparams'] = b2_schunk.dparams
         b2chunkit_from_dataset = b2chunkit_from_blosc2
     else:
-        # TODO: do not slurp, only re-compress
-        b2chunkit_from_dataset = b2chunkit_from_nonchunked
-        # b2chunkit_from_dataset = b2chunkit_from_chunked  # TODO
+        b2chunkit_from_dataset = b2chunkit_from_chunked
 
     def b2_make_empty(**kwds) -> blosc2.NDArray:
         b2_empty = blosc2.empty(
@@ -131,6 +129,25 @@ def b2chunkit_from_nonchunked(node: h5py.Dataset,
     schunk = src_array.schunk
     yield from (schunk.get_chunk(ci.nchunk)
                 for ci in schunk.iterchunks_info())
+
+
+def b2chunkit_from_chunked(node: h5py.Dataset,
+                           b2_args: Mapping) -> Iterable[bytes]:
+    # Non-Blosc2 chunked dataset,
+    # load each HDF5 chunk into chunk 0 of compatible Blosc2 array,
+    # then get the resulting compressed chunk.
+    assert node.chunks == b2_args['chunks']
+    src_array = blosc2.empty(
+        shape=node.chunks, dtype=node.dtype,  # note that shape is chunkshape
+        **b2_args
+    )
+    schunk = src_array.schunk
+    for chunk_slice in node.iter_chunks():
+        chunk_array = node[chunk_slice]
+        # Always place at the beginning so that it fits in chunk 0.
+        src_slice = tuple(slice(0, n, 1) for n in chunk_array.shape)
+        src_array[src_slice] = chunk_array
+        yield schunk.get_chunk(0)
 
 
 def copy_dataset(name: str, node: h5py.Dataset,
