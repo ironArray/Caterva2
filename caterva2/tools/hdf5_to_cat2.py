@@ -121,7 +121,8 @@ def b2chunkit_from_blosc2(node: h5py.Dataset,
 def b2chunkit_from_nonchunked(node: h5py.Dataset,
                               b2_args: Mapping) -> Iterable[bytes]:
     # Contiguous or compact dataset,
-    # slurp into (hopefully small) Blosc2 array and get chunks from it.
+    # slurp into Blosc2 array and get chunks from it.
+    # Hopefully the data is small enough to be loaded into memory.
     src_array = blosc2.asarray(
         node[()],  # ok for arrays & scalars
         **b2_args
@@ -136,6 +137,7 @@ def b2chunkit_from_chunked(node: h5py.Dataset,
     # Non-Blosc2 chunked dataset,
     # load each HDF5 chunk into chunk 0 of compatible Blosc2 array,
     # then get the resulting compressed chunk.
+    # Thus, only one chunk worth of data is kept in memory.
     assert node.chunks == b2_args['chunks']
     src_array = blosc2.empty(
         shape=node.chunks, dtype=node.dtype,  # note that shape is chunkshape
