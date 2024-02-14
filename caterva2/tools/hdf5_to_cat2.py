@@ -38,7 +38,7 @@ import h5py
 import hdf5plugin
 import msgpack
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 
 from blosc2 import blosc2_ext
 
@@ -75,50 +75,55 @@ def b2_from_h5_chunk(node: h5py.Dataset,
             getattr(b2, 'schunk', b2))
 
 
-def b2args_from_dataset(node: h5py.Dataset) -> Mapping:
-    blocks = cparams = dparams = None
+def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
+        Callable[..., blosc2.NDArray],
+        Iterable[bytes]):
+    b2_args = dict(
+        chunks=node.chunks,  # None is ok (let Blosc2 decide)
+    )
 
-    if BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
+    if node.chunks is None:
+        b2chunks_from_dataset = b2chunks_from_nonchunked
+    elif BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
         # Get Blosc2 arguments from the first schunk.
         # HDF5 filter parameters are less reliable than these.
-        b2array, b2schunk = b2_from_h5_chunk(node, 0)
-        blocks = b2array.blocks if b2array else None
-        cparams = b2schunk.cparams
-        dparams = b2schunk.dparams
+        b2_array, b2_schunk = b2_from_h5_chunk(node, 0)
+        if b2_array is not None:
+            b2_args['blocks'] = b2_array.blocks
+        b2_args['cparams'] = b2_schunk.cparams
+        b2_args['dparams'] = b2_schunk.dparams
+        b2chunks_from_dataset = b2chunks_from_blosc2
+    else:
+        # TODO: do not slurp, only re-compress
+        b2chunks_from_dataset = b2chunks_from_nonchunked
+        # b2chunks_from_dataset = b2chunks_from_chunked  # TODO
 
-    b2args = dict(
-        chunks=node.chunks,  # None is ok (let Blosc2 decide)
-        blocks=blocks,
-        cparams=cparams,
-        dparams=dparams,
-    )
-    return b2args
+    def b2_make_empty(**kwds) -> blosc2.NDArray:
+        b2_empty = blosc2.empty(
+            shape=node.shape, dtype=node.dtype,
+            **(b2_args | kwds)
+        )
+        return b2_empty
 
-
-def b2empty_from_dataset(node: h5py.Dataset,
-                         b2_path: pathlib.Path,
-                         b2_args: Mapping) -> blosc2.NDArray:
-    dst_array = blosc2.empty(
-        shape=node.shape, dtype=node.dtype,
-        urlpath=b2_path, mode='w',
-        **b2_args
-    )
-    return dst_array
+    b2_chunkit = b2chunks_from_dataset(node, b2_args)
+    return b2_make_empty, b2_chunkit
 
 
-def b2chunks_from_dataset(node: h5py.Dataset,
-                          b2_args: Mapping) -> Iterable[bytes]:
-    if BLOSC2_HDF5_FID in node._filters:
-        # Blosc2-compressed dataset, just pass chunks as they are.
-        # Support both Blosc2 arrays and frames as HDF5 chunks.
-        for h5chunk_idx in range(node.id.get_num_chunks()):
-            b2array, b2schunk = b2_from_h5_chunk(node, h5chunk_idx)
-            # TODO: check if schunk is compatible with created array
-            for b2chunk_info in b2schunk.iterchunks_info():
-                yield b2schunk.get_chunk(b2chunk_info.nchunk)
-        return
+def b2chunks_from_blosc2(node: h5py.Dataset,
+                         b2_args: Mapping) -> Iterable[bytes]:
+    # Blosc2-compressed dataset, just pass chunks as they are.
+    # Support both Blosc2 arrays and frames as HDF5 chunks.
+    for h5_chunk_idx in range(node.id.get_num_chunks()):
+        b2_array, b2_schunk = b2_from_h5_chunk(node, h5_chunk_idx)
+        # TODO: check if schunk is compatible with creation arguments
+        for b2_chunk_info in b2_schunk.iterchunks_info():
+            yield b2_schunk.get_chunk(b2_chunk_info.nchunk)
 
-    # TODO: do not slurp & re-compress
+
+def b2chunks_from_nonchunked(node: h5py.Dataset,
+                             b2_args: Mapping) -> Iterable[bytes]:
+    # Contiguous or compact dataset,
+    # slurp into (hopefully small) Blosc2 array and get chunks from it.
     src_array = blosc2.asarray(
         node[()],  # ok for arrays & scalars
         **b2_args
@@ -133,9 +138,8 @@ def copy_dataset(name: str, node: h5py.Dataset,
     # TODO: handle array / frame / (compressed) file distinctly
     b2_path = c2_root / f'{name}.b2nd'
     try:
-        b2_args = b2args_from_dataset(node)
-        b2_array = b2empty_from_dataset(node, b2_path, b2_args)
-        b2_chunks = b2chunks_from_dataset(node, b2_args)
+        b2mkempty, b2_chunks = b2mkempty_b2chunkit_from_dataset(node)
+        b2_array = b2mkempty(urlpath=b2_path, mode='w')
 
         b2_schunk = b2_array.schunk
         for (nchunk, chunk) in enumerate(b2_chunks):
