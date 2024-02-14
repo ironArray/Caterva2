@@ -68,9 +68,8 @@ def create_directory(name: str, node: h5py.Group,
 def b2_from_h5_chunk(node: h5py.Dataset,
                      chunk_index: int) -> (blosc2.NDArray | blosc2.SChunk):
     h5chunk_info = node.id.get_chunk_info(chunk_index)
-    b2 = blosc2.open(node.file.filename, mode='r',
-                     offset=h5chunk_info.byte_offset)
-    return b2
+    return blosc2.open(node.file.filename, mode='r',
+                       offset=h5chunk_info.byte_offset)
 
 
 def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
@@ -108,11 +107,10 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         b2chunkit_from_dataset = b2chunkit_from_chunked
 
     def b2_make_empty(**kwds) -> blosc2.NDArray:
-        b2_empty = blosc2.empty(
+        return blosc2.empty(
             shape=node.shape, dtype=node.dtype,
             **(b2_args | kwds)
         )
-        return b2_empty
 
     b2_chunkit = b2chunkit_from_dataset(node, b2_args)
     return b2_make_empty, b2_chunkit
