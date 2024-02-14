@@ -165,9 +165,16 @@ def b2chunkit_from_chunked(node: h5py.Dataset,
 def copy_dataset(name: str, node: h5py.Dataset,
                  c2_root: pathlib.Path) -> None:
     # TODO: handle array / frame / (compressed) file distinctly
-    b2_path = c2_root / f'{name}.b2nd'
+
     try:
         b2mkempty, b2_chunks = b2mkempty_b2chunkit_from_dataset(node)
+    except Exception as e:
+        logging.error(f"Failed to translate dataset "
+                      f"to Blosc2 ND array: {name!r} -> {e!r}")
+        return
+
+    b2_path = c2_root / f'{name}.b2nd'
+    try:
         b2_array = b2mkempty(urlpath=b2_path, mode='w')
 
         b2_schunk = b2_array.schunk
@@ -188,8 +195,8 @@ def copy_dataset(name: str, node: h5py.Dataset,
                               f"{aname!r}: {name!r} -> {e!r}")
     except Exception as e:
         b2_path.unlink(missing_ok=True)
-        logging.error(f"Failed to export dataset "
-                      f"to Blosc2 ND array: {name!r} -> {e!r}")
+        logging.error(f"Failed to save dataset "
+                      f"as Blosc2 ND array: {name!r} -> {e!r}")
         return
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
