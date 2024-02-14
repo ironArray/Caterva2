@@ -63,16 +63,14 @@ def create_directory(name: str, node: h5py.Group,
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
-# Warning: Keep the reference to both returned results.
+# Warning: Keep the reference to the returned result.
 # Losing the reference to the array may result in a segmentation fault.
 def b2_from_h5_chunk(node: h5py.Dataset,
-                     chunk_index: int) -> (blosc2.NDArray | None,
-                                           blosc2.SChunk):
+                     chunk_index: int) -> (blosc2.NDArray | blosc2.SChunk):
     h5chunk_info = node.id.get_chunk_info(chunk_index)
     b2 = blosc2.open(node.file.filename, mode='r',
                      offset=h5chunk_info.byte_offset)
-    return (b2 if hasattr(b2, 'ndim') else None,
-            getattr(b2, 'schunk', b2))
+    return b2
 
 
 def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
@@ -87,8 +85,9 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     elif BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
         # Get Blosc2 arguments from the first schunk.
         # HDF5 filter parameters are less reliable than these.
-        b2_array, b2_schunk = b2_from_h5_chunk(node, 0)
-        if b2_array is not None:
+        b2_array = b2_from_h5_chunk(node, 0)
+        b2_schunk = getattr(b2_array, 'schunk', b2_array)
+        if hasattr(b2_array, 'blocks'):
             b2_args['blocks'] = b2_array.blocks
         b2_args['cparams'] = b2_schunk.cparams
         b2_args['dparams'] = b2_schunk.dparams
@@ -114,7 +113,8 @@ def b2chunks_from_blosc2(node: h5py.Dataset,
     # Blosc2-compressed dataset, just pass chunks as they are.
     # Support both Blosc2 arrays and frames as HDF5 chunks.
     for h5_chunk_idx in range(node.id.get_num_chunks()):
-        b2_array, b2_schunk = b2_from_h5_chunk(node, h5_chunk_idx)
+        b2_array = b2_from_h5_chunk(node, h5_chunk_idx)
+        b2_schunk = getattr(b2_array, 'schunk', b2_array)
         # TODO: check if schunk is compatible with creation arguments
         for b2_chunk_info in b2_schunk.iterchunks_info():
             yield b2_schunk.get_chunk(b2_chunk_info.nchunk)
