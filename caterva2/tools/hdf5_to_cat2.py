@@ -188,7 +188,7 @@ def copy_dataset(name: str, node: h5py.Dataset,
                 # so we can handle value subclasses like `numpy.bytes_`
                 # (e.g. for Fortran-style string attributes added by PyTables).
                 pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
-                b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric data
+                b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric
                 logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
             except Exception as e:
                 logging.error(f"Failed to export dataset attribute "
