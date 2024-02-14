@@ -76,6 +76,18 @@ def b2_from_h5_chunk(node: h5py.Dataset,
 def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         Callable[..., blosc2.NDArray],
         Iterable[bytes]):
+    """Get empty Blosc2 array maker and compressed chunk iterator from `node`.
+
+    The first returned value can be called to create an empty Blosc2 array
+    with prepared construction arguments extracted from the HDF5 dataset
+    `node`.  By default it is created without storage, but that may be changed
+    by passing additional keyword arguments like ``urlpath``.
+
+    The second returned value is an iterator that yields compressed Blosc2
+    chunks compatible with the construction arguments used by the previous
+    callable, for the data in `node`.  They may be stored straight away in
+    order in a Blosc2 super-chunk without further processing.
+    """
     b2_args = dict(
         chunks=node.chunks,  # None is ok (let Blosc2 decide)
     )
