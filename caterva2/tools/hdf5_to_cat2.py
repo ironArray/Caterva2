@@ -93,7 +93,9 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
 
     if node.chunks is None:
         b2chunkit_from_dataset = b2chunkit_from_nonchunked
-    elif f'{BLOSC2_HDF5_FID:#d}' in node._filters and node.id.get_num_chunks() > 0:
+    elif (list(node._filters) == [f'{BLOSC2_HDF5_FID:#d}']
+          and node.id.get_num_chunks() > 0):
+        # Blosc2 is the sole filter, direct chunk copy is possible.
         # Get Blosc2 arguments from the first schunk.
         # HDF5 filter parameters are less reliable than these.
         b2_array = b2_from_h5_chunk(node, 0)
