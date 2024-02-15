@@ -78,6 +78,10 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
 
 
 def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
+    ndim = getattr(b2_array, 'ndim', -1)
+    if ndim == 0:  # scalar, no filters/compression allowed
+        return {}
+
     b2_schunk = getattr(b2_array, 'schunk', b2_array)
     cparams = b2_schunk.cparams
     # This is what hdf5plugin does (more or less).
@@ -92,7 +96,6 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
                          (s.value for s in cparams['filters'])),
         cparams['codec'].value,  # compressor code
     )
-    ndim = getattr(b2_array, 'ndim', -1)
     if ndim > 1:
         opts += (
             ndim,  # chunk rank (number of dimensions)
