@@ -46,7 +46,7 @@ from .common import BLOSC2_HDF5_FID
 
 
 # Set to an empty mapping to store HDF5 dataset without compression.
-default_h5_cparams = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
+default_h5_compargs = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
