@@ -98,8 +98,9 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         # HDF5 filter parameters are less reliable than these.
         b2_array = b2_from_h5_chunk(node, 0)
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
-        if hasattr(b2_array, 'blocks'):
-            b2_args['blocks'] = b2_array.blocks
+        b2_args['blocks'] = getattr(
+            b2_array, 'blocks',
+            (b2_schunk.blocksize // b2_schunk.typesize,))
         b2_args['cparams'] = b2_schunk.cparams
         b2_args['dparams'] = b2_schunk.dparams
         b2chunkit_from_dataset = b2chunkit_from_blosc2
