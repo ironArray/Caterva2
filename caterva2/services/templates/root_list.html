@@ -3,6 +3,7 @@
 <form hx-get="/htmx/path-list/"
       hx-target="#path-list"
       hx-trigger="change"
+      hx-include="#query-search"
       hx-indicator="#path-list-wrapper .htmx-indicator"
       hx-on:htmx:before-request="clearContent('path-list');">
 

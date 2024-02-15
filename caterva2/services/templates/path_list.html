@@ -1,8 +1,11 @@
 <h3>Datasets</h3>
 
+{# Used in root_list.html #}
+<input type="hidden" id="query-search" name="search" value="{{ search_text }}">
+
 <!--- Search box --->
 <form class="d-flex" hx-get="{{ search_url }}" hx-target="#path-list">
-    <input class="form-control me-2" id="autocomplete" name="search" type="search"
+    <input class="form-control me-2" name="search" type="search"
            placeholder="Search" aria-label="Search" value="{{ search_text }}">
     <button class="btn btn-outline-success" type="submit">Search</button>
 </form>
