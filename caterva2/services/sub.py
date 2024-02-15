@@ -49,6 +49,15 @@ locks = {}
 port = None
 
 
+def make_url(request, name, query=None, **path_params):
+    url = request.url_for(name, **path_params)
+    # url.include_query_params() does not seem to work for list values
+    if query:
+        url = furl.furl(url)
+        url = url.set(query)
+    return str(url)
+
+
 async def download_chunk(path, schunk, nchunk):
     root, name = path.split('/', 1)
     host = database.roots[root].http
@@ -465,9 +474,10 @@ async def download_data(path: str):
 
 def home(request, roots=None, search=None, context=None):
     context = context or {}
-    context['roots_url'] = furl.furl('/htmx/root-list/').set({'roots': roots})
+
+    context['roots_url'] = make_url(request, 'htmx_root_list', {'roots': roots})
     if roots:
-        paths_url = furl.furl("/htmx/path-list/").set({'roots': roots, 'search': search})
+        paths_url = make_url(request, 'htmx_path_list', {'roots': roots, 'search': search})
         context['paths_url'] = paths_url
 
     return templates.TemplateResponse(request, "home.html", context)
@@ -521,7 +531,7 @@ async def htmx_path_list(
                 paths.append(f'{root}/{relpath}')
 
     # Render template
-    search_url = furl.furl("/htmx/path-list/").set({'roots': roots})
+    search_url = make_url(request, 'htmx_path_list', {'roots': roots})
     context = {
         "paths": paths,
         "search_text": search,
@@ -533,17 +543,16 @@ async def htmx_path_list(
     args = {'roots': roots}
     if search:
         args['search'] = search
-    push_url = furl.furl(hx_current_url).set(args)
-    response.headers['HX-Push-Url'] = push_url.url
+    push_url = furl.furl(hx_current_url).set(args).url
+    response.headers['HX-Push-Url'] = push_url
 
     return response
 
 
-@app.get("/roots/{root}/{path:path}", response_class=HTMLResponse)
+@app.get("/roots/{path:path}", response_class=HTMLResponse)
 async def html_path_info(
     request: Request,
     # Path parameters
-    root: str,
     path: str,
     # Query parameters
     roots: list[str] = fastapi.Query([]),
@@ -555,15 +564,15 @@ async def html_path_info(
 
     if not hx_request:
         context = {
-            "meta_url": request.url_for('html_path_info', root=root, path=path),
+            "meta_url": make_url(request, 'html_path_info', path=path),
         }
         return home(request, roots, search, context)
 
-    filepath = cache / root / path
+    filepath = cache / path
     abspath = lookup_path(filepath)
     meta = srv_utils.read_metadata(abspath)
 
-    context = {"path": pathlib.Path(root) / path, "meta": meta}
+    context = {"path": path, "meta": meta}
     response = templates.TemplateResponse(request, "meta.html", context=context)
 
     current_url = furl.furl(hx_current_url)
