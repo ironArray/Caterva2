@@ -501,7 +501,7 @@ async def htmx_root_list(
 ):
 
     context = {
-        "roots": database.roots.values(),
+        "roots": sorted(database.roots.values(), key=lambda x: x.name),
         "checked": roots,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
