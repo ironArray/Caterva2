@@ -44,7 +44,7 @@ from blosc2 import blosc2_ext
 
 
 """The registered identifier for Blosc2 in HDF5 filters."""
-BLOSC2_HDF5_FID = '32026'
+BLOSC2_HDF5_FID = 32026
 
 
 def create_directory(name: str, node: h5py.Group,
@@ -93,7 +93,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
 
     if node.chunks is None:
         b2chunkit_from_dataset = b2chunkit_from_nonchunked
-    elif BLOSC2_HDF5_FID in node._filters and node.id.get_num_chunks() > 0:
+    elif f'{BLOSC2_HDF5_FID:#d}' in node._filters and node.id.get_num_chunks() > 0:
         # Get Blosc2 arguments from the first schunk.
         # HDF5 filter parameters are less reliable than these.
         b2_array = b2_from_h5_chunk(node, 0)
