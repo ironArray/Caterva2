@@ -28,7 +28,9 @@ Datasets or attributes which are unsupported or fail to be converted are
 simply reported and skipped, and they do not cause the program to fail.
 """
 
+import functools
 import logging
+import operator
 import os
 import pathlib
 import sys
@@ -43,6 +45,10 @@ from collections.abc import Callable, Iterator, Mapping
 
 # Set to an empty mapping to store HDF5 dataset without compression.
 default_h5_cparams = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
+
+
+"""The registered identifier for Blosc2 in HDF5 filters."""
+BLOSC2_HDF5_FID = 32026
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
@@ -73,14 +79,37 @@ def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
     logging.info(f"Exported dataset: {c2_leaf.path!r} => {h5_dataset.name!r}")
 
 
+def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
+    b2_schunk = getattr(b2_array, 'schunk', b2_array)
+    cparams = b2_schunk.cparams
+    # This is what hdf5plugin does (more or less).
+    # Option list as per ``hdf5-blosc2/src/blosc2_filter.c``.
+    opts = (
+        1,  # filter revision
+        cparams['blocksize'],  # block size (in bytes)
+        cparams['typesize'],  # type size (in bytes)
+        b2_schunk.chunksize,  # chunk size (in bytes)
+        cparams['clevel'],  # compression level
+        functools.reduce(operator.or_,  # shuffle method
+                         (s.value for s in cparams['filters'])),
+        cparams['codec'].value,  # compressor code
+    )
+    ndim = getattr(b2_array, 'ndim', -1)
+    if ndim > 1:
+        opts += (
+            ndim,  # chunk rank (number of dimensions)
+            *b2_array.chunks,  # length of chunk dimension i
+        )
+    return dict(compression=BLOSC2_HDF5_FID, compression_opts=opts)
+
+
 def read_array(path: str) -> tuple[Mapping, Mapping]:
     b2_array = blosc2.open(path)
     kwds = dict(
         name=pathlib.Path(path).stem,
         data=b2_array[()],  # ok for arrays & scalars
         chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
-        **(default_h5_cparams if b2_array.ndim > 0 else {}),
-        # TODO: carry compression parameters (including blocks)
+        **h5compargs_from_b2(b2_array),
     )
     # TODO: mark array distinguishably
     return kwds, b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
@@ -92,8 +121,7 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
         name=pathlib.Path(path).stem,
         data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
         chunks=(b2_schunk.chunkshape,),
-        **default_h5_cparams,
-        # TODO: carry compression parameters (including blocks)
+        **h5compargs_from_b2(b2_schunk),
     )
     # TODO: mark frame / compressed file distinguishably
     return kwds, b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
