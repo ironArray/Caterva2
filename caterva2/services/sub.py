@@ -53,8 +53,7 @@ def make_url(request, name, query=None, **path_params):
     url = request.url_for(name, **path_params)
     # url.include_query_params() does not seem to work for list values
     if query:
-        url = furl.furl(url)
-        url = url.set(query)
+        url = furl.furl(url).set(query)
     return str(url)
 
 
@@ -553,7 +552,7 @@ async def htmx_path_list(
 async def html_path_info(
     request: Request,
     # Path parameters
-    path: str,
+    path: pathlib.Path,
     # Query parameters
     roots: list[str] = fastapi.Query([]),
     search: str = '',
