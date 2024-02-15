@@ -1,52 +1,18 @@
 <h3>Roots</h3>
 
-<form
-    hx-get="/htmx/path-list/"
-    hx-target="#path-list"
-    hx-trigger="changed"
-    hx-indicator="#path-list-wrapper .htmx-indicator"
-    hx-on:htmx:before-request="clearContent('path-list');"
->
-{% for root in roots %}
+<form hx-get="/htmx/path-list/"
+      hx-target="#path-list"
+      hx-trigger="change"
+      hx-indicator="#path-list-wrapper .htmx-indicator"
+      hx-on:htmx:before-request="clearContent('path-list');">
+
+    {% for root in roots %}
     <div class="form-check">
         <input class="form-check-input" type="checkbox"
-               name="roots" value="{{ root.name }}"
-               id="id_root_{{ root.name }}"
-               hx-trigger="change"
-        >
-        <label class="form-check-label" for="id_root_{{ root.name }}">
-            {{ root.name }}
-        </label>
+               name="roots" value="{{ root.name }}" {{ "checked" if root.name in checked }}
+               id="id_root_{{ root.name }}">
+        <label class="form-check-label" for="id_root_{{ root.name }}">{{ root.name }}</label>
     </div>
-{% endfor %}
-</form>
-
-{#
-<div id="root-list" class="list-group">
-    {% for root in roots %}
-        <a href="/htmx/path-list/"
-           class="list-group-item list-group-item-action"
-           data-name="{{ root.name }}"
-           hx-get="/htmx/path-list/"
-           hx-target="#path-list"
-           hx-indicator="#path-list-wrapper .htmx-indicator"
-           hx-on:htmx:before-request="toggleActive(this); clearContent('path-list'); clearContent('meta')"
-           >
-            {{root.name}}
-        </a>
     {% endfor %}
-</div>
-#}
 
-<script>
-    const url = new URL(document.URL);
-    const roots = url.searchParams.getAll('roots');
-    for (el of document.querySelectorAll('#root-list a')) {
-        if (roots.includes(el.dataset.name)) {
-            el.classList.add("active");
-        }
-        else {
-            el.classList.remove("active");
-        }
-    }
-</script>
+</form>

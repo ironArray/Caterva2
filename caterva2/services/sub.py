@@ -18,6 +18,7 @@ from fastapi import FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import fastapi
 
 # Requirements
 import blosc2
@@ -462,37 +463,51 @@ async def download_data(path: str):
     return f'http://{host}:{port}/files/{path}'
 
 
-def home(request, context=None):
-    return templates.TemplateResponse(request, "home.html", context or {})
+def home(request, roots=None, search=None, context=None):
+    context = context or {}
+    context['roots_url'] = furl.furl('/htmx/root-list/').set({'roots': roots})
+    if roots:
+        paths_url = furl.furl("/htmx/path-list/").set({'roots': roots, 'search': search})
+        context['paths_url'] = paths_url
+
+    return templates.TemplateResponse(request, "home.html", context)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def html_home(
     request: Request,
     # Query parameters
-    roots: list[str] = [],
+    roots: list[str] = fastapi.Query([]),
+    search: str = '',
 ):
-    return home(request)
+    return home(request, roots, search)
 
 
 @app.get("/htmx/root-list/")
 async def htmx_root_list(
     request: Request,
     # Headers
+    roots: list[str] = fastapi.Query([]),
     hx_current_url: srv_utils.HeaderType = None,
 ):
-    context = {"roots": database.roots.values()}
+
+    context = {
+        "roots": database.roots.values(),
+        "checked": roots,
+    }
     return templates.TemplateResponse(request, "root_list.html", context)
+
 
 @app.get("/htmx/path-list/", response_class=HTMLResponse)
 async def htmx_path_list(
     request: Request,
     # Query parameters
-    roots: list[str] = [],
+    roots: list[str] = fastapi.Query([]),
     search: str = '',
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
 ):
+
     paths = []
     for root in roots:
         if not get_root(root).subscribed:
@@ -505,45 +520,22 @@ async def htmx_path_list(
             if search in str(relpath):
                 paths.append(f'{root}/{relpath}')
 
-    url = furl.furl('/htmx/path-list/').set({'roots': roots})
-    context = {"url": url, "paths": paths, "search": search}
+    # Render template
+    search_url = furl.furl("/htmx/path-list/").set({'roots': roots})
+    context = {
+        "paths": paths,
+        "search_text": search,
+        "search_url": search_url,
+    }
     response = templates.TemplateResponse(request, "path_list.html", context)
-    return response
 
-
-@app.get("/roots/{root}/", response_class=HTMLResponse)
-async def html_path_list(
-    request: Request,
-    # Path parameters
-    root: str,
-    # Query parameters
-    search: str = '',
-    # Headers
-    hx_request: srv_utils.HeaderType = None,
-    hx_current_url: srv_utils.HeaderType = None,
-):
-
-    if not hx_request:
-        context = {
-            "content_url": request.url_for('html_path_list', root=root),
-            "search": search,
-        }
-        return home(request, context)
-
-    if not get_root(root).subscribed:
-        follow(root)
-
-    rootdir = cache / root
-    paths = [
-        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
-        for path, relpath in utils.walk_files(rootdir)
-        if search in str(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
-    ]
-    context = {"root": root, "paths": paths, "search": search}
-    response = templates.TemplateResponse(request, "path_list.html", context)
+    # Push URL
+    args = {'roots': roots}
     if search:
-        url = furl.furl(hx_current_url)
-        response.headers['HX-Push-Url'] = url.set({'search': search}).url
+        args['search'] = search
+    push_url = furl.furl(hx_current_url).set(args)
+    response.headers['HX-Push-Url'] = push_url.url
+
     return response
 
 
@@ -554,6 +546,7 @@ async def html_path_info(
     root: str,
     path: str,
     # Query parameters
+    roots: list[str] = fastapi.Query([]),
     search: str = '',
     # Headers
     hx_request: srv_utils.HeaderType = None,
@@ -562,11 +555,9 @@ async def html_path_info(
 
     if not hx_request:
         context = {
-            "content_url": request.url_for('html_path_list', root=root),
             "meta_url": request.url_for('html_path_info', root=root, path=path),
-            "search": search,
         }
-        return home(request, context)
+        return home(request, roots, search, context)
 
     filepath = cache / root / path
     abspath = lookup_path(filepath)

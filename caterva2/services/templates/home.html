@@ -12,14 +12,16 @@
 
 <body class="vh-120">
 
-<img src="/static/logo-caterva2-horizontal-small.png" alt="Caterva2 logo" id="logo">
+<a href="/">
+    <img src="/static/logo-caterva2-horizontal-small.png" alt="Caterva2 logo" id="logo">
+</a>
 
 <!-- Main section -->
 <div id="page">
-    <div hx-get="/htmx/root-list/" hx-trigger="load"></div>
+    <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
     <div id="path-list-wrapper">
         {% include 'loading.html' %}
-        <div id="path-list"{% if content_url %} hx-get="{{ content_url }}?search={{ search }}" hx-trigger="load"{% endif %}>
+        <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>
         </div>
     </div>
     <div id="meta-wrapper">
