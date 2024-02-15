@@ -45,8 +45,8 @@ from collections.abc import Callable, Iterator, Mapping
 from .common import BLOSC2_HDF5_FID
 
 
-# Set to an empty mapping to store HDF5 dataset without compression.
-default_h5_compargs = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
+# Set to empty mapping to store files as uncompressed HDF5 datasets.
+file_h5_compargs = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
 
 
 def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
@@ -135,8 +135,7 @@ def read_file(path: str) -> tuple[Mapping, Mapping]:
         name=pathlib.Path(path).name,
         data=numpy.frombuffer(data, dtype=numpy.uint8),
         chunks=True,
-        **default_h5_cparams,
-        # TODO: compression?
+        **file_h5_compargs,
     )
     # TODO: mark plain file distinguishably
     return kwds, {}
