@@ -572,7 +572,7 @@ async def html_path_info(
     meta = srv_utils.read_metadata(abspath)
 
     context = {"path": path, "meta": meta}
-    response = templates.TemplateResponse(request, "meta.html", context=context)
+    response = templates.TemplateResponse(request, "info.html", context=context)
 
     current_url = furl.furl(hx_current_url)
     request_url = furl.furl(request.url)

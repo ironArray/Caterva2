@@ -55,3 +55,14 @@
     color: whitesmoke;
     background-color: #008287;
 }
+
+.tab-content {
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 1rem;
+}
+
+.nav-tabs {
+    margin-bottom: 0;
+}
