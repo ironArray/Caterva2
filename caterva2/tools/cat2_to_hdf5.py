@@ -106,6 +106,7 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
 
 def read_array(path: str) -> tuple[Mapping, Mapping]:
     b2_array = blosc2.open(path)
+    # TODO: do not slurp & re-compress
     kwds = dict(
         name=pathlib.Path(path).stem,
         data=b2_array[()],  # ok for arrays & scalars
@@ -118,6 +119,7 @@ def read_array(path: str) -> tuple[Mapping, Mapping]:
 
 def read_frame(path: str) -> tuple[Mapping, Mapping]:
     b2_schunk = blosc2.open(path)
+    # TODO: do not slurp & re-compress
     kwds = dict(
         name=pathlib.Path(path).stem,
         data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
@@ -131,6 +133,7 @@ def read_frame(path: str) -> tuple[Mapping, Mapping]:
 def read_file(path: str) -> tuple[Mapping, Mapping]:
     with open(path, 'rb') as f:
         data = f.read()
+    # TODO: do not slurp & re-compress
     kwds = dict(
         name=pathlib.Path(path).name,
         data=numpy.frombuffer(data, dtype=numpy.uint8),
