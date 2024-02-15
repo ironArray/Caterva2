@@ -42,9 +42,7 @@ from collections.abc import Callable, Iterable, Mapping
 
 from blosc2 import blosc2_ext
 
-
-"""The registered identifier for Blosc2 in HDF5 filters."""
-BLOSC2_HDF5_FID = 32026
+from .common import BLOSC2_HDF5_FID
 
 
 def create_directory(name: str, node: h5py.Group,
