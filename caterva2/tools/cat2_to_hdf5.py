@@ -86,12 +86,21 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
     cparams = b2_schunk.cparams
     # This is what hdf5plugin does (more or less).
     # Option list as per ``hdf5-blosc2/src/blosc2_filter.c``.
+    #
+    # Note: These HDF5 filter options (``cd_values``)
+    # are just an approximation to the actual cparams/dparams
+    # in the Blosc2 super-chunks stored as HDF5 chunks,
+    # as they are not yet able to encode all Blosc2 features
+    # (like the ordered filter pipeline and meta as of 2024-02).
+    # The cparams/dparams in each schunk are more reliable.
     opts = (
         1,  # filter revision
         cparams['blocksize'],  # block size (in bytes)
         cparams['typesize'],  # type size (in bytes)
         b2_schunk.chunksize,  # chunk size (in bytes)
         cparams['clevel'],  # compression level
+        # Just a coarse hint that filters are used (see note above),
+        # e.g. their order and meta are lost here.
         functools.reduce(operator.or_,  # shuffle method
                          (s.value for s in cparams['filters'])),
         cparams['codec'].value,  # compressor code
