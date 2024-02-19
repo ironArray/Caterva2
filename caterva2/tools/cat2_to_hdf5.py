@@ -131,16 +131,15 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
     # TODO: handle symlinks safely
     c2_leaf_name = pathlib.Path(c2_leaf.name)
     if c2_leaf_name.suffix == '.b2nd':
-        # TODO: do not slurp & re-compress
         b2_array = blosc2.open(c2_leaf.path)
         h5_args |= dict(
             name=pathlib.Path(c2_leaf).stem,
             shape=b2_array.shape,
             dtype=b2_array.dtype,
-            data=b2_array[()],  # ok for arrays & scalars
             chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
             **h5compargs_from_b2(b2_array),
         )
+        h5_chunkit = h5chunkit_from_array(b2_array)
         h5_attrs |= b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
     elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
         # TODO: do not slurp & re-compress
@@ -154,6 +153,7 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
         )
+        h5_chunkit = iter([])  # TODO: iterate over chunks
         h5_attrs |= b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
     else:
         # TODO: do not slurp & re-compress
@@ -167,6 +167,7 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             chunks=True,
             **file_h5_compargs,
         )
+        h5_chunkit = iter([])  # TODO: iterate over chunks
 
     def h5_make_empty(h5_group: h5py.Group, **kwds) -> h5py.Dataset:
         dtype = h5_args.pop('dtype')
@@ -175,7 +176,29 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             **(h5_args | kwds)
         )
 
-    return h5_make_empty, [], h5_attrs  # TODO: iterate chunks
+    return h5_make_empty, h5_chunkit, h5_attrs
+
+
+def h5chunkit_from_array(b2_array: blosc2.NDArray) -> Iterator[bytes]:
+    # Blosc2 chunks are passed as they are,
+    # but chunks need to be wrapped in a super-chunk
+    # to store that as the HDF5 chunk.
+    # Copy each Blosc2 chunk into chunk 0 of compatible Blosc2 array,
+    # then dump the resulting array/super-chunk.
+    # Thus, only one chunk worth of data is kept in memory.
+    b2_schunk = b2_array.schunk
+    src_array = blosc2.empty(
+        shape=b2_array.chunks,  # note that shape is chunkshape
+        dtype=b2_array.dtype,
+        chunks=b2_array.chunks,
+        blocks=b2_array.blocks,
+        cparams=b2_schunk.cparams,
+        dparams=b2_schunk.dparams,
+    )
+    src_schunk = src_array.schunk
+    for b2_chunk_info in b2_schunk.iterchunks_info():
+        src_schunk.update_chunk(0, b2_schunk.get_chunk(b2_chunk_info.nchunk))
+        yield src_array.to_cframe()  # whole array/schunk, not just chunk
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
