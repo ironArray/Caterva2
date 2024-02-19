@@ -49,8 +49,12 @@ from .common import BLOSC2_HDF5_FID
 file_h5_compargs = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
 
 
-def export_dataset(c2_leaf: os.DirEntry, h5_group: h5py.Group,
-                   read: Callable[[str], tuple[Mapping, Mapping]]) -> None:
+def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
+    """Export Caterva2 leaf entry `c2_leaf` into
+    open HDF5 group `h5_group`.
+    """
+    read = reader_from_leaf(c2_leaf)
+
     try:
         (kwds, attrs) = read(c2_leaf.path)
     except Exception as e:
@@ -153,18 +157,17 @@ def read_file(path: str) -> tuple[Mapping, Mapping]:
     return kwds, {}
 
 
-def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
-    """Export Caterva2 leaf entry `c2_leaf` into
-    open HDF5 group `h5_group`.
-    """
+def reader_from_leaf(c2_leaf: os.DirEntry) -> (
+        Callable[[str], tuple[Mapping, Mapping]]):
     # TODO: handle symlinks safely
     c2_leaf_name = pathlib.Path(c2_leaf.name)
     if c2_leaf_name.suffix == '.b2nd':
-        export_dataset(c2_leaf, h5_group, read_array)
+        reader = read_array
     elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
-        export_dataset(c2_leaf, h5_group, read_frame)
+        reader = read_frame
     else:
-        export_dataset(c2_leaf, h5_group, read_file)
+        reader = read_file
+    return reader
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
