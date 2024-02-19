@@ -53,10 +53,8 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     """Export Caterva2 leaf entry `c2_leaf` into
     open HDF5 group `h5_group`.
     """
-    read = reader_from_leaf(c2_leaf)
-
     try:
-        (kwds, attrs) = read(c2_leaf.path)
+        (kwds, attrs) = h5args_attrs_from_leaf(c2_leaf)
     except Exception as e:
         logging.error(f"Failed to read Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
@@ -117,57 +115,45 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
     return dict(compression=BLOSC2_HDF5_FID, compression_opts=opts)
 
 
-def read_array(path: str) -> tuple[Mapping, Mapping]:
-    b2_array = blosc2.open(path)
-    # TODO: do not slurp & re-compress
-    kwds = dict(
-        name=pathlib.Path(path).stem,
-        data=b2_array[()],  # ok for arrays & scalars
-        chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
-        **h5compargs_from_b2(b2_array),
-    )
-    # TODO: mark array distinguishably
-    return kwds, b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
+def h5args_attrs_from_leaf(c2_leaf: os.DirEntry) -> tuple[Mapping, Mapping]:
+    # TODO: mark array / frame / file distinguishably
+    h5_args = {}
+    attrs = {}
 
-
-def read_frame(path: str) -> tuple[Mapping, Mapping]:
-    b2_schunk = blosc2.open(path)
-    # TODO: do not slurp & re-compress
-    kwds = dict(
-        name=pathlib.Path(path).stem,
-        data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
-        chunks=(b2_schunk.chunkshape,),
-        **h5compargs_from_b2(b2_schunk),
-    )
-    # TODO: mark frame / compressed file distinguishably
-    return kwds, b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
-
-
-def read_file(path: str) -> tuple[Mapping, Mapping]:
-    with open(path, 'rb') as f:
-        data = f.read()
-    # TODO: do not slurp & re-compress
-    kwds = dict(
-        name=pathlib.Path(path).name,
-        data=numpy.frombuffer(data, dtype=numpy.uint8),
-        chunks=True,
-        **file_h5_compargs,
-    )
-    # TODO: mark plain file distinguishably
-    return kwds, {}
-
-
-def reader_from_leaf(c2_leaf: os.DirEntry) -> (
-        Callable[[str], tuple[Mapping, Mapping]]):
     # TODO: handle symlinks safely
     c2_leaf_name = pathlib.Path(c2_leaf.name)
     if c2_leaf_name.suffix == '.b2nd':
-        reader = read_array
+        # TODO: do not slurp & re-compress
+        b2_array = blosc2.open(c2_leaf.path)
+        h5_args |= dict(
+            name=pathlib.Path(c2_leaf).stem,
+            data=b2_array[()],  # ok for arrays & scalars
+            chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
+            **h5compargs_from_b2(b2_array),
+        )
+        attrs |= b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
     elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
-        reader = read_frame
+        # TODO: do not slurp & re-compress
+        b2_schunk = blosc2.open(c2_leaf.path)
+        h5_args |= dict(
+            name=pathlib.Path(c2_leaf).stem,
+            data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
+            chunks=(b2_schunk.chunkshape,),
+            **h5compargs_from_b2(b2_schunk),
+        )
+        attrs |= b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
     else:
-        reader = read_file
-    return reader
+        # TODO: do not slurp & re-compress
+        with open(c2_leaf, 'rb') as f:
+            data = f.read()
+        h5_args |= dict(
+            name=pathlib.Path(c2_leaf).name,
+            data=numpy.frombuffer(data, dtype=numpy.uint8),
+            chunks=True,
+            **file_h5_compargs,
+        )
+
+    return h5_args, attrs
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
