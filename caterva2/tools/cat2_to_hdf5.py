@@ -129,6 +129,8 @@ def h5mkdataset_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         b2_array = blosc2.open(c2_leaf.path)
         h5_args |= dict(
             name=pathlib.Path(c2_leaf).stem,
+            shape=b2_array.shape,
+            dtype=b2_array.dtype,
             data=b2_array[()],  # ok for arrays & scalars
             chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
             **h5compargs_from_b2(b2_array),
@@ -139,6 +141,9 @@ def h5mkdataset_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         b2_schunk = blosc2.open(c2_leaf.path)
         h5_args |= dict(
             name=pathlib.Path(c2_leaf).stem,
+            # TODO: check for other types/typesizes
+            shape=(b2_schunk.nbytes,),
+            dtype=numpy.uint8,
             data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
@@ -150,13 +155,17 @@ def h5mkdataset_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             data = f.read()
         h5_args |= dict(
             name=pathlib.Path(c2_leaf).name,
+            shape=(c2_leaf.stat(follow_symlinks=True).st_size,),
+            dtype=numpy.uint8,
             data=numpy.frombuffer(data, dtype=numpy.uint8),
             chunks=True,
             **file_h5_compargs,
         )
 
     def h5_make_dataset(h5_group: h5py.Group, **kwds) -> h5py.Dataset:
+        dtype = h5_args.pop('dtype')
         return h5_group.create_dataset(
+            dtype=dtype,  # not allowed as a real keyword argument
             **(h5_args | kwds)
         )
 
