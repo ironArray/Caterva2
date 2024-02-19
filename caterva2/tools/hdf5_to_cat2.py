@@ -38,7 +38,7 @@ import h5py
 import hdf5plugin
 import msgpack
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 
 from blosc2 import blosc2_ext
 
@@ -72,7 +72,7 @@ def b2_from_h5_chunk(node: h5py.Dataset,
 
 def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         Callable[..., blosc2.NDArray],
-        Iterable[bytes]):
+        Iterator[bytes]):
     """Get empty Blosc2 array maker and compressed chunk iterator from `node`.
 
     The first returned value can be called to create an empty Blosc2 array
@@ -118,7 +118,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
 
 
 def b2chunkit_from_blosc2(node: h5py.Dataset,
-                          b2_args: Mapping) -> Iterable[bytes]:
+                          b2_args: Mapping) -> Iterator[bytes]:
     # Blosc2-compressed dataset, just pass chunks as they are.
     # Support both Blosc2 arrays and frames as HDF5 chunks.
     for h5_chunk_idx in range(node.id.get_num_chunks()):
@@ -130,7 +130,7 @@ def b2chunkit_from_blosc2(node: h5py.Dataset,
 
 
 def b2chunkit_from_nonchunked(node: h5py.Dataset,
-                              b2_args: Mapping) -> Iterable[bytes]:
+                              b2_args: Mapping) -> Iterator[bytes]:
     # Contiguous or compact dataset,
     # slurp into Blosc2 array and get chunks from it.
     # Hopefully the data is small enough to be loaded into memory.
@@ -144,7 +144,7 @@ def b2chunkit_from_nonchunked(node: h5py.Dataset,
 
 
 def b2chunkit_from_chunked(node: h5py.Dataset,
-                           b2_args: Mapping) -> Iterable[bytes]:
+                           b2_args: Mapping) -> Iterator[bytes]:
     # Non-Blosc2 chunked dataset,
     # load each HDF5 chunk into chunk 0 of compatible Blosc2 array,
     # then get the resulting compressed chunk.
