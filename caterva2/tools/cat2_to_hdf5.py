@@ -54,16 +54,22 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     open HDF5 group `h5_group`.
     """
     try:
-        (h5mkdataset, attrs) = h5mkdataset_h5attrs_from_leaf(c2_leaf)
+        (h5mkempty, h5_chunks, attrs) = (
+            h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf))
     except Exception as e:
         logging.error(f"Failed to translate Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
         return
 
     try:
-        h5_dataset = h5mkdataset(h5_group)
+        h5_dataset = h5mkempty(h5_group)
+        for (chunk_slice, chunk) in zip(h5_dataset.iter_chunks(), h5_chunks):
+            # Cannot use ``h5_dataset.id.get_chunk_info(nchunk)``
+            # as there are indeed no chunks yet.
+            chunk_offset = tuple(cs.start for cs in chunk_slice)
+            h5_dataset.id.write_direct_chunk(chunk_offset, chunk)
     except Exception as e:
-        logging.error(f"Failed to create dataset in HDF5 group "
+        logging.error(f"Failed to save dataset in HDF5 group "
                       f"{h5_group.name!r}: {c2_leaf.name!r} -> {e!r}")
         return
 
@@ -115,7 +121,7 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
     return dict(compression=BLOSC2_HDF5_FID, compression_opts=opts)
 
 
-def h5mkdataset_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
+def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         Callable[[h5py.Group, ...], h5py.Dataset],
         Mapping):
     # TODO: mark array / frame / file distinguishably
@@ -162,14 +168,14 @@ def h5mkdataset_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             **file_h5_compargs,
         )
 
-    def h5_make_dataset(h5_group: h5py.Group, **kwds) -> h5py.Dataset:
+    def h5_make_empty(h5_group: h5py.Group, **kwds) -> h5py.Dataset:
         dtype = h5_args.pop('dtype')
         return h5_group.create_dataset(
             dtype=dtype,  # not allowed as a real keyword argument
             **(h5_args | kwds)
         )
 
-    return h5_make_dataset, h5_attrs
+    return h5_make_empty, [], h5_attrs  # TODO: iterate chunks
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
