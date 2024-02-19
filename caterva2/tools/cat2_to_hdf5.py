@@ -54,7 +54,7 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     open HDF5 group `h5_group`.
     """
     try:
-        (h5mkdataset, attrs) = h5mkdataset_attrs_from_leaf(c2_leaf)
+        (h5mkdataset, attrs) = h5mkdataset_h5attrs_from_leaf(c2_leaf)
     except Exception as e:
         logging.error(f"Failed to translate Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
@@ -115,12 +115,12 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
     return dict(compression=BLOSC2_HDF5_FID, compression_opts=opts)
 
 
-def h5mkdataset_attrs_from_leaf(c2_leaf: os.DirEntry) -> (
+def h5mkdataset_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         Callable[[h5py.Group, ...], h5py.Dataset],
         Mapping):
     # TODO: mark array / frame / file distinguishably
     h5_args = {}
-    attrs = {}
+    h5_attrs = {}
 
     # TODO: handle symlinks safely
     c2_leaf_name = pathlib.Path(c2_leaf.name)
@@ -133,7 +133,7 @@ def h5mkdataset_attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             chunks=(b2_array.chunks if b2_array.ndim > 0 else None),
             **h5compargs_from_b2(b2_array),
         )
-        attrs |= b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
+        h5_attrs |= b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
     elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
         # TODO: do not slurp & re-compress
         b2_schunk = blosc2.open(c2_leaf.path)
@@ -143,7 +143,7 @@ def h5mkdataset_attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
         )
-        attrs |= b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
+        h5_attrs |= b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
     else:
         # TODO: do not slurp & re-compress
         with open(c2_leaf, 'rb') as f:
@@ -160,7 +160,7 @@ def h5mkdataset_attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             **(h5_args | kwds)
         )
 
-    return h5_make_dataset, attrs
+    return h5_make_dataset, h5_attrs
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
