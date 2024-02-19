@@ -54,7 +54,7 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     open HDF5 group `h5_group`.
     """
     try:
-        (h5mkempty, h5_chunks, attrs) = (
+        (h5mkempty, h5_chunks, h5_attrs) = (
             h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf))
     except Exception as e:
         logging.error(f"Failed to translate Blosc2 dataset: "
@@ -73,7 +73,7 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
                       f"{h5_group.name!r}: {c2_leaf.name!r} -> {e!r}")
         return
 
-    for (aname, avalue) in attrs.items():
+    for (aname, avalue) in h5_attrs.items():
         try:
             h5_dataset.attrs[aname] = avalue
             logging.info(f"Exported dataset attribute "
