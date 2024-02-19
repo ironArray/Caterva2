@@ -54,14 +54,14 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
     open HDF5 group `h5_group`.
     """
     try:
-        (kwds, attrs) = h5args_attrs_from_leaf(c2_leaf)
+        (h5mkdataset, attrs) = h5mkdataset_attrs_from_leaf(c2_leaf)
     except Exception as e:
-        logging.error(f"Failed to read Blosc2 dataset: "
+        logging.error(f"Failed to translate Blosc2 dataset: "
                       f"{c2_leaf.path!r} -> {e!r}")
         return
 
     try:
-        h5_dataset = h5_group.create_dataset(**kwds)
+        h5_dataset = h5mkdataset(h5_group)
     except Exception as e:
         logging.error(f"Failed to create dataset in HDF5 group "
                       f"{h5_group.name!r}: {c2_leaf.name!r} -> {e!r}")
@@ -115,7 +115,9 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
     return dict(compression=BLOSC2_HDF5_FID, compression_opts=opts)
 
 
-def h5args_attrs_from_leaf(c2_leaf: os.DirEntry) -> tuple[Mapping, Mapping]:
+def h5mkdataset_attrs_from_leaf(c2_leaf: os.DirEntry) -> (
+        Callable[[h5py.Group, ...], h5py.Dataset],
+        Mapping):
     # TODO: mark array / frame / file distinguishably
     h5_args = {}
     attrs = {}
@@ -153,7 +155,12 @@ def h5args_attrs_from_leaf(c2_leaf: os.DirEntry) -> tuple[Mapping, Mapping]:
             **file_h5_compargs,
         )
 
-    return h5_args, attrs
+    def h5_make_dataset(h5_group: h5py.Group, **kwds) -> h5py.Dataset:
+        return h5_group.create_dataset(
+            **(h5_args | kwds)
+        )
+
+    return h5_make_dataset, attrs
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
