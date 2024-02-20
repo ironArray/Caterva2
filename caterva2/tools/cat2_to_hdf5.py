@@ -123,6 +123,7 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
 
 def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         Callable[[h5py.Group, ...], h5py.Dataset],
+        Iterator[bytes],
         Mapping):
     # TODO: mark array / frame / file distinguishably
     h5_args = {}
