@@ -178,40 +178,47 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
     return h5_make_empty, h5_chunkit, h5_attrs
 
 
-def h5chunkit_from_array(b2_array: blosc2.NDArray) -> Iterator[bytes]:
+def h5chunkit_from_temp(b2_tmp: (blosc2.NDArray | blosc2.SChunk),
+                        b2_src: (blosc2.NDArray | blosc2.SChunk)) -> (
+        Iterator[bytes]):
     # Blosc2 chunks are passed as they are,
     # but chunks need to be wrapped in a super-chunk
     # to store that as the HDF5 chunk.
     # Copy each Blosc2 chunk into chunk 0 of compatible Blosc2 array,
     # then dump the resulting array/super-chunk.
     # Thus, only one chunk worth of data is kept in memory.
-    b2_schunk = b2_array.schunk
-    src_array = blosc2.empty(
+    b2_tmp_schunk = getattr(b2_tmp, 'schunk', b2_tmp)
+    b2_src_schunk = getattr(b2_src, 'schunk', b2_src)
+    for (b2_nchunk, _) in enumerate(b2_src_schunk.iterchunks_info()):
+        b2_tmp_schunk.update_chunk(0, b2_src_schunk.get_chunk(b2_nchunk))
+        yield b2_tmp.to_cframe()  # whole array/schunk, not just chunk
+
+
+def h5chunkit_from_array(b2_array: blosc2.NDArray) -> Iterator[bytes]:
+    # See comment in `h5chunkit_from_temp()`.
+    tmp_array = blosc2.empty(
         shape=b2_array.chunks,  # note that shape is chunkshape
         dtype=b2_array.dtype,
         chunks=b2_array.chunks,
         blocks=b2_array.blocks,
-        cparams=b2_schunk.cparams,
-        dparams=b2_schunk.dparams,
+        cparams=b2_array.schunk.cparams,
+        dparams=b2_array.schunk.dparams,
     )
-    src_schunk = src_array.schunk
-    for b2_chunk_info in b2_schunk.iterchunks_info():
-        src_schunk.update_chunk(0, b2_schunk.get_chunk(b2_chunk_info.nchunk))
-        yield src_array.to_cframe()  # whole array/schunk, not just chunk
+    # Passing `b2_array` instead of `b2_array.schunk`
+    # avoids a potential SIGSEGV.
+    return h5chunkit_from_temp(tmp_array, b2_array)
 
 
 def h5chunkit_from_schunk(b2_schunk: blosc2.SChunk) -> Iterator[bytes]:
-    # See comment in `h5chunkit_from_array()`.
-    src_schunk = blosc2.SChunk(
+    # See comment in `h5chunkit_from_temp()`.
+    tmp_schunk = blosc2.SChunk(
         chunksize=b2_schunk.chunksize,
         cparams=b2_schunk.cparams,
         dparams=b2_schunk.dparams,
     )
-    src_schunk.fill_special(b2_schunk.chunkshape,  # just one chunk
+    tmp_schunk.fill_special(b2_schunk.chunkshape,  # note just one chunk
                             blosc2.SpecialValue.UNINIT)
-    for b2_chunk_info in b2_schunk.iterchunks_info():
-        src_schunk.update_chunk(0, b2_schunk.get_chunk(b2_chunk_info.nchunk))
-        yield src_schunk.to_cframe()  # whole schunk, not just chunk
+    return h5chunkit_from_temp(tmp_schunk, b2_schunk)
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
