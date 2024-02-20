@@ -143,18 +143,16 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         h5_chunkit = h5chunkit_from_array(b2_array)
         h5_attrs |= b2_array.schunk.vlmeta.getall()  # copy avoids SIGSEGV
     elif c2_leaf_name.suffix in ['.b2frame', '.b2']:
-        # TODO: do not slurp & re-compress
         b2_schunk = blosc2.open(c2_leaf.path)
         h5_args |= dict(
             name=pathlib.Path(c2_leaf).stem,
             # TODO: check for other types/typesizes
             shape=(b2_schunk.nbytes,),
             dtype=numpy.uint8,
-            data=numpy.frombuffer(b2_schunk[:], dtype=numpy.uint8),
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
         )
-        h5_chunkit = iter([])  # TODO: iterate over chunks
+        h5_chunkit = h5chunkit_from_schunk(b2_schunk)
         h5_attrs |= b2_schunk.vlmeta.getall()  # copy avoids SIGSEGV
     else:
         # TODO: do not slurp & re-compress
@@ -200,6 +198,20 @@ def h5chunkit_from_array(b2_array: blosc2.NDArray) -> Iterator[bytes]:
     for b2_chunk_info in b2_schunk.iterchunks_info():
         src_schunk.update_chunk(0, b2_schunk.get_chunk(b2_chunk_info.nchunk))
         yield src_array.to_cframe()  # whole array/schunk, not just chunk
+
+
+def h5chunkit_from_schunk(b2_schunk: blosc2.SChunk) -> Iterator[bytes]:
+    # See comment in `h5chunkit_from_array()`.
+    src_schunk = blosc2.SChunk(
+        chunksize=b2_schunk.chunksize,
+        cparams=b2_schunk.cparams,
+        dparams=b2_schunk.dparams,
+    )
+    src_schunk.fill_special(b2_schunk.chunkshape,  # just one chunk
+                            blosc2.SpecialValue.UNINIT)
+    for b2_chunk_info in b2_schunk.iterchunks_info():
+        src_schunk.update_chunk(0, b2_schunk.get_chunk(b2_chunk_info.nchunk))
+        yield src_schunk.to_cframe()  # whole schunk, not just chunk
 
 
 def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
