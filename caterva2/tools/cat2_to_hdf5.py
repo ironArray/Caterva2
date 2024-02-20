@@ -146,9 +146,9 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
         b2_schunk = blosc2.open(c2_leaf.path)
         h5_args |= dict(
             name=pathlib.Path(c2_leaf).stem,
-            # TODO: check for other types/typesizes
-            shape=(b2_schunk.nbytes,),
-            dtype=numpy.uint8,
+            shape=(len(b2_schunk),),
+            dtype=(numpy.uint8 if b2_schunk.typesize == 1
+                   else numpy.dtype('|V%d' % b2_schunk.typesize)),
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
         )
