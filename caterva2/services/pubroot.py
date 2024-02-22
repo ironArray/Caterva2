@@ -10,10 +10,11 @@
 import os
 import pathlib
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Collection, Iterator
 
 # Requirements
 import pydantic
+import watchfiles
 
 
 class PubRoot(ABC):
@@ -37,6 +38,10 @@ class PubRoot(ABC):
 
     @abstractmethod
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
+        ...
+
+    @abstractmethod
+    async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         ...
 
 
@@ -72,6 +77,13 @@ class DirectoryRoot:
         abspath = self._rel_to_abs(relpath)
         stat = abspath.stat()
         return f'{stat.st_mtime}:{stat.st_size}'
+
+    async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
+        async for changes in watchfiles.awatch(proot.abspath):
+            relpaths = set(
+                proot.Path(pathlib.Path(abspath).relative_to(self.abspath))
+                for change, abspath in changes)
+            yield relpaths
 
     # TODO: pending interface methods
 

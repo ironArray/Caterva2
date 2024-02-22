@@ -16,7 +16,6 @@ import pathlib
 import blosc2
 from fastapi import FastAPI, Response, responses
 import uvicorn
-from watchfiles import awatch
 
 # Project
 from caterva2 import utils, api_utils, models
@@ -74,7 +73,7 @@ async def worker(queue):
         queue.task_done()
 
 
-async def watchfiles(queue):
+async def watch_root(queue):
     # On start, notify the network about changes to the datasets, changes done since the
     # last run.
     etags = database.etags.copy()
@@ -91,13 +90,10 @@ async def watchfiles(queue):
         del database.etags[key]
         database.save()
 
-    # Watch directory for changes
-    async for changes in awatch(proot.abspath):
-        paths = set([abspath for change, abspath in changes])
-        for abspath in paths:
-            abspath = pathlib.Path(abspath)
-            relpath = abspath.relative_to(proot.abspath)
-            queue.put_nowait(proot.Path(relpath))
+    # Watch root for changes
+    async for changes in proot.awatch_dsets():
+        for relpath in changes:
+            queue.put_nowait(relpath)
 
     print('THIS SHOULD BE PRINTED ON CTRL+C')
 
@@ -117,7 +113,7 @@ async def lifespan(app: FastAPI):
 
     # Watch dataset files (must wait before publishing)
     await client.wait_until_ready()
-    watch_task = asyncio.create_task(watchfiles(queue))
+    watch_task = asyncio.create_task(watch_root(queue))
 
     yield
 
