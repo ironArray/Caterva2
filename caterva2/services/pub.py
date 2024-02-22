@@ -50,7 +50,7 @@ async def worker(queue):
             assert isinstance(abspath, pathlib.Path)
             relpath = abspath.relative_to(root)
             key = str(relpath)
-            if abspath.is_file():
+            if proot.exists_dset(relpath):
                 print('UPDATE', relpath)
                 # Load metadata
                 if abspath.suffix in {'.b2frame', '.b2nd'}:

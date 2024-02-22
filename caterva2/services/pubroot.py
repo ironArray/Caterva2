@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import os
 import pathlib
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -54,6 +55,20 @@ class DirectoryRoot:
                 for p in self.abspath.glob('**/*')
                 if not p.is_dir())
 
+    def _rel_to_abs(self, relpath: Path) -> pathlib.Path:
+        if relpath.is_absolute():
+            raise ValueError(f"path is not relative: {str(relpath)!r}")
+        # ``.`` is removed on path instantiation, no need to check for it.
+        if os.path.pardir in relpath.parts:
+            raise ValueError(f"{str(os.path.pardir)!r} not allowed "
+                             f"in path: {str(relpath)!r}")
+        return self.abspath / relpath
+
+    def exists_dset(self, relpath: Path) -> bool:
+        abspath = self._rel_to_abs(relpath)
+        return abspath.is_file()
+
     # TODO: pending interface methods
+
 
 PubRoot.register(DirectoryRoot)
