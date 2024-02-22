@@ -37,3 +37,23 @@ class PubRoot(ABC):
     @abstractmethod
     def get_chunk(self, relpath: Path, nchunk: int) -> bytes:
         ...
+
+
+class DirectoryRoot:
+    Path = PubRoot.Path
+
+    def __init__(self, path: pathlib.Path):
+        abspath = path.resolve(strict=True)
+        # Force an error for non-dirs or non-readable dirs.
+        next(abspath.iterdir())
+
+        self.abspath = abspath
+
+    def walk_datasets(self) -> Iterator[Path]:
+        return (self.Path(p.relative_to(self.abspath))
+                for p in self.abspath.glob('**/*')
+                if not p.is_dir())
+
+    # TODO: pending interface methods
+
+PubRoot.register(DirectoryRoot)

@@ -20,7 +20,7 @@ from watchfiles import awatch
 
 # Project
 from caterva2 import utils, api_utils, models
-from caterva2.services import srv_utils
+from caterva2.services import pubroot, srv_utils
 
 
 logger = logging.getLogger('pub')
@@ -29,6 +29,7 @@ logger = logging.getLogger('pub')
 broker = None
 name = None
 root = None
+proot = None
 nworkers = 1
 
 # State
@@ -83,7 +84,8 @@ async def watchfiles(queue):
     # On start, notify the network about changes to the datasets, changes done since the
     # last run.
     etags = database.etags.copy()
-    for abspath, relpath in utils.walk_files(root):
+    for relpath in proot.walk_dsets():
+        abspath = proot.abspath / relpath
         key = str(relpath)
         val = etags.pop(key, None)
         if val != get_etag(abspath):
@@ -142,7 +144,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
-    return [relpath for abspath, relpath in utils.walk_files(root)]
+    return list(proot.walk_datasets())
 
 
 @app.get("/api/info/{path:path}")
@@ -208,10 +210,11 @@ def main():
             "root name was not specified in configuration nor in arguments")
 
     # Global configuration
-    global broker, name, root
+    global broker, name, root, proot
     broker = args.broker
     name = args.name
     root = args.root.resolve()
+    proot = pubroot.DirectoryRoot(args.root)
 
     # Init cache
     global cache
