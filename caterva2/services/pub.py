@@ -28,7 +28,6 @@ logger = logging.getLogger('pub')
 # Configuration
 broker = None
 name = None
-root = None
 proot = None
 nworkers = 1
 
@@ -43,7 +42,7 @@ async def worker(queue):
         abspath = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
             assert isinstance(abspath, pathlib.Path)
-            relpath = abspath.relative_to(root)
+            relpath = abspath.relative_to(proot.abspath)
             key = str(relpath)
             if proot.exists_dset(relpath):
                 print('UPDATE', relpath)
@@ -88,13 +87,13 @@ async def watchfiles(queue):
 
     # The etags left are those that were deleted
     for key in etags:
-        abspath = root / key
+        abspath = proot.abspath / key
         queue.put_nowait(abspath)
         del database.etags[key]
         database.save()
 
     # Watch directory for changes
-    async for changes in awatch(root):
+    async for changes in awatch(proot.abspath):
         paths = set([abspath for change, abspath in changes])
         for abspath in paths:
             abspath = pathlib.Path(abspath)
@@ -148,7 +147,7 @@ async def get_info(
     response: Response,
     if_none_match: srv_utils.HeaderType = None,
 ):
-    abspath = srv_utils.get_abspath(root, path)
+    abspath = srv_utils.get_abspath(proot.abspath, path)
 
     # Check etag
     etag = database.etags[path]
@@ -169,7 +168,7 @@ async def get_download(path: str, nchunk: int = -1):
     if nchunk < 0:
         srv_utils.raise_bad_request('Chunk number required')
 
-    abspath = srv_utils.get_abspath(root, path)
+    abspath = srv_utils.get_abspath(proot.abspath, path)
 
     suffix = abspath.suffix
     if suffix == '.b2nd':
@@ -178,7 +177,7 @@ async def get_download(path: str, nchunk: int = -1):
     elif suffix == '.b2frame':
         schunk = blosc2.open(abspath)
     else:
-        relpath = pathlib.Path(abspath).relative_to(root)
+        relpath = pathlib.Path(abspath).relative_to(proot.abspath)
         b2path = cache / f'{relpath}.b2'
         schunk = blosc2.open(b2path)
 
@@ -205,10 +204,9 @@ def main():
             "root name was not specified in configuration nor in arguments")
 
     # Global configuration
-    global broker, name, root, proot
+    global broker, name, proot
     broker = args.broker
     name = args.name
-    root = args.root.resolve()
     proot = pubroot.DirectoryRoot(args.root)
 
     # Init cache
