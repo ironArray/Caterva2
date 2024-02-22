@@ -68,6 +68,11 @@ class DirectoryRoot:
         abspath = self._rel_to_abs(relpath)
         return abspath.is_file()
 
+    def get_dset_etag(self, relpath: Path) -> str:
+        abspath = self._rel_to_abs(relpath)
+        stat = abspath.stat()
+        return f'{stat.st_mtime}:{stat.st_size}'
+
     # TODO: pending interface methods
 
 

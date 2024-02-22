@@ -38,11 +38,6 @@ client = None
 database = None  # <Database> instance
 
 
-def get_etag(abspath):
-    stat = abspath.stat()
-    return f'{stat.st_mtime}:{stat.st_size}'
-
-
 async def worker(queue):
     while True:
         abspath = await queue.get()
@@ -66,7 +61,7 @@ async def worker(queue):
                 data = {'path': relpath, 'metadata': metadata}
                 await client.publish(name, data=data)
                 # Update database
-                database.etags[key] = get_etag(abspath)
+                database.etags[key] = proot.get_dset_etag(relpath)
                 database.save()
             else:
                 print('DELETE', relpath)
@@ -88,7 +83,7 @@ async def watchfiles(queue):
         abspath = proot.abspath / relpath
         key = str(relpath)
         val = etags.pop(key, None)
-        if val != get_etag(abspath):
+        if val != proot.get_dset_etag(relpath):
             queue.put_nowait(abspath)
 
     # The etags left are those that were deleted
