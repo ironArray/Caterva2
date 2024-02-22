@@ -39,10 +39,10 @@ database = None  # <Database> instance
 
 async def worker(queue):
     while True:
-        abspath = await queue.get()
+        relpath = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
-            assert isinstance(abspath, pathlib.Path)
-            relpath = abspath.relative_to(proot.abspath)
+            assert isinstance(relpath, proot.Path)
+            abspath = proot.abspath / relpath
             key = str(relpath)
             if proot.exists_dset(relpath):
                 print('UPDATE', relpath)
@@ -57,14 +57,14 @@ async def worker(queue):
 
                 # Publish
                 metadata = metadata.model_dump()
-                data = {'path': relpath, 'metadata': metadata}
+                data = {'path': str(relpath), 'metadata': metadata}
                 await client.publish(name, data=data)
                 # Update database
                 database.etags[key] = proot.get_dset_etag(relpath)
                 database.save()
             else:
                 print('DELETE', relpath)
-                data = {'path': relpath}
+                data = {'path': str(relpath)}
                 await client.publish(name, data=data)
                 # Update database
                 if key in database.etags:
@@ -79,16 +79,15 @@ async def watchfiles(queue):
     # last run.
     etags = database.etags.copy()
     for relpath in proot.walk_dsets():
-        abspath = proot.abspath / relpath
         key = str(relpath)
         val = etags.pop(key, None)
         if val != proot.get_dset_etag(relpath):
-            queue.put_nowait(abspath)
+            queue.put_nowait(relpath)
 
     # The etags left are those that were deleted
     for key in etags:
-        abspath = proot.abspath / key
-        queue.put_nowait(abspath)
+        relpath = proot.Path(key)
+        queue.put_nowait(relpath)
         del database.etags[key]
         database.save()
 
@@ -97,7 +96,8 @@ async def watchfiles(queue):
         paths = set([abspath for change, abspath in changes])
         for abspath in paths:
             abspath = pathlib.Path(abspath)
-            queue.put_nowait(abspath)
+            relpath = abspath.relative_to(proot.abspath)
+            queue.put_nowait(proot.Path(relpath))
 
     print('THIS SHOULD BE PRINTED ON CTRL+C')
 
