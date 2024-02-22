@@ -19,23 +19,23 @@ class PubRoot(ABC):
     Path = pathlib.PurePosixPath
 
     @abstractmethod
-    def walk_datasets(self) -> Iterator[Path]:
+    def walk_dsets(self) -> Iterator[Path]:
         ...
 
     @abstractmethod
-    def exists_dataset(self, relpath: Path) -> bool:
+    def exists_dset(self, relpath: Path) -> bool:
         ...
 
     @abstractmethod
-    def get_etag(self, relpath: Path) -> str:
+    def get_dset_etag(self, relpath: Path) -> str:
         ...
 
     @abstractmethod
-    def get_metadata(self, relpath: Path) -> pydantic.BaseModel:
+    def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         ...
 
     @abstractmethod
-    def get_chunk(self, relpath: Path, nchunk: int) -> bytes:
+    def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
         ...
 
 
@@ -49,7 +49,7 @@ class DirectoryRoot:
 
         self.abspath = abspath
 
-    def walk_datasets(self) -> Iterator[Path]:
+    def walk_dsets(self) -> Iterator[Path]:
         return (self.Path(p.relative_to(self.abspath))
                 for p in self.abspath.glob('**/*')
                 if not p.is_dir())

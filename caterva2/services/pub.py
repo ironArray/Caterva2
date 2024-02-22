@@ -144,7 +144,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
-    return list(proot.walk_datasets())
+    return list(proot.walk_dsets())
 
 
 @app.get("/api/info/{path:path}")
