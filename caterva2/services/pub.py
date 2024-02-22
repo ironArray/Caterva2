@@ -200,7 +200,8 @@ def main():
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
     parser.add_argument('name', nargs='?', default=conf.get('.name'))
-    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'))
+    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'),
+                        type=pathlib.Path)
     args = utils.run_parser(parser)
     if args.name is None:  # because optional positional arg w/o conf default
         raise RuntimeError(
@@ -210,7 +211,7 @@ def main():
     global broker, name, root
     broker = args.broker
     name = args.name
-    root = pathlib.Path(args.root).resolve()
+    root = args.root.resolve()
 
     # Init cache
     global cache
