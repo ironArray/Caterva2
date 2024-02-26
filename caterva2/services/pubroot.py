@@ -54,7 +54,7 @@ class PubRoot(ABC):
         ...
 
     @abstractmethod
-    def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
+    def open_dset_raw(self, relpath: Path) -> io.BufferedIOBase:
         """Get a byte reader for the raw contents of the named dataset."""
         ...
 
