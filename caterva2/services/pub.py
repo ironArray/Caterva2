@@ -46,7 +46,7 @@ async def worker(queue):
             if proot.exists_dset(relpath):
                 print('UPDATE', relpath)
                 # Load metadata
-                if abspath.suffix in {'.b2frame', '.b2nd'}:
+                if relpath.suffix in {'.b2frame', '.b2nd'}:
                     metadata = srv_utils.read_metadata(abspath)
                 else:
                     # Compress regular files in publisher's cache
@@ -143,16 +143,17 @@ async def get_info(
     response: Response,
     if_none_match: srv_utils.HeaderType = None,
 ):
-    abspath = srv_utils.get_abspath(proot.abspath, path)
+    relpath = proot.Path(path)
+    abspath = srv_utils.get_abspath(proot.abspath, relpath)
 
     # Check etag
-    etag = database.etags[path]
+    etag = database.etags[str(relpath)]
     if if_none_match == etag:
         return Response(status_code=304)
 
     # Regular files (.b2)
-    if abspath.suffix not in {'.b2frame', '.b2nd'}:
-        abspath = srv_utils.get_abspath(cache, f'{path}.b2')
+    if relpath.suffix not in {'.b2frame', '.b2nd'}:
+        abspath = srv_utils.get_abspath(cache, '%s.b2' % relpath)
 
     # Return
     response.headers['Etag'] = etag
@@ -164,17 +165,17 @@ async def get_download(path: str, nchunk: int = -1):
     if nchunk < 0:
         srv_utils.raise_bad_request('Chunk number required')
 
-    abspath = srv_utils.get_abspath(proot.abspath, path)
+    relpath = proot.Path(path)
+    abspath = srv_utils.get_abspath(proot.abspath, relpath)
 
-    suffix = abspath.suffix
+    suffix = relpath.suffix
     if suffix == '.b2nd':
         array = blosc2.open(abspath)
         schunk = array.schunk
     elif suffix == '.b2frame':
         schunk = blosc2.open(abspath)
     else:
-        relpath = pathlib.Path(abspath).relative_to(proot.abspath)
-        b2path = cache / f'{relpath}.b2'
+        b2path = cache / ('%s.b2' % relpath)
         schunk = blosc2.open(b2path)
 
     chunk = schunk.get_chunk(nchunk)
