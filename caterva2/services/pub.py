@@ -41,15 +41,15 @@ async def worker(queue):
         relpath = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
             assert isinstance(relpath, proot.Path)
-            abspath = proot.abspath / relpath
             key = str(relpath)
             if proot.exists_dset(relpath):
                 print('UPDATE', relpath)
                 # Load metadata
                 if relpath.suffix in {'.b2frame', '.b2nd'}:
-                    metadata = srv_utils.read_metadata(abspath)
+                    metadata = proot.get_dset_meta(relpath)
                 else:
                     # Compress regular files in publisher's cache
+                    abspath = proot.abspath / relpath
                     b2path = cache / f'{relpath}.b2'
                     srv_utils.compress(abspath, b2path)
                     metadata = srv_utils.read_metadata(b2path)
@@ -151,13 +151,15 @@ async def get_info(
     if if_none_match == etag:
         return Response(status_code=304)
 
-    # Regular files (.b2)
-    if relpath.suffix not in {'.b2frame', '.b2nd'}:
-        abspath = srv_utils.get_abspath(cache, '%s.b2' % relpath)
+    if relpath.suffix in {'.b2frame', '.b2nd'}:
+        meta = proot.get_dset_meta(relpath)
+    else:
+        b2path = srv_utils.get_abspath(cache, '%s.b2' % relpath)
+        meta = srv_utils.read_metadata(b2path)
 
     # Return
     response.headers['Etag'] = etag
-    return srv_utils.read_metadata(abspath)
+    return meta
 
 
 @app.get("/api/download/{path:path}")

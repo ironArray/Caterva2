@@ -16,6 +16,9 @@ from collections.abc import AsyncIterator, Collection, Iterator
 import pydantic
 import watchfiles
 
+# Project
+from caterva2.services import srv_utils
+
 
 class PubRoot(ABC):
     Path = pathlib.PurePosixPath
@@ -77,6 +80,10 @@ class DirectoryRoot:
         abspath = self._rel_to_abs(relpath)
         stat = abspath.stat()
         return f'{stat.st_mtime}:{stat.st_size}'
+
+    def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
+        abspath = self._rel_to_abs(relpath)
+        return srv_utils.read_metadata(abspath)
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         async for changes in watchfiles.awatch(proot.abspath):
