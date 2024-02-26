@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import io
 import os
 import pathlib
 from abc import ABC, abstractmethod
@@ -42,6 +43,10 @@ class PubRoot(ABC):
 
     @abstractmethod
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
+        ...
+
+    @abstractmethod
+    def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
         ...
 
     @abstractmethod
@@ -91,6 +96,10 @@ class DirectoryRoot:
         b2dset = blosc2.open(abspath)
         schunk = getattr(b2dset, 'schunk', b2dset)
         return schunk.get_chunk(nchunk)
+
+    def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
+        abspath = self._rel_to_abs(relpath)
+        return open(abspath, 'rb')
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         async for changes in watchfiles.awatch(proot.abspath):

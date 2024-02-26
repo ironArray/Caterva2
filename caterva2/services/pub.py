@@ -49,9 +49,10 @@ async def worker(queue):
                     metadata = proot.get_dset_meta(relpath)
                 else:
                     # Compress regular files in publisher's cache
-                    abspath = proot.abspath / relpath
+                    with proot.open_dset_raw(relpath) as f:
+                        data = f.read()
                     b2path = cache / f'{relpath}.b2'
-                    srv_utils.compress(abspath, b2path)
+                    srv_utils.compress(data, b2path)
                     metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
