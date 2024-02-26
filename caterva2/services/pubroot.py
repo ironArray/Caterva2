@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Collection, Iterator
 
 # Requirements
+import blosc2
 import pydantic
 import watchfiles
 
@@ -85,14 +86,18 @@ class DirectoryRoot:
         abspath = self._rel_to_abs(relpath)
         return srv_utils.read_metadata(abspath)
 
+    def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
+        abspath = self._rel_to_abs(relpath)
+        b2dset = blosc2.open(abspath)
+        schunk = getattr(b2dset, 'schunk', b2dset)
+        return schunk.get_chunk(nchunk)
+
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         async for changes in watchfiles.awatch(proot.abspath):
             relpaths = set(
                 proot.Path(pathlib.Path(abspath).relative_to(self.abspath))
                 for change, abspath in changes)
             yield relpaths
-
-    # TODO: pending interface methods
 
 
 PubRoot.register(DirectoryRoot)

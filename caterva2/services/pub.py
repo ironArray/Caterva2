@@ -170,20 +170,14 @@ async def get_download(path: str, nchunk: int = -1):
     relpath = proot.Path(path)
     srv_utils.check_dset_path(proot, relpath)
 
-    abspath = proot.abspath / relpath
-    suffix = relpath.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(abspath)
-        schunk = array.schunk
-    elif suffix == '.b2frame':
-        schunk = blosc2.open(abspath)
+    if relpath.suffix in {'.b2frame', '.b2nd'}:
+        chunk = proot.get_dset_chunk(relpath, nchunk)
     else:
         b2path = cache / ('%s.b2' % relpath)
         schunk = blosc2.open(b2path)
+        chunk = schunk.get_chunk(nchunk)
 
-    chunk = schunk.get_chunk(nchunk)
     downloader = srv_utils.iterchunk(chunk)
-
     return responses.StreamingResponse(downloader)
 
 
