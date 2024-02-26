@@ -144,7 +144,7 @@ async def get_info(
     if_none_match: srv_utils.HeaderType = None,
 ):
     relpath = proot.Path(path)
-    abspath = srv_utils.get_abspath(proot.abspath, relpath)
+    srv_utils.check_dset_path(proot, relpath)
 
     # Check etag
     etag = database.etags[str(relpath)]
@@ -168,8 +168,9 @@ async def get_download(path: str, nchunk: int = -1):
         srv_utils.raise_bad_request('Chunk number required')
 
     relpath = proot.Path(path)
-    abspath = srv_utils.get_abspath(proot.abspath, relpath)
+    srv_utils.check_dset_path(proot, relpath)
 
+    abspath = proot.abspath / relpath
     suffix = relpath.suffix
     if suffix == '.b2nd':
         array = blosc2.open(abspath)

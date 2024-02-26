@@ -129,6 +129,16 @@ def get_abspath(root, path):
 
     return abspath
 
+
+def check_dset_path(proot, path):
+    try:
+        exists = proot.exists_dset(path)
+    except ValueError:
+        raise_bad_request(f'Invalid path {path}')
+
+    if not exists:
+        raise_not_found()
+
 #
 # Blosc2 related helpers
 #
