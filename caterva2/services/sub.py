@@ -30,6 +30,7 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
+from .plugins import tomography
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -143,14 +144,6 @@ def follow(name: str):
         client = srv_utils.start_client(f'ws://{broker}/pubsub')
         client.subscribe(name, updated_dataset)
         clients[name] = client
-
-
-def lookup_path(path):
-    path = pathlib.Path(path)
-    if path.suffix not in {'.b2frame', '.b2nd'}:
-        path = f'{path}.b2'
-
-    return srv_utils.get_abspath(cache, path)
 
 
 #
@@ -320,7 +313,7 @@ async def get_info(path: str):
     dict
         The metadata of the dataset.
     """
-    abspath = lookup_path(path)
+    abspath = srv_utils.cache_lookup(cache, path)
     return srv_utils.read_metadata(abspath)
 
 
@@ -388,7 +381,7 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
         The (slice of) dataset as a NumPy array or a Blosc2 schunk.
     """
 
-    abspath = lookup_path(path)
+    abspath = srv_utils.cache_lookup(cache, path)
     slice_ = api_utils.parse_slice(slice_)
 
     # Download and update the necessary chunks of the schunk in cache
@@ -458,7 +451,7 @@ async def download_data(path: str):
         The url of the file in 'files/' to be downloaded later on.
     """
 
-    abspath = lookup_path(path)
+    abspath = srv_utils.cache_lookup(cache, path)
 
     # Download and update the necessary chunks of the schunk in cache
     await partial_download(abspath, path)
@@ -470,6 +463,10 @@ async def download_data(path: str):
         path = f'{path}.b2'
     return f'http://{host}:{port}/files/{path}'
 
+
+#
+# HTML interface
+#
 
 def home(request, roots=None, search=None, context=None):
     context = context or {}
@@ -568,10 +565,17 @@ async def html_path_info(
         return home(request, roots, search, context)
 
     filepath = cache / path
-    abspath = lookup_path(filepath)
+    abspath = srv_utils.cache_lookup(cache, filepath)
     meta = srv_utils.read_metadata(abspath)
 
-    context = {"path": path, "meta": meta}
+    contenttype = 'tomography'  # FIXME
+    plugin = plugins.get(contenttype)
+    if plugin:
+        display = {
+            "name": plugin.name
+        }
+
+    context = {"path": path, "meta": meta, "display": display}
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     current_url = furl.furl(hx_current_url)
@@ -583,6 +587,8 @@ async def html_path_info(
 #
 # Command line interface
 #
+
+plugins = {}
 
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
@@ -609,6 +615,11 @@ def main():
     global database
     model = models.Subscriber(roots={}, etags={})
     database = srv_utils.Database(statedir / 'db.json', model)
+
+    # Register display plugins
+    app.mount(f"/plugins/{tomography.name}", tomography.app)
+    plugins[tomography.contenttype] = tomography
+    tomography.init(cache)
 
     # Run
     global host, port

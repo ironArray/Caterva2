@@ -23,6 +23,14 @@ import safer
 from caterva2 import models
 
 
+def cache_lookup(cachedir, path):
+    path = pathlib.Path(path)
+    if path.suffix not in {'.b2frame', '.b2nd'}:
+        path = f'{path}.b2'
+
+    return get_abspath(cachedir, path)
+
+
 def get_model_from_obj(obj, model_class, **kwargs):
     if isinstance(obj, dict):
         def getter(o, k):

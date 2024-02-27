@@ -8,7 +8,7 @@
             Metadata
         </button>
     </li>
-    {#
+    {% if display %}
     <li class="nav-item" role="presentation">
         <button type="button" class="nav-link" id="display-tab"
                 data-bs-toggle="tab" data-bs-target="#display-tab-pane"
@@ -16,7 +16,7 @@
             Display
         </button>
     </li>
-    #}
+    {% endif %}
 </ul>
 
 <div class="tab-content" id="myTabContent">
@@ -24,8 +24,10 @@
          role="tabpanel" aria-labelledby="tab-metadata">
         {% include 'info_metadata.html' %}
     </div>
+    {% if display %}
     <div class="tab-pane fade" id="display-tab-pane" tabindex="0"
-         role="tabpanel" aria-labelledby="tab-display">
-        TODO Display a nice picture here
+         role="tabpanel" aria-labelledby="tab-display"
+         hx-get="/plugins/{{ display.name }}/display/{{ path }}" hx-trigger="load">
     </div>
+    {% endif %}
 </div>
