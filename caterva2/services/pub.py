@@ -16,11 +16,10 @@ import pathlib
 import blosc2
 from fastapi import FastAPI, Response, responses
 import uvicorn
-from watchfiles import awatch
 
 # Project
 from caterva2 import utils, api_utils, models
-from caterva2.services import srv_utils
+from caterva2.services import pubroot, srv_utils
 
 
 logger = logging.getLogger('pub')
@@ -28,7 +27,7 @@ logger = logging.getLogger('pub')
 # Configuration
 broker = None
 name = None
-root = None
+proot = None
 nworkers = 1
 
 # State
@@ -37,39 +36,35 @@ client = None
 database = None  # <Database> instance
 
 
-def get_etag(abspath):
-    stat = abspath.stat()
-    return f'{stat.st_mtime}:{stat.st_size}'
-
-
 async def worker(queue):
     while True:
-        abspath = await queue.get()
+        relpath = await queue.get()
         with utils.log_exception(logger, 'Publication failed'):
-            assert isinstance(abspath, pathlib.Path)
-            relpath = abspath.relative_to(root)
+            assert isinstance(relpath, proot.Path)
             key = str(relpath)
-            if abspath.is_file():
+            if proot.exists_dset(relpath):
                 print('UPDATE', relpath)
                 # Load metadata
-                if abspath.suffix in {'.b2frame', '.b2nd'}:
-                    metadata = srv_utils.read_metadata(abspath)
+                if relpath.suffix in {'.b2frame', '.b2nd'}:
+                    metadata = proot.get_dset_meta(relpath)
                 else:
                     # Compress regular files in publisher's cache
+                    with proot.open_dset_raw(relpath) as f:
+                        data = f.read()
                     b2path = cache / f'{relpath}.b2'
-                    srv_utils.compress(abspath, b2path)
+                    srv_utils.compress(data, b2path)
                     metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
                 metadata = metadata.model_dump()
-                data = {'path': relpath, 'metadata': metadata}
+                data = {'path': str(relpath), 'metadata': metadata}
                 await client.publish(name, data=data)
                 # Update database
-                database.etags[key] = get_etag(abspath)
+                database.etags[key] = proot.get_dset_etag(relpath)
                 database.save()
             else:
                 print('DELETE', relpath)
-                data = {'path': relpath}
+                data = {'path': str(relpath)}
                 await client.publish(name, data=data)
                 # Update database
                 if key in database.etags:
@@ -79,29 +74,27 @@ async def worker(queue):
         queue.task_done()
 
 
-async def watchfiles(queue):
+async def watch_root(queue):
     # On start, notify the network about changes to the datasets, changes done since the
     # last run.
     etags = database.etags.copy()
-    for abspath, relpath in utils.walk_files(root):
+    for relpath in proot.walk_dsets():
         key = str(relpath)
         val = etags.pop(key, None)
-        if val != get_etag(abspath):
-            queue.put_nowait(abspath)
+        if val != proot.get_dset_etag(relpath):
+            queue.put_nowait(relpath)
 
     # The etags left are those that were deleted
     for key in etags:
-        abspath = root / key
-        queue.put_nowait(abspath)
+        relpath = proot.Path(key)
+        queue.put_nowait(relpath)
         del database.etags[key]
         database.save()
 
-    # Watch directory for changes
-    async for changes in awatch(root):
-        paths = set([abspath for change, abspath in changes])
-        for abspath in paths:
-            abspath = pathlib.Path(abspath)
-            queue.put_nowait(abspath)
+    # Watch root for changes
+    async for changes in proot.awatch_dsets():
+        for relpath in changes:
+            queue.put_nowait(relpath)
 
     print('THIS SHOULD BE PRINTED ON CTRL+C')
 
@@ -121,7 +114,7 @@ async def lifespan(app: FastAPI):
 
     # Watch dataset files (must wait before publishing)
     await client.wait_until_ready()
-    watch_task = asyncio.create_task(watchfiles(queue))
+    watch_task = asyncio.create_task(watch_root(queue))
 
     yield
 
@@ -142,7 +135,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/api/list")
 async def get_list():
-    return [relpath for abspath, relpath in utils.walk_files(root)]
+    return list(proot.walk_dsets())
 
 
 @app.get("/api/info/{path:path}")
@@ -151,20 +144,23 @@ async def get_info(
     response: Response,
     if_none_match: srv_utils.HeaderType = None,
 ):
-    abspath = srv_utils.get_abspath(root, path)
+    relpath = proot.Path(path)
+    srv_utils.check_dset_path(proot, relpath)
 
     # Check etag
-    etag = database.etags[path]
+    etag = database.etags[str(relpath)]
     if if_none_match == etag:
         return Response(status_code=304)
 
-    # Regular files (.b2)
-    if abspath.suffix not in {'.b2frame', '.b2nd'}:
-        abspath = srv_utils.get_abspath(cache, f'{path}.b2')
+    if relpath.suffix in {'.b2frame', '.b2nd'}:
+        meta = proot.get_dset_meta(relpath)
+    else:
+        b2path = srv_utils.get_abspath(cache, '%s.b2' % relpath)
+        meta = srv_utils.read_metadata(b2path)
 
     # Return
     response.headers['Etag'] = etag
-    return srv_utils.read_metadata(abspath)
+    return meta
 
 
 @app.get("/api/download/{path:path}")
@@ -172,22 +168,17 @@ async def get_download(path: str, nchunk: int = -1):
     if nchunk < 0:
         srv_utils.raise_bad_request('Chunk number required')
 
-    abspath = srv_utils.get_abspath(root, path)
+    relpath = proot.Path(path)
+    srv_utils.check_dset_path(proot, relpath)
 
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(abspath)
-        schunk = array.schunk
-    elif suffix == '.b2frame':
-        schunk = blosc2.open(abspath)
+    if relpath.suffix in {'.b2frame', '.b2nd'}:
+        chunk = proot.get_dset_chunk(relpath, nchunk)
     else:
-        relpath = pathlib.Path(abspath).relative_to(root)
-        b2path = cache / f'{relpath}.b2'
+        b2path = cache / ('%s.b2' % relpath)
         schunk = blosc2.open(b2path)
+        chunk = schunk.get_chunk(nchunk)
 
-    chunk = schunk.get_chunk(nchunk)
     downloader = srv_utils.iterchunk(chunk)
-
     return responses.StreamingResponse(downloader)
 
 
@@ -200,17 +191,18 @@ def main():
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
     parser.add_argument('name', nargs='?', default=conf.get('.name'))
-    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'))
+    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'),
+                        type=pathlib.Path)
     args = utils.run_parser(parser)
     if args.name is None:  # because optional positional arg w/o conf default
         raise RuntimeError(
             "root name was not specified in configuration nor in arguments")
 
     # Global configuration
-    global broker, name, root
+    global broker, name, proot
     broker = args.broker
     name = args.name
-    root = pathlib.Path(args.root).resolve()
+    proot = pubroot.DirectoryRoot(args.root)
 
     # Init cache
     global cache
