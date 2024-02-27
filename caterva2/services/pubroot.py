@@ -31,37 +31,30 @@ class PubRoot(ABC):
     @abstractmethod
     def walk_dsets(self) -> Iterator[Path]:
         """Iterate over the relative paths of datasets in this root."""
-        ...
 
     @abstractmethod
     def exists_dset(self, relpath: Path) -> bool:
         """Does the named dataset exist?"""
-        ...
 
     @abstractmethod
     def get_dset_etag(self, relpath: Path) -> str:
         """Get a string that varies if the named dataset is modified."""
-        ...
 
     @abstractmethod
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         """Get the metadata of the named dataset."""
-        ...
 
     @abstractmethod
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
         """Get compressed chunk with index `nchunk` of the named dataset."""
-        ...
 
     @abstractmethod
     def open_dset_raw(self, relpath: Path) -> io.BufferedIOBase:
         """Get a byte reader for the raw contents of the named dataset."""
-        ...
 
     @abstractmethod
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         """Yield a set of datasets that have been modified."""
-        ...
 
 
 class DirectoryRoot:
