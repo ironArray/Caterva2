@@ -41,7 +41,7 @@ from collections.abc import Callable, Iterator, Mapping
 
 from blosc2 import blosc2_ext
 
-from ..hdf5 import BLOSC2_HDF5_FID
+from .. import hdf5
 
 
 def create_directory(name: str, node: h5py.Group,
@@ -60,15 +60,6 @@ def create_directory(name: str, node: h5py.Group,
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
-# Warning: Keep the reference to the returned result.
-# Losing the reference to the array may result in a segmentation fault.
-def b2_from_h5_chunk(node: h5py.Dataset,
-                     chunk_index: int) -> (blosc2.NDArray | blosc2.SChunk):
-    h5chunk_info = node.id.get_chunk_info(chunk_index)
-    return blosc2.open(node.file.filename, mode='r',
-                       offset=h5chunk_info.byte_offset)
-
-
 def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         Callable[..., blosc2.NDArray],
         Iterator[bytes]):
@@ -84,24 +75,11 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     callable, for the data in `node`.  They may be stored straight away in
     order in a Blosc2 super-chunk without further processing.
     """
-    b2_args = dict(
-        chunks=node.chunks,  # None is ok (let Blosc2 decide)
-    )
+    b2_args = hdf5.b2args_from_h5dset(node)
 
-    if node.chunks is None:
+    if b2_args['chunks'] is None:
         b2chunkit_from_dataset = b2chunkit_from_nonchunked
-    elif (list(node._filters) == [f'{BLOSC2_HDF5_FID:#d}']
-          and node.id.get_num_chunks() > 0):
-        # Blosc2 is the sole filter, direct chunk copy is possible.
-        # Get Blosc2 arguments from the first schunk.
-        # HDF5 filter parameters are less reliable than these.
-        b2_array = b2_from_h5_chunk(node, 0)
-        b2_schunk = getattr(b2_array, 'schunk', b2_array)
-        b2_args['blocks'] = getattr(
-            b2_array, 'blocks',
-            (b2_schunk.blocksize // b2_schunk.typesize,))
-        b2_args['cparams'] = b2_schunk.cparams
-        b2_args['dparams'] = b2_schunk.dparams
+    elif 'blocks' in b2_args:
         b2chunkit_from_dataset = b2chunkit_from_blosc2
     else:
         b2chunkit_from_dataset = b2chunkit_from_chunked
@@ -121,7 +99,7 @@ def b2chunkit_from_blosc2(node: h5py.Dataset,
     # Blosc2-compressed dataset, just pass chunks as they are.
     # Support both Blosc2 arrays and frames as HDF5 chunks.
     for h5_chunk_idx in range(node.id.get_num_chunks()):
-        b2_array = b2_from_h5_chunk(node, h5_chunk_idx)
+        b2_array = hdf5.b2_from_h5_chunk(node, h5_chunk_idx)
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
         # TODO: check if schunk is compatible with creation arguments
         for b2_chunk_info in b2_schunk.iterchunks_info():
