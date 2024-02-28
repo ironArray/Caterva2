@@ -11,7 +11,12 @@ import io
 import os
 import pathlib
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Collection, Iterator
+from collections.abc import AsyncIterator, Callable, Collection, Iterator
+try:
+    from typing import Self
+except ImportError:  # Python < 3.11
+    from typing import TypeVar
+    Self = TypeVar('Self', bound='PubRoot')
 
 # Requirements
 import blosc2
@@ -27,6 +32,15 @@ class PubRoot(ABC):
 
     """The class of dataset (relative) paths."""
     Path = pathlib.PurePosixPath
+
+    @classmethod
+    @abstractmethod
+    def get_maker(cls, target: str) -> Callable[[], Self]:
+        """Return a callable that returns a root for the given `target`.
+
+        If `target` cannot be used to create an instance of this class,
+        return `None`, but no exception should be raised.
+        """
 
     @abstractmethod
     def walk_dsets(self) -> Iterator[Path]:
@@ -74,12 +88,41 @@ def register_root_class(cls: type) -> bool:
     return True
 
 
+class UnsupportedRootError(Exception):
+    """No publisher root class supports the given target."""
+
+
+def make_root(target: str) -> PubRoot:
+    """Return a publisher root instance for the given `target`.
+
+    If no registered publisher root class supports the given `target`,
+    raise `UnsupportedRootError`.
+    """
+    for cls in _registered_classes:
+        maker = cls.get_maker(target)
+        if maker is not None:
+            return maker()
+    else:
+        raise UnsupportedRootError(f"no publisher root class could be used "
+                                   f"for target: {target!r}")
+
+
 class DirectoryRoot:
     """Represents a publisher root which keeps datasets as files
     in a directory.
     """
 
     Path = PubRoot.Path
+
+    @classmethod
+    def get_maker(cls, target: str) -> Callable[[], Self]:
+        try:
+            path = pathlib.Path(target)
+            if not path.is_dir():
+                return None
+        except Exception:
+            return None
+        return lambda: cls(path)
 
     def __init__(self, path: pathlib.Path):
         abspath = path.resolve(strict=True)
