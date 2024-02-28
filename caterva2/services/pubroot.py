@@ -42,6 +42,10 @@ class NoSuchDatasetError(LookupError):
     """The given dataset does not exist."""
 
 
+class NoSuchChunkError(IndexError):
+    """The given chunk does not exist in the dataset."""
+
+
 class PubRoot(ABC):
     """Abstract class that represents a publisher root."""
 
@@ -84,6 +88,7 @@ class PubRoot(ABC):
         """Get compressed chunk with index `nchunk` of the named dataset.
 
         Raise `NoSuchDatasetError` if the dataset does not exist.
+        Raise `NoSuchChunkError` if the chunk does not exist.
         """
 
     @abstractmethod
@@ -192,6 +197,8 @@ class DirectoryRoot:
         abspath = self._rel_to_abs(relpath)
         b2dset = blosc2.open(abspath)
         schunk = getattr(b2dset, 'schunk', b2dset)
+        if nchunk > schunk.nchunks:
+            raise NoSuchChunkError(nchunk)
         return schunk.get_chunk(nchunk)
 
     def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
