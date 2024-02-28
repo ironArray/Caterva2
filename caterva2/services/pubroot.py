@@ -206,9 +206,9 @@ class DirectoryRoot:
         return open(abspath, 'rb')
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
-        async for changes in watchfiles.awatch(proot.abspath):
+        async for changes in watchfiles.awatch(self.abspath):
             relpaths = set(
-                proot.Path(pathlib.Path(abspath).relative_to(self.abspath))
+                self.Path(pathlib.Path(abspath).relative_to(self.abspath))
                 for change, abspath in changes)
             yield relpaths
 
