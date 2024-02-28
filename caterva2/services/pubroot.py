@@ -38,6 +38,14 @@ import watchfiles
 from caterva2.services import srv_utils
 
 
+class NoSuchDatasetError(LookupError):
+    """The given dataset does not exist."""
+
+
+class NoSuchChunkError(IndexError):
+    """The given chunk does not exist in the dataset."""
+
+
 class PubRoot(ABC):
     """Abstract class that represents a publisher root."""
 
@@ -63,19 +71,32 @@ class PubRoot(ABC):
 
     @abstractmethod
     def get_dset_etag(self, relpath: Path) -> str:
-        """Get a string that varies if the named dataset is modified."""
+        """Get a string that varies if the named dataset is modified.
+
+        Raise `NoSuchDatasetError` if the dataset does not exist.
+        """
 
     @abstractmethod
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
-        """Get the metadata of the named dataset."""
+        """Get the metadata of the named dataset.
+
+        Raise `NoSuchDatasetError` if the dataset does not exist.
+        """
 
     @abstractmethod
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
-        """Get compressed chunk with index `nchunk` of the named dataset."""
+        """Get compressed chunk with index `nchunk` of the named dataset.
+
+        Raise `NoSuchDatasetError` if the dataset does not exist.
+        Raise `NoSuchChunkError` if the chunk does not exist.
+        """
 
     @abstractmethod
     def open_dset_raw(self, relpath: Path) -> io.BufferedIOBase:
-        """Get a byte reader for the raw contents of the named dataset."""
+        """Get a byte reader for the raw contents of the named dataset.
+
+        Raise `NoSuchDatasetError` if the dataset does not exist.
+        """
 
     @abstractmethod
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
@@ -154,7 +175,10 @@ class DirectoryRoot:
         if os.path.pardir in relpath.parts:
             raise ValueError(f"{str(os.path.pardir)!r} not allowed "
                              f"in path: {str(relpath)!r}")
-        return self.abspath / relpath
+        abspath = self.abspath / relpath
+        if not abspath.is_file():
+            raise NoSuchDatasetError(relpath)
+        return abspath
 
     def exists_dset(self, relpath: Path) -> bool:
         abspath = self._rel_to_abs(relpath)
@@ -173,6 +197,8 @@ class DirectoryRoot:
         abspath = self._rel_to_abs(relpath)
         b2dset = blosc2.open(abspath)
         schunk = getattr(b2dset, 'schunk', b2dset)
+        if nchunk > schunk.nchunks:
+            raise NoSuchChunkError(nchunk)
         return schunk.get_chunk(nchunk)
 
     def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
