@@ -54,6 +54,11 @@ services = [
     "uvicorn",
     "watchfiles",
 ]
+# Currently used to enable HDF5 support at the publisher.
+hdf5 = [
+    "h5py",
+    "hdf5plugin",
+]
 clients = [
     "rich",
     "textual",
