@@ -42,7 +42,7 @@ import numpy
 
 from collections.abc import Callable, Iterator, Mapping
 
-from .common import BLOSC2_HDF5_FID
+from ..hdf5 import BLOSC2_HDF5_FID
 
 
 # Set to empty mapping to store files as uncompressed HDF5 datasets.

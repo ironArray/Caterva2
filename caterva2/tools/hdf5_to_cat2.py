@@ -42,7 +42,7 @@ from collections.abc import Callable, Iterator, Mapping
 
 from blosc2 import blosc2_ext
 
-from .common import BLOSC2_HDF5_FID
+from ..hdf5 import BLOSC2_HDF5_FID
 
 
 def create_directory(name: str, node: h5py.Group,
