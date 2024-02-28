@@ -7,11 +7,27 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+"""Publisher root classes.
+
+This includes an abstract `PubRoot` class defining the interface that concrete
+classes must implement to support different publisher root sources.  New
+classes may be registered with the `register_root_class()` function.
+
+The `make_root()` function, given a target string argument, tries to find the
+adequate class that understands the target and can create a publisher root
+instance from it.
+"""
+
 import io
 import os
 import pathlib
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Collection, Iterator
+from collections.abc import AsyncIterator, Callable, Collection, Iterator
+try:
+    from typing import Self
+except ImportError:  # Python < 3.11
+    from typing import TypeVar
+    Self = TypeVar('Self', bound='PubRoot')
 
 # Requirements
 import blosc2
@@ -28,40 +44,78 @@ class PubRoot(ABC):
     """The class of dataset (relative) paths."""
     Path = pathlib.PurePosixPath
 
+    @classmethod
+    @abstractmethod
+    def get_maker(cls, target: str) -> Callable[[], Self]:
+        """Return a callable that returns a root for the given `target`.
+
+        If `target` cannot be used to create an instance of this class,
+        return `None`, but no exception should be raised.
+        """
+
     @abstractmethod
     def walk_dsets(self) -> Iterator[Path]:
         """Iterate over the relative paths of datasets in this root."""
-        ...
 
     @abstractmethod
     def exists_dset(self, relpath: Path) -> bool:
         """Does the named dataset exist?"""
-        ...
 
     @abstractmethod
     def get_dset_etag(self, relpath: Path) -> str:
         """Get a string that varies if the named dataset is modified."""
-        ...
 
     @abstractmethod
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         """Get the metadata of the named dataset."""
-        ...
 
     @abstractmethod
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
         """Get compressed chunk with index `nchunk` of the named dataset."""
-        ...
 
     @abstractmethod
     def open_dset_raw(self, relpath: Path) -> io.BufferedIOBase:
         """Get a byte reader for the raw contents of the named dataset."""
-        ...
 
     @abstractmethod
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         """Yield a set of datasets that have been modified."""
-        ...
+
+
+_registered_classes = []
+
+
+def register_root_class(cls: type) -> bool:
+    """Add a publisher root class to the registry.
+
+    This also registers the class as a virtual subclass of `PubRoot`.
+
+    Return whether the class was added or not (because it was already).
+    """
+    if cls in _registered_classes:
+        return False
+    PubRoot.register(cls)
+    _registered_classes.append(cls)
+    return True
+
+
+class UnsupportedRootError(Exception):
+    """No publisher root class supports the given target."""
+
+
+def make_root(target: str) -> PubRoot:
+    """Return a publisher root instance for the given `target`.
+
+    If no registered publisher root class supports the given `target`,
+    raise `UnsupportedRootError`.
+    """
+    for cls in _registered_classes:
+        maker = cls.get_maker(target)
+        if maker is not None:
+            return maker()
+    else:
+        raise UnsupportedRootError(f"no publisher root class could be used "
+                                   f"for target: {target!r}")
 
 
 class DirectoryRoot:
@@ -70,6 +124,16 @@ class DirectoryRoot:
     """
 
     Path = PubRoot.Path
+
+    @classmethod
+    def get_maker(cls, target: str) -> Callable[[], Self]:
+        try:
+            path = pathlib.Path(target)
+            if not path.is_dir():
+                return None
+        except Exception:
+            return None
+        return lambda: cls(path)
 
     def __init__(self, path: pathlib.Path):
         abspath = path.resolve(strict=True)
@@ -123,4 +187,4 @@ class DirectoryRoot:
             yield relpaths
 
 
-PubRoot.register(DirectoryRoot)
+register_root_class(DirectoryRoot)
