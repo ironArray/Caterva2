@@ -68,7 +68,10 @@ class HDF5Root:
     # TODO: pending interface methods
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
-        async for changes in watchfiles.awatch(self.h5file.filename):
+        h5path = self.h5file.filename
+        async for changes in watchfiles.awatch(h5path):
+            self.h5file.close()
+            self.h5file = h5py.File(h5path, mode='r')
             # All datasets are supposed to change along with their file.
             yield set(self.walk_dsets())
 
