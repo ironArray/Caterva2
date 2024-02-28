@@ -7,6 +7,17 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+"""Publisher root classes.
+
+This includes an abstract `PubRoot` class defining the interface that concrete
+classes must implement to support different publisher root sources.  New
+classes may be registered with the `register_root_class()` function.
+
+The `make_root()` function, given a target string argument, tries to find the
+adequate class that understands the target and can create a publisher root
+instance from it.
+"""
+
 import io
 import os
 import pathlib
