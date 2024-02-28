@@ -57,6 +57,23 @@ class PubRoot(ABC):
         """Yield a set of datasets that have been modified."""
 
 
+_registered_classes = []
+
+
+def register_root_class(cls: type) -> bool:
+    """Add a publisher root class to the registry.
+
+    This also registers the class as a virtual subclass of `PubRoot`.
+
+    Return whether the class was added or not (because it was already).
+    """
+    if cls in _registered_classes:
+        return False
+    PubRoot.register(cls)
+    _registered_classes.append(cls)
+    return True
+
+
 class DirectoryRoot:
     """Represents a publisher root which keeps datasets as files
     in a directory.
@@ -116,4 +133,4 @@ class DirectoryRoot:
             yield relpaths
 
 
-PubRoot.register(DirectoryRoot)
+register_root_class(DirectoryRoot)
