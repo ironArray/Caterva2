@@ -35,7 +35,6 @@ import sys
 
 import blosc2
 import h5py
-import hdf5plugin
 import msgpack
 
 from collections.abc import Callable, Iterator, Mapping
