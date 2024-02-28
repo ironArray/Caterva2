@@ -6,6 +6,8 @@
 
 <script>
     document.getElementById('image-index').addEventListener('change', function() {
-        document.querySelector("img#display-image").src = `/plugins/{{ name }}/image/{{ path }}?i=${this.value}`;
+        const src = `/plugins/{{ name }}/image/{{ path }}?i=${this.value}`;
+        const img = document.getElementById("display-image");
+        img.src = src;
     });
 </script>
