@@ -71,9 +71,7 @@ class HDF5Root:
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         dset = self._path_to_dset(relpath)
         # TODO: cache
-        b2_args = hdf5.b2args_from_h5dset(dset)
-        b2_array = blosc2.empty(shape=dset.shape, dtype=dset.dtype,
-                                **b2_args)
+        b2_array = hdf5.b2empty_from_h5dset(dset)
         return srv_utils.read_metadata(b2_array)
 
     # TODO: pending interface methods

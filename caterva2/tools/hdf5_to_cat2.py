@@ -85,10 +85,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         b2chunkit_from_dataset = b2chunkit_from_chunked
 
     def b2_make_empty(**kwds) -> blosc2.NDArray:
-        return blosc2.empty(
-            shape=node.shape, dtype=node.dtype,
-            **(b2_args | kwds)
-        )
+        return hdf5.b2empty_from_h5dset(node, b2_args, **kwds)
 
     b2_chunkit = b2chunkit_from_dataset(node, b2_args)
     return b2_make_empty, b2_chunkit

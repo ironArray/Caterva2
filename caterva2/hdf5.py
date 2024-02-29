@@ -40,3 +40,11 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     b2_args['dparams'] = b2_schunk.dparams
 
     return b2_args
+
+
+def b2empty_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
+                        **kwds) -> blosc2.NDArray:
+    b2_args = b2_args or b2args_from_h5dset(h5_dset)
+    b2_array = blosc2.empty(shape=h5_dset.shape, dtype=h5_dset.dtype,
+                            **(b2_args | kwds))
+    return b2_array
