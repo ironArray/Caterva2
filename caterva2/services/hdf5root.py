@@ -8,11 +8,14 @@ except ImportError:  # Python < 3.11
     Self = TypeVar('Self', bound='PubRoot')
 
 # Requirements
+import blosc2
 import h5py
+import pydantic
 import watchfiles
 
 # Project
-from caterva2.services import pubroot
+from caterva2 import hdf5
+from caterva2.services import pubroot, srv_utils
 
 
 class HDF5Root:
@@ -64,6 +67,14 @@ class HDF5Root:
         h5path = pathlib.Path(self.h5file.filename)
         stat = h5path.stat()
         return f'{stat.st_mtime}:{dset.nbytes}'
+
+    def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
+        dset = self._path_to_dset(relpath)
+        # TODO: cache
+        b2_args = hdf5.b2args_from_h5dset(dset)
+        b2_array = blosc2.empty(shape=dset.shape, dtype=dset.dtype,
+                                **b2_args)
+        return srv_utils.read_metadata(b2_array)
 
     # TODO: pending interface methods
 
