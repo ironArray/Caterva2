@@ -34,9 +34,8 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     # HDF5 filter parameters are less reliable than these.
     b2_array = b2_from_h5_chunk(h5_dset, 0)
     b2_schunk = getattr(b2_array, 'schunk', b2_array)
-    b2_args['blocks'] = getattr(
-        b2_array, 'blocks',
-        (b2_schunk.blocksize // b2_schunk.typesize,))
+    if hasattr(b2_array, 'blocks'):  # rely on cparams blocksize otherwise
+        b2_args['blocks'] = b2_array.blocks
     b2_args['cparams'] = b2_schunk.cparams
     b2_args['dparams'] = b2_schunk.dparams
 

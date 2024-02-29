@@ -79,7 +79,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
 
     if b2_args['chunks'] is None:
         b2chunkit_from_dataset = b2chunkit_from_nonchunked
-    elif 'blocks' in b2_args:
+    elif 'cparams' in b2_args:
         b2chunkit_from_dataset = b2chunkit_from_blosc2
     else:
         b2chunkit_from_dataset = b2chunkit_from_chunked
