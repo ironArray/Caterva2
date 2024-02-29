@@ -39,7 +39,7 @@ class HDF5Root:
             if isinstance(node, h5py.Group):
                 return
             # TODO: handle array / frame / (compressed) file distinctly
-            dsets.append(f'{name}.b2nd')
+            dsets.append(self.Path(f'{name}.b2nd'))
 
         self.h5file.visititems(visitor)
         yield from iter(dsets)
