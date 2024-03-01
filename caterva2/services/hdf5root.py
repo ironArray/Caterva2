@@ -43,6 +43,7 @@ class HDF5Root:
             if isinstance(node, h5py.Group):
                 return
             # TODO: handle array / frame / (compressed) file distinctly
+            # TODO: handle unsupported datasets (e.g. compound types)
             dsets.append(self.Path(f'{name}.b2nd'))
 
         self.h5file.visititems(visitor)
