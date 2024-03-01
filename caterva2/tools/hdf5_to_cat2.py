@@ -60,6 +60,8 @@ def create_directory(name: str, node: h5py.Group,
     logging.info(f"Exported group: {name!r} => {str(path)!r}")
 
 
+# TODO: refactor with HDF5 publisher root code
+
 def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
         Callable[..., blosc2.NDArray],
         Iterator[bytes]):

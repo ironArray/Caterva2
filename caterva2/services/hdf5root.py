@@ -93,6 +93,8 @@ class HDF5Root:
 pubroot.register_root_class(HDF5Root)
 
 
+# TODO: refactor with import code
+
 def b2chunker_from_h5dset(dset: h5py.Dataset) -> Callable[[int], bytes]:
     b2_args = hdf5.b2args_from_h5dset(dset)
 
