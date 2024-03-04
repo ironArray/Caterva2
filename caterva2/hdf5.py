@@ -12,10 +12,10 @@ BLOSC2_HDF5_FID = 32026
 
 # Warning: Keep the reference to the returned result.
 # Losing the reference to the array may result in a segmentation fault.
-def b2_from_h5_chunk(node: h5py.Dataset,
-                     chunk_index: int) -> (blosc2.NDArray | blosc2.SChunk):
-    h5chunk_info = node.id.get_chunk_info(chunk_index)
-    return blosc2.open(node.file.filename, mode='r',
+def b2_from_h5chunk(h5_dset: h5py.Dataset,
+                    chunk_index: int) -> (blosc2.NDArray | blosc2.SChunk):
+    h5chunk_info = h5_dset.id.get_chunk_info(chunk_index)
+    return blosc2.open(h5_dset.file.filename, mode='r',
                        offset=h5chunk_info.byte_offset)
 
 
@@ -32,7 +32,7 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     # Blosc2 is the sole filter, direct chunk copy is possible.
     # Get Blosc2 arguments from the first schunk.
     # HDF5 filter parameters are less reliable than these.
-    b2_array = b2_from_h5_chunk(h5_dset, 0)
+    b2_array = b2_from_h5chunk(h5_dset, 0)
     b2_schunk = getattr(b2_array, 'schunk', b2_array)
     if hasattr(b2_array, 'blocks'):  # rely on cparams blocksize otherwise
         b2_args['blocks'] = b2_array.blocks

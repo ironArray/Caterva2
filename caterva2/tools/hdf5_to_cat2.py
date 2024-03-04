@@ -98,7 +98,7 @@ def b2chunkit_from_blosc2(node: h5py.Dataset,
     # Blosc2-compressed dataset, just pass chunks as they are.
     # Support both Blosc2 arrays and frames as HDF5 chunks.
     for h5_chunk_idx in range(node.id.get_num_chunks()):
-        b2_array = hdf5.b2_from_h5_chunk(node, h5_chunk_idx)
+        b2_array = hdf5.b2_from_h5chunk(node, h5_chunk_idx)
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
         # TODO: check if schunk is compatible with creation arguments
         for b2_chunk_info in b2_schunk.iterchunks_info():

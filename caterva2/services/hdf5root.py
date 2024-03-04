@@ -122,7 +122,7 @@ def b2chunker_from_blosc2(dset: h5py.Dataset,
     def b2chunker_blosc2(nchunk: int) -> bytes:
         if not (0 <= nchunk < dset.id.get_num_chunks()):
             raise pubroot.NoSuchChunkError(nchunk)
-        b2_array = hdf5.b2_from_h5_chunk(dset, nchunk)
+        b2_array = hdf5.b2_from_h5chunk(dset, nchunk)
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
         if b2_schunk.nchunks < 1:
             raise IOError(f"chunk #{nchunk} of HDF5 node {dset.name!r} "
