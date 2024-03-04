@@ -19,7 +19,16 @@ def b2_from_h5chunk(h5_dset: h5py.Dataset,
                        offset=h5chunk_info.byte_offset)
 
 
+def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
+    """Is the HDF5 dataset compatible with a Blosc2 dataset?"""
+    dtype = h5_dset.dtype
+    return dtype.ndim == 0 and dtype.fields is None  # scalar, non-compound
+
+
 def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
+    if not h5dset_is_compatible(h5_dset):
+        raise TypeError("HDF5 dataset is not compatible with Blosc2")
+
     b2_args = dict(
         chunks=h5_dset.chunks,  # None is ok (let Blosc2 decide)
     )

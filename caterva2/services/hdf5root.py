@@ -41,10 +41,9 @@ class HDF5Root:
         dsets = []
 
         def visitor(name, node):
-            if isinstance(node, h5py.Group):
+            if not _is_dataset(node):
                 return
             # TODO: handle array / frame / (compressed) file distinctly
-            # TODO: handle unsupported datasets (e.g. compound types)
             dsets.append(self.Path(f'{name}.b2nd'))
 
         self.h5file.visititems(visitor)
@@ -53,7 +52,7 @@ class HDF5Root:
     def _path_to_dset(self, relpath: Path) -> h5py.Dataset:
         name = re.sub(r'\.b2(nd|frame)?$', '', str(relpath))
         node = self.h5file.get(name)
-        if node is None or isinstance(node, h5py.Group):
+        if node is None or not _is_dataset(node):
             raise pubroot.NoSuchDatasetError(relpath)
         return node
 
@@ -98,6 +97,10 @@ class HDF5Root:
 
 
 pubroot.register_root_class(HDF5Root)
+
+
+def _is_dataset(node: h5py.Group | h5py.Dataset) -> bool:
+    return isinstance(node, h5py.Dataset) and hdf5.h5dset_is_compatible(node)
 
 
 # TODO: refactor with import code
