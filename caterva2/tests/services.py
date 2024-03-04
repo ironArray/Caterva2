@@ -7,7 +7,10 @@ running before proceeding to tests.  It has three modes of operation:
   and makes sure that they are available to other local programs.  If given an
   argument, it uses it as the directory to store state in; otherwise it uses
   the value in `DEFAULT_STATE_DIR`.  If the directory does not exist, it is
-  created and populated with the example files from the source distribution.
+  created and populated with example datasets.  If a second argument is given,
+  it is taken as the source of example datasets, instead of those from the
+  source distribution.
+
   Terminating the program stops the services.
 
   Usage example::
@@ -211,14 +214,16 @@ def services(examples_dir, configuration):
 
 
 def main():
+    from . import files, conf
+    examples_path = files.get_examples_dir()
+
     if '--help' in sys.argv:
-        print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\"]")
+        print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" "
+              f"[EXAMPLES_PATH=\"{examples_path}\"]]")
         return
 
-    from . import files, conf
-
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    examples_path = files.get_examples_dir()
+    examples_path = Path(sys.argv[2]) if len(sys.argv) >= 3 else examples_path
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
