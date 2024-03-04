@@ -1,3 +1,4 @@
+import io
 import pathlib
 import re
 from collections.abc import (
@@ -81,6 +82,11 @@ class HDF5Root:
         # TODO: cache
         b2_chunker = b2chunker_from_h5dset(dset)
         return b2_chunker(nchunk)
+
+    def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
+        # TODO: handle array / frame / (compressed) file distinctly
+        raise NotImplementedError(
+            "cannot read raw contents of array dataset")
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         h5path = self.h5file.filename
