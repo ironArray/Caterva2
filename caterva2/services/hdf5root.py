@@ -1,4 +1,5 @@
 import io
+import logging
 import pathlib
 import re
 from collections.abc import (
@@ -39,9 +40,12 @@ class HDF5Root:
     def walk_dsets(self) -> Iterator[Path]:
         # TODO: either iterate (without accumulation) or cache
         dsets = []
+        warn = logging.getLogger().warning
 
         def visitor(name, node):
             if not _is_dataset(node):
+                if not isinstance(node, h5py.Group):
+                    warn("skipping incompatible HDF5 dataset: %r", name)
                 return
             # TODO: handle array / frame / (compressed) file distinctly
             dsets.append(self.Path(f'{name}.b2nd'))
