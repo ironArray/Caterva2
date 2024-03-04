@@ -94,15 +94,15 @@ class Services:
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True,
-                 examples_dir=None, configuration=None):
+                 examples_path=None, configuration=None):
         super().__init__()
 
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
-        self.examples_dir = examples_dir
+        self.examples_path = examples_path
         self.configuration = configuration
 
-        self.data_dir = self.state_dir / 'data'
+        self.data_path = self.state_dir / 'data'
 
         self._procs = {}
         self._setup_done = False
@@ -141,9 +141,13 @@ class ManagedServices(Services):
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
 
-        if not self.data_dir.exists():
-            shutil.copytree(self.examples_dir, self.data_dir, symlinks=True)
-        self.data_dir.mkdir(exist_ok=True)
+        if self.examples_path.is_dir():
+            if not self.data_path.exists():
+                shutil.copytree(self.examples_path, self.data_path,
+                                symlinks=True)
+            self.data_path.mkdir(exist_ok=True)
+        elif not self.data_path.exists():
+            shutil.copy(self.examples_path, self.data_path)
 
         self._setup_done = True
 
@@ -151,7 +155,7 @@ class ManagedServices(Services):
         self._setup()
 
         self._start_proc('bro', check=bro_check(self.configuration))
-        self._start_proc('pub', TEST_PUBLISHED_ROOT, self.data_dir,
+        self._start_proc('pub', TEST_PUBLISHED_ROOT, self.data_path,
                          check=pub_check(self.configuration))
         self._start_proc('sub', check=sub_check(self.configuration))
 
@@ -196,7 +200,7 @@ def services(examples_dir, configuration):
     srvs = (ExternalServices(configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 examples_dir=examples_dir,
+                                 examples_path=examples_dir,
                                  configuration=configuration))
     try:
         srvs.start_all()
@@ -214,11 +218,11 @@ def main():
     from . import files, conf
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    examples_dir = files.get_examples_dir()
+    examples_path = files.get_examples_dir()
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           examples_dir=examples_dir,
+                           examples_path=examples_path,
                            configuration=configuration)
     try:
         srvs.start_all()
