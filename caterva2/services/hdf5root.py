@@ -2,8 +2,7 @@ import io
 import logging
 import pathlib
 import re
-from collections.abc import (
-    AsyncIterator, Callable, Collection, Iterator, Mapping)
+from collections.abc import AsyncIterator, Callable, Collection, Iterator
 try:
     from typing import Self
 except ImportError:  # Python < 3.11
