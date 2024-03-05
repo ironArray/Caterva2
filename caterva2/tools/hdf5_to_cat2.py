@@ -101,8 +101,15 @@ def b2chunkit_from_blosc2(node: h5py.Dataset,
         b2_array = hdf5.b2_from_h5chunk(node, h5_chunk_idx)
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
         # TODO: check if schunk is compatible with creation arguments
-        for b2_chunk_info in b2_schunk.iterchunks_info():
-            yield b2_schunk.get_chunk(b2_chunk_info.nchunk)
+        if b2_schunk.nchunks < 1:
+            raise IOError(f"chunk #{h5_chunk_idx} of HDF5 node {node.name!r} "
+                          f"contains Blosc2 super-chunk with no chunks")
+        if b2_schunk.nchunks > 1:
+            # TODO: warn, check shape, re-compress as single chunk
+            raise NotImplementedError(
+                f"chunk #{h5_chunk_idx} of HDF5 node {node.name!r} "
+                f"contains Blosc2 super-chunk with several chunks")
+        yield b2_schunk.get_chunk(0)
 
 
 def b2chunkit_from_nonchunked(node: h5py.Dataset,
