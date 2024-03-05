@@ -155,7 +155,7 @@ def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
     # Thus, only one chunk worth of data is kept in memory.
     assert h5_dset.chunks == b2_args['chunks']
     b2_array = blosc2.empty(
-        shape=h5_dset.chunks, dtype=h5_dset.dtype,  # note that shape is chunkshape
+        shape=h5_dset.chunks, dtype=h5_dset.dtype,  # array shape is chunkshape
         **b2_args
     )
 
