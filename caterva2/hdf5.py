@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 # Requirements
 import blosc2
@@ -57,3 +57,82 @@ def b2empty_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
     b2_array = blosc2.empty(shape=h5_dset.shape, dtype=h5_dset.dtype,
                             **(b2_args | kwds))
     return b2_array
+
+
+def b2chunker_from_h5dset(dset: h5py.Dataset) -> Callable[[int], bytes]:
+    b2_args = b2args_from_h5dset(dset)
+
+    if b2_args['chunks'] is None:
+        b2chunker_from_dataset = b2chunker_from_nonchunked
+    elif 'cparams' in b2_args:
+        b2chunker_from_dataset = b2chunker_from_blosc2
+    else:
+        b2chunker_from_dataset = b2chunker_from_chunked
+
+    return b2chunker_from_dataset(dset, b2_args)
+
+
+def b2chunker_from_blosc2(dset: h5py.Dataset,
+                          b2_args: Mapping) -> Callable[[int], bytes]:
+    # Blosc2-compressed dataset, just pass chunks as they are.
+    # Support both Blosc2 arrays and frames as HDF5 chunks.
+    def b2chunker_blosc2(nchunk: int) -> bytes:
+        if not (0 <= nchunk < dset.id.get_num_chunks()):
+            raise IndexError(nchunk)
+        b2_array = b2_from_h5chunk(dset, nchunk)
+        b2_schunk = getattr(b2_array, 'schunk', b2_array)
+        # TODO: check if schunk is compatible with creation arguments
+        if b2_schunk.nchunks < 1:
+            raise IOError(f"chunk #{nchunk} of HDF5 node {dset.name!r} "
+                          f"contains Blosc2 super-chunk with no chunks")
+        if b2_schunk.nchunks > 1:
+            # TODO: warn, check shape, re-compress as single chunk
+            raise NotImplementedError(
+                f"chunk #{nchunk} of HDF5 node {dset.name!r} "
+                f"contains Blosc2 super-chunk with several chunks")
+        return b2_schunk.get_chunk(0)
+    return b2chunker_blosc2
+
+
+def b2chunker_from_nonchunked(dset: h5py.Dataset,
+                              b2_args: Mapping) -> Callable[[int], bytes]:
+    # Contiguous or compact dataset,
+    # slurp into Blosc2 array and get chunks from it.
+    # Hopefully the data is small enough to be loaded into memory.
+    b2_array = blosc2.asarray(
+        dset[()],  # ok for arrays & scalars
+        **b2_args
+    )
+
+    def b2chunker_nonchunked(nchunk: int) -> bytes:
+        b2_schunk = b2_array.schunk  # keep array ref to prevent SIGSEGV
+        if not (0 <= nchunk < b2_schunk.nchunks):
+            raise IndexError(nchunk)
+        return b2_schunk.get_chunk(nchunk)
+    return b2chunker_nonchunked
+
+
+def b2chunker_from_chunked(dset: h5py.Dataset,
+                           b2_args: Mapping) -> Callable[[int], bytes]:
+    # Non-Blosc2 chunked dataset,
+    # load each HDF5 chunk into chunk 0 of compatible Blosc2 array,
+    # then get the resulting compressed chunk.
+    # Thus, only one chunk worth of data is kept in memory.
+    assert dset.chunks == b2_args['chunks']
+    b2_array = blosc2.empty(
+        shape=dset.chunks, dtype=dset.dtype,  # note that shape is chunkshape
+        **b2_args
+    )
+
+    def b2chunker_chunked(nchunk: int) -> bytes:
+        if not (0 <= nchunk < dset.id.get_num_chunks()):
+            raise IndexError(nchunk)
+        chunk_start = dset.id.get_chunk_info(nchunk).chunk_offset
+        chunk_slice = tuple(slice(cst, cst + csz, 1)
+                            for (cst, csz) in zip(chunk_start, dset.chunks))
+        chunk_array = dset[chunk_slice]
+        # Always place at the beginning so that it fits in chunk 0.
+        b2_slice = tuple(slice(0, n, 1) for n in chunk_array.shape)
+        b2_array[b2_slice] = chunk_array
+        return b2_array.schunk.get_chunk(0)
+    return b2chunker_chunked
