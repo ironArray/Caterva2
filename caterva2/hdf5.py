@@ -59,8 +59,9 @@ def b2empty_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
     return b2_array
 
 
-def b2chunker_from_h5dset(h5_dset: h5py.Dataset) -> Callable[[int], bytes]:
-    b2_args = b2args_from_h5dset(h5_dset)
+def b2chunker_from_h5dset(h5_dset: h5py.Dataset,
+                          b2_args={}) -> Callable[[int], bytes]:
+    b2_args = b2_args or b2args_from_h5dset(h5_dset)
 
     if b2_args['chunks'] is None:
         b2chunker_from_dataset = b2chunker_from_nonchunked
