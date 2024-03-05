@@ -62,6 +62,21 @@ def b2empty_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
 def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args={}) -> (
         Callable[[int], bytes],
         Callable[[], Iterator[bytes]]):
+    """Get by-index and iterator chunkers for the given dataset.
+
+    The first returned value (``getchunk``) can be called with an integer
+    index to get the compressed Blosc2 chunk with that index.  An `IndexError`
+    is raised if the index is out of bounds.
+
+    The second returned value (``iterchunks``) can be called to get an
+    iterator that yields compressed Blosc2 chunks in order.
+
+    Chunks will be compatible with Blosc2 array construction arguments, either
+    as provided by a non-empty mapping `b2_args`, or otherwise inferred from
+    the dataset.  The former may be useful if you have already called
+    `b2args_from_h5dset()` on the dataset.  The chunks may be stored straight
+    away in order in a Blosc2 super-chunk without further processing.
+    """
     b2_args = b2_args or b2args_from_h5dset(h5_dset)
 
     if b2_args['chunks'] is None:
