@@ -83,7 +83,7 @@ class HDF5Root:
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
         dset = self._path_to_dset(relpath)
         # TODO: cache
-        b2_chunkget, _ = hdf5.b2chunker_from_h5dset(dset)
+        b2_chunkget, _ = hdf5.b2chunkers_from_h5dset(dset)
         try:
             return b2_chunkget(nchunk)
         except IndexError as ie:

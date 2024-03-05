@@ -59,22 +59,22 @@ def b2empty_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
     return b2_array
 
 
-def b2chunker_from_h5dset(h5_dset: h5py.Dataset, b2_args={}) -> (
+def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args={}) -> (
         Callable[[int], bytes],
         Iterator[bytes]):
     b2_args = b2_args or b2args_from_h5dset(h5_dset)
 
     if b2_args['chunks'] is None:
-        b2chunker_from_dataset = b2chunker_from_nonchunked
+        b2chunkers_from_dataset = b2chunkers_from_nonchunked
     elif 'cparams' in b2_args:
-        b2chunker_from_dataset = b2chunker_from_blosc2
+        b2chunkers_from_dataset = b2chunkers_from_blosc2
     else:
-        b2chunker_from_dataset = b2chunker_from_chunked
+        b2chunkers_from_dataset = b2chunkers_from_chunked
 
-    return b2chunker_from_dataset(h5_dset, b2_args)
+    return b2chunkers_from_dataset(h5_dset, b2_args)
 
 
-def b2chunker_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
+def b2chunkers_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         Callable[[int], bytes],
         Iterator[bytes]):
     # Blosc2-compressed dataset, just pass chunks as they are.
@@ -105,7 +105,7 @@ def b2chunker_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
     return b2chunkget_blosc2, b2chunkit_blosc2()
 
 
-def b2chunker_from_nonchunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
+def b2chunkers_from_nonchunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         Callable[[int], bytes],
         Iterator[bytes]):
     # Contiguous or compact dataset,
@@ -131,7 +131,7 @@ def b2chunker_from_nonchunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
     return b2chunkget_nonchunked, b2chunkit_nonchunked()
 
 
-def b2chunker_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
+def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         Callable[[int], bytes],
         Iterator[bytes]):
     # Non-Blosc2 chunked dataset,

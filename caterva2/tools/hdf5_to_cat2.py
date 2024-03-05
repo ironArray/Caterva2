@@ -76,7 +76,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     order in a Blosc2 super-chunk without further processing.
     """
     b2_args = hdf5.b2args_from_h5dset(node)
-    _, b2_chunkit = hdf5.b2chunker_from_h5dset(node, b2_args)
+    _, b2_chunkit = hdf5.b2chunkers_from_h5dset(node, b2_args)
 
     def b2_make_empty(**kwds) -> blosc2.NDArray:
         return hdf5.b2empty_from_h5dset(node, b2_args, **kwds)
