@@ -125,7 +125,7 @@ class HDF5Root:
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         h5path = self.h5file.filename
         old_dsets = set(self.walk_dsets())
-        async for changes in watchfiles.awatch(h5path):
+        async for _ in watchfiles.awatch(h5path):
             self._clear_caches()
             self.h5file.close()
             self.h5file = h5py.File(h5path, mode='r')

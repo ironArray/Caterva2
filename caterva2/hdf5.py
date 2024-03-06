@@ -60,7 +60,7 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
 
 
 def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
-    def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
+    def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args=None,
                             **kwds) -> blosc2.NDArray:
         b2_args = b2_args or b2args_from_h5dset(h5_dset)
         b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype,
@@ -68,11 +68,12 @@ def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
         return b2_array
     return _b2make_from_h5dset
 
+
 b2empty_from_h5dset = _b2maker_from_h5dset(blosc2.empty)
 b2uninit_from_h5dset = _b2maker_from_h5dset(blosc2.uninit)
 
 
-def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args={}) -> (
+def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args=None) -> (
         Callable[[int], bytes],
         Callable[[], Iterator[bytes]]):
     """Get by-index and iterator chunkers for the given dataset.
@@ -191,7 +192,6 @@ def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         return b2_array.schunk.get_chunk(0)
 
     def b2iterchunks_chunked() -> Iterator[bytes]:
-        schunk = b2_array.schunk
         for chunk_slice in h5_dset.iter_chunks():
             yield _b2getchunk_slice(chunk_slice)
 
