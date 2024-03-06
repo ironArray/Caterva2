@@ -95,11 +95,15 @@ class HDF5Root:
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         h5path = self.h5file.filename
+        old_dsets = set(self.walk_dsets())
         async for changes in watchfiles.awatch(h5path):
             self.h5file.close()
             self.h5file = h5py.File(h5path, mode='r')
             # All datasets are supposed to change along with their file.
-            yield set(self.walk_dsets())
+            cur_dsets = set(self.walk_dsets())
+            # Old datasets are included in case any of them disappeared.
+            yield old_dsets | cur_dsets
+            old_dsets = cur_dsets
 
 
 pubroot.register_root_class(HDF5Root)
