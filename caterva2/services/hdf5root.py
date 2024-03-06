@@ -106,7 +106,6 @@ class HDF5Root:
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         dset = self._path_to_dset(relpath)
         b2_args = self._b2args_from_h5dset(dset)
-        # TODO: cache?
         b2_array = hdf5.b2uninit_from_h5dset(dset, b2_args)
         return srv_utils.read_metadata(b2_array)
 
