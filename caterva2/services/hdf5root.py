@@ -30,7 +30,7 @@ class HDF5Root:
     Path = pubroot.PubRoot.Path
 
     @classmethod
-    def get_maker(cls, target: str) -> Callable[[], Self]:
+    def get_maker(cls, target: str) -> Callable[[], Self] | None:
         try:
             path = pathlib.Path(target)
             if not h5py.is_hdf5(path):

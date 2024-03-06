@@ -54,7 +54,7 @@ class PubRoot(ABC):
 
     @classmethod
     @abstractmethod
-    def get_maker(cls, target: str) -> Callable[[], Self]:
+    def get_maker(cls, target: str) -> Callable[[], Self] | None:
         """Return a callable that returns a root for the given `target`.
 
         If `target` cannot be used to create an instance of this class,
@@ -147,7 +147,7 @@ class DirectoryRoot:
     Path = PubRoot.Path
 
     @classmethod
-    def get_maker(cls, target: str) -> Callable[[], Self]:
+    def get_maker(cls, target: str) -> Callable[[], Self] | None:
         try:
             path = pathlib.Path(target)
             if not path.is_dir():
