@@ -3,7 +3,7 @@
 
 In the ecosystem where Caterva2 belongs, it is common to work with HDF5 files containing multidimensional numerical data stored as datasets arranged in arbitrary hierarchies.  Caterva2 is designed to distribute such type of datasets (and some others), with similar features such as compression, chunking and arbitrary attributes, and also grouped in hierarchies.
 
-`cat2import` is a simple tool (still in its early stages of development) targeted at exporting a single HDF5 file into an equivalent Caterva2 root.  To use it, the `tools` extra needs to be installed:
+Although Caterva2 does allow publishing an HDF5 file as a root (with datasets converted to Blosc2 on-the-fly), it also includes `cat2import`, a simple tool (still in its early stages of development) targeted at exporting the whole hierarchy in an HDF5 file into an equivalent Caterva2 root directory.  To use it, the `tools` extra needs to be installed:
 
 ```sh
 python -m pip install caterva2[tools]
