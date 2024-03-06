@@ -107,7 +107,7 @@ class HDF5Root:
         dset = self._path_to_dset(relpath)
         b2_args = self._b2args_from_h5dset(dset)
         # TODO: cache?
-        b2_array = hdf5.b2empty_from_h5dset(dset, b2_args)
+        b2_array = hdf5.b2uninit_from_h5dset(dset, b2_args)
         return srv_utils.read_metadata(b2_array)
 
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:

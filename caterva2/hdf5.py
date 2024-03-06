@@ -59,12 +59,17 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     return b2_args
 
 
-def b2empty_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
-                        **kwds) -> blosc2.NDArray:
-    b2_args = b2_args or b2args_from_h5dset(h5_dset)
-    b2_array = blosc2.empty(shape=h5_dset.shape, dtype=h5_dset.dtype,
-                            **(b2_args | kwds))
-    return b2_array
+def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
+    def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args={},
+                            **kwds) -> blosc2.NDArray:
+        b2_args = b2_args or b2args_from_h5dset(h5_dset)
+        b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype,
+                          **(b2_args | kwds))
+        return b2_array
+    return _b2make_from_h5dset
+
+b2empty_from_h5dset = _b2maker_from_h5dset(blosc2.empty)
+b2uninit_from_h5dset = _b2maker_from_h5dset(blosc2.uninit)
 
 
 def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args={}) -> (
