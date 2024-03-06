@@ -26,6 +26,14 @@ def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
 
 
 def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
+    """Get Blosc2 array creation arguments for the given HDF5 dataset.
+
+    Return a mapping which can be applied to array creation calls.
+
+    This may be an expensive operation with Blosc2-compressed datasets, as it
+    requires opening the Blosc2 super-chunk in the first HDF5 chunk to read
+    its metadata (so as to return the exact same arguments).
+    """
     if not h5dset_is_compatible(h5_dset):
         raise TypeError("HDF5 dataset is not compatible with Blosc2")
 
