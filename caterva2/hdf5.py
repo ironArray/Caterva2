@@ -84,6 +84,9 @@ def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args={}) -> (
     the dataset.  The former may be useful if you have already called
     `b2args_from_h5dset()` on the dataset.  The chunks may be stored straight
     away in order in a Blosc2 super-chunk without further processing.
+
+    Some chunkers may hold a sizable amount of memory (especially for datasets
+    with big chunks, or big non-chunked datasets).
     """
     b2_args = b2_args or b2args_from_h5dset(h5_dset)
 
