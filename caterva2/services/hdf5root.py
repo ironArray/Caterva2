@@ -22,6 +22,10 @@ from caterva2 import hdf5
 from caterva2.services import pubroot, srv_utils
 
 
+_MAX_CACHED_CHUNKERS = 32
+"""Maximum number of dataset chunkers to keep in per-instance LRU cache."""
+
+
 class HDF5Root:
     Path = pubroot.PubRoot.Path
 
@@ -48,8 +52,19 @@ class HDF5Root:
             return hdf5.b2args_from_h5dset(dset)
         return _getb2args
 
+    @functools.cached_property
+    def _b2chunkers_from_h5dset(self):
+        @functools.lru_cache(maxsize=_MAX_CACHED_CHUNKERS)  # only hot datasets
+        def _getb2chunkers(dset: h5py.Dataset) -> (
+                Callable[[int], bytes],
+                Callable[[], Iterator[bytes]]):
+            b2_args = self._b2args_from_h5dset(dset)
+            return hdf5.b2chunkers_from_h5dset(dset, b2_args)
+        return _getb2chunkers
+
     def _clear_caches(self):
         del self._b2args_from_h5dset
+        del self._b2chunkers_from_h5dset
 
     def walk_dsets(self) -> Iterator[Path]:
         # TODO: either iterate (without accumulation) or cache
@@ -97,9 +112,7 @@ class HDF5Root:
 
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
         dset = self._path_to_dset(relpath)
-        b2_args = self._b2args_from_h5dset(dset)
-        # TODO: cache?
-        b2getchunk, _ = hdf5.b2chunkers_from_h5dset(dset, b2_args)
+        b2getchunk, _ = self._b2chunkers_from_h5dset(dset)
         try:
             return b2getchunk(nchunk)
         except IndexError as ie:
