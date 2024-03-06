@@ -1,8 +1,10 @@
+import functools
 import io
 import logging
 import pathlib
 import re
-from collections.abc import AsyncIterator, Callable, Collection, Iterator
+from collections.abc import (
+    AsyncIterator, Callable, Collection, Iterator, Mapping)
 try:
     from typing import Self
 except ImportError:  # Python < 3.11
@@ -35,6 +37,19 @@ class HDF5Root:
 
     def __init__(self, path: pathlib.Path):
         self.h5file = h5py.File(path, mode='r')
+
+    # There must be one cached function per instance,
+    # so that it can be reset individually.
+
+    @functools.cached_property
+    def _b2args_from_h5dset(self):
+        @functools.cache  # TODO: limit size?
+        def _getb2args(dset: h5py.Dataset) -> Mapping[str, object]:
+            return hdf5.b2args_from_h5dset(dset)
+        return _getb2args
+
+    def _clear_caches(self):
+        del self._b2args_from_h5dset
 
     def walk_dsets(self) -> Iterator[Path]:
         # TODO: either iterate (without accumulation) or cache
@@ -75,14 +90,16 @@ class HDF5Root:
 
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         dset = self._path_to_dset(relpath)
-        # TODO: cache
-        b2_array = hdf5.b2empty_from_h5dset(dset)
+        b2_args = self._b2args_from_h5dset(dset)
+        # TODO: cache?
+        b2_array = hdf5.b2empty_from_h5dset(dset, b2_args)
         return srv_utils.read_metadata(b2_array)
 
     def get_dset_chunk(self, relpath: Path, nchunk: int) -> bytes:
         dset = self._path_to_dset(relpath)
-        # TODO: cache
-        b2getchunk, _ = hdf5.b2chunkers_from_h5dset(dset)
+        b2_args = self._b2args_from_h5dset(dset)
+        # TODO: cache?
+        b2getchunk, _ = hdf5.b2chunkers_from_h5dset(dset, b2_args)
         try:
             return b2getchunk(nchunk)
         except IndexError as ie:
@@ -97,6 +114,7 @@ class HDF5Root:
         h5path = self.h5file.filename
         old_dsets = set(self.walk_dsets())
         async for changes in watchfiles.awatch(h5path):
+            self._clear_caches()
             self.h5file.close()
             self.h5file = h5py.File(h5path, mode='r')
             # All datasets are supposed to change along with their file.
