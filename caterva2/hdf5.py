@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterator, Mapping
 import blosc2
 import h5py
 import hdf5plugin  # enable Blosc2 support in HDF5
+import numpy
 
 
 """The registered identifier for Blosc2 in HDF5 filters."""
@@ -151,7 +152,7 @@ def b2chunkers_from_nonchunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
     # slurp into Blosc2 array and get chunks from it.
     # Hopefully the data is small enough to be loaded into memory.
     b2_array = blosc2.asarray(
-        h5_dset[()],  # ok for arrays & scalars
+        numpy.asanyarray(h5_dset[()]),  # ok for arrays & scalars
         **b2_args
     )
 
@@ -192,7 +193,7 @@ def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         return _b2getchunk_slice(chunk_slice)
 
     def _b2getchunk_slice(chunk_slice) -> bytes:
-        chunk_array = h5_dset[chunk_slice]
+        chunk_array = numpy.asanyarray(h5_dset[chunk_slice])
         # Always place at the beginning so that it fits in chunk 0.
         b2_slice = tuple(slice(0, n, 1) for n in chunk_array.shape)
         b2_array[b2_slice] = chunk_array
