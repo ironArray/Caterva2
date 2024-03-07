@@ -27,7 +27,9 @@ def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
     if len(shape) > getattr(blosc2, 'MAX_DIM', 8):
         return False  # too many dimensions
     dtype = h5_dset.dtype
-    return dtype.ndim == 0 and dtype.fields is None  # scalar, non-compound
+    if dtype.ndim != 0 or dtype.fields is not None:
+        return False  # array or compound dtype
+    return True
 
 
 def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
