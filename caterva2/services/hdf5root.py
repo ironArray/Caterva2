@@ -144,3 +144,63 @@ pubroot.register_root_class(HDF5Root)
 
 def _is_dataset(node: h5py.Group | h5py.Dataset) -> bool:
     return isinstance(node, h5py.Dataset) and hdf5.h5dset_is_compatible(node)
+
+
+def create_example_root(path):
+    """Create an example HDF5 file to be used as a root."""
+    import blosc2
+    import h5py
+    import hdf5plugin
+    import numpy
+
+    with h5py.File(path, 'x') as h5f:
+        h5f.create_dataset('/scalar', data=123.456)
+        h5f.create_dataset('/string', data="Hello world!")
+
+        a = numpy.arange(100, dtype='uint8')
+        h5f.create_dataset('/arrays/1d-raw', data=a)
+
+        a = numpy.array([b'foobar'] * 100)
+        h5f.create_dataset('/arrays/1ds-blosc2', data=a, chunks=(50,),
+                           **hdf5plugin.Blosc2())
+
+        a = numpy.arange(100, dtype='complex128').reshape(10, 10)
+        a = a + a*1j
+        h5f.create_dataset('/arrays/2d-gzip', data=a, chunks=(4, 4),
+                           compression='gzip')
+
+        a = numpy.arange(1000, dtype='uint8').reshape(10, 10, 10)
+        h5f.create_dataset('/arrays/3d-blosc2', data=a, chunks=(4, 10, 10),
+                           **hdf5plugin.Blosc2())
+
+        h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))
+
+        a = numpy.arange(1, dtype='uint8').reshape((1,) * 23)
+        h5f.create_dataset('/unsupported/too-many-dimensions', data=a)
+
+        h5f.create_dataset('/unsupported/array-dtype',
+                           dtype=numpy.dtype(('float64', (4,))),
+                           shape=(10,))
+
+        h5f.create_dataset('/unsupported/compound-dtype',
+                           dtype=numpy.dtype('uint8,float64'),
+                           shape=(10,))
+
+        h5f['/unsupported/soft-link'] = h5py.SoftLink('/arrays/1d-raw')
+
+
+def main():
+    import os
+    import sys
+    try:
+        _, h5fpath = sys.argv
+    except ValueError:
+        prog = os.path.basename(sys.argv[0])
+        print(f"Usage: {prog} HDF5_FILE", file=sys.stderr)
+        sys.exit(1)
+    create_example_root(h5fpath)
+    print(f"Created example HDF5 root: {h5fpath!r}", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
