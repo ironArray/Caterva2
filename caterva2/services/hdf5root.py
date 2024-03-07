@@ -63,9 +63,8 @@ class HDF5Root:
         return _getb2chunkers
 
     def _clear_caches(self):
-        for attr in ['_b2args_from_h5dset', '_b2chunkers_from_h5dset']:
-            if attr in self.__dict__:
-                delattr(self, attr)
+        self._b2args_from_h5dset.cache_clear()
+        self._b2chunkers_from_h5dset.cache_clear()
 
     def walk_dsets(self) -> Iterator[Path]:
         # TODO: either iterate (without accumulation) or cache
