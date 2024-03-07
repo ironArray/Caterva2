@@ -198,7 +198,7 @@ All the services mentioned above (and clients, to some limited extent) may get t
 
 ## Tools
 
-Although Caterva2 allows publishing an HDF5 file directly as a root (with datasets converted to Blosc2 arrays on-the-fly), it also includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may use it like:
+Although Caterva2 allows publishing an HDF5 file directly as a root (with datasets converted to Blosc2 arrays on-the-fly), it also includes a simple script that can import its full hierarchy to a new Caterva2 root directory.  You may use it like:
 
 ```sh
 cat2import existing-hdf5-file.h5 new-caterva2-root
