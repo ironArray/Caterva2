@@ -24,6 +24,8 @@ def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
     shape = h5_dset.shape
     if shape is None:
         return False  # empty dataspace (``H5S_NULL``)
+    if len(shape) > getattr(blosc2, 'MAX_DIM', 8):
+        return False  # too many dimensions
     dtype = h5_dset.dtype
     return dtype.ndim == 0 and dtype.fields is None  # scalar, non-compound
 
