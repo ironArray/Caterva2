@@ -41,9 +41,9 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
         chunks=h5_dset.chunks,  # None is ok (let Blosc2 decide)
     )
 
-    if h5_dset.chunks is None \
-       or list(h5_dset._filters) != [f'{BLOSC2_HDF5_FID:#d}'] \
-       or h5_dset.id.get_num_chunks() < 1:
+    if (h5_dset.chunks is None
+            or list(h5_dset._filters) != [f'{BLOSC2_HDF5_FID:#d}']
+            or h5_dset.id.get_num_chunks() < 1):
         return b2_args
 
     # Blosc2 is the sole filter, direct chunk copy is possible.
