@@ -60,7 +60,13 @@ You may install Caterva2 in several ways:.
   python -m pip install -e .
   ```
 
-In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  For instance, to enable all extras append `[services,clients,tests]`.
+In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  The following extras are supported:
+
+- `services` for running Caterva2 services (broker, publisher, subscriber)
+- `clients` to use Caterva2 client programs (command-line or terminal)
+- `hdf5` to enable serving HDF5 files as Caterva2 roots at the publisher
+- `tools` for additional utilities like `cat2import` and `cat2export` (see below)
+- `tests` if you want to run the Caterva2 test suite
 
 ### Testing
 
