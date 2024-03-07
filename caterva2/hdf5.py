@@ -21,6 +21,9 @@ def b2_from_h5chunk(h5_dset: h5py.Dataset,
 
 def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
     """Is the HDF5 dataset compatible with a Blosc2 dataset?"""
+    shape = h5_dset.shape
+    if shape is None:
+        return False  # empty dataspace (``H5S_NULL``)
     dtype = h5_dset.dtype
     return dtype.ndim == 0 and dtype.fields is None  # scalar, non-compound
 
