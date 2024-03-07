@@ -118,6 +118,16 @@ cat2sub &  # subscriber
 
 (To stop them later on, bring each one to the foreground with `fg` and press Ctrl+C.)
 
+### HDF5 roots
+
+If you want to try and publish your own HDF5 file as a root, you need to include the `hdf5` extra in your Caterva2 installation.  Then you may just run `cat2pub foo /path/to/your-file.h5 &`.  You can also get an example HDF5 file with some datasets by running:
+
+```sh
+python -m caterva2.services.hdf5root root-example.h5
+```
+
+You may want to test compatibility with [silx' HDF5 examples](https://www.silx.org/pub/h5web/) (`epics.h5` and `grove.h5` are quite illustrative).
+
 ### The command line client
 
 Now that the services are running, we can use the `cat2cli` client to talk
