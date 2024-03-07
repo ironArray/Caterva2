@@ -44,6 +44,9 @@ class HDF5Root:
 
     # There must be one cached function per instance,
     # so that it can be reset individually.
+    # This means that just ``@functools.(lru_)cache``
+    # on e.g. ``_b2args_from_h5dset(self, dset)`` is not enough
+    # (there would be a single cache shared by all instances).
 
     @functools.cached_property
     def _b2args_from_h5dset(self):
