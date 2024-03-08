@@ -1,0 +1,31 @@
+# This workflow will run on an external ubicloud arm64 runner on latest ubuntu (ubicloud standard)
+
+name: Python application (ubuntu, arm64)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubicloud-standard-2-arm
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: |
+        # Use the Python in Ubuntu system
+        python -m pip install --upgrade pip
+        pip install -e '.[tests]'
+    - name: Test with pytest
+      run: |
+        python -m pytest
+    - name: Test building docs
+      run: |
+        python -m pip install -r doc/requirements.txt
+        sphinx-build doc doc/html
