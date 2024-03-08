@@ -2,7 +2,7 @@
 
 ## What is it?
 
-Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
+Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets (either native or converted on-the-fly from HDF5) among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
 
 ![Figure: Caterva2 publish-subscribe](./doc/_static/Caterva2-PubSub.png)
 
@@ -21,7 +21,7 @@ Caterva2 subscribers perform on demand data access with local caching (fit for r
 A Caterva2 deployment includes:
 
 - One **broker** service to enable the communication between publishers and subscribers.
-- Several **publishers**, each one providing subscribers with access to one root and the datasets that it contains.
+- Several **publishers**, each one providing subscribers with access to one root and the datasets that it contains. The root may be a native Caterva2 directory with Blosc2 and plain files, or an HDF5 file (support for other formats may be added).
 - Several **subscribers**, each one tracking changes in multiple roots and datasets from publishers, and caching them locally for efficient reuse.
 - Several **clients**, each one asking a subscriber to track roots and datasets, and provide access to their data and metadata.
 
@@ -60,7 +60,13 @@ You may install Caterva2 in several ways:.
   python -m pip install -e .
   ```
 
-In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  For instance, to enable all extras append `[services,clients,tests]`.
+In any case, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  The following extras are supported:
+
+- `services` for running Caterva2 services (broker, publisher, subscriber)
+- `clients` to use Caterva2 client programs (command-line or terminal)
+- `hdf5` to enable serving HDF5 files as Caterva2 roots at the publisher
+- `tools` for additional utilities like `cat2import` and `cat2export` (see below)
+- `tests` if you want to run the Caterva2 test suite
 
 ### Testing
 
@@ -111,6 +117,16 @@ cat2sub &  # subscriber
 ```
 
 (To stop them later on, bring each one to the foreground with `fg` and press Ctrl+C.)
+
+### HDF5 roots
+
+If you want to try and publish your own HDF5 file as a root, you need to include the `hdf5` extra in your Caterva2 installation.  Then you may just run `cat2pub foo /path/to/your-file.h5 &`.  You can also get an example HDF5 file with some datasets by running:
+
+```sh
+python -m caterva2.services.hdf5root root-example.h5
+```
+
+You may want to test compatibility with [silx' HDF5 examples](https://www.silx.org/pub/h5web/) (`epics.h5` and `grove.h5` are quite illustrative).
 
 ### The command line client
 
@@ -198,7 +214,7 @@ All the services mentioned above (and clients, to some limited extent) may get t
 
 ## Tools
 
-Caterva2 includes a simple script to export the full group and dataset hierarchy in an HDF5 file to a new Caterva2 root directory.  You may use it like:
+Although Caterva2 allows publishing an HDF5 file directly as a root (with datasets converted to Blosc2 arrays on-the-fly), it also includes a simple script that can import its full hierarchy to a new Caterva2 root directory.  You may use it like:
 
 ```sh
 cat2import existing-hdf5-file.h5 new-caterva2-root
