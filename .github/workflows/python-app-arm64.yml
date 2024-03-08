@@ -1,6 +1,6 @@
 # This workflow will run on an external ubicloud arm64 runner on latest ubuntu (ubicloud standard)
 
-name: Python application
+name: Python application (ubuntu, arm64)
 
 on:
   push:
@@ -16,9 +16,10 @@ jobs:
     runs-on: ubicloud-standard-2-arm
 
     steps:
+    - uses: actions/checkout@v3
     - name: Install dependencies
       run: |
-        sudo apt update
+        # Use the Python in Ubuntu system
         python -m pip install --upgrade pip
         pip install -e '.[tests]'
     - name: Test with pytest
