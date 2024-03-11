@@ -109,7 +109,7 @@ class ManagedServices(Services):
         self.root = root
         self.configuration = configuration
 
-        self.data_path = self.state_dir / 'data'
+        self.data_path = self.state_dir / f'data.{root.name}'
 
         self._procs = {}
         self._setup_done = False
