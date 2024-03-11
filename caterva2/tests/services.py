@@ -42,6 +42,7 @@ running before proceeding to tests.  It has three modes of operation:
       $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
 """
 
+import collections
 import os
 import shutil
 import signal
@@ -90,6 +91,9 @@ def sub_check(conf):
     return http_service_check(conf, 'subscriber', 8002, '/api/roots')
 
 
+TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
+
+
 class Services:
     def __init__(self):  # mostly to appease QA
         pass
@@ -97,12 +101,12 @@ class Services:
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True,
-                 root_path=None, configuration=None):
+                 root=None, configuration=None):
         super().__init__()
 
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
-        self.root_path = root_path
+        self.root = root
         self.configuration = configuration
 
         self.data_path = self.state_dir / 'data'
@@ -144,13 +148,13 @@ class ManagedServices(Services):
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
 
-        if self.root_path.is_dir():
+        if self.root.source.is_dir():
             if not self.data_path.exists():
-                shutil.copytree(self.root_path, self.data_path,
+                shutil.copytree(self.root.source, self.data_path,
                                 symlinks=True)
             self.data_path.mkdir(exist_ok=True)
         elif not self.data_path.exists():
-            shutil.copy(self.root_path, self.data_path)
+            shutil.copy(self.root.source, self.data_path)
 
         self._setup_done = True
 
@@ -158,7 +162,7 @@ class ManagedServices(Services):
         self._setup()
 
         self._start_proc('bro', check=bro_check(self.configuration))
-        self._start_proc('pub', TEST_PUBLISHED_ROOT, self.data_path,
+        self._start_proc('pub', self.root.name, self.data_path,
                          check=pub_check(self.configuration))
         self._start_proc('sub', check=sub_check(self.configuration))
 
@@ -203,7 +207,8 @@ def services(examples_dir, configuration):
     srvs = (ExternalServices(configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 root_path=examples_dir,
+                                 root=TestRoot(TEST_PUBLISHED_ROOT,
+                                               examples_dir),
                                  configuration=configuration))
     try:
         srvs.start_all()
@@ -215,19 +220,20 @@ def services(examples_dir, configuration):
 
 def main():
     from . import files, conf
-    root_path = files.get_examples_dir()
+    root_source = files.get_examples_dir()
 
     if '--help' in sys.argv:
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" "
-              f"[ROOT_PATH=\"{root_path}\"]]")
+              f"[ROOT=\"{root_source}\"]]")
         return
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    root_path = Path(sys.argv[2]) if len(sys.argv) >= 3 else root_path
+    root_source = Path(sys.argv[2]) if len(sys.argv) >= 3 else root_source
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           root_path=root_path,
+                           root=TestRoot(TEST_PUBLISHED_ROOT,
+                                         root_source),
                            configuration=configuration)
     try:
         srvs.start_all()
