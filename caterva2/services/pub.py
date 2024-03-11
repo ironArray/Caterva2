@@ -19,6 +19,7 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import pubroot, srv_utils
+import caterva2.services.dirroot
 try:
     import caterva2.services.hdf5root
 except ImportError:
