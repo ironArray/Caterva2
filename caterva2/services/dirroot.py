@@ -101,3 +101,70 @@ class DirectoryRoot:
 
 
 pubroot.register_root_class(DirectoryRoot)
+
+
+def create_example_root(path):
+    """Create an example Caterva2 directory to be used as a root."""
+    import pathlib
+
+    import blosc2
+    import numpy as np
+
+    # The examples come from ``SPECS.md`` and ``root-example`` content.
+    path = pathlib.Path(path)
+    path.mkdir(parents=True)
+
+    with open(path / "README.md", "w") as f:
+        f.write("This is a simple example,\n"
+                "with several lines,\n"
+                "for showing purposes.\n")
+
+    # A SChunk containing a data buffer.
+    blosc2.SChunk(chunksize=100, data=b"Hello world!" * 100,
+                  urlpath=path / "ds-hello.b2frame", mode="w")
+
+    # A 1D array (int64).
+    a = np.arange(1000, dtype="int64")
+    blosc2.asarray(a, chunks=(100,), blocks=(10,),
+                   urlpath=path / "ds-1d.b2nd", mode="w")
+
+    # A 1D array (6-byte strings).
+    a = np.array([b'foobar'] * 1000)
+    blosc2.asarray(a, chunks=(100,), blocks=(10,),
+                   urlpath=path / "ds-1d-b.b2nd", mode="w")
+
+    (path / "dir1").mkdir()
+
+    # A 2D array (uint16).
+    a = np.arange(200, dtype="uint16").reshape(10, 20)
+    blosc2.asarray(a, chunks=(5, 5), blocks=(2, 3),
+                   urlpath=path / "dir1/ds-2d.b2nd", mode="w")
+
+    # A 3D array (float32).
+    a = np.arange(60, dtype="float32").reshape(3, 4, 5)
+    blosc2.asarray(a, chunks=(2, 3, 4), blocks=(2, 2, 2),
+                   urlpath=path / "dir1/ds-3d.b2nd", mode="w")
+
+    (path / "dir2").mkdir()
+
+    # A 4D array (complex128).
+    a = np.arange(120, dtype="complex128").reshape(2, 3, 4, 5)
+    blosc2.asarray(a + a * 1j, chunks=(1, 2, 3, 4), blocks=(1, 2, 2, 2),
+                   urlpath=path / "dir2/ds-4d.b2nd", mode="w")
+
+
+def main():
+    import os
+    import sys
+    try:
+        _, c2dpath = sys.argv
+    except ValueError:
+        prog = os.path.basename(sys.argv[0])
+        print(f"Usage: {prog} CATERVA2_DIR", file=sys.stderr)
+        sys.exit(1)
+    create_example_root(c2dpath)
+    print(f"Created example Caterva2 root: {c2dpath!r}", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
