@@ -394,25 +394,27 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     # Download and update the necessary chunks of the schunk in cache
     await partial_download(abspath, path, slice_)
 
-    # Serialization can be done either as:
-    # * a serialized NDArray
-    # * a compressed SChunk (bytes, via blosc2.compress2)
-    # * a pickled NumPy array (specially scalars and 0-dim arrays)
     array, schunk = srv_utils.open_b2(abspath)
     typesize = schunk.typesize
     if slice_:
         if array is not None:
-            data = array[slice_] if array.ndim > 0 else array[()]
+            array = array[slice_] if array.ndim > 0 else array[()]
         else:
             assert len(slice_) == 1
             slice_ = slice_[0]
             if isinstance(slice_, int):
                 # TODO: make SChunk support integer as slice
                 slice_ = slice(slice_, slice_ + 1)
-            data = schunk[slice_]
-    else:
+            schunk = schunk[slice_]
+
+    # Serialization can be done either as:
+    # * a serialized NDArray
+    # * a compressed SChunk (bytes, via blosc2.compress2)
+    # * a pickled NumPy array (specially scalars and 0-dim arrays)
+    data = array if array is not None else schunk
+    if not slice_:
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
-        data = array[()] if array is not None else schunk[:]
+        data = data[()] if array is not None else data[:]
 
     # Optimizations for small data. If too small, we pickle it instead of compressing it.
     # Some measurements have been done and it looks like this has no effect on performance.
