@@ -114,7 +114,9 @@ class ManagedServices(Services):
         self._procs = {}
         self._setup_done = False
 
-    def _start_proc(self, name, *args, check=None):
+    def _start_proc(self, name, *args, id=None, check=None):
+        service, name = name, name if id is None else f'{name}.{id}'
+
         if check is not None and check():
             raise RuntimeError(
                 f"check for service \"{name}\" succeeded before start"
@@ -122,7 +124,7 @@ class ManagedServices(Services):
 
         self._procs[name] = subprocess.Popen(
             [sys.executable,
-             '-m' + f'caterva2.services.{name}',
+             '-m' + f'caterva2.services.{service}',
              '--statedir=%s' % (self.state_dir / name),
              *args])
 
@@ -162,8 +164,8 @@ class ManagedServices(Services):
         self._setup()
 
         self._start_proc('bro', check=bro_check(self.configuration))
-        self._start_proc('pub', f'--id={self.root.name}',
-                         self.root.name, self.data_path,
+        self._start_proc('pub', self.root.name, self.data_path,
+                         id=self.root.name,
                          check=pub_check(self.configuration, self.root.name))
         self._start_proc('sub', check=sub_check(self.configuration))
 
