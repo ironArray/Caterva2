@@ -434,9 +434,10 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
         else:
             # A bytes object can still be compressed
             data = blosc2.compress2(data, typesize=typesize)
+        downloader = srv_utils.iterchunk(data)
     else:
         data = pickle.dumps(data, protocol=-1)
-    downloader = srv_utils.iterchunk(data)
+        downloader = iter((data,))
     return responses.StreamingResponse(downloader)
 
 
