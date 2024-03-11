@@ -222,4 +222,9 @@ cat2import existing-hdf5-file.h5 new-caterva2-root
 
 The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information (see also [cat2import](cat2import) in Caterva2 utilities documentation).
 
+Caterva2 also ships a complementary tool to export a Caterva root directory to an HDF5 file; see [cat2export](cat2export) in Caterva2 utilities documentation.  You may use it like:
+```sh
+cat2export existing-caterva2-root new-hdf5-file.h5
+```
+
 That's all folks!
