@@ -22,7 +22,8 @@ from .. import api_utils
 
 @pytest.fixture
 def pub_host(configuration):
-    return configuration.get('publisher.http', cat2.pub_host_default)
+    return configuration.get(
+        f'publisher.{TEST_PUBLISHED_ROOT}.http', cat2.pub_host_default)
 
 
 @pytest.fixture

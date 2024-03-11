@@ -83,8 +83,8 @@ def bro_check(conf):
     return http_service_check(conf, 'broker', 8000, '/api/roots')
 
 
-def pub_check(conf):
-    return http_service_check(conf, 'publisher', 8001, '/api/list')
+def pub_check(conf, id):
+    return http_service_check(conf, f'publisher.{id}', 8001, '/api/list')
 
 
 def sub_check(conf):
@@ -162,8 +162,9 @@ class ManagedServices(Services):
         self._setup()
 
         self._start_proc('bro', check=bro_check(self.configuration))
-        self._start_proc('pub', self.root.name, self.data_path,
-                         check=pub_check(self.configuration))
+        self._start_proc('pub', f'--id={self.root.name}',
+                         self.root.name, self.data_path,
+                         check=pub_check(self.configuration, self.root.name))
         self._start_proc('sub', check=sub_check(self.configuration))
 
     def stop_all(self):
