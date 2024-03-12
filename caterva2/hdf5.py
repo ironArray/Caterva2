@@ -79,7 +79,8 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
 def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
     def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args=None,
                             **kwds) -> blosc2.NDArray:
-        b2_args = b2_args or b2args_from_h5dset(h5_dset)
+        b2_args = (b2_args if b2_args is not None
+                   else b2args_from_h5dset(h5_dset))
         b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype,
                           **(b2_args | kwds))
         return b2_array
