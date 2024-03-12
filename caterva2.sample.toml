@@ -27,7 +27,7 @@ http = "localhost:8001"  # The ``host:port`` endpoint where the service listens 
 statedir = "_caterva2/pub"  # The directory where the service will place state files.
 loglevel = "warning"  # All service messages having this severity or worse will be logged.
 name = "foo"  # The name given to the root to be registered at the broker. This setting has no default, if it is not defined here, you need to give it to the publisher as an argument.
-root = "root-examples"  # The directory containig the datasets for the registered root.
+root = "root-examples"  # The location (directory, HDF5 file...) containing the datasets for the registered root.
 
 # Only one of these is allowed. It will be used by a publisher invoked with no ID, or it may be used by other programs to find how to connect to a publisher (``publisher.http``).
 [publisher]

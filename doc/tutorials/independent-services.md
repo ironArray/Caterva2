@@ -56,7 +56,7 @@ cat2bro
 
 ## Publishers
 
-Here we will setup at the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
+Here we will setup at the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective Caterva2 directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
 
 ```sh
 mkdir foo-root

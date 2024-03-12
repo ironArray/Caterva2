@@ -54,14 +54,18 @@ services = [
     "uvicorn",
     "watchfiles",
 ]
+# Currently used to enable HDF5 support at the publisher.
+hdf5 = [
+    "h5py",
+    "hdf5plugin",
+]
 clients = [
     "rich",
     "textual",
 ]
 tools = [
+    "caterva2[hdf5]",
     "blosc2",
-    "h5py",
-    "hdf5plugin",
     "msgpack",
 ]
 tests = [

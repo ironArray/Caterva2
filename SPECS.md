@@ -64,7 +64,7 @@ loglevel = "warning"
 
 ## Client implementation
 
-The client must be implemented in Python 3 (3.9 being the minimal supported version).  It must be a library with a command line interface that connects to a subscriber and sends commands to it.  The subscriber must be running before the client is started. If the subscriber is not running, the client must print an error message and exit. The publisher is expected to be running before the subscriber is started; if not, the subscriber will only serve its cached data.
+The client must be implemented in Python 3 (3.10 being the minimal supported version).  It must be a library with a command line interface that connects to a subscriber and sends commands to it.  The subscriber must be running before the client is started. If the subscriber is not running, the client must print an error message and exit. The publisher is expected to be running before the subscriber is started; if not, the subscriber will only serve its cached data.
 
 ### Command line interface
 

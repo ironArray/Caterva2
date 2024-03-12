@@ -10,7 +10,6 @@
 import asyncio
 import contextlib
 import logging
-import pathlib
 
 # Requirements
 import blosc2
@@ -20,6 +19,11 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import pubroot, srv_utils
+import caterva2.services.dirroot
+try:
+    import caterva2.services.hdf5root
+except ImportError:
+    pass
 
 
 logger = logging.getLogger('pub')
@@ -191,8 +195,7 @@ def main():
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
     parser.add_argument('name', nargs='?', default=conf.get('.name'))
-    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'),
-                        type=pathlib.Path)
+    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'))
     args = utils.run_parser(parser)
     if args.name is None:  # because optional positional arg w/o conf default
         raise RuntimeError(
@@ -202,7 +205,7 @@ def main():
     global broker, name, proot
     broker = args.broker
     name = args.name
-    proot = pubroot.DirectoryRoot(args.root)
+    proot = pubroot.make_root(args.root)
 
     # Init cache
     global cache

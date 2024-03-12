@@ -390,7 +390,7 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     array, schunk = srv_utils.open_b2(abspath)
     typesize = schunk.typesize
     if slice_:
-        if array:
+        if array is not None:
             array = array[slice_] if array.ndim > 0 else array[()]
         else:
             assert len(slice_) == 1
@@ -407,7 +407,7 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     data = array if array is not None else schunk
     if not slice_:
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
-        data = data[:]
+        data = data[()] if array is not None else data[:]
 
     # Optimizations for small data. If too small, we pickle it instead of compressing it.
     # Some measurements have been done and it looks like this has no effect on performance.
@@ -429,9 +429,10 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
         else:
             # A bytes object can still be compressed
             data = blosc2.compress2(data, typesize=typesize)
+        downloader = srv_utils.iterchunk(data)
     else:
         data = pickle.dumps(data, protocol=-1)
-    downloader = srv_utils.iterchunk(data)
+        downloader = iter((data,))
     return responses.StreamingResponse(downloader)
 
 
