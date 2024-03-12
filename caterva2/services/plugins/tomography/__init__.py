@@ -20,11 +20,14 @@ contenttype = 'tomography'
 
 
 cache = None
+partial_download = None
 
-def init(sub_cache):
+def init(sub_cache, f):
     print('INIT', sub_cache)
     global cache
     cache = sub_cache
+    global partial_download
+    partial_download = f
 
 @app.get("/display/{path:path}", response_class=HTMLResponse)
 def display(
@@ -55,6 +58,7 @@ async def image_file(
 ):
 
     abspath = srv_utils.cache_lookup(cache, cache / path)
+    await partial_download(abspath, str(path))
     arr = blosc2.open(abspath)
 
     img = arr[i,:]

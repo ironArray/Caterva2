@@ -620,7 +620,7 @@ def main():
     # Register display plugins
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(cache)
+    tomography.init(cache, partial_download)
 
     # Run
     global host, port

@@ -1,4 +1,4 @@
-.PHONY: install bro pub sub tests-start tests-run test-stop
+.PHONY: install bro pub-dir pub-color pub-gris sub
 
 BIN = ./venv/bin
 
@@ -12,11 +12,14 @@ install:
 bro:
 	${BIN}/python -m caterva2.services.bro --statedir=var/bro
 
-pub:
-	${BIN}/python -m caterva2.services.pub --statedir=var/pub foo root-example --http=localhost:8010
+pub-dir:
+	${BIN}/python -m caterva2.services.pub --statedir=var/pub-dir foo root-example --http=localhost:8010
 
-pub2:
-	${BIN}/python -m caterva2.services.pub --statedir=var/pub bar root-example --http=localhost:8011
+pub-color:
+	${BIN}/python -m caterva2.services.pub --statedir=var/pub-color color numbers-default.h5 --http=localhost:8011
+
+pub-gris:
+	${BIN}/python -m caterva2.services.pub --statedir=var/pub-gris gris numbers-10x-gris-3d.h5 --http=localhost:8012
 
 sub:
 	${BIN}/python -m caterva2.services.sub --statedir=var/sub
