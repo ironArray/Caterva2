@@ -11,8 +11,10 @@ from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
 import blosc2
+from blosc2 import blosc2_ext
 import h5py
 import hdf5plugin  # enable Blosc2 support in HDF5
+import msgpack
 import numpy
 
 
@@ -74,6 +76,29 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     b2_args['dparams'] = b2_schunk.dparams
 
     return b2_args
+
+
+def b2attrs_from_h5dset(
+        h5_dset: h5py.Dataset,
+        on_success: Callable[[h5py.Dataset, str], None]=None,
+        on_error: Callable[[h5py.Dataset, str, Exception], None]=None) -> (
+            Mapping[str, object]):
+    """Get msgpack-encoded attributes from the given HDF5 dataset."""
+    b2_attrs = {}
+    for (aname, avalue) in h5_dset.attrs.items():
+        try:
+            # This small workaround avoids Blosc2's strict type packing,
+            # so we can handle value subclasses like `numpy.bytes_`
+            # (e.g. for Fortran-style string attributes added by PyTables).
+            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
+        except Exception as e:
+            if on_error:
+                on_error(h5_dset, aname, e)
+        else:
+            b2_attrs[aname] = pvalue
+            if on_success:
+                on_success(h5_dset, aname)
+    return b2_attrs
 
 
 def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):

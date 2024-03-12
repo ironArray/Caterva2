@@ -35,11 +35,8 @@ import sys
 
 import blosc2
 import h5py
-import msgpack
 
 from collections.abc import Callable, Iterator, Mapping
-
-from blosc2 import blosc2_ext
 
 from .. import hdf5
 
@@ -107,18 +104,17 @@ def copy_dataset(name: str, node: h5py.Dataset,
                       f"as Blosc2 ND array: {name!r} -> {e!r}")
         return
 
-    b2_attrs = b2_schunk.vlmeta
-    for (aname, avalue) in node.attrs.items():
-        try:
-            # This small workaround avoids Blosc2's strict type packing,
-            # so we can handle value subclasses like `numpy.bytes_`
-            # (e.g. for Fortran-style string attributes added by PyTables).
-            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
-            b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric
-            logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
-        except Exception as e:
-            logging.error(f"Failed to export dataset attribute "
-                          f"{aname!r}: {name!r} -> {e!r}")
+    b2_attrs = hdf5.b2attrs_from_h5dset(
+        node,
+        on_success=lambda n, a: logging.info(
+            f"Translated dataset attribute {a!r}: {n.name!r}"),
+        on_error=lambda n, a, e: logging.error(
+            f"Failed to translate dataset attribute "
+            f"{a!r}: {n.name!r} -> {e!r}"),
+    )
+    b2_vlmeta = b2_schunk.vlmeta
+    for (aname, avalue) in b2_attrs.items():
+        b2_vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
 
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 
