@@ -73,7 +73,9 @@ tests = [
     "caterva2[services]",
     "pytest<8",
 ]
-
+plugins = [
+    "pillow",
+]
 [tool.hatch.build.targets.wheel]
 only-include = ["caterva2", "root-example"]
 

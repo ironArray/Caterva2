@@ -2,7 +2,6 @@ import io
 import pathlib
 
 import blosc2
-from PIL import Image
 
 from fastapi import FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
@@ -56,6 +55,7 @@ async def image_file(
     # Query parameters
     i: int
 ):
+    from PIL import Image
 
     abspath = srv_utils.cache_lookup(cache, cache / path)
     await partial_download(abspath, str(path))
