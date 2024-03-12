@@ -102,12 +102,19 @@ def b2attrs_from_h5dset(
 
 
 def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
-    def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args=None,
+    def _b2make_from_h5dset(h5_dset: h5py.Dataset,
+                            b2_args=None, b2_attrs=None,
                             **kwds) -> blosc2.NDArray:
         b2_args = (b2_args if b2_args is not None
                    else b2args_from_h5dset(h5_dset))
+        b2_attrs = (b2_attrs if b2_attrs is not None
+                    else b2attrs_from_h5dset(h5_dset))
+
         b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype,
                           **(b2_args | kwds))
+        b2_vlmeta = b2_array.schunk.vlmeta
+        for (aname, avalue) in b2_attrs.items():
+            b2_vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
         return b2_array
     return _b2make_from_h5dset
 
