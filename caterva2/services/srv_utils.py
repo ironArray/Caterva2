@@ -187,8 +187,11 @@ def init_b2nd(metadata, urlpath=None):
             urlpath.unlink()
 
     dtype = np.dtype(metadata.dtype)
-    return blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
-                         chunks=metadata.chunks, blocks=metadata.blocks)
+    arr = blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
+                        chunks=metadata.chunks, blocks=metadata.blocks)
+    for k, v in metadata.schunk.vlmeta.items():
+        arr.schunk.vlmeta[k] = v
+    return arr
 
 
 def init_b2frame(metadata, urlpath=None):

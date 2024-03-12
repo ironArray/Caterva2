@@ -33,7 +33,7 @@ class SChunk(pydantic.BaseModel, extra=pydantic.Extra.allow):
 #   meta
     nbytes: int
     urlpath: str
-#   vlmeta
+    vlmeta: dict = {}
     nchunks: int
 
 

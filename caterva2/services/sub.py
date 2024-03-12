@@ -569,12 +569,16 @@ async def html_path_info(
     abspath = srv_utils.cache_lookup(cache, filepath)
     meta = srv_utils.read_metadata(abspath)
 
-    contenttype = 'tomography'  # FIXME
+    #meta.schunk.vlmeta['contenttype'] = 'tomography'
+    contenttype = meta.schunk.vlmeta.get('contenttype')
+
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
             "name": plugin.name
         }
+    else:
+        display = None
 
     context = {"path": path, "meta": meta, "display": display}
     response = templates.TemplateResponse(request, "info.html", context=context)
