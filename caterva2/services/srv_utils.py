@@ -210,6 +210,8 @@ def init_b2frame(metadata, urlpath=None):
     )
     sc.fill_special(metadata.nbytes / sc.typesize,
                     special_value=blosc2.SpecialValue.UNINIT)
+    for k, v in metadata.schunk.vlmeta.items():
+        sc.vlmeta[k] = v
     return sc
 
 
