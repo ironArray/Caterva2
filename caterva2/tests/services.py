@@ -53,6 +53,8 @@ import time
 import httpx
 import pytest
 
+import caterva2 as cat2
+
 from pathlib import Path
 
 
@@ -146,15 +148,16 @@ class ManagedServices(Services):
         self._setup()
         conf = self.configuration
 
-        bro_ep = conf.get('broker.http', 'localhost:8000')
+        bro_ep = conf.get('broker.http', cat2.bro_host_default)
         self._start_proc('bro', check=make_get_http(bro_ep, '/api/roots'))
 
-        pub_ep = conf.get(f'publisher.{self.root.name}.http', 'localhost:8001')
+        pub_ep = conf.get(f'publisher.{self.root.name}.http',
+                          cat2.pub_host_default)
         self._start_proc('pub', self.root.name, self.data_path,
                          id=self.root.name,
                          check=make_get_http(pub_ep, '/api/list'))
 
-        sub_ep = conf.get('subscriber.http', 'localhost:8002')
+        sub_ep = conf.get('subscriber.http', cat2.sub_host_default)
         self._start_proc('sub', check=make_get_http(sub_ep, '/api/roots'))
 
     def stop_all(self):
