@@ -74,6 +74,7 @@ def make_get_http(host, path='/'):
         except httpx.ConnectError:
             return False
     check.__name__ = f'get_http_{host}'  # more descriptive
+    check.host = host  # to get final value
     return check
 
 
@@ -165,19 +166,12 @@ class ManagedServices(Services):
 
     def start_all(self):
         self._setup()
-        conf = self.configuration
 
-        bro_ep = conf.get('broker.http', cat2.bro_host_default)
-        self._start_proc('bro', check=make_get_http(bro_ep, '/api/roots'))
-
-        pub_ep = conf.get(f'publisher.{self.root.name}.http',
-                          cat2.pub_host_default)
+        self._start_proc('bro', check=bro_check(self.configuration))
         self._start_proc('pub', self.root.name, self.data_path,
                          id=self.root.name,
-                         check=make_get_http(pub_ep, '/api/list'))
-
-        sub_ep = conf.get('subscriber.http', cat2.sub_host_default)
-        self._start_proc('sub', check=make_get_http(sub_ep, '/api/roots'))
+                         check=pub_check(self.root.name, self.configuration))
+        self._start_proc('sub', check=sub_check(self.configuration))
 
     def stop_all(self):
         for proc in self._procs.values():
