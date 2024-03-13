@@ -80,8 +80,8 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
 
 def b2attrs_from_h5dset(
         h5_dset: h5py.Dataset,
-        attr_ok: Callable[[h5py.Dataset, str], None]=None,
-        attr_err: Callable[[h5py.Dataset, str, Exception], None]=None) -> (
+        attr_ok: Callable[[h5py.Dataset, str], None] = None,
+        attr_err: Callable[[h5py.Dataset, str, Exception], None] = None) -> (
             Mapping[str, object]):
     """Get msgpack-encoded attributes from the given HDF5 dataset.
 
