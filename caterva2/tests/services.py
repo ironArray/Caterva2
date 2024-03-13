@@ -61,7 +61,7 @@ TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_PUBLISHED_ROOT = 'foo'
 
 
-def get_http(host, path='/'):
+def make_get_http(host, path='/'):
     def check():
         url = f'http://{host}{path}'
         try:
@@ -71,24 +71,6 @@ def get_http(host, path='/'):
             return False
     check.__name__ = f'get_http_{host}'  # more descriptive
     return check
-
-
-def http_service_check(conf, conf_sect, def_local_port, path):
-    return get_http(conf.get(f'{conf_sect}.http',
-                             f'localhost:{def_local_port:d}'),
-                    path)
-
-
-def bro_check(conf):
-    return http_service_check(conf, 'broker', 8000, '/api/roots')
-
-
-def pub_check(conf, id):
-    return http_service_check(conf, f'publisher.{id}', 8001, '/api/list')
-
-
-def sub_check(conf):
-    return http_service_check(conf, 'subscriber', 8002, '/api/roots')
 
 
 TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
@@ -162,12 +144,18 @@ class ManagedServices(Services):
 
     def start_all(self):
         self._setup()
+        conf = self.configuration
 
-        self._start_proc('bro', check=bro_check(self.configuration))
+        bro_ep = conf.get('broker.http', 'localhost:8000')
+        self._start_proc('bro', check=make_get_http(bro_ep, '/api/roots'))
+
+        pub_ep = conf.get(f'publisher.{self.root.name}.http', 'localhost:8001')
         self._start_proc('pub', self.root.name, self.data_path,
                          id=self.root.name,
-                         check=pub_check(self.configuration, self.root.name))
-        self._start_proc('sub', check=sub_check(self.configuration))
+                         check=make_get_http(pub_ep, '/api/list'))
+
+        sub_ep = conf.get('subscriber.http', 'localhost:8002')
+        self._start_proc('sub', check=make_get_http(sub_ep, '/api/roots'))
 
     def stop_all(self):
         for proc in self._procs.values():
