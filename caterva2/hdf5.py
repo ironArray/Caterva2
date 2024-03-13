@@ -106,6 +106,18 @@ def b2attrs_from_h5dset(
 
 
 def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
+    """Get a factory to create a Blosc2 array compatible with an HDF dataset.
+
+    The result may be called with the dataset and optional Blosc2 creation
+    arguments and msgpack-encoded attributes (which will be added to the
+    array's variable-length metadata), plus other keyword arguments.  The
+    dataset-compatible Blosc2 array will be created using the `b2make`
+    callable.
+
+    If the aforementioned optional parameters are not given, they will be
+    extracted anew from the HDF5 dataset (which may be an expensive operation
+    depending on the case).
+    """
     def _b2make_from_h5dset(h5_dset: h5py.Dataset,
                             b2_args=None, b2_attrs=None,
                             **kwds) -> blosc2.NDArray:
