@@ -35,11 +35,8 @@ import sys
 
 import blosc2
 import h5py
-import msgpack
 
 from collections.abc import Callable, Iterator, Mapping
-
-from blosc2 import blosc2_ext
 
 from .. import hdf5
 
@@ -66,9 +63,9 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     """Get empty Blosc2 array maker and compressed chunk iterator from `node`.
 
     The first returned value can be called to create an empty Blosc2 array
-    with prepared construction arguments extracted from the HDF5 dataset
-    `node`.  By default it is created without storage, but that may be changed
-    by passing additional keyword arguments like ``urlpath``.
+    with prepared construction arguments and attributes extracted from the
+    HDF5 dataset `node`.  By default it is created without storage, but that
+    may be changed by passing additional keyword arguments like ``urlpath``.
 
     The second returned value is an iterator that yields compressed Blosc2
     chunks compatible with the construction arguments used by the previous
@@ -76,10 +73,18 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     order in a Blosc2 super-chunk without further processing.
     """
     b2_args = hdf5.b2args_from_h5dset(node)
+    b2_attrs = hdf5.b2attrs_from_h5dset(
+        node,
+        attr_ok=lambda n, a: logging.info(
+            f"Translated dataset attribute {a!r}: {n.name!r}"),
+        attr_err=lambda n, a, e: logging.error(
+            f"Failed to translate dataset attribute "
+            f"{a!r}: {n.name!r} -> {e!r}"),
+    )
     _, b2iterchunks = hdf5.b2chunkers_from_h5dset(node, b2_args)
 
     def b2_make_empty(**kwds) -> blosc2.NDArray:
-        return hdf5.b2empty_from_h5dset(node, b2_args, **kwds)
+        return hdf5.b2empty_from_h5dset(node, b2_args, b2_attrs, **kwds)
 
     return b2_make_empty, b2iterchunks()
 
@@ -106,19 +111,6 @@ def copy_dataset(name: str, node: h5py.Dataset,
         logging.error(f"Failed to save dataset "
                       f"as Blosc2 ND array: {name!r} -> {e!r}")
         return
-
-    b2_attrs = b2_schunk.vlmeta
-    for (aname, avalue) in node.attrs.items():
-        try:
-            # This small workaround avoids Blosc2's strict type packing,
-            # so we can handle value subclasses like `numpy.bytes_`
-            # (e.g. for Fortran-style string attributes added by PyTables).
-            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
-            b2_attrs.set_vlmeta(aname, pvalue, typesize=1)  # non-numeric
-            logging.info(f"Exported dataset attribute {aname!r}: {name!r}")
-        except Exception as e:
-            logging.error(f"Failed to export dataset attribute "
-                          f"{aname!r}: {name!r} -> {e!r}")
 
     logging.info(f"Exported dataset: {name!r} => {str(b2_path)!r}")
 

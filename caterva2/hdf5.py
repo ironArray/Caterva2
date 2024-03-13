@@ -1,9 +1,20 @@
+###############################################################################
+# Caterva2 - On demand access to remote Blosc2 data repositories
+#
+# Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
+# https://www.blosc.org
+# License: GNU Affero General Public License v3.0
+# See LICENSE.txt for details about copyright and rights to use.
+###############################################################################
+
 from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
 import blosc2
+from blosc2 import blosc2_ext
 import h5py
 import hdf5plugin  # enable Blosc2 support in HDF5
+import msgpack
 import numpy
 
 
@@ -67,12 +78,59 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     return b2_args
 
 
+def b2attrs_from_h5dset(
+        h5_dset: h5py.Dataset,
+        attr_ok: Callable[[h5py.Dataset, str], None] = None,
+        attr_err: Callable[[h5py.Dataset, str, Exception], None] = None) -> (
+            Mapping[str, object]):
+    """Get msgpack-encoded attributes from the given HDF5 dataset.
+
+    If given, call `attr_ok` or `attr_err` on attribute translation success or
+    error, respectively.
+    """
+    b2_attrs = {}
+    for (aname, avalue) in h5_dset.attrs.items():
+        try:
+            # This small workaround avoids Blosc2's strict type packing,
+            # so we can handle value subclasses like `numpy.bytes_`
+            # (e.g. for Fortran-style string attributes added by PyTables).
+            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
+        except Exception as e:
+            if attr_err:
+                attr_err(h5_dset, aname, e)
+        else:
+            b2_attrs[aname] = pvalue
+            if attr_ok:
+                attr_ok(h5_dset, aname)
+    return b2_attrs
+
+
 def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
-    def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args=None,
+    """Get a factory to create a Blosc2 array compatible with an HDF dataset.
+
+    The result may be called with the dataset and optional Blosc2 creation
+    arguments and msgpack-encoded attributes (which will be added to the
+    array's variable-length metadata), plus other keyword arguments.  The
+    dataset-compatible Blosc2 array will be created using the `b2make`
+    callable.
+
+    If the aforementioned optional parameters are not given, they will be
+    extracted anew from the HDF5 dataset (which may be an expensive operation
+    depending on the case).
+    """
+    def _b2make_from_h5dset(h5_dset: h5py.Dataset,
+                            b2_args=None, b2_attrs=None,
                             **kwds) -> blosc2.NDArray:
-        b2_args = b2_args or b2args_from_h5dset(h5_dset)
+        b2_args = (b2_args if b2_args is not None
+                   else b2args_from_h5dset(h5_dset))
+        b2_attrs = (b2_attrs if b2_attrs is not None
+                    else b2attrs_from_h5dset(h5_dset))
+
         b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype,
                           **(b2_args | kwds))
+        b2_vlmeta = b2_array.schunk.vlmeta
+        for (aname, avalue) in b2_attrs.items():
+            b2_vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
         return b2_array
     return _b2make_from_h5dset
 
