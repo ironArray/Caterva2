@@ -65,6 +65,13 @@ class HDF5Root:
         return _getb2args
 
     @functools.cached_property
+    def _b2attrs_from_h5dset(self):
+        @functools.cache  # TODO: limit size?
+        def _getb2attrs(dset: h5py.Dataset) -> Mapping[str, object]:
+            return hdf5.b2attrs_from_h5dset(dset)
+        return _getb2attrs
+
+    @functools.cached_property
     def _b2chunkers_from_h5dset(self):
         @functools.lru_cache(maxsize=_MAX_CACHED_CHUNKERS)  # only hot datasets
         def _getb2chunkers(dset: h5py.Dataset) -> (
@@ -76,6 +83,7 @@ class HDF5Root:
 
     def _clear_caches(self):
         self._b2args_from_h5dset.cache_clear()
+        self._b2attrs_from_h5dset.cache_clear()
         self._b2chunkers_from_h5dset.cache_clear()
 
     def walk_dsets(self) -> Iterator[Path]:
@@ -118,7 +126,7 @@ class HDF5Root:
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         dset = self._path_to_dset(relpath)
         b2_args = self._b2args_from_h5dset(dset)
-        b2_attrs = hdf5.b2attrs_from_h5dset(dset)  # TODO: cache?
+        b2_attrs = self._b2attrs_from_h5dset(dset)
         b2_array = hdf5.b2uninit_from_h5dset(dset, b2_args, b2_attrs)
         return srv_utils.read_metadata(b2_array)
 
