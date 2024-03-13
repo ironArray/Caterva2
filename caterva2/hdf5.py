@@ -80,10 +80,14 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
 
 def b2attrs_from_h5dset(
         h5_dset: h5py.Dataset,
-        on_success: Callable[[h5py.Dataset, str], None]=None,
-        on_error: Callable[[h5py.Dataset, str, Exception], None]=None) -> (
+        attr_ok: Callable[[h5py.Dataset, str], None]=None,
+        attr_err: Callable[[h5py.Dataset, str, Exception], None]=None) -> (
             Mapping[str, object]):
-    """Get msgpack-encoded attributes from the given HDF5 dataset."""
+    """Get msgpack-encoded attributes from the given HDF5 dataset.
+
+    If given, call `attr_ok` or `attr_err` on attribute translation success or
+    error, respectively.
+    """
     b2_attrs = {}
     for (aname, avalue) in h5_dset.attrs.items():
         try:
@@ -92,12 +96,12 @@ def b2attrs_from_h5dset(
             # (e.g. for Fortran-style string attributes added by PyTables).
             pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
         except Exception as e:
-            if on_error:
-                on_error(h5_dset, aname, e)
+            if attr_err:
+                attr_err(h5_dset, aname, e)
         else:
             b2_attrs[aname] = pvalue
-            if on_success:
-                on_success(h5_dset, aname)
+            if attr_ok:
+                attr_ok(h5_dset, aname)
     return b2_attrs
 
 

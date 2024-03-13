@@ -75,9 +75,9 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
     b2_args = hdf5.b2args_from_h5dset(node)
     b2_attrs = hdf5.b2attrs_from_h5dset(
         node,
-        on_success=lambda n, a: logging.info(
+        attr_ok=lambda n, a: logging.info(
             f"Translated dataset attribute {a!r}: {n.name!r}"),
-        on_error=lambda n, a, e: logging.error(
+        attr_err=lambda n, a, e: logging.error(
             f"Failed to translate dataset attribute "
             f"{a!r}: {n.name!r} -> {e!r}"),
     )
