@@ -44,6 +44,7 @@ running before proceeding to tests.  It has three modes of operation:
 
 import collections
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -215,20 +216,24 @@ def services(examples_dir, configuration):
 
 def main():
     from . import files, conf
-    root_source = files.get_examples_dir()
 
+    root = TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())
     if '--help' in sys.argv:
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" "
-              f"[ROOT=\"{root_source}\"]]")
+              f"[ROOT=\"{root.name}={root.source}\"]]")
         return
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
-    root_source = Path(sys.argv[2]) if len(sys.argv) >= 3 else root_source
+    if len(sys.argv) >= 3:
+        rname, rsource = re.match(r'(?:(.+?)=)?(.+)',  # ``[name=]source``
+                                  sys.argv[2]).groups()
+        root = TestRoot(rname if rname else TEST_DEFAULT_ROOT,
+                        Path(rsource))
+
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           root=TestRoot(TEST_DEFAULT_ROOT,
-                                         root_source),
+                           root=root,
                            configuration=configuration)
     try:
         srvs.start_all()
