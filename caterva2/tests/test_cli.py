@@ -15,13 +15,13 @@ import sys
 
 import pytest
 
-from .services import TEST_PUBLISHED_ROOT
+from .services import TEST_CATERVA2_ROOT
 
 
 @pytest.fixture
 def pub_host(configuration):
     return configuration.get(
-        f'publisher.{TEST_PUBLISHED_ROOT}.http', cat2.pub_host_default)
+        f'publisher.{TEST_CATERVA2_ROOT}.http', cat2.pub_host_default)
 
 
 def cli(args, binary=False) -> str or dict:
@@ -37,25 +37,25 @@ def cli(args, binary=False) -> str or dict:
 
 def test_roots(services, pub_host):
     roots = cli(['roots'])
-    assert roots[TEST_PUBLISHED_ROOT]['name'] == TEST_PUBLISHED_ROOT
-    assert roots[TEST_PUBLISHED_ROOT]['http'] == pub_host
+    assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
+    assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
 def test_url(services, pub_host):
-    out = cli(['url', TEST_PUBLISHED_ROOT])
+    out = cli(['url', TEST_CATERVA2_ROOT])
     assert out == [f'http://{pub_host}']
 
 
 def test_subscribe(services):
     # Subscribe once
-    out = cli(['subscribe', TEST_PUBLISHED_ROOT])
+    out = cli(['subscribe', TEST_CATERVA2_ROOT])
     assert out == 'Ok'
 
     # Subscribe again, should be a noop
-    out = cli(['subscribe', TEST_PUBLISHED_ROOT])
+    out = cli(['subscribe', TEST_CATERVA2_ROOT])
     assert out == 'Ok'
 
     # Show
-    a = cli(['show', f'{TEST_PUBLISHED_ROOT}/ds-1d.b2nd'], binary=True)
-    b = cli(['show', f'{TEST_PUBLISHED_ROOT}/ds-1d.b2nd'], binary=True)
+    a = cli(['show', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], binary=True)
+    b = cli(['show', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], binary=True)
     assert a == b

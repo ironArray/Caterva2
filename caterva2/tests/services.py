@@ -60,7 +60,8 @@ from pathlib import Path
 
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
-TEST_PUBLISHED_ROOT = 'foo'
+TEST_DEFAULT_ROOT = 'foo'
+TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
 
 
 def make_get_http(host, path='/'):
@@ -201,7 +202,7 @@ def services(examples_dir, configuration):
     srvs = (ExternalServices(configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 root=TestRoot(TEST_PUBLISHED_ROOT,
+                                 root=TestRoot(TEST_CATERVA2_ROOT,
                                                examples_dir),
                                  configuration=configuration))
     try:
@@ -226,7 +227,7 @@ def main():
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           root=TestRoot(TEST_PUBLISHED_ROOT,
+                           root=TestRoot(TEST_DEFAULT_ROOT,
                                          root_source),
                            configuration=configuration)
     try:
