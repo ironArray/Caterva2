@@ -77,6 +77,23 @@ def make_get_http(host, path='/'):
     return check
 
 
+def http_service_check(conf, conf_sect, def_host, path):
+    return make_get_http(conf.get(f'{conf_sect}.http', def_host),
+                         path)
+
+
+def bro_check(conf, def_host=cat2.bro_host_default):
+    return http_service_check(conf, 'broker', def_host, '/api/roots')
+
+
+def pub_check(id, conf, def_host=cat2.pub_host_default):
+    return http_service_check(conf, f'publisher.{id}', def_host, '/api/list')
+
+
+def sub_check(conf, def_host=cat2.sub_host_default):
+    return http_service_check(conf, 'subscriber', def_host, '/api/roots')
+
+
 TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
 
 
@@ -177,10 +194,13 @@ class ManagedServices(Services):
 
 
 class ExternalServices(Services):
-    def __init__(self, configuration=None):
+    def __init__(self, root=None, configuration=None):
         super().__init__()
+        self.root = root
         self.configuration = conf = configuration
-        self._checks = [bro_check(conf), pub_check(conf), sub_check(conf)]
+        self._checks = [bro_check(conf),
+                        pub_check(root.name, conf),
+                        sub_check(conf)]
 
     def start_all(self):
         failed = [check.__name__ for check in self._checks if not check()]
@@ -200,11 +220,12 @@ def services(examples_dir, configuration):
     # TODO: Consider using a temporary directory to avoid
     # polluting the current directory with test files
     # and tests being influenced by the presence of a configuration file.
-    srvs = (ExternalServices(configuration=configuration)
+    root = TestRoot(TEST_CATERVA2_ROOT, examples_dir)
+    srvs = (ExternalServices(root=root,
+                             configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 root=TestRoot(TEST_CATERVA2_ROOT,
-                                               examples_dir),
+                                 root=root,
                                  configuration=configuration))
     try:
         srvs.start_all()
