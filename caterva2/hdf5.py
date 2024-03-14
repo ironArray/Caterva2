@@ -11,7 +11,6 @@ from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
 import blosc2
-from blosc2 import blosc2_ext
 import h5py
 import hdf5plugin  # enable Blosc2 support in HDF5
 import msgpack
@@ -94,7 +93,9 @@ def b2attrs_from_h5dset(
             # This small workaround avoids Blosc2's strict type packing,
             # so we can handle value subclasses like `numpy.bytes_`
             # (e.g. for Fortran-style string attributes added by PyTables).
-            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
+            # TODO: However, ad hoc Blosc2 tuple coding is not used either
+            # (custom encoding requires ``strict_types=True``).
+            pvalue = msgpack.packb(avalue)
         except Exception as e:
             if attr_err:
                 attr_err(h5_dset, aname, e)
