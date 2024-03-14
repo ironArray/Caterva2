@@ -21,7 +21,7 @@ files use a default chunk size.  Arrays result in typed multidimensional
 datasets, while the rest result in flat datasets of bytes.  Currently, all
 exported datasets use some default Blosc2 compression parameters.
 
-Warning: For the moment, the data in each file and dataset is read and
+Warning: For the moment, the data in plain files dataset is read and
 decompressed into memory in its entirety.
 
 Datasets or attributes which are unsupported or fail to be converted are
