@@ -213,4 +213,9 @@ def test_vlmeta(name, services, sub_host):
     ds = myroot[name]
     schunk_meta = ds.meta.get('schunk', ds.meta)
     assert ds.vlmeta is schunk_meta['vlmeta']
-    # TODO: check for particular values in file
+
+
+def test_vlmeta_data(services, sub_host):
+    myroot = cat2.Root(TEST_PUBLISHED_ROOT, host=sub_host)
+    ds = myroot['ds-sc-attr.b2nd']
+    assert ds.vlmeta == dict(a=1, b="foo", c=123.456)

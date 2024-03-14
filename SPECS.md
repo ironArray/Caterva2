@@ -187,8 +187,15 @@ You can find an example of a data root in the `root-example` folder.  It contain
 
 - `ds-1d-b.b2nd`: A 1D array (6-byte strings). Constructed as:
 
-      a = np.array([b'foobar'] * 1000)
+      a = np.array([b"foobar"] * 1000)
       blosc2.asarray(a, chunks=(100,), blocks=(10,), urlpath="ds-1d-b.b2nd", mode="w")
+
+- `ds-sc-attr.b2nd`: A scalar (string) with variable-length metalayers (user attributes). Constructed as:
+
+      a = np.str_("foobar")
+      b = blosc2.asarray(a, urlpath=path / "ds-sc-attr.b2nd", mode="w")
+      for k, v in dict(a=1, b="foo", c=123.456).items():
+          b.schunk.vlmeta[k] = v
 
 - `dir1/ds-2d.b2nd`: A 2D array (uint16).  Constructed as:
 

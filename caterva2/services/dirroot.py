@@ -132,9 +132,15 @@ def create_example_root(path):
                    urlpath=path / "ds-1d.b2nd", mode="w")
 
     # A 1D array (6-byte strings).
-    a = np.array([b'foobar'] * 1000)
+    a = np.array([b"foobar"] * 1000)
     blosc2.asarray(a, chunks=(100,), blocks=(10,),
                    urlpath=path / "ds-1d-b.b2nd", mode="w")
+
+    # A scalar (string) with variable-length metalayers (user attributes).
+    a = np.str_("foobar")
+    b = blosc2.asarray(a, urlpath=path / "ds-sc-attr.b2nd", mode="w")
+    for k, v in dict(a=1, b="foo", c=123.456).items():
+        b.schunk.vlmeta[k] = v
 
     (path / "dir1").mkdir()
 
