@@ -68,7 +68,10 @@ class DirectoryRoot:
         return abspath
 
     def exists_dset(self, relpath: Path) -> bool:
-        abspath = self._rel_to_abs(relpath)
+        try:
+            abspath = self._rel_to_abs(relpath)
+        except pubroot.NoSuchDatasetError:
+            return False
         return abspath.is_file()
 
     def get_dset_etag(self, relpath: Path) -> str:
