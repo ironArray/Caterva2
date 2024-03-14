@@ -203,3 +203,14 @@ def test_download_regular_file(services, examples_dir, sub_host):
     b = blosc2.schunk_from_cframe(data.content)
     # TODO: why do we need .decode() here?
     assert a[:] == b[:].decode()
+
+
+@pytest.mark.parametrize("name", ['ds-1d.b2nd',
+                                  'ds-hello.b2frame',
+                                  'README.md'])
+def test_vlmeta(name, services, sub_host):
+    myroot = cat2.Root(TEST_PUBLISHED_ROOT, host=sub_host)
+    ds = myroot[name]
+    schunk_meta = ds.meta.get('schunk', ds.meta)
+    assert ds.vlmeta is schunk_meta['vlmeta']
+    # TODO: check for particular values in file

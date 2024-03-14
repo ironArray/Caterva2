@@ -10,6 +10,7 @@
 This module provides a Python API to Caterva2.
 """
 
+import functools
 import pathlib
 
 from caterva2 import api_utils
@@ -223,6 +224,26 @@ class File:
 
     def __repr__(self):
         return f'<File: {self.path}>'
+
+    @functools.cached_property
+    def vlmeta(self):
+        """
+        Access variable-length metalayers (i.e. user attributes) for a file.
+
+        Examples
+        --------
+        >>> root = cat2.Root('foo')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.vlmeta
+        {}
+
+        Returns
+        -------
+        dict
+            The mapping of metalayer names to their respective values.
+        """
+        schunk_meta = self.meta.get('schunk', self.meta)
+        return schunk_meta.get('vlmeta', {})
 
     def get_download_url(self):
         """
