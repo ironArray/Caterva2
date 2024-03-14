@@ -11,7 +11,6 @@ from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
 import blosc2
-from blosc2 import blosc2_ext
 import h5py
 import hdf5plugin  # enable Blosc2 support in HDF5
 import msgpack
@@ -78,6 +77,23 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     return b2_args
 
 
+def _msgpack_h5attr(obj):
+    if isinstance(obj, tuple):  # ad hoc Blosc2 tuple handling
+        return ['__tuple__', *obj]
+
+    if isinstance(obj, h5py.Empty):
+        if obj.dtype.kind not in ['S', 'U']:  # not strings
+            # This drops object type but is probably less dangerous
+            # than using an actual zero value.
+            return None
+        obj = obj.dtype.type()  # use empty value of that type
+
+    if isinstance(obj, (numpy.generic, numpy.ndarray)):
+        return obj.tolist()
+
+    return obj
+
+
 def b2attrs_from_h5dset(
         h5_dset: h5py.Dataset,
         attr_ok: Callable[[h5py.Dataset, str], None] = None,
@@ -85,16 +101,22 @@ def b2attrs_from_h5dset(
             Mapping[str, object]):
     """Get msgpack-encoded attributes from the given HDF5 dataset.
 
+    NumPy and empty attribute values are first translated into native Python
+    values.
+
     If given, call `attr_ok` or `attr_err` on attribute translation success or
     error, respectively.
     """
     b2_attrs = {}
     for (aname, avalue) in h5_dset.attrs.items():
         try:
-            # This small workaround avoids Blosc2's strict type packing,
-            # so we can handle value subclasses like `numpy.bytes_`
-            # (e.g. for Fortran-style string attributes added by PyTables).
-            pvalue = msgpack.packb(avalue, default=blosc2_ext.encode_tuple)
+            # This workaround allows NumPy objects
+            # and converts them to similar native Python objects
+            # which can be encoded by plain msgpack.
+            # Of course, some typing information is lost in the process,
+            # but the result is portable.
+            pvalue = msgpack.packb(avalue, default=_msgpack_h5attr,
+                                   strict_types=True)
         except Exception as e:
             if attr_err:
                 attr_err(h5_dset, aname, e)

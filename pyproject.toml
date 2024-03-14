@@ -58,6 +58,7 @@ services = [
 hdf5 = [
     "h5py",
     "hdf5plugin",
+    "msgpack",
 ]
 clients = [
     "rich",
@@ -66,7 +67,6 @@ clients = [
 tools = [
     "caterva2[hdf5]",
     "blosc2",
-    "msgpack",
 ]
 tests = [
     "caterva2[clients]",

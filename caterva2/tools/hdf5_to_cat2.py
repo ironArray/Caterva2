@@ -17,7 +17,8 @@ extension) is created under the Caterva2 root.
 
 The only datasets supported currently are those which can be converted to
 NumPy arrays.  Dataset attributes are supported as Blosc2 vlmeta entries if
-they can be serialized with msgpack.  Group attributes are not supported yet.
+they can be serialized with msgpack (with NumPy and empty values first
+translated into native Python).  Group attributes are not supported yet.
 Moreover, for the moment datasets get compressed with default Blosc2
 parameters.
 
