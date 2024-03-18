@@ -67,6 +67,7 @@ clients = [
 tools = [
     "caterva2[hdf5]",
     "blosc2",
+    "blosc2-grok",
 ]
 tests = [
     "caterva2[clients]",
