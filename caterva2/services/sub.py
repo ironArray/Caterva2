@@ -115,8 +115,13 @@ def follow(name: str):
     if not rootdir.exists():
         rootdir.mkdir(exist_ok=True)
 
+    # Get list of datasets
+    try:
+        data = api_utils.get(f'http://{root.http}/api/list')
+    except httpx.ConnectError:
+        return
+
     # Initialize the datasets in the cache
-    data = api_utils.get(f'http://{root.http}/api/list')
     for relpath in data:
         # If-None-Match header
         key = f'{name}/{relpath}'
