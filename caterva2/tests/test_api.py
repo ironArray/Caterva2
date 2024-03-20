@@ -210,13 +210,13 @@ def test_download_regular_file(services, examples_dir, sub_host):
                                   'ds-hello.b2frame',
                                   'README.md'])
 def test_vlmeta(name, services, sub_host):
-    myroot = cat2.Root(TEST_PUBLISHED_ROOT, host=sub_host)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host)
     ds = myroot[name]
     schunk_meta = ds.meta.get('schunk', ds.meta)
     assert ds.vlmeta is schunk_meta['vlmeta']
 
 
 def test_vlmeta_data(services, sub_host):
-    myroot = cat2.Root(TEST_PUBLISHED_ROOT, host=sub_host)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host)
     ds = myroot['ds-sc-attr.b2nd']
     assert ds.vlmeta == dict(a=1, b="foo", c=123.456)
