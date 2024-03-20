@@ -43,6 +43,7 @@ running before proceeding to tests.  It has three modes of operation:
 """
 
 import collections
+import itertools
 import os
 import re
 import shutil
@@ -65,6 +66,24 @@ TEST_DEFAULT_ROOT = 'foo'
 TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
 
 
+local_port_iter = itertools.count(8100)
+
+
+def service_ep_getter(first):
+    def get_service_ep():
+        nonlocal first
+        if first is not None:
+            ep, first = first, None
+            return ep
+        return 'localhost:%d' % next(local_port_iter)
+    return get_service_ep
+
+
+get_bro_ep = service_ep_getter(cat2.bro_host_default)
+get_pub_ep = service_ep_getter(cat2.pub_host_default)
+get_sub_ep = service_ep_getter(cat2.sub_host_default)
+
+
 def make_get_http(host, path='/'):
     def check():
         url = f'http://{host}{path}'
@@ -83,16 +102,19 @@ def http_service_check(conf, conf_sect, def_host, path):
                          path)
 
 
-def bro_check(conf, def_host=cat2.bro_host_default):
-    return http_service_check(conf, 'broker', def_host, '/api/roots')
+def bro_check(conf):
+    return http_service_check(conf, 'broker',
+                              get_bro_ep(), '/api/roots')
 
 
-def pub_check(id, conf, def_host=cat2.pub_host_default):
-    return http_service_check(conf, f'publisher.{id}', def_host, '/api/list')
+def pub_check(id, conf):
+    return http_service_check(conf, f'publisher.{id}',
+                              get_pub_ep(), '/api/list')
 
 
-def sub_check(conf, def_host=cat2.sub_host_default):
-    return http_service_check(conf, 'subscriber', def_host, '/api/roots')
+def sub_check(conf):
+    return http_service_check(conf, 'subscriber',
+                              get_sub_ep(), '/api/roots')
 
 
 TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
