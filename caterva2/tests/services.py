@@ -127,15 +127,13 @@ class Services:
 
 class ManagedServices(Services):
     def __init__(self, state_dir, reuse_state=True,
-                 root=None, configuration=None):
+                 roots=None, configuration=None):
         super().__init__()
 
         self.state_dir = Path(state_dir).resolve()
         self.reuse_state = reuse_state
-        self.root = root
+        self.roots = list(roots)
         self.configuration = configuration
-
-        self.data_path = self.state_dir / f'data.{root.name}'
 
         self._procs = {}
         self._endpoints = {}
@@ -170,6 +168,9 @@ class ManagedServices(Services):
                 f"service \"{name}\" failed to become available"
                 f" after {start_timeout_secs:d} seconds")
 
+    def _get_data_path(self, root):
+        return self.state_dir / f'data.{root.name}'
+
     def _setup(self):
         if self._setup_done:
             return
@@ -178,13 +179,14 @@ class ManagedServices(Services):
             shutil.rmtree(self.state_dir)
         self.state_dir.mkdir(exist_ok=True)
 
-        if self.root.source.is_dir():
-            if not self.data_path.exists():
-                shutil.copytree(self.root.source, self.data_path,
-                                symlinks=True)
-            self.data_path.mkdir(exist_ok=True)
-        elif not self.data_path.exists():
-            shutil.copy(self.root.source, self.data_path)
+        for root in self.roots:
+            data_path = self._get_data_path(root)
+            if root.source.is_dir():
+                if not data_path.exists():
+                    shutil.copytree(root.source, data_path, symlinks=True)
+                data_path.mkdir(exist_ok=True)
+            elif not data_path.exists():
+                shutil.copy(root.source, data_path)
 
         self._setup_done = True
 
@@ -192,9 +194,10 @@ class ManagedServices(Services):
         self._setup()
 
         self._start_proc('broker', check=bro_check(self.configuration))
-        self._start_proc('publisher', self.root.name, self.data_path,
-                         id=self.root.name,
-                         check=pub_check(self.root.name, self.configuration))
+        for root in self.roots:
+            self._start_proc('publisher', root.name,
+                             self._get_data_path(root), id=root.name,
+                             check=pub_check(root.name, self.configuration))
         self._start_proc('subscriber', check=sub_check(self.configuration))
 
     def stop_all(self):
@@ -215,13 +218,16 @@ class ManagedServices(Services):
 
 
 class ExternalServices(Services):
-    def __init__(self, root=None, configuration=None):
+    def __init__(self, roots=None, configuration=None):
         super().__init__()
-        self.root = root
+        self.roots = list(roots)
         self.configuration = conf = configuration
-        self._checks = {'broker': bro_check(conf),
-                        f'publisher.{root.name}': pub_check(root.name, conf),
-                        'subscriber': sub_check(conf)}
+
+        self._checks = checks = {}
+        checks['broker'] = bro_check(conf)
+        for root in roots:
+            checks[f'publisher.{root.name}'] = pub_check(root.name, conf)
+        checks['subscriber'] = sub_check(conf)
 
     def start_all(self):
         failed = [check.__name__ for check in self._checks.values()
@@ -248,11 +254,11 @@ def services(examples_dir, configuration):
     # polluting the current directory with test files
     # and tests being influenced by the presence of a configuration file.
     root = TestRoot(TEST_CATERVA2_ROOT, examples_dir)
-    srvs = (ExternalServices(root=root,
+    srvs = (ExternalServices(roots=[root],
                              configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 root=root,
+                                 roots=[root],
                                  configuration=configuration))
     try:
         srvs.start_all()
@@ -281,7 +287,7 @@ def main():
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           root=root,
+                           roots=[root],
                            configuration=configuration)
     try:
         srvs.start_all()
