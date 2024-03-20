@@ -120,7 +120,13 @@ cat2sub &  # subscriber
 
 ### HDF5 roots
 
-If you want to try and publish your own HDF5 file as a root, you need to include the `hdf5` extra in your Caterva2 installation.  Then you may just run `cat2pub foo /path/to/your-file.h5 &`.  You can also get an example HDF5 file with some datasets by running:
+If you want to try and publish your own HDF5 file as a root, you need to include the `hdf5` extra in your Caterva2 installation.  Then you may just run:
+
+```sh
+cat2pub foo /path/to/your-file.h5 &
+```
+
+You can also get an example HDF5 file with some datasets by running:
 
 ```sh
 python -m caterva2.services.hdf5root root-example.h5
