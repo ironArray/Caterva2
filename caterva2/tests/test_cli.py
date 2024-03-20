@@ -8,7 +8,6 @@
 ###############################################################################
 
 
-import caterva2 as cat2
 import json
 import subprocess
 import sys
@@ -19,9 +18,8 @@ from .services import TEST_CATERVA2_ROOT
 
 
 @pytest.fixture
-def pub_host(configuration):
-    return configuration.get(
-        f'publisher.{TEST_CATERVA2_ROOT}.http', cat2.pub_host_default)
+def pub_host(services):
+    return services.get_endpoint(f'publisher.{TEST_CATERVA2_ROOT}')
 
 
 def cli(args, binary=False) -> str or dict:

@@ -21,14 +21,13 @@ from .. import api_utils
 
 
 @pytest.fixture
-def pub_host(configuration):
-    return configuration.get(
-        f'publisher.{TEST_CATERVA2_ROOT}.http', cat2.pub_host_default)
+def pub_host(services):
+    return services.get_endpoint(f'publisher.{TEST_CATERVA2_ROOT}')
 
 
 @pytest.fixture
-def sub_host(configuration):
-    return configuration.get('subscriber.http', cat2.sub_host_default)
+def sub_host(services):
+    return services.get_endpoint('subscriber')
 
 
 def my_path(dspath, slice_):

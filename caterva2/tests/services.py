@@ -138,6 +138,7 @@ class ManagedServices(Services):
         self.data_path = self.state_dir / f'data.{root.name}'
 
         self._procs = {}
+        self._endpoints = {}
         self._setup_done = False
 
     def _start_proc(self, name, *args, id=None, check=None):
@@ -156,6 +157,7 @@ class ManagedServices(Services):
 
         if check is None:
             return
+        self._endpoints[name] = check.host
 
         start_timeout_secs = 10
         start_sleep_secs = 1
@@ -208,18 +210,22 @@ class ManagedServices(Services):
         for proc in self._procs.values():
             proc.wait()
 
+    def get_endpoint(self, service):
+        return self._endpoints.get(service)
+
 
 class ExternalServices(Services):
     def __init__(self, root=None, configuration=None):
         super().__init__()
         self.root = root
         self.configuration = conf = configuration
-        self._checks = [bro_check(conf),
-                        pub_check(root.name, conf),
-                        sub_check(conf)]
+        self._checks = {'broker': bro_check(conf),
+                        f'publisher.{root.name}': pub_check(root.name, conf),
+                        'subscriber': sub_check(conf)}
 
     def start_all(self):
-        failed = [check.__name__ for check in self._checks if not check()]
+        failed = [check.__name__ for check in self._checks.values()
+                  if not check()]
         if failed:
             raise RuntimeError("failed checks for external services: "
                                + ' '.join(failed))
@@ -229,6 +235,11 @@ class ExternalServices(Services):
 
     def wait_for_all(self):
         pass
+
+    def get_endpoint(self, service):
+        if service not in self._checks:
+            return None
+        return self._checks[service].host
 
 
 @pytest.fixture(scope='session')
