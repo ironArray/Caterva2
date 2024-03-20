@@ -39,7 +39,7 @@
     {% for key, value in meta %}
             {% if key in ['schunk', 'cparams'] %}
                 {% for key2, value2 in meta[key] %}
-                    {% if key2 not in ['chunkshape', 'chunksize'] %}
+                    {% if key2 not in ['chunkshape', 'chunksize', 'vlmeta'] %}
                         {% if key2 == 'urlpath' %}
                             {% set key2 = 'cachepath' %}
                         {% endif %}
@@ -60,3 +60,22 @@
             {% endif %}
     {% endfor %}
 </table>
+
+<h4>Vlmeta (user attributes):</h4>
+{% if meta.schunk %}
+    {% set vlmeta = meta.schunk.vlmeta %}
+{% else %}
+    {% set vlmeta = meta.vlmeta %}
+{% endif %}
+{% if not vlmeta %}
+    (none)
+{% else %}
+    <table class="table table-sm">
+        {% for key, value in vlmeta.items() %}
+            <tr>
+                <th scope="row">{{ key }}</th>
+                <td>{{ value }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endif %}
