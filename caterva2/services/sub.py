@@ -574,8 +574,8 @@ async def html_path_info(
     abspath = srv_utils.cache_lookup(cache, filepath)
     meta = srv_utils.read_metadata(abspath)
 
-    #meta.schunk.vlmeta['contenttype'] = 'tomography'
-    contenttype = meta.schunk.vlmeta.get('contenttype')
+    #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
+    contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
 
     plugin = plugins.get(contenttype)
     if plugin:
