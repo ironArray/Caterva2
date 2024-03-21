@@ -7,9 +7,10 @@ running before proceeding to tests.  It has three modes of operation:
   and makes sure that they are available to other local programs.  If given an
   argument, it uses it as the directory to store state in; otherwise it uses
   the value in `DEFAULT_STATE_DIR`.  If the directory does not exist, it is
-  created and populated with example datasets.  If a second argument is given,
-  it is taken as the source of example datasets, instead of those from the
-  source distribution.
+  created and populated with example datasets.  If further arguments are
+  given, each one is taken as a root description ``[ROOT_NAME=]ROOT_SOURCE``
+  with an optional root name (`TEST_DEFAULT_ROOT` by default) and the source
+  of example datasets to be copied.
 
   Terminating the program stops the services.
 
