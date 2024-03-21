@@ -149,6 +149,7 @@ class ManagedServices(Services):
             [sys.executable,
              '-m' + f'caterva2.services.{name[:3]}',
              '--statedir=%s' % (self.state_dir / name),
+             *(['--http=%s' % check.host] if check else []),
              *args])
 
         if check is None:
