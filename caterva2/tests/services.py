@@ -269,23 +269,26 @@ def services(examples_dir, configuration):
 def main():
     from . import files, conf
 
-    root = TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())
+    roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
     if '--help' in sys.argv:
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" "
-              f"[ROOT=\"{root.name}={root.source}\"]]")
+              f"[ROOT=\"{roots[0].name}={roots[0].source}\"]...]")
         return
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     if len(sys.argv) >= 3:
+        roots = []  # user-provided roots
+    for rarg in sys.argv[2:]:
         rname, rsource = re.match(r'(?:(.+?)=)?(.+)',  # ``[name=]source``
-                                  sys.argv[2]).groups()
+                                  rarg).groups()
         root = TestRoot(rname if rname else TEST_DEFAULT_ROOT,
                         Path(rsource))
+        roots.append(root)
 
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
     srvs = ManagedServices(state_dir, reuse_state=True,
-                           roots=[root],
+                           roots=roots,
                            configuration=configuration)
     try:
         srvs.start_all()
