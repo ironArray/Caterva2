@@ -44,6 +44,7 @@ running before proceeding to tests.  It has three modes of operation:
 """
 
 import collections
+import functools
 import itertools
 import os
 import re
@@ -272,10 +273,30 @@ def services(configuration, examples_dir, examples_hdf5):
     srvs.wait_for_all()
 
 
-def main():
+# Inspired by <https://towerbabbel.com/go-defer-in-python/>.
+def defer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwds):
+        deferred = []
+        try:
+            return func(*args, defer=deferred.append, **kwds)
+        finally:
+            for f in reversed(deferred):
+                f()
+    return wrapper
+
+
+@defer
+def main(defer):
     from . import files, conf
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
+    hdf5source = files.make_examples_hdf5()
+    if hdf5source:
+        defer(lambda: (hdf5source.parent.is_dir()
+                       and shutil.rmtree(hdf5source.parent)))
+        roots.append(TestRoot(TEST_HDF5_ROOT, hdf5source))
+
     if '--help' in sys.argv:
         print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" "
               f"[ROOT=\"{roots[0].name}={roots[0].source}\"]...]")
