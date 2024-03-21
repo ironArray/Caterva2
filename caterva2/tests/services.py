@@ -278,12 +278,17 @@ def main():
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     if len(sys.argv) >= 3:
         roots = []  # user-provided roots
+    rnames = {r.name for r in roots}
     for rarg in sys.argv[2:]:
         rname, rsource = re.match(r'(?:(.+?)=)?(.+)',  # ``[name=]source``
                                   rarg).groups()
-        root = TestRoot(rname if rname else TEST_DEFAULT_ROOT,
-                        Path(rsource))
+        rname = rname if rname else TEST_DEFAULT_ROOT
+        if rname in rnames:
+            raise ValueError(f"root name {rname!r} already in use; "
+                             f"please set a different name for {rsource!r}")
+        root = TestRoot(rname, Path(rsource))
         roots.append(root)
+        rnames.add(root.name)
 
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
