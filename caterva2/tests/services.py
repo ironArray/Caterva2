@@ -298,8 +298,9 @@ def main(defer):
         roots.append(TestRoot(TEST_HDF5_ROOT, hdf5source))
 
     if '--help' in sys.argv:
-        print(f"Usage: {sys.argv[0]} [STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" "
-              f"[ROOT=\"{roots[0].name}={roots[0].source}\"]...]")
+        rspecs = ' '.join(f'"{r.name}={r.source}"' for r in roots)
+        print(f"Usage: {sys.argv[0]} "
+              f"[STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" [ROOTS={rspecs}]]")
         return
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
