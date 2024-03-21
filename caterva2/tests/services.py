@@ -65,6 +65,7 @@ DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_DEFAULT_ROOT = 'foo'
 TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
+TEST_HDF5_ROOT = 'hdf5root'
 
 
 local_port_iter = itertools.count(8100)
@@ -249,16 +250,19 @@ class ExternalServices(Services):
 
 
 @pytest.fixture(scope='session')
-def services(examples_dir, configuration):
+def services(configuration, examples_dir, examples_hdf5):
     # TODO: Consider using a temporary directory to avoid
     # polluting the current directory with test files
     # and tests being influenced by the presence of a configuration file.
-    root = TestRoot(TEST_CATERVA2_ROOT, examples_dir)
-    srvs = (ExternalServices(roots=[root],
+    roots = [TestRoot(TEST_CATERVA2_ROOT, examples_dir)]
+    if examples_hdf5 is not None:
+        roots.append(TestRoot(TEST_HDF5_ROOT, examples_hdf5))
+
+    srvs = (ExternalServices(roots=roots,
                              configuration=configuration)
             if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
             else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 roots=[root],
+                                 roots=roots,
                                  configuration=configuration))
     try:
         srvs.start_all()
