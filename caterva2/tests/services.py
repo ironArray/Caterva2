@@ -279,9 +279,9 @@ def main():
     if len(sys.argv) >= 3:
         roots = []  # user-provided roots
     rnames = {r.name for r in roots}
+    rarg_rx = re.compile(r'(?:(.+?)=)?(.+)')  # ``[name=]source``
     for rarg in sys.argv[2:]:
-        rname, rsource = re.match(r'(?:(.+?)=)?(.+)',  # ``[name=]source``
-                                  rarg).groups()
+        rname, rsource = rarg_rx.match(rarg).groups()
         rname = rname if rname else TEST_DEFAULT_ROOT
         if rname in rnames:
             raise ValueError(f"root name {rname!r} already in use; "
