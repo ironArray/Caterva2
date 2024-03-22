@@ -96,12 +96,14 @@ def test_slicing(api_root, slice_):
 
 def test_vlmeta(api_root):
     ds = api_root['attrs.b2nd']
-    assert len(ds.vlmeta) == 8
+    assert len(ds.vlmeta) == 9
     m = ds.vlmeta
     assert m['Int'] == m['IntT'] == 42
     # TODO: consistent conversion of strings
-    # assert m['Str'] == m['StrT'] == b'foo'
+    # assert m['Bin'] == m['BinT'] == b'foo'
+    # assert m['Str'] == m['StrT'] == 'bar'
     assert m['Arr'] == m['ArrT'] == [[0, 1], [2, 3]]
     # TODO: consistent conversion of strings
-    # assert m['NilStr'] == b''
+    # assert m['NilBin'] == b''
+    # assert m['NilStr'] == ''
     assert m['NilInt'] is None
