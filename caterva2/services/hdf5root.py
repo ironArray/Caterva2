@@ -184,6 +184,10 @@ def create_example_root(path):
 
         a = numpy.arange(100, dtype='complex128').reshape(10, 10)
         a = a + a*1j
+        h5f.create_dataset('/arrays/2d-nochunks', data=a, chunks=None)
+
+        a = numpy.arange(100, dtype='complex128').reshape(10, 10)
+        a = a + a*1j
         h5f.create_dataset('/arrays/2d-gzip', data=a, chunks=(4, 4),
                            compression='gzip')
 
