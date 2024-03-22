@@ -101,8 +101,7 @@ def make_get_http(host, path='/'):
 
 
 def http_service_check(conf, conf_sect, def_host, path):
-    return make_get_http(conf.get(f'{conf_sect}.http', def_host),
-                         path)
+    return make_get_http(conf.get(f'{conf_sect}.http', def_host), path)
 
 
 def bro_check(conf):
@@ -110,8 +109,8 @@ def bro_check(conf):
                               get_bro_ep(), '/api/roots')
 
 
-def pub_check(id, conf):
-    return http_service_check(conf, f'publisher.{id}',
+def pub_check(id_, conf):
+    return http_service_check(conf, f'publisher.{id_}',
                               get_pub_ep(), '/api/list')
 
 
@@ -274,7 +273,7 @@ def services(configuration, examples_dir, examples_hdf5):
 
 
 # Inspired by <https://towerbabbel.com/go-defer-in-python/>.
-def defer(func):
+def defers(func):
     @functools.wraps(func)
     def wrapper(*args, **kwds):
         deferred = []
@@ -286,7 +285,7 @@ def defer(func):
     return wrapper
 
 
-@defer
+@defers
 def main(defer):
     from . import files, conf
 
