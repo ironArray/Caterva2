@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import blosc2
 import numpy as np
 import pytest
 
@@ -78,6 +79,10 @@ def test_blosc2(api_root):
     ds_chunks = tuple(ds.meta['chunks'])
     assert ds_chunks == (4, 10, 10)  # chunk shape is kept
     # TODO: compression parameters
+    # cparams = ds.meta['schunk']['cparams']
+    # assert cparams['codec'] == blosc2.Codec.LZ4.value
+    # assert cparams['filters'] == [0, 0, 0, 0, 0,
+    #                               blosc2.Filter.BITSHUFFLE.value]
     v = ds[:]
     a = np.arange(1000, dtype='uint8').reshape(10, 10, 10)
     np.testing.assert_array_equal(v, a)
