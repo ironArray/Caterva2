@@ -40,6 +40,8 @@ def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
     dtype = h5_dset.dtype
     if dtype.ndim != 0 or dtype.fields is not None:
         return False  # array or compound dtype
+    if dtype.kind in ['O']:  # other kinds may be missing
+        return False
     return True
 
 
