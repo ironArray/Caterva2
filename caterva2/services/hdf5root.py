@@ -191,6 +191,15 @@ def create_example_root(path):
         h5f.create_dataset('/arrays/3d-blosc2', data=a, chunks=(4, 10, 10),
                            **hdf5plugin.Blosc2())
 
+        ds = h5f.create_dataset('/attrs', data=0)
+        a = numpy.arange(4, dtype='uint8').reshape(2, 2)
+        for k, v in dict(Int=42, IntT=numpy.int16(42),
+                         Str=b"foo", StrT=numpy.bytes_(b"foo"),
+                         Arr=a.tolist(), ArrT=a,
+                         NilStr=h5py.Empty('|S4'),
+                         NilInt=h5py.Empty('uint8')).items():
+            ds.attrs[k] = v
+
         h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))
 
         a = numpy.arange(1, dtype='uint8').reshape((1,) * 23)
