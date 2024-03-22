@@ -168,7 +168,7 @@ def create_example_root(path):
     """Create an example HDF5 file to be used as a root."""
     import blosc2
     import h5py
-    import hdf5plugin
+    from hdf5plugin import Blosc2 as B2Comp
     import numpy
 
     with h5py.File(path, 'x') as h5f:
@@ -180,7 +180,7 @@ def create_example_root(path):
 
         a = numpy.array([b'foobar'] * 100)
         h5f.create_dataset('/arrays/1ds-blosc2', data=a, chunks=(50,),
-                           **hdf5plugin.Blosc2())
+                           **B2Comp())
 
         a = numpy.arange(100, dtype='complex128').reshape(10, 10)
         a = a + a*1j
@@ -193,7 +193,8 @@ def create_example_root(path):
 
         a = numpy.arange(1000, dtype='uint8').reshape(10, 10, 10)
         h5f.create_dataset('/arrays/3d-blosc2', data=a, chunks=(4, 10, 10),
-                           **hdf5plugin.Blosc2())
+                           **B2Comp(cname='lz4', clevel=7,
+                                    filters=B2Comp.BITSHUFFLE))
 
         ds = h5f.create_dataset('/attrs', data=0)
         a = numpy.arange(4, dtype='uint8').reshape(2, 2)
