@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import numpy as np
 import pytest
 
 import caterva2 as cat2
@@ -31,3 +32,76 @@ def api_root(sub_host):
 def test_not_unsupported(api_root):
     for node in api_root.node_list:
         assert not node.startswith('unsupported/')
+
+
+def test_ds_name_ext(api_root):
+    for node in api_root.node_list:
+        node.endswith('.b2nd')  # no other conversions supported yet
+
+
+def test_scalar(api_root):
+    ds = api_root['scalar.b2nd']
+    v = ds[()]
+    assert v.dtype.kind == 'f'
+    assert v == pytest.approx(123.456)
+
+
+# TODO
+@pytest.mark.skip("HDF5 scalar strings not well-tested yet")
+def test_string(api_root):
+    ds = api_root['string.b2nd']
+    v = ds[()]
+    assert v.dtype.kind == 'S'  # turned to bytes
+    assert v == b'Hello world!'
+
+
+def test_nonchunked(api_root):
+    ds = api_root['arrays/2d-nochunks.b2nd']
+    ds_chunks = ds.meta['chunks']
+    assert ds_chunks is not None and len(ds_chunks) == 2  # auto chunking
+    v = ds[:]
+    a = np.arange(100, dtype='complex128').reshape(10, 10)
+    a = a + a*1j
+    np.testing.assert_array_equal(v, a)
+
+
+def test_chunked(api_root):
+    ds = api_root['arrays/2d-gzip.b2nd']
+    ds_chunks = tuple(ds.meta['chunks'])
+    assert ds_chunks == (4, 4)  # chunk shape is kept
+    v = ds[:]
+    a = np.arange(100, dtype='complex128').reshape(10, 10)
+    a = a + a*1j
+    np.testing.assert_array_equal(v, a)
+
+
+def test_blosc2(api_root):
+    ds = api_root['arrays/3d-blosc2.b2nd']
+    ds_chunks = tuple(ds.meta['chunks'])
+    assert ds_chunks == (4, 10, 10)  # chunk shape is kept
+    # TODO: compression parameters
+    v = ds[:]
+    a = np.arange(1000, dtype='uint8').reshape(10, 10, 10)
+    np.testing.assert_array_equal(v, a)
+
+
+@pytest.mark.parametrize("slice_", [slice(None), 1, slice(2, 6),
+                                    (slice(None, 6), slice(5, 8), slice(6))])
+def test_slicing(api_root, slice_):
+    ds = api_root['arrays/3d-blosc2.b2nd']
+    v = ds[:]
+    a = np.arange(1000, dtype='uint8').reshape(10, 10, 10)
+    np.testing.assert_array_equal(v[slice_], a[slice_])
+
+
+def test_vlmeta(api_root):
+    ds = api_root['attrs.b2nd']
+    assert len(ds.vlmeta) == 8
+    m = ds.vlmeta
+    assert m['Int'] == m['IntT'] == 42
+    # TODO: consistent conversion of strings
+    # assert m['Str'] == m['StrT'] == b'foo'
+    assert m['Arr'] == m['ArrT'] == [[0, 1], [2, 3]]
+    # TODO: consistent conversion of strings
+    # assert m['NilStr'] == b''
+    assert m['NilInt'] is None
