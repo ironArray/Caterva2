@@ -173,7 +173,7 @@ def create_example_root(path):
 
     with h5py.File(path, 'x') as h5f:
         h5f.create_dataset('/scalar', data=123.456)
-        h5f.create_dataset('/string', data="Hello world!")
+        h5f.create_dataset('/string', data=numpy.bytes_("Hello world!"))
 
         a = numpy.arange(100, dtype='uint8')
         h5f.create_dataset('/arrays/1d-raw', data=a)
@@ -208,6 +208,7 @@ def create_example_root(path):
             ds.attrs[k] = v
 
         h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))
+        h5f.create_dataset('/unsupported/vlstring', data="Hello world!")
 
         a = numpy.arange(1, dtype='uint8').reshape((1,) * 23)
         h5f.create_dataset('/unsupported/too-many-dimensions', data=a)

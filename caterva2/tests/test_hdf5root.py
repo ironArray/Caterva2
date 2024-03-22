@@ -46,12 +46,10 @@ def test_scalar(api_root):
     assert v == pytest.approx(123.456)
 
 
-# TODO
-@pytest.mark.skip("HDF5 scalar strings not well-tested yet")
 def test_string(api_root):
     ds = api_root['string.b2nd']
     v = ds[()]
-    assert v.dtype.kind == 'S'  # turned to bytes
+    assert v.dtype.kind == 'S'
     assert v == b'Hello world!'
 
 
