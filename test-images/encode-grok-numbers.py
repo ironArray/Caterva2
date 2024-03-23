@@ -21,9 +21,6 @@ import os
 import blosc2
 
 if __name__ == '__main__':
-    cratio = 10
-    print(f"Compressing with cratio={cratio}x ...")
-
     # Define the compression and decompression parameters. Disable the filters and the
     # splitmode, because these don't work with the codec.
     cparams = {
@@ -37,9 +34,7 @@ if __name__ == '__main__':
         'cod_format': blosc2_grok.GrkFileFmt.GRK_FMT_JP2,
         'num_threads': 1,    # this does not have any effect (grok should work in multithreading mode)
         'quality_mode': "rates",
-        'quality_layers': np.array([cratio], dtype=np.float64)
     }
-    blosc2_grok.set_params_defaults(**kwargs)
 
     # Compression params for identifying the codec. In the future, one should be able to
     # specify the grok plugin (and its parameters) here.
@@ -73,29 +68,28 @@ if __name__ == '__main__':
     dset_gray = np.array(images_gray)
 
     # Open the output file for color and gray images
-    fname = f'numbers-{cratio}x.h5'
+    fname = f'numbers-jpeg2000.h5'
     print(f"output file: {fname}")
     fout = h5py.File(fname, 'w')
 
-    # Store the color images
-    chunks = (1,) + dset_color.shape[1:]
-    disk_color = fout.create_dataset('/numbers_color', shape=dset_color.shape, dtype=dset_color.dtype,
-                                     chunks=chunks, **b2params)
-    disk_color.attrs['contenttype'] = 'tomography'
-    for i in range(dset_color.shape[0]):
-        im = dset_color[i:i+1]
-        b2im = blosc2.asarray(im, chunks=im.shape, blocks=im.shape, cparams=cparams)
-        # Write to disk
-        disk_color.id.write_direct_chunk((i, 0, 0, 0), b2im.schunk.to_cframe())
+    for cratio in (2, 5, 10, 20):
+        print(f"Compressing with cratio={cratio}x ...")
+        kwargs['quality_layers'] = np.array([cratio], dtype=np.float64)
+        blosc2_grok.set_params_defaults(**kwargs)
+        group = fout.create_group(f'/cratio_{cratio}x')
+        # Store the color and grey images
+        for dset in [dset_color, dset_gray]:
+            chunks = (1,) + dset.shape[1:]
+            name = 'numbers_color' if dset is dset_color else 'numbers_gray'
+            disk_dset = group.create_dataset(name, shape=dset.shape, dtype=dset.dtype,
+                                             chunks=chunks, **b2params)
+            disk_dset.attrs['contenttype'] = 'tomography'
+            for i in range(dset.shape[0]):
+                im = dset[i:i+1]
+                b2im = blosc2.asarray(im, chunks=im.shape, blocks=im.shape, cparams=cparams)
+                # Write to disk.
+                # Due to leading 1 dim, color images have 4 dimensions, gray images have 3 dimensions
+                offset = (i, 0, 0, 0) if dset is dset_color else (i, 0, 0)
+                disk_dset.id.write_direct_chunk(offset, b2im.schunk.to_cframe())
 
-    # The gray images
-    chunks = (1,) + dset_gray.shape[1:]
-    disk_gray = fout.create_dataset('/numbers_gray', shape=dset_gray.shape, dtype=dset_gray.dtype,
-                                    chunks=chunks, **b2params)
-    disk_gray.attrs['contenttype'] = 'tomography'
-    for i in range(dset_gray.shape[0]):
-        im = dset_gray[i:i+1]
-        b2im = blosc2.asarray(im, chunks=im.shape, blocks=im.shape, cparams=cparams)
-        # Write to disk
-        disk_gray.id.write_direct_chunk((i, 0, 0), b2im.schunk.to_cframe())
     fout.close()
