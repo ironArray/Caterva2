@@ -59,7 +59,7 @@ Tagging and releasing
 
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::
 
-  $ pip install caterva2
+  $ pip install caterva2[tests]
   $ python -m caterva2.tests -v
 
 
@@ -79,13 +79,13 @@ Post-release actions
   version to the next minor one (i.e. X.Y.Z --> X.Y.(Z+1).dev0).
 
 - Create new headers for adding new features in ``RELEASE_NOTES.md``
-  and add this place-holder instead:
+  and add this place-holder instead::
 
-  #XXX version-specific blurb XXX#
+    #XXX version-specific blurb XXX#
 
-- Replace the version-specific blurb of ``ANNOUNCE.md`` with this placeholder:
+- Replace the version-specific blurb of ``ANNOUNCE.md`` with this placeholder::
 
-  #XXX version-specific blurb XXX#
+    #XXX version-specific blurb XXX#
 
 - Commit the changes::
 
