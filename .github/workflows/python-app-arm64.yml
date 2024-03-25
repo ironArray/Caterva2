@@ -21,7 +21,7 @@ jobs:
       run: |
         # Use the Python in Ubuntu system
         python -m pip install --upgrade pip
-        pip install -e '.[tests]'
+        pip install -e '.[tests,hdf5]'
     - name: Test with pytest
       run: |
         python -m pytest

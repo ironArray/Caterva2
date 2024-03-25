@@ -168,19 +168,23 @@ def create_example_root(path):
     """Create an example HDF5 file to be used as a root."""
     import blosc2
     import h5py
-    import hdf5plugin
+    from hdf5plugin import Blosc2 as B2Comp
     import numpy
 
     with h5py.File(path, 'x') as h5f:
         h5f.create_dataset('/scalar', data=123.456)
-        h5f.create_dataset('/string', data="Hello world!")
+        h5f.create_dataset('/string', data=numpy.bytes_("Hello world!"))
 
         a = numpy.arange(100, dtype='uint8')
         h5f.create_dataset('/arrays/1d-raw', data=a)
 
         a = numpy.array([b'foobar'] * 100)
         h5f.create_dataset('/arrays/1ds-blosc2', data=a, chunks=(50,),
-                           **hdf5plugin.Blosc2())
+                           **B2Comp())
+
+        a = numpy.arange(100, dtype='complex128').reshape(10, 10)
+        a = a + a*1j
+        h5f.create_dataset('/arrays/2d-nochunks', data=a, chunks=None)
 
         a = numpy.arange(100, dtype='complex128').reshape(10, 10)
         a = a + a*1j
@@ -189,9 +193,22 @@ def create_example_root(path):
 
         a = numpy.arange(1000, dtype='uint8').reshape(10, 10, 10)
         h5f.create_dataset('/arrays/3d-blosc2', data=a, chunks=(4, 10, 10),
-                           **hdf5plugin.Blosc2())
+                           **B2Comp(cname='lz4', clevel=7,
+                                    filters=B2Comp.BITSHUFFLE))
+
+        ds = h5f.create_dataset('/attrs', data=0)
+        a = numpy.arange(4, dtype='uint8').reshape(2, 2)
+        for k, v in dict(Int=42, IntT=numpy.int16(42),
+                         Bin=b"foo", BinT=numpy.bytes_(b"foo"),
+                         Str="bar", # StrT=numpy.str_("bar"),
+                         Arr=a.tolist(), ArrT=a,
+                         NilBin=h5py.Empty('|S4'),
+                         # NilStr=h5py.Empty('|U4'),
+                         NilInt=h5py.Empty('uint8')).items():
+            ds.attrs[k] = v
 
         h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))
+        h5f.create_dataset('/unsupported/vlstring', data="Hello world!")
 
         a = numpy.arange(1, dtype='uint8').reshape((1,) * 23)
         h5f.create_dataset('/unsupported/too-many-dimensions', data=a)
