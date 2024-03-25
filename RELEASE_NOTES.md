@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 0.2 to 0.2.1
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 0.1 to 0.2
 
 * Publisher: Support several implementations for the publisher root, besides a Caterva2 directory with Blosc2 and plain files (PR #27).  A publisher root module can be run as a script to generate an example root of that kind.
