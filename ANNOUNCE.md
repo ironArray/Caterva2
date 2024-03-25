@@ -1,8 +1,10 @@
 Announcing Caterva2 0.1
 =======================
 
-This is the first public release of Caterva2, a high-performance storage and
-communication system for on-demand access to Blosc2 data repositories.
+This is Caterva2, a high-performance storage and communication system for
+on-demand access to Blosc2 data repositories.
+
+#XXX version-specific blurb XXX#
 
 For more info, you can have a look at the release notes in:
 
