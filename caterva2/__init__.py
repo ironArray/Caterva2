@@ -9,7 +9,7 @@
 
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
 
-__version__ = "0.1.1.dev0"
+__version__ = "0.2.0"
 """The version in use of the Caterva2 package."""
 
 from .api import bro_host_default, pub_host_default, sub_host_default

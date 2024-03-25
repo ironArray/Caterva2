@@ -7,7 +7,7 @@ Preliminaries
 - Make sure that ``RELEASE_NOTES.md`` and ``ANNOUNCE.md`` are up to
   date with the latest news in the release.
 
-- Check that *VERSION* symbol in caterva2/__init__.py contains the correct info.
+- Check that ``__version__`` symbol in ``caterva2/__init__.py`` contains the correct info.
 
 - Commit the changes with::
 
@@ -18,10 +18,10 @@ Preliminaries
 Testing
 -------
 
-Follow the steps in README-DEVELOPERS.md file for locally creating and
+Follow the steps in ``README-DEVELOPERS.md`` file for locally creating and
 installing the wheel, then test it::
 
-  $ python -m pip install -e .[test]
+  $ python -m pip install -e .[tests,hdf5]
   $ cd ..   # to avoid using the source code
   $ python -m caterva2.tests -v
   $ cd -
@@ -32,7 +32,7 @@ If the tests pass, you are ready to release.
 Check documentation
 -------------------
 
-Check that the `README.md` and `README-DEVELOPERS.md` are consistent with this new release.
+Check that the ``README.md`` and ``README-DEVELOPERS.md`` are consistent with this new release.
 
 
 Tagging and releasing
@@ -54,8 +54,8 @@ Tagging and releasing
 
     $ git push --delete origin vX.Y.Z
 
-- Create a new release visiting https://github.com/Blosc/Caterva2/releases/new
-  and add the release notes copying them from `RELEASE_NOTES.md` document.
+- Create a new release by visiting https://github.com/Blosc/Caterva2/releases/new
+  and add the release notes copying them from ``RELEASE_NOTES.md`` document.
 
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::
 
@@ -75,11 +75,15 @@ Announcing
 Post-release actions
 --------------------
 
-- Edit *__version__* var in caterva2/__init__.py to increment the
+- Edit ``__version__`` var in ``caterva2/__init__.py`` to increment the
   version to the next minor one (i.e. X.Y.Z --> X.Y.(Z+1).dev0).
 
 - Create new headers for adding new features in ``RELEASE_NOTES.md``
   and add this place-holder instead:
+
+  #XXX version-specific blurb XXX#
+
+- Replace the version-specific blurb of ``ANNOUNCE.md`` with this placeholder:
 
   #XXX version-specific blurb XXX#
 

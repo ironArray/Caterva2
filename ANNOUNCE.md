@@ -1,8 +1,19 @@
-Announcing Caterva2 0.1
+Announcing Caterva2 0.2
 =======================
 
-This is the first public release of Caterva2, a high-performance storage and
-communication system for on-demand access to Blosc2 data repositories.
+This is Caterva2, a high-performance storage and communication system for
+on-demand access to Blosc2 data repositories.
+
+This release includes many fixes and updates, although the main additions are
+(i) native support for HDF5 publisher roots, and (ii) browsing enhancements
+with tomography display support in the web client.  The former addition allows
+publishing an HDF5 file as a root, with its hierarchy, datasets and attributes
+efficiently mapped to Blosc2 on-the-fly (no need to use `cat2import` as
+previously); support for other storage formats can be added to the publisher.
+The latter addition allows detecting 3D datasets tagged with a `tomography`
+content type attribute, so that the web client shows a "Display" tab that
+allows viewing the stacked images; this relies on a plugin model for custom
+visualization of any content type.
 
 For more info, you can have a look at the release notes in:
 
