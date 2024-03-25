@@ -1,4 +1,4 @@
-Announcing Caterva2 0.1
+Announcing Caterva2 0.2
 =======================
 
 This is Caterva2, a high-performance storage and communication system for
