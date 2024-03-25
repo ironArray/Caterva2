@@ -67,7 +67,6 @@ clients = [
 tools = [
     "caterva2[hdf5]",
     "blosc2",
-    "blosc2-grok",
 ]
 tests = [
     "caterva2[clients]",
@@ -77,6 +76,10 @@ tests = [
 plugins = [
     "pillow",
 ]
+blosc2-plugins = [
+    "blosc2-grok",
+]
+
 [tool.hatch.build.targets.wheel]
 only-include = ["caterva2", "root-example"]
 
