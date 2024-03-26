@@ -63,8 +63,6 @@ async def image_file(
 
     img = arr[i,:]
     img = Image.fromarray(img)
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
 
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
