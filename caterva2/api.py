@@ -233,9 +233,9 @@ class File:
         Examples
         --------
         >>> root = cat2.Root('foo')
-        >>> file = root['ds-1d.b2nd']
+        >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
-        {}
+        {'a': 1, 'b': 'foo', 'c': 123.456}
 
         Returns
         -------
