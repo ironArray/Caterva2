@@ -1,13 +1,4 @@
-<input type="number" min="0" max="{{ pages - 1 }}" name="i" value="0" id="image-index">
+<input type="number" min="0" max="{{ pages - 1 }}" name="i" value="0"
+        hx-get="{{ href }}" hx-target="#image-div">
 
-<div>
-    <img src="/plugins/{{ name }}/image/{{ path }}?i=0" id="display-image">
-</div>
-
-<script>
-    document.getElementById('image-index').addEventListener('change', function() {
-        const src = `/plugins/{{ name }}/image/{{ path }}?i=${this.value}`;
-        const img = document.getElementById("display-image");
-        img.src = src;
-    });
-</script>
+<div hx-get="{{ href }}?i=0" hx-trigger="load" id="image-div"></div>
