@@ -75,7 +75,7 @@ async def display_one(
     if width and img.width > width:
         links.append({
             "href": f"{base}/image/{path}?i={i}",
-            "label": f"{img.width} x {img.height} (orignal size)",
+            "label": f"{img.width} x {img.height} (original size)",
             "target": "blank_",
         })
 
