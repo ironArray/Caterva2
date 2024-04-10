@@ -53,6 +53,8 @@ def walk_files(root, exclude=None):
 def socket_type(string):
     host, port = string.rsplit(':', maxsplit=1)
     port = int(port)
+    if host.startswith('[') and host.endswith(']'):
+        host = host[1:-1]
     return host, port
 
 
