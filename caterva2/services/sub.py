@@ -585,6 +585,11 @@ async def html_path_info(
     else:
         display = None
 
+    if filepath.suffix == ".md":
+        display = {
+            "name": "markdown"
+        }
+
     context = {"path": path, "meta": meta, "display": display}
     response = templates.TemplateResponse(request, "info.html", context=context)
 
@@ -592,6 +597,26 @@ async def html_path_info(
     request_url = furl.furl(request.url)
     response.headers['HX-Push-Url'] = request_url.set(current_url.query.params).url
     return response
+
+
+@app.get("/markdown/{path:path}", response_class=HTMLResponse)
+async def markdown(
+        request: Request,
+        # Path parameters
+        path: pathlib.Path,
+):
+    abspath = srv_utils.cache_lookup(cache, cache / path)
+    await partial_download(abspath, str(path))
+    arr = blosc2.open(abspath)
+    content = arr[:]
+
+    import markdown
+    temp_html = markdown.markdown(content.decode('utf-8'))
+    f = open(f"{BASE_DIR}/templates/markdown.html", "w")
+    f.write(temp_html)
+    f.close()
+
+    return templates.TemplateResponse(request, "markdown.html", context={})
 
 
 #
