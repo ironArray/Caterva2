@@ -1,31 +1,21 @@
 <h3>{{ path }}</h3>
 
-<ul class="nav nav-tabs">
+<ul class="nav nav-tabs" id="tabs">
     <li class="nav-item" role="presentation">
         <button type="button" class="nav-link active" id="metadata-tab"
                 data-bs-toggle="tab" data-bs-target="#metadata-tab-pane"
                 role="tab" aria-controls="metadata-tab-pane" aria-selected="true">
             Metadata
-        </button>
+        </a>
     </li>
     {% if display %}
-        {% if display.name in ['markdown'] %}
-            <li class="nav-item" role="presentation">
-                <button type="button" class="nav-link" id="markdown-tab"
-                        data-bs-toggle="tab" data-bs-target="#markdown-tab-pane"
-                        role="tab" aria-controls="metadata-tab-pane" aria-selected="false">
-                    Display
-                </button>
-            </li>
-        {% else %}
-            <li class="nav-item" role="presentation">
-                <button type="button" class="nav-link" id="display-tab"
-                        data-bs-toggle="tab" data-bs-target="#display-tab-pane"
-                        role="tab" aria-controls="metadata-tab-pane" aria-selected="false">
-                    Display
-                </button>
-            </li>
-        {% endif %}
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" id="display-tab"
+                    data-bs-toggle="tab" data-bs-target="#display-tab-pane"
+                    role="tab" aria-controls="display-tab-pane" aria-selected="false">
+                Display
+            </a>
+        </li>
     {% endif %}
 </ul>
 
@@ -35,16 +25,26 @@
         {% include 'info_metadata.html' %}
     </div>
     {% if display %}
-        {% if display.name in ['markdown'] %}
-            <div class="tab-pane fade" id="markdown-tab-pane" tabindex="0"
-                 role="tabpanel" aria-labelledby="tab-display"
-                 hx-get="/{{ display.name }}/{{ path }}" hx-trigger="load">
-            </div>
-        {% else %}
-            <div class="tab-pane fade" id="display-tab-pane" tabindex="0"
-                 role="tabpanel" aria-labelledby="tab-display"
-                 hx-get="/plugins/{{ display.name }}/display/{{ path }}" hx-trigger="load">
-            </div>
-        {% endif %}
+        <div class="tab-pane fade" id="display-tab-pane" tabindex="0"
+             role="tabpanel" aria-labelledby="tab-display"
+             hx-get="{{ display.url }}" hx-trigger="load">
+        </div>
     {% endif %}
 </div>
+
+<script>
+    // If the url has a hash open the appropriate tab
+    function openTab(id) {
+        if (id) {
+            let el = document.querySelector(`${id}-tab`);
+            let tab = new bootstrap.Tab(el);
+            tab.show();
+        }
+    }
+    openTab(window.location.hash);
+
+    // Append hash to the url when a tab is clicked, so the url can be copied including the hash
+    document.querySelector('#tabs').addEventListener('shown.bs.tab', function (event) {
+        window.location.hash = event.target.id.slice(0, -4);
+    })
+</script>

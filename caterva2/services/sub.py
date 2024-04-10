@@ -51,11 +51,13 @@ port = None
 
 
 def make_url(request, name, query=None, **path_params):
-    url = request.url_for(name, **path_params)
-    # url.include_query_params() does not seem to work for list values
+    url = request.url_for(name, **path_params)  # <starlette.datastructures.URL>
+    url = str(url)
+
     if query:
-        url = furl.furl(url).set(query)
-    return str(url)
+        url = furl.furl(url).set(query).url
+
+    return url
 
 
 async def download_chunk(path, schunk, nchunk):
@@ -580,22 +582,29 @@ async def html_path_info(
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
-            "name": plugin.name
+            "url": f"/plugins/{plugin.name}/display/{path}",
+        }
+    elif filepath.suffix == ".md":
+        display = {
+            "url": f"/{plugin.name}/{path}",
         }
     else:
         display = None
 
-    if filepath.suffix == ".md":
-        display = {
-            "name": "markdown"
-        }
-
     context = {"path": path, "meta": meta, "display": display}
     response = templates.TemplateResponse(request, "info.html", context=context)
 
+    # Preserve state (query)
     current_url = furl.furl(hx_current_url)
     request_url = furl.furl(request.url)
-    response.headers['HX-Push-Url'] = request_url.set(current_url.query.params).url
+    push_url = request_url.copy()
+    push_url.set(current_url.query.params)
+    # Preserve fragment only if from a direct link
+    if request_url.path == current_url.path:
+        push_url.set(fragment=str(current_url.fragment))
+
+    response.headers['HX-Push-Url'] = push_url.url
+
     return response
 
 
