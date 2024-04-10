@@ -51,7 +51,7 @@ def walk_files(root, exclude=None):
 # Command line helpers
 #
 def socket_type(string):
-    host, port = string.split(':')
+    host, port = string.rsplit(':', maxsplit=1)
     port = int(port)
     return host, port
 
