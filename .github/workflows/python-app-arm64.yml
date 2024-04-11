@@ -17,6 +17,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install system dependencies
+      run: |
+        apt-get install python3-dev libhdf5-dev pkg-config
     - name: Install dependencies
       run: |
         # Use the Python in Ubuntu system
