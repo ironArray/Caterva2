@@ -586,7 +586,7 @@ async def html_path_info(
         }
     elif filepath.suffix == ".md":
         display = {
-            "url": "/markdown/{path}",
+            "url": f"/markdown/{path}",
         }
     else:
         display = None
