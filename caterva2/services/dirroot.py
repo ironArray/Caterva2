@@ -118,8 +118,11 @@ def create_example_root(path):
     path.mkdir(parents=True)
 
     with open(path / "README.md", "w") as f:
-        f.write("This is a simple example,\n"
+        f.write("# Header example\n"
+                "This is a simple example,\n"
+                "\n"
                 "with several lines,\n"
+                "\n"
                 "for showing purposes.\n")
 
     # A SChunk containing a data buffer.
