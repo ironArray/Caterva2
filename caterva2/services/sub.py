@@ -15,7 +15,7 @@ import pickle
 
 # FastAPI
 from fastapi import FastAPI, Request, responses
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
@@ -443,10 +443,10 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     return responses.StreamingResponse(downloader)
 
 
-@app.get('/api/download/{path:path}')
-async def download_data(path: str):
+@app.get('/api/download-url/{path:path}')
+async def download_url(path: str):
     """
-    Download a dataset.
+    Return the download URL from the publisher.
 
     Parameters
     ----------
@@ -470,6 +470,31 @@ async def download_data(path: str):
     if abspath.suffix == '.b2':
         path = f'{path}.b2'
     return f'http://{host}:{port}/files/{path}'
+
+
+@app.get('/api/download/{path:path}')
+async def download_data(path: str):
+    """
+    Download a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path to the dataset.
+
+    Returns
+    -------
+    The file's data.
+    """
+
+    abspath = srv_utils.cache_lookup(cache, path)
+
+    # Download and update the necessary chunks of the schunk in cache
+    await partial_download(abspath, path)
+
+    # Send the data to the client
+    abspath = pathlib.Path(abspath)
+    return FileResponse(abspath, filename=abspath.name)
 
 
 #

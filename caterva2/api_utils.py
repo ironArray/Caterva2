@@ -81,7 +81,7 @@ def fetch_data(path, host, params):
 
 
 def get_download_url(path, host):
-    response = httpx.get(f'http://{host}/api/download/{path}')
+    response = httpx.get(f'http://{host}/api/download-url/{path}')
     response.raise_for_status()
     return response.json()
 
