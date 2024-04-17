@@ -15,7 +15,7 @@ import pickle
 
 # FastAPI
 from fastapi import FastAPI, Request, responses
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
@@ -500,6 +500,24 @@ async def download_data(path: str):
 #
 # HTML interface
 #
+
+@app.get("/login", response_class=HTMLResponse)
+async def html_login(request: Request):
+    return templates.TemplateResponse(request, "login.html")
+
+
+"""
+@app.post("/login")
+async def html_login_post(request: Request):
+    error = False
+    if error:
+        context = {}
+        return templates.TemplateResponse(request, "login.html", context)
+
+    # TODO Set Cookie
+    return RedirectResponse("/", status_code=302)
+"""
+
 
 def home(request, roots=None, search=None, context=None):
     context = context or {}
