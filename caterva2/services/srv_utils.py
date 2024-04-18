@@ -188,11 +188,11 @@ def init_b2nd(metadata, urlpath=None):
 
     cparams = metadata.schunk.cparams.model_dump()
     dtype = np.dtype(metadata.dtype)
+    # Let default behaviour decide whether to use contiguous storage or not,
+    # depending on where the dataset is going to be stored.
+    # The original value is irrelevant.
     arr = blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
                         chunks=metadata.chunks, blocks=metadata.blocks,
-                        # Force contiguous storage until
-                        # non-contiguous datasets are handled properly.
-                        contiguous=True,
                         cparams=cparams, dparams={})
     for k, v in metadata.schunk.vlmeta.items():
         arr.schunk.vlmeta[k] = v
@@ -206,11 +206,11 @@ def init_b2frame(metadata, urlpath=None):
             urlpath.unlink()
 
     cparams = metadata.cparams.model_dump()
+    # Let default behaviour decide whether to use contiguous storage or not,
+    # depending on where the dataset is going to be stored.
+    # The original value is irrelevant.
     sc = blosc2.SChunk(
         metadata.chunksize,
-        # Force contiguous storage until
-        # non-contiguous datasets are handled properly.
-        contiguous=True,
         cparams=cparams,
         dparams={},
         urlpath=urlpath,
