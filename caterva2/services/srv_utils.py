@@ -193,7 +193,7 @@ def init_b2nd(metadata, urlpath=None):
                         # Force contiguous storage until
                         # non-contiguous datasets are handled properly.
                         contiguous=True,
-                        cparams=cparams)
+                        cparams=cparams, dparams={})
     for k, v in metadata.schunk.vlmeta.items():
         arr.schunk.vlmeta[k] = v
     return arr
