@@ -180,39 +180,41 @@ def compress(data, dst=None):
     return schunk
 
 
-def init_b2nd(metadata, urlpath=None):
+def _init_b2(make_b2, metadata, urlpath=None):
     if urlpath is not None:
         urlpath.parent.mkdir(exist_ok=True, parents=True)
         if urlpath.exists():
             urlpath.unlink()
 
-    dtype = np.dtype(metadata.dtype)
-    arr = blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
-                        chunks=metadata.chunks, blocks=metadata.blocks)
-    for k, v in metadata.schunk.vlmeta.items():
-        arr.schunk.vlmeta[k] = v
-    return arr
+    schunk_meta = getattr(metadata, 'schunk', metadata)
+    # Let default behaviour decide whether to use contiguous storage or not,
+    # depending on where the dataset is going to be stored.
+    # The original value is irrelevant.
+    b2_args = dict(urlpath=urlpath, dparams={},
+                   cparams=schunk_meta.cparams.model_dump())
+    b2 = make_b2(**b2_args)
+
+    b2_vlmeta = getattr(b2, 'schunk', b2).vlmeta
+    for k, v in schunk_meta.vlmeta.items():
+        b2_vlmeta[k] = v
+    return b2
+
+
+def init_b2nd(metadata, urlpath=None):
+    def make_b2nd(**kwargs):
+        return blosc2.uninit(metadata.shape, np.dtype(metadata.dtype),
+                             chunks=metadata.chunks, blocks=metadata.blocks,
+                             **kwargs)
+    return _init_b2(make_b2nd, metadata, urlpath)
 
 
 def init_b2frame(metadata, urlpath=None):
-    if urlpath is not None:
-        urlpath.parent.mkdir(exist_ok=True, parents=True)
-        if urlpath.exists():
-            urlpath.unlink()
-
-    cparams = metadata.cparams.model_dump()
-    sc = blosc2.SChunk(
-        metadata.chunksize,
-        contiguous=metadata.contiguous,
-        cparams=cparams,
-        dparams={},
-        urlpath=urlpath,
-    )
-    sc.fill_special(metadata.nbytes / sc.typesize,
-                    special_value=blosc2.SpecialValue.UNINIT)
-    for k, v in metadata.vlmeta.items():
-        sc.vlmeta[k] = v
-    return sc
+    def make_b2frame(**kwargs):
+        sc = blosc2.SChunk(metadata.chunksize, **kwargs)
+        sc.fill_special(metadata.nbytes / sc.typesize,
+                        special_value=blosc2.SpecialValue.UNINIT)
+        return sc
+    return _init_b2(make_b2frame, metadata, urlpath)
 
 
 def init_b2(abspath, metadata):
