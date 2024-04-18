@@ -186,12 +186,14 @@ def init_b2nd(metadata, urlpath=None):
         if urlpath.exists():
             urlpath.unlink()
 
+    cparams = metadata.schunk.cparams.model_dump()
     dtype = np.dtype(metadata.dtype)
     arr = blosc2.uninit(metadata.shape, dtype, urlpath=urlpath,
                         chunks=metadata.chunks, blocks=metadata.blocks,
                         # Force contiguous storage until
                         # non-contiguous datasets are handled properly.
-                        contiguous=True)
+                        contiguous=True,
+                        cparams=cparams)
     for k, v in metadata.schunk.vlmeta.items():
         arr.schunk.vlmeta[k] = v
     return arr
