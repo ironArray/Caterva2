@@ -10,6 +10,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 import pathlib
 import pickle
 
@@ -30,6 +31,7 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
+from caterva2.services.subscriber import db
 from .plugins import tomography
 
 
@@ -42,6 +44,7 @@ logger = logging.getLogger('sub')
 broker = None
 
 # State
+statedir = None
 cache = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
@@ -159,6 +162,10 @@ def follow(name: str):
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize the (users) database
+    if os.environ.get(db.SECRET_TOKEN_ENVVAR):
+        await db.create_db_and_tables(statedir)
+
     # Initialize roots from the broker
     try:
         data = api_utils.get(f'http://{broker}/api/roots')
@@ -692,7 +699,7 @@ def main():
     broker = args.broker
 
     # Init cache
-    global cache
+    global statedir, cache
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
