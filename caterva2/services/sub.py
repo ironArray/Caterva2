@@ -31,7 +31,7 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
-from caterva2.services.subscriber import db
+from caterva2.services.subscriber import db, schemas
 from .plugins import tomography
 
 
