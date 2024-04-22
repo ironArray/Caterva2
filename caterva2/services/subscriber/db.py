@@ -11,6 +11,13 @@
 
 Used for user authentication (for the moment), based on FastAPI Users example:
 https://fastapi-users.github.io/fastapi-users/latest/configuration/full-example/
+
+The database should only be used if a (non-empty) secret token for the
+management of users is set in the environment variable named by
+`SECRET_TOKEN_ENVVAR`.
+
+The database will be stored in SQLite format inside of the state directory
+given to `create_db_and_tables()`.
 """
 
 from pathlib import Path
