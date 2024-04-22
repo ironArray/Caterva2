@@ -31,7 +31,7 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
-from caterva2.services.subscriber import db, schemas
+from caterva2.services.subscriber import db, schemas, users
 from .plugins import tomography
 
 
@@ -163,7 +163,7 @@ def follow(name: str):
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
-    if os.environ.get(db.SECRET_TOKEN_ENVVAR):
+    if os.environ.get(users.SECRET_TOKEN_ENVVAR):
         await db.create_db_and_tables(statedir)
 
     # Initialize roots from the broker
