@@ -211,6 +211,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+if os.environ.get(users.SECRET_TOKEN_ENVVAR):
+    app.include_router(
+        users.fastapi_users.get_auth_router(users.auth_backend),
+        prefix="/auth/jwt", tags=["auth"]
+    )
+    app.include_router(
+        users.fastapi_users.get_register_router(
+            schemas.UserRead, schemas.UserCreate),
+        prefix="/auth", tags=["auth"],
+    )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
