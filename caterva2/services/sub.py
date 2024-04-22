@@ -160,10 +160,14 @@ def follow(name: str):
 # HTTP API
 #
 
+def user_auth_enabled():
+    return os.environ.get(users.SECRET_TOKEN_ENVVAR)
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
-    if os.environ.get(users.SECRET_TOKEN_ENVVAR):
+    if user_auth_enabled():
         await db.create_db_and_tables(statedir)
 
     # Initialize roots from the broker
@@ -211,7 +215,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-if os.environ.get(users.SECRET_TOKEN_ENVVAR):
+if user_auth_enabled():
     app.include_router(
         users.fastapi_users.get_auth_router(users.auth_backend),
         prefix="/auth/jwt", tags=["auth"]
