@@ -563,9 +563,13 @@ async def html_home(
     # Query parameters
     roots: list[str] = fastapi.Query([]),
     search: str = '',
-    user: db.User = Depends(current_active_user),
+    opt_user: db.User = Depends(optional_user),
 ):
-    context = {'username': user.email} if user else {}
+    # Redirect to login page if user not authenticated.
+    if user_auth_enabled() and not opt_user:
+        return RedirectResponse("/login", status_code=307)
+
+    context = {'username': opt_user.email} if opt_user else {}
     return home(request, roots, search, context)
 
 
