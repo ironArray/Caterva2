@@ -33,9 +33,23 @@
 </div>
 
 <script>
-document.getElementById("id_form").addEventListener("submit", (ev) => {
+document.getElementById("id_form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    // TODO await fetch
+
+    const username = document.getElementById("id_username").value;
+    const password = document.getElementById("id_password").value;
+    const response = await fetch(
+        "/auth/jwt/login", {
+            method: "POST",
+            body: new URLSearchParams({username: username,
+                                       password: password})},
+    );
+    const json = await response.json();
+
+    if (response.ok)
+        window.location.href = "/";
+
+    // TODO: Show error on failure.
 });
 </script>
 
