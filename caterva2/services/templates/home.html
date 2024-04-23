@@ -14,9 +14,7 @@
 
 <!-- Main section -->
 <div id="page">
-    <div hx-get="{{ roots_url }}" hx-trigger="load">
-        {% if username %}Logged in as: {{ username }}<br><a href="/logout">Logout</a>{% endif %}
-    </div>
+    <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
     <div id="path-list-wrapper">
         {% include 'loading.html' %}
         <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>
@@ -26,6 +24,7 @@
         {% include 'loading.html' %}
         <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
     </div>
+    {% if username %}<p>Logged in as: {{ username }}<br><a href="/logout">Logout</a></p>{% endif %}
 </div>
 
 </body>
