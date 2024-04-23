@@ -537,13 +537,14 @@ async def download_data(path: str):
 # HTML interface
 #
 
-@app.get("/login", response_class=HTMLResponse)
-async def html_login(
-        request: Request,
-        opt_user: db.User = Depends(optional_user)
-):
-    context = {'username': opt_user.email} if opt_user else {}
-    return templates.TemplateResponse(request, "login.html", context)
+if user_auth_enabled():
+    @app.get("/login", response_class=HTMLResponse)
+    async def html_login(
+            request: Request,
+            opt_user: db.User = Depends(optional_user)
+    ):
+        context = {'username': opt_user.email} if opt_user else {}
+        return templates.TemplateResponse(request, "login.html", context)
 
 
 def home(request, roots=None, search=None, context=None):
