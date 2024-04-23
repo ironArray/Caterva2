@@ -92,7 +92,7 @@ def make_get_http(host, path='/'):
         url = f'http://{host}{path}'
         try:
             r = httpx.get(url, timeout=0.5)
-            return r.status_code == 200
+            return 100 <= r.status_code < 500  # not internal errors
         except httpx.ConnectError:
             return False
     check.__name__ = f'get_http_{host}'  # more descriptive
