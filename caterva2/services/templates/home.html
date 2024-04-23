@@ -13,6 +13,12 @@
 <body class="vh-120">
 
 <!-- Main section -->
+{% if username %}
+<div class="alert alert-info">
+    Logged in as {{ username }}.
+    <a href="/logout">Logout</a>.
+</div>
+{% endif %}
 <div id="page">
     <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
     <div id="path-list-wrapper">
@@ -24,7 +30,6 @@
         {% include 'loading.html' %}
         <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
     </div>
-    {% if username %}<p>Logged in as: {{ username }}<br><a href="/logout">Logout</a></p>{% endif %}
 </div>
 
 </body>
