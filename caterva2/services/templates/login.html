@@ -12,6 +12,12 @@
 <body class="vh-120">
 
 <!-- Main section -->
+{% if username %}
+<div class="alert alert-info">
+    <strong>Note:</strong> You are already logged in as {{ username }}.
+    <a href="/logout">Logout</a>.
+</div>
+{% endif %}
 <div id="page">
     <form method="post" id="id_form">
         <div class="mb-3">

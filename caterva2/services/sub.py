@@ -166,6 +166,9 @@ def user_auth_enabled():
 
 current_active_user = (users.current_active_user if user_auth_enabled()
                        else (lambda: None))
+optional_user = (users.fastapi_users.current_user(optional=True)
+                 if user_auth_enabled()
+                 else (lambda: None))
 
 
 @contextlib.asynccontextmanager
@@ -535,8 +538,12 @@ async def download_data(path: str):
 #
 
 @app.get("/login", response_class=HTMLResponse)
-async def html_login(request: Request):
-    return templates.TemplateResponse(request, "login.html")
+async def html_login(
+        request: Request,
+        opt_user: db.User = Depends(optional_user)
+):
+    context = {'username': opt_user.email} if opt_user else {}
+    return templates.TemplateResponse(request, "login.html", context)
 
 
 """
