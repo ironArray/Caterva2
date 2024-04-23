@@ -563,15 +563,16 @@ def home(request, roots=None, search=None, context=None):
     return templates.TemplateResponse(request, "home.html", context)
 
 
-@app.get("/", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/", response_class=HTMLResponse)
 async def html_home(
     request: Request,
     # Query parameters
     roots: list[str] = fastapi.Query([]),
     search: str = '',
+    user: db.User = Depends(current_active_user),
 ):
-    return home(request, roots, search)
+    context = {'username': user.email} if user else {}
+    return home(request, roots, search, context)
 
 
 @app.get("/htmx/root-list/",
