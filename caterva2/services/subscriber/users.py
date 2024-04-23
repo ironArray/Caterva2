@@ -68,6 +68,8 @@ cookie_transport = CookieTransport(cookie_secure=False)  # TODO: only for testin
 
 
 def get_jwt_strategy() -> JWTStrategy:
+    # The token itself is valid for an hour, even after an explicit logout
+    # (however the cookie transport would delete the cookie anyway).
     return JWTStrategy(secret=os.environ.get(SECRET_TOKEN_ENVVAR),
                        lifetime_seconds=3600)
 
