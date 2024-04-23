@@ -15,7 +15,7 @@ import pathlib
 import pickle
 
 # FastAPI
-from fastapi import FastAPI, Request, responses
+from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -164,6 +164,10 @@ def user_auth_enabled():
     return os.environ.get(users.SECRET_TOKEN_ENVVAR)
 
 
+current_active_user = (users.current_active_user if user_auth_enabled()
+                       else (lambda: None))
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
@@ -229,7 +233,8 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@app.get('/api/roots')
+@app.get('/api/roots',
+         dependencies=[Depends(current_active_user)])
 async def get_roots() -> dict:
     """
     Get a dict of roots, with root names as keys and properties as values.
@@ -250,7 +255,8 @@ def get_root(name):
     return root
 
 
-@app.post('/api/subscribe/{name}')
+@app.post('/api/subscribe/{name}',
+         dependencies=[Depends(current_active_user)])
 async def post_subscribe(name: str):
     """
     Subscribe to a root.
@@ -270,7 +276,8 @@ async def post_subscribe(name: str):
     return 'Ok'
 
 
-@app.get('/api/list/{name}')
+@app.get('/api/list/{name}',
+         dependencies=[Depends(current_active_user)])
 async def get_list(name: str):
     """
     List the datasets in a root.
@@ -297,7 +304,8 @@ async def get_list(name: str):
     ]
 
 
-@app.get('/api/url/{path:path}')
+@app.get('/api/url/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def get_url(path: str):
     """
     Get the URLs to access a dataset.
@@ -326,7 +334,8 @@ async def get_url(path: str):
     return [http]
 
 
-@app.get('/api/info/{path:path}')
+@app.get('/api/info/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def get_info(path: str):
     """
     Get the metadata of a dataset.
@@ -389,7 +398,8 @@ async def partial_download(abspath, path, slice_=None):
                 await download_chunk(path, schunk, n)
 
 
-@app.get('/api/fetch/{path:path}')
+@app.get('/api/fetch/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
     """
     Fetch a dataset.
@@ -464,7 +474,8 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     return responses.StreamingResponse(downloader)
 
 
-@app.get('/api/download-url/{path:path}')
+@app.get('/api/download-url/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def download_url(path: str):
     """
     Return the download URL from the publisher.
@@ -493,7 +504,8 @@ async def download_url(path: str):
     return f'http://{host}:{port}/files/{path}'
 
 
-@app.get('/api/download/{path:path}')
+@app.get('/api/download/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def download_data(path: str):
     """
     Download a dataset.
@@ -551,7 +563,8 @@ def home(request, roots=None, search=None, context=None):
     return templates.TemplateResponse(request, "home.html", context)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def html_home(
     request: Request,
     # Query parameters
@@ -561,7 +574,8 @@ async def html_home(
     return home(request, roots, search)
 
 
-@app.get("/htmx/root-list/")
+@app.get("/htmx/root-list/",
+         dependencies=[Depends(current_active_user)])
 async def htmx_root_list(
     request: Request,
     # Headers
@@ -576,7 +590,8 @@ async def htmx_root_list(
     return templates.TemplateResponse(request, "root_list.html", context)
 
 
-@app.get("/htmx/path-list/", response_class=HTMLResponse)
+@app.get("/htmx/path-list/", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def htmx_path_list(
     request: Request,
     # Query parameters
@@ -617,7 +632,8 @@ async def htmx_path_list(
     return response
 
 
-@app.get("/roots/{path:path}", response_class=HTMLResponse)
+@app.get("/roots/{path:path}", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def html_path_info(
     request: Request,
     # Path parameters
@@ -672,7 +688,8 @@ async def html_path_info(
     return response
 
 
-@app.get("/markdown/{path:path}", response_class=HTMLResponse)
+@app.get("/markdown/{path:path}", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def markdown(
         request: Request,
         # Path parameters
