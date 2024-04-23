@@ -19,16 +19,16 @@
 </div>
 {% endif %}
 <div id="page">
-    <form method="post" id="id_form">
+    <form action="/auth/jwt/login" method="post" id="id_form">
         <div class="mb-3">
             <label for="id_username" class="form-label">Username</label>
-            <input type="username" class="form-control" id="id_username">
+            <input type="username" name="username" class="form-control" id="id_username">
         </div>
         <div class="mb-3">
             <label for="id_password" class="form-label">Password</label>
-            <input type="password" class="form-control" id="id_password">
+            <input type="password" name="password" class="form-control" id="id_password">
         </div>
-        <button type="submit" class="btn btn-primary">Submit</button>
+        <button type="submit" class="btn btn-primary">Login</button>
     </form>
 </div>
 
