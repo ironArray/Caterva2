@@ -31,10 +31,14 @@
         <button type="submit" class="btn btn-primary">Login</button>
     </form>
 </div>
+<div id="result"></div>
 
 <script>
 document.getElementById("id_form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+
+    const result = document.getElementById("result");
+    result.replaceChildren();  // empty the result view
 
     const username = document.getElementById("id_username").value;
     const password = document.getElementById("id_password").value;
@@ -44,12 +48,20 @@ document.getElementById("id_form").addEventListener("submit", async (ev) => {
             body: new URLSearchParams({username: username,
                                        password: password})},
     );
-    const json = await response.json();
 
-    if (response.ok)
+    if (response.ok) {
         window.location.href = "/";
+        return;
+    }
 
-    // TODO: Show error on failure.
+    const json = await response.json();
+    const errd = document.createElement("div");
+    errd.setAttribute("class", "alert alert-danger");
+    const errt = document.createTextNode("Authentication failed:");
+    const errp = document.createElement("pre");
+    errp.textContent = JSON.stringify(json);
+    errd.replaceChildren(errt, errp);
+    result.replaceChildren(errd);
 });
 </script>
 
