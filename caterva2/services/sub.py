@@ -546,19 +546,6 @@ async def html_login(
     return templates.TemplateResponse(request, "login.html", context)
 
 
-"""
-@app.post("/login")
-async def html_login_post(request: Request):
-    error = False
-    if error:
-        context = {}
-        return templates.TemplateResponse(request, "login.html", context)
-
-    # TODO Set Cookie
-    return RedirectResponse("/", status_code=302)
-"""
-
-
 def home(request, roots=None, search=None, context=None):
     context = context or {}
 
