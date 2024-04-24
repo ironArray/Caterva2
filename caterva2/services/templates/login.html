@@ -29,37 +29,5 @@
 </div>
 <div id="error"></div>
 
-<script>
-async function submitForm(form, errorElemId="error") {
-    const result = document.getElementById(errorElemId);
-    result.replaceChildren();  // empty the result view
-
-    const params = {};
-    for (const field of form.elements)
-        if (field.name != "")
-            params[field.name] = field.value;
-
-    const response = await fetch(
-        form.action, {
-            method: form.method,
-            body: new URLSearchParams(params)},
-    );
-
-    if (response.ok) {
-        window.location.href = "/";
-        return;
-    }
-
-    const json = await response.json();
-    const errd = document.createElement("div");
-    errd.setAttribute("class", "alert alert-danger");
-    const errt = document.createTextNode("Submission failed:");
-    const errp = document.createElement("pre");
-    errp.textContent = JSON.stringify(json);
-    errd.replaceChildren(errt, errp);
-    result.replaceChildren(errd);
-}
-</script>
-
 </body>
 </html>
