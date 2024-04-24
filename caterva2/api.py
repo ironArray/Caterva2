@@ -27,6 +27,8 @@ sub_host_default = 'localhost:8002'
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
 
+# TODO: Add user authentication support.
+
 def get_roots(host=sub_host_default):
     """
     Get the list of available roots.
