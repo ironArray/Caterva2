@@ -25,8 +25,8 @@ function clearContent(elementID) {
     document.getElementById(elementID).innerHTML = "";
 }
 
-async function submitForm(form, errorElemId="error") {
-    const result = document.getElementById(errorElemId);
+async function submitForm(form, errorElementID="error") {
+    const result = document.getElementById(errorElementID);
     result.replaceChildren();  // empty the result view
 
     const params = {};
