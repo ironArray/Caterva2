@@ -561,6 +561,14 @@ if user_auth_enabled():
         context = {'username': opt_user.email} if opt_user else {}
         return templates.TemplateResponse(request, "logout.html", context)
 
+    @app.get("/register", response_class=HTMLResponse)
+    async def html_register(
+            request: Request,
+            opt_user: db.User = Depends(optional_user)
+    ):
+        context = {'username': opt_user.email} if opt_user else {}
+        return templates.TemplateResponse(request, "register.html", context)
+
 
 def home(request, roots=None, search=None, context=None):
     context = context or {}
