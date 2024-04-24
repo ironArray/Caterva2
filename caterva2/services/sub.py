@@ -549,6 +549,18 @@ if user_auth_enabled():
         context = {'username': opt_user.email} if opt_user else {}
         return templates.TemplateResponse(request, "login.html", context)
 
+    @app.get("/logout", response_class=HTMLResponse)
+    async def html_logout(
+            request: Request,
+            opt_user: db.User = Depends(optional_user)
+    ):
+        # Redirect to root page if already not authenticated.
+        if user_auth_enabled() and not opt_user:
+            return RedirectResponse("/", status_code=307)
+
+        context = {'username': opt_user.email} if opt_user else {}
+        return templates.TemplateResponse(request, "logout.html", context)
+
 
 def home(request, roots=None, search=None, context=None):
     context = context or {}
