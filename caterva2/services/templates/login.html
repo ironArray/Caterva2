@@ -27,11 +27,11 @@
         <button type="submit" class="btn btn-primary">Login</button>
     </form>
 </div>
-<div id="result"></div>
+<div id="error"></div>
 
 <script>
-async function submitForm(form) {
-    const result = document.getElementById("result");
+async function submitForm(form, errorElemId="error") {
+    const result = document.getElementById(errorElemId);
     result.replaceChildren();  // empty the result view
 
     const params = {};
