@@ -19,7 +19,7 @@
 </div>
 {% endif %}
 <div id="page">
-    <form action="/auth/jwt/login" method="post" id="id_form">
+    <form action="/auth/jwt/login" method="post" onsubmit="submitForm(); return false">
         <div class="mb-3">
             <label for="id_username" class="form-label">Username</label>
             <input type="username" name="username" class="form-control" id="id_username">
@@ -34,9 +34,7 @@
 <div id="result"></div>
 
 <script>
-document.getElementById("id_form").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-
+async function submitForm() {
     const result = document.getElementById("result");
     result.replaceChildren();  // empty the result view
 
@@ -57,12 +55,12 @@ document.getElementById("id_form").addEventListener("submit", async (ev) => {
     const json = await response.json();
     const errd = document.createElement("div");
     errd.setAttribute("class", "alert alert-danger");
-    const errt = document.createTextNode("Authentication failed:");
+    const errt = document.createTextNode("Submission failed:");
     const errp = document.createElement("pre");
     errp.textContent = JSON.stringify(json);
     errd.replaceChildren(errt, errp);
     result.replaceChildren(errd);
-});
+}
 </script>
 
 </body>
