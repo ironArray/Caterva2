@@ -26,8 +26,8 @@ function clearContent(elementID) {
 }
 
 async function submitForm(form, errorElementID="error") {
-    const result = document.getElementById(errorElementID);
-    result.replaceChildren();  // empty the result view
+    const error = document.getElementById(errorElementID);
+    error.replaceChildren();  // empty the error view
 
     const params = {};
     for (const field of form.elements)
@@ -52,5 +52,5 @@ async function submitForm(form, errorElementID="error") {
     const errp = document.createElement("pre");
     errp.textContent = JSON.stringify(json);
     errd.replaceChildren(errt, errp);
-    result.replaceChildren(errd);
+    error.replaceChildren(errd);
 }
