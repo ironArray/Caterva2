@@ -25,7 +25,7 @@ function clearContent(elementID) {
     document.getElementById(elementID).innerHTML = "";
 }
 
-async function submitForm(form, errorElementID="error") {
+async function submitForm(form, successURL, errorElementID="error") {
     const error = document.getElementById(errorElementID);
     error.replaceChildren();  // empty the error view
 
@@ -41,7 +41,7 @@ async function submitForm(form, errorElementID="error") {
     );
 
     if (response.ok) {
-        window.location.href = "/";
+        window.location.href = successURL;
         return;
     }
 

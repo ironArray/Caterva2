@@ -18,7 +18,7 @@
 </div>
 {% endif %}
 <div id="page">
-    <form action="/auth/jwt/logout" method="post" onsubmit="submitForm(this); return false">
+    <form action="/auth/jwt/logout" method="post" onsubmit="submitForm(this, '/'); return false">
         <button type="submit" class="btn btn-primary">Logout</button>
     </form>
 </div>

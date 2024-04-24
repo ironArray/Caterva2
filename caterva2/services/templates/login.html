@@ -19,7 +19,7 @@
 </div>
 {% endif %}
 <div id="page">
-    <form action="/auth/jwt/login" method="post" onsubmit="submitForm(this); return false">
+    <form action="/auth/jwt/login" method="post" onsubmit="submitForm(this, '/'); return false">
         <label class="form-label">Username
             <input type="username" name="username" class="form-control"></label>
         <label class="form-label">Password
