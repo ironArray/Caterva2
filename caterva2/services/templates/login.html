@@ -20,14 +20,10 @@
 {% endif %}
 <div id="page">
     <form action="/auth/jwt/login" method="post" onsubmit="submitForm(this); return false">
-        <div class="mb-3">
-            <label for="id_username" class="form-label">Username</label>
-            <input type="username" name="username" class="form-control" id="id_username">
-        </div>
-        <div class="mb-3">
-            <label for="id_password" class="form-label">Password</label>
-            <input type="password" name="password" class="form-control" id="id_password">
-        </div>
+        <label class="form-label">Username
+            <input type="username" name="username" class="form-control"></label>
+        <label class="form-label">Password
+            <input type="password" name="password" class="form-control"></label>
         <button type="submit" class="btn btn-primary">Login</button>
     </form>
 </div>
