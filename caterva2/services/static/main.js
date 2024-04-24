@@ -25,7 +25,7 @@ function clearContent(elementID) {
     document.getElementById(elementID).innerHTML = "";
 }
 
-async function submitForm(form, successURL, errorElementID="error") {
+async function _submitForm(form, successURL, errorElementID, asJSON) {
     const error = document.getElementById(errorElementID);
     error.replaceChildren();  // empty the error view
 
@@ -37,7 +37,10 @@ async function submitForm(form, successURL, errorElementID="error") {
     const response = await fetch(
         form.action, {
             method: form.method,
-            body: new URLSearchParams(params)},
+            headers: {'Content-Type': (asJSON ? 'application/json'
+                                       : 'application/x-www-form-urlencoded')},
+            body: (asJSON ? JSON.stringify(params)
+                   : new URLSearchParams(params))},
     );
 
     if (response.ok) {
@@ -53,4 +56,12 @@ async function submitForm(form, successURL, errorElementID="error") {
     errp.textContent = JSON.stringify(json);
     errd.replaceChildren(errt, errp);
     error.replaceChildren(errd);
+}
+
+async function submitForm(form, successURL, errorElementID="error") {
+    return await _submitForm(form, successURL, errorElementID, false);
+}
+
+async function submitFormAsJSON(form, successURL, errorElementID="error") {
+    return await _submitForm(form, successURL, errorElementID, true);
 }
