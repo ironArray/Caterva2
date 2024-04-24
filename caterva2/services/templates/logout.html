@@ -18,38 +18,11 @@
 </div>
 {% endif %}
 <div id="page">
-    <form action="/auth/jwt/logout" method="post" id="id_form">
+    <form action="/auth/jwt/logout" method="post" onsubmit="submitForm(this); return false">
         <button type="submit" class="btn btn-primary">Logout</button>
     </form>
 </div>
-<div id="result"></div>
-
-<script>
-document.getElementById("id_form").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-
-    const result = document.getElementById("result");
-    result.replaceChildren();  // empty the result view
-
-    const response = await fetch(
-        "/auth/jwt/logout", {method: "POST"},
-    );
-
-    if (response.ok) {
-        window.location.href = "/";
-        return;
-    }
-
-    const json = await response.json();
-    const errd = document.createElement("div");
-    errd.setAttribute("class", "alert alert-danger");
-    const errt = document.createTextNode("Authentication failed:");
-    const errp = document.createElement("pre");
-    errp.textContent = JSON.stringify(json);
-    errd.replaceChildren(errt, errp);
-    result.replaceChildren(errd);
-});
-</script>
+<div id="error"></div>
 
 </body>
 </html>
