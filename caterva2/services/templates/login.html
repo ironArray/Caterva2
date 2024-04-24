@@ -19,7 +19,7 @@
 </div>
 {% endif %}
 <div id="page">
-    <form action="/auth/jwt/login" method="post" onsubmit="submitForm(); return false">
+    <form action="/auth/jwt/login" method="post" onsubmit="submitForm(this); return false">
         <div class="mb-3">
             <label for="id_username" class="form-label">Username</label>
             <input type="username" name="username" class="form-control" id="id_username">
@@ -34,15 +34,15 @@
 <div id="result"></div>
 
 <script>
-async function submitForm() {
+async function submitForm(form) {
     const result = document.getElementById("result");
     result.replaceChildren();  // empty the result view
 
     const username = document.getElementById("id_username").value;
     const password = document.getElementById("id_password").value;
     const response = await fetch(
-        "/auth/jwt/login", {
-            method: "POST",
+        form.action, {
+            method: form.method,
             body: new URLSearchParams({username: username,
                                        password: password})},
     );
