@@ -166,9 +166,12 @@ def user_auth_enabled():
 
 current_active_user = (users.current_active_user if user_auth_enabled()
                        else (lambda: None))
+"""Depend on this if the route needs an authenticated user (if enabled)."""
+
 optional_user = (users.fastapi_users.current_user(optional=True)
                  if user_auth_enabled()
                  else (lambda: None))
+"""Depend on this if the route may do something with no authentication."""
 
 
 @contextlib.asynccontextmanager
