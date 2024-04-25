@@ -237,6 +237,7 @@ if user_auth_enabled():
             schemas.UserRead, schemas.UserCreate),
         prefix="/auth", tags=["auth"],
     )
+    # TODO: Support user verification, allow password reset and user deletion.
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
@@ -570,6 +571,8 @@ if user_auth_enabled():
     ):
         context = {'username': opt_user.email} if opt_user else {}
         return templates.TemplateResponse(request, "register.html", context)
+
+    # TODO: Support user verification, allow password reset and user deletion.
 
 
 def home(request, roots=None, search=None, context=None):

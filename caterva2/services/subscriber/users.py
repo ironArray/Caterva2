@@ -46,6 +46,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     def verification_token_secret(self):
         return os.environ.get(SECRET_TOKEN_ENVVAR)
 
+    # TODO: Replace with actual functionality;
+    # support user verification, allow password reset and user deletion.
+
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         print(f"User {user.id} has registered.")
 
