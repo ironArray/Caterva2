@@ -43,11 +43,6 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
                    : new URLSearchParams(params))},
     );
 
-    if (successURL && response.ok) {
-        window.location.href = successURL;
-        return;
-    }
-
     const resd = document.createElement("div");
     resd.setAttribute("class", ("alert alert-"
                                 + (response.ok ? "success" : "danger")));
@@ -55,10 +50,16 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
         response.ok ? "Submission succeeded: " : "Submission failed: "));
     resd.appendChild(document.createElement("code"))
         .textContent = `${response.status} ${response.statusText}`;
-    if (response.status != 204)  // 204 No Content, "!response.ok" is quieter
+    if (!response.ok)
         resd.appendChild(document.createElement("pre"))
             .textContent = JSON.stringify(await response.json());
     result.replaceChildren(resd);
+
+    if (successURL && response.ok) {
+        // Flash successful response for 2s, then go to success URL.
+        await new Promise(r => setTimeout(r, 2000));
+        window.location.href = successURL;
+    }
 }
 
 async function submitForm(form, successURL, resultElementID="result") {
