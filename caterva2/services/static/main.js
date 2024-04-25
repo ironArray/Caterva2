@@ -25,9 +25,9 @@ function clearContent(elementID) {
     document.getElementById(elementID).innerHTML = "";
 }
 
-async function _submitForm(form, successURL, errorElementID, asJSON) {
-    const error = document.getElementById(errorElementID);
-    error.replaceChildren();  // empty the error view
+async function _submitForm(form, successURL, resultElementID, asJSON) {
+    const result = document.getElementById(resultElementID);
+    result.replaceChildren();  // empty the result view
 
     const params = {};
     for (const field of form.elements)
@@ -49,20 +49,20 @@ async function _submitForm(form, successURL, errorElementID, asJSON) {
     }
 
     const json = await response.json();
-    const errd = document.createElement("div");
-    errd.setAttribute("class", "alert alert-danger");
-    errd.appendChild(document.createTextNode("Submission failed: "));
-    errd.appendChild(document.createElement("code"))
+    const resd = document.createElement("div");
+    resd.setAttribute("class", "alert alert-danger");
+    resd.appendChild(document.createTextNode("Submission failed: "));
+    resd.appendChild(document.createElement("code"))
         .textContent = `${response.status} ${response.statusText}`;
-    errd.appendChild(document.createElement("pre"))
+    resd.appendChild(document.createElement("pre"))
         .textContent = JSON.stringify(json);
-    error.replaceChildren(errd);
+    result.replaceChildren(resd);
 }
 
-async function submitForm(form, successURL, errorElementID="error") {
-    return await _submitForm(form, successURL, errorElementID, false);
+async function submitForm(form, successURL, resultElementID="result") {
+    return await _submitForm(form, successURL, resultElementID, false);
 }
 
-async function submitFormAsJSON(form, successURL, errorElementID="error") {
-    return await _submitForm(form, successURL, errorElementID, true);
+async function submitFormAsJSON(form, successURL, resultElementID="result") {
+    return await _submitForm(form, successURL, resultElementID, true);
 }
