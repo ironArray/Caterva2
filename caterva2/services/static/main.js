@@ -48,14 +48,14 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
         return;
     }
 
-    const json = await response.json();
     const resd = document.createElement("div");
     resd.setAttribute("class", "alert alert-danger");
     resd.appendChild(document.createTextNode("Submission failed: "));
     resd.appendChild(document.createElement("code"))
         .textContent = `${response.status} ${response.statusText}`;
-    resd.appendChild(document.createElement("pre"))
-        .textContent = JSON.stringify(json);
+    if (response.status != 204)  // 204 No Content
+        resd.appendChild(document.createElement("pre"))
+            .textContent = JSON.stringify(await response.json());
     result.replaceChildren(resd);
 }
 
