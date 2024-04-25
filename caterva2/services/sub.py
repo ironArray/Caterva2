@@ -264,7 +264,7 @@ def get_root(name):
 
 
 @app.post('/api/subscribe/{name}',
-         dependencies=[Depends(current_active_user)])
+          dependencies=[Depends(current_active_user)])
 async def post_subscribe(name: str):
     """
     Subscribe to a root.
