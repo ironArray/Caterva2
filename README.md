@@ -229,9 +229,10 @@ The Caterva2 subscriber includes some initial and incomplete support for authent
 Also note that, although the subscriber side of the client API does support user authentication (using cookies), it is not yet supported by the client API implementation shipped with Caterva2.  You may still play with it using an HTTP client like cURL:
 
 ```sh
-curl -v --json '{"email":"foo@example.com","password":"bar"}' http://localhost:8002/auth/register
-curl -v -d'username=foo@example.com' -d'password=bar' http://localhost:8002/auth/jwt/login  # -> "Set-Cookie: c2subauth=...t3IM; ..."
-curl -v -b'c2subauth=...t3IM' http://localhost:8002/api/roots
+C2SUB=http://localhost:8002
+curl -v --json '{"email":"foo@example.com","password":"bar"}' $C2SUB/auth/register
+curl -v -d'username=foo@example.com' -d'password=bar' $C2SUB/auth/jwt/login #→Set-Cookie: c2subauth=…xxx;…
+curl -v -b'c2subauth=…xxx' $C2SUB/api/roots
 ```
 
 ## Tools
