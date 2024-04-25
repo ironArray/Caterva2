@@ -51,7 +51,9 @@ async function _submitForm(form, successURL, errorElementID, asJSON) {
     const json = await response.json();
     const errd = document.createElement("div");
     errd.setAttribute("class", "alert alert-danger");
-    errd.appendChild(document.createTextNode("Submission failed:"));
+    errd.appendChild(document.createTextNode("Submission failed: "));
+    errd.appendChild(document.createElement("code"))
+        .textContent = `${response.status} ${response.statusText}`;
     errd.appendChild(document.createElement("pre"))
         .textContent = JSON.stringify(json);
     error.replaceChildren(errd);
