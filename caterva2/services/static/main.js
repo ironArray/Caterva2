@@ -43,17 +43,19 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
                    : new URLSearchParams(params))},
     );
 
-    if (response.ok) {
+    if (successURL && response.ok) {
         window.location.href = successURL;
         return;
     }
 
     const resd = document.createElement("div");
-    resd.setAttribute("class", "alert alert-danger");
-    resd.appendChild(document.createTextNode("Submission failed: "));
+    resd.setAttribute("class", ("alert alert-"
+                                + (response.ok ? "success" : "danger")));
+    resd.appendChild(document.createTextNode(
+        response.ok ? "Submission succeeded: " : "Submission failed: "));
     resd.appendChild(document.createElement("code"))
         .textContent = `${response.status} ${response.statusText}`;
-    if (response.status != 204)  // 204 No Content
+    if (response.status != 204)  // 204 No Content, "!response.ok" is quieter
         resd.appendChild(document.createElement("pre"))
             .textContent = JSON.stringify(await response.json());
     result.replaceChildren(resd);
