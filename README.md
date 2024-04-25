@@ -230,8 +230,8 @@ Also note that, although the subscriber side of the client API does support user
 
 ```sh
 curl -v --json '{"email":"foo@example.com","password":"bar"}' http://localhost:8002/auth/register
-curl -v -d'username=foo@example.com' -d'password=bar' http://localhost:8002/auth/jwt/login  # -> "Set-Cookie: fastapi...t3IM; ..."
-curl -v -b'fastapi...t3IM' http://localhost:8002/api/roots
+curl -v -d'username=foo@example.com' -d'password=bar' http://localhost:8002/auth/jwt/login  # -> "Set-Cookie: c2subauth=...t3IM; ..."
+curl -v -b'c2subauth=...t3IM' http://localhost:8002/api/roots
 ```
 
 ## Tools
