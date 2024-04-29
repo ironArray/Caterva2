@@ -52,7 +52,10 @@ base-services = [
     "watchfiles",
 ]
 subscriber = [
+    "aiosqlite",
     "caterva2[base-services]",
+    "fastapi-users[sqlalchemy]",
+    "uvicorn[standard]",
     "furl",
     "jinja2",
     "markdown",

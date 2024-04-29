@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <title>User login</title>
+
     <link rel="icon" type="image/png" href="/static/logo-caterva2-16x16.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
     <script src="/static/main.js"></script>
     <link href="/static/main.css" rel="stylesheet">
@@ -15,22 +16,21 @@
 <!-- Main section -->
 {% if username %}
 <div class="alert alert-info">
-    Logged in as {{ username }}.
+    <strong>Note:</strong> You are already logged in as {{ username }}.
     <a href="/logout">Logout</a>.
 </div>
 {% endif %}
 <div id="page">
-    <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
-    <div id="path-list-wrapper">
-        {% include 'loading.html' %}
-        <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>
-        </div>
-    </div>
-    <div id="meta-wrapper">
-        {% include 'loading.html' %}
-        <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
-    </div>
+    <form action="/auth/jwt/login" method="post" onsubmit="submitForm(this, '/'); return false">
+        <label class="form-label">Username (e-mail)
+            <input type="username" name="username" class="form-control"></label>
+        <label class="form-label">Password
+            <input type="password" name="password" class="form-control"></label>
+        <button type="submit" class="btn btn-primary">Login</button>
+    </form>
 </div>
+<p><a href="/register">Register as a new user</a></p>
+<div id="result"></div>
 
 </body>
 </html>

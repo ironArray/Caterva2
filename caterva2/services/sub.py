@@ -10,12 +10,13 @@
 import asyncio
 import contextlib
 import logging
+import os
 import pathlib
 import pickle
 
 # FastAPI
-from fastapi import FastAPI, Request, responses
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import Depends, FastAPI, Request, responses
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
@@ -30,6 +31,7 @@ import uvicorn
 # Project
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
+from caterva2.services.subscriber import db, schemas, users
 from .plugins import tomography
 
 
@@ -42,6 +44,7 @@ logger = logging.getLogger('sub')
 broker = None
 
 # State
+statedir = None
 cache = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
@@ -157,8 +160,28 @@ def follow(name: str):
 # HTTP API
 #
 
+def user_auth_enabled():
+    return os.environ.get(users.SECRET_TOKEN_ENVVAR)
+
+
+current_active_user = (users.current_active_user if user_auth_enabled()
+                       else (lambda: None))
+"""Depend on this if the route needs an authenticated user (if enabled)."""
+
+optional_user = (users.fastapi_users.current_user(
+                     optional=True,
+                     verified=False)  # TODO: set when verification works
+                 if user_auth_enabled()
+                 else (lambda: None))
+"""Depend on this if the route may do something with no authentication."""
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize the (users) database
+    if user_auth_enabled():
+        await db.create_db_and_tables(statedir)
+
     # Initialize roots from the broker
     try:
         data = api_utils.get(f'http://{broker}/api/roots')
@@ -204,11 +227,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+if user_auth_enabled():
+    app.include_router(
+        users.fastapi_users.get_auth_router(users.auth_backend),
+        prefix="/auth/jwt", tags=["auth"]
+    )
+    app.include_router(
+        users.fastapi_users.get_register_router(
+            schemas.UserRead, schemas.UserCreate),
+        prefix="/auth", tags=["auth"],
+    )
+    # TODO: Support user verification, allow password reset and user deletion.
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@app.get('/api/roots')
+@app.get('/api/roots',
+         dependencies=[Depends(current_active_user)])
 async def get_roots() -> dict:
     """
     Get a dict of roots, with root names as keys and properties as values.
@@ -229,7 +264,8 @@ def get_root(name):
     return root
 
 
-@app.post('/api/subscribe/{name}')
+@app.post('/api/subscribe/{name}',
+          dependencies=[Depends(current_active_user)])
 async def post_subscribe(name: str):
     """
     Subscribe to a root.
@@ -249,7 +285,8 @@ async def post_subscribe(name: str):
     return 'Ok'
 
 
-@app.get('/api/list/{name}')
+@app.get('/api/list/{name}',
+         dependencies=[Depends(current_active_user)])
 async def get_list(name: str):
     """
     List the datasets in a root.
@@ -276,7 +313,8 @@ async def get_list(name: str):
     ]
 
 
-@app.get('/api/url/{path:path}')
+@app.get('/api/url/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def get_url(path: str):
     """
     Get the URLs to access a dataset.
@@ -305,7 +343,8 @@ async def get_url(path: str):
     return [http]
 
 
-@app.get('/api/info/{path:path}')
+@app.get('/api/info/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def get_info(path: str):
     """
     Get the metadata of a dataset.
@@ -368,7 +407,8 @@ async def partial_download(abspath, path, slice_=None):
                 await download_chunk(path, schunk, n)
 
 
-@app.get('/api/fetch/{path:path}')
+@app.get('/api/fetch/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
     """
     Fetch a dataset.
@@ -443,7 +483,8 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     return responses.StreamingResponse(downloader)
 
 
-@app.get('/api/download-url/{path:path}')
+@app.get('/api/download-url/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def download_url(path: str):
     """
     Return the download URL from the publisher.
@@ -472,7 +513,8 @@ async def download_url(path: str):
     return f'http://{host}:{port}/files/{path}'
 
 
-@app.get('/api/download/{path:path}')
+@app.get('/api/download/{path:path}',
+         dependencies=[Depends(current_active_user)])
 async def download_data(path: str):
     """
     Download a dataset.
@@ -501,6 +543,38 @@ async def download_data(path: str):
 # HTML interface
 #
 
+if user_auth_enabled():
+    @app.get("/login", response_class=HTMLResponse)
+    async def html_login(
+            request: Request,
+            opt_user: db.User = Depends(optional_user)
+    ):
+        context = {'username': opt_user.email} if opt_user else {}
+        return templates.TemplateResponse(request, "login.html", context)
+
+    @app.get("/logout", response_class=HTMLResponse)
+    async def html_logout(
+            request: Request,
+            opt_user: db.User = Depends(optional_user)
+    ):
+        # Redirect to root page if already not authenticated.
+        if user_auth_enabled() and not opt_user:
+            return RedirectResponse("/", status_code=307)
+
+        context = {'username': opt_user.email} if opt_user else {}
+        return templates.TemplateResponse(request, "logout.html", context)
+
+    @app.get("/register", response_class=HTMLResponse)
+    async def html_register(
+            request: Request,
+            opt_user: db.User = Depends(optional_user)
+    ):
+        context = {'username': opt_user.email} if opt_user else {}
+        return templates.TemplateResponse(request, "register.html", context)
+
+    # TODO: Support user verification, allow password reset and user deletion.
+
+
 def home(request, roots=None, search=None, context=None):
     context = context or {}
 
@@ -518,11 +592,18 @@ async def html_home(
     # Query parameters
     roots: list[str] = fastapi.Query([]),
     search: str = '',
+    opt_user: db.User = Depends(optional_user),
 ):
-    return home(request, roots, search)
+    # Redirect to login page if user not authenticated.
+    if user_auth_enabled() and not opt_user:
+        return RedirectResponse("/login", status_code=307)
+
+    context = {'username': opt_user.email} if opt_user else {}
+    return home(request, roots, search, context)
 
 
-@app.get("/htmx/root-list/")
+@app.get("/htmx/root-list/",
+         dependencies=[Depends(current_active_user)])
 async def htmx_root_list(
     request: Request,
     # Headers
@@ -537,7 +618,8 @@ async def htmx_root_list(
     return templates.TemplateResponse(request, "root_list.html", context)
 
 
-@app.get("/htmx/path-list/", response_class=HTMLResponse)
+@app.get("/htmx/path-list/", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def htmx_path_list(
     request: Request,
     # Query parameters
@@ -578,7 +660,8 @@ async def htmx_path_list(
     return response
 
 
-@app.get("/roots/{path:path}", response_class=HTMLResponse)
+@app.get("/roots/{path:path}", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def html_path_info(
     request: Request,
     # Path parameters
@@ -633,7 +716,8 @@ async def html_path_info(
     return response
 
 
-@app.get("/markdown/{path:path}", response_class=HTMLResponse)
+@app.get("/markdown/{path:path}", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def markdown(
         request: Request,
         # Path parameters
@@ -674,7 +758,7 @@ def main():
     broker = args.broker
 
     # Init cache
-    global cache
+    global statedir, cache
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
