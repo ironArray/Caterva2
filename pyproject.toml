@@ -16,7 +16,7 @@ name = "caterva2"
 requires-python = ">=3.10"
 readme = "README.md"
 authors = [
-    {name = "Blosc Development Team", email = "contact@blosc.org"},
+    {name = "ironArray SLU", email = "contact@ironarray.io"},
 ]
 dynamic = ["version", "description"]
 keywords = ["pubsub", "blosc2"]
