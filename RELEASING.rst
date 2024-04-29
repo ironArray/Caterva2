@@ -54,7 +54,7 @@ Tagging and releasing
 
     $ git push --delete origin vX.Y.Z
 
-- Create a new release by visiting https://github.com/Blosc/Caterva2/releases/new
+- Create a new release by visiting https://github.com/ironArray/Caterva2/releases/new
   and add the release notes copying them from ``RELEASE_NOTES.md`` document.
 
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::

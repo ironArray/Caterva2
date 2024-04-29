@@ -95,7 +95,7 @@ blosc2-plugins = [
 only-include = ["caterva2", "root-example"]
 
 [project.urls]
-Home = "https://github.com/Blosc/Caterva2"
+Home = "https://github.com/ironArray/Caterva2"
 
 [project.scripts]
 cat2bro = "caterva2.services.bro:main"

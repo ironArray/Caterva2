@@ -46,7 +46,7 @@ html_favicon = "_static/logo-caterva2-16x16.png"
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "github_url": "https://github.com/Blosc/Caterva2",
+    "github_url": "https://github.com/ironArray/Caterva2",
     "icon_links": [
         {
             "name": "Blosc Web Site",

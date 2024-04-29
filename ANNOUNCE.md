@@ -8,11 +8,11 @@ on-demand access to Blosc2 data repositories.
 
 For more info, you can have a look at the release notes in:
 
-https://github.com/Blosc/Caterva2/releases
+https://github.com/ironArray/Caterva2/releases
 
 More info and examples are available in the README:
 
-https://github.com/Blosc/Caterva2#readme
+https://github.com/ironArray/Caterva2#readme
 
 ## What is it?
 
@@ -28,7 +28,7 @@ datasets and sharing them within a local network, thereby optimizing
 communication and storage resources within work groups.
 
 Caterva2 is distributed using the AGPL license, see
-https://github.com/Blosc/Caterva2/blob/main/LICENSE.txt
+https://github.com/ironArray/Caterva2/blob/main/LICENSE.txt
 for details.
 
 ## People
