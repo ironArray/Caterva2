@@ -7,9 +7,9 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'Caterva2'
-copyright = '2024, The Blosc Development Team'
-author = 'The Blosc Development Team'
-release = '0.1'
+copyright = '2024, ironArray SLU'
+author = 'ironArray SLU'
+release = '0.3.dev0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -46,12 +46,12 @@ html_favicon = "_static/logo-caterva2-16x16.png"
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "github_url": "https://github.com/Blosc/Caterva2",
+    "github_url": "https://github.com/ironArray/Caterva2",
     "icon_links": [
         {
-            "name": "Blosc Web Site",
-            "url": "https://blosc.org/",
-            "icon": "_static/blosc-logo_128.png",
+            "name": "ironArray Web Site",
+            "url": "https://ironarray.io/",
+            "icon": "_static/ironArray-icon2-128px.png",
             "type": "local",
         },
     ],

@@ -8,11 +8,11 @@ on-demand access to Blosc2 data repositories.
 
 For more info, you can have a look at the release notes in:
 
-https://github.com/Blosc/Caterva2/releases
+https://github.com/ironArray/Caterva2/releases
 
 More info and examples are available in the README:
 
-https://github.com/Blosc/Caterva2#readme
+https://github.com/ironArray/Caterva2#readme
 
 ## What is it?
 
@@ -28,23 +28,17 @@ datasets and sharing them within a local network, thereby optimizing
 communication and storage resources within work groups.
 
 Caterva2 is distributed using the AGPL license, see
-https://github.com/Blosc/Caterva2/blob/main/LICENSE.txt
+https://github.com/ironArray/Caterva2/blob/main/LICENSE.txt
 for details.
 
-## People
+## Follow us
 
-Caterva2 is mainly developed and maintained by the Blosc Development Team:
+You can follow us on Mastodon: https://mastodon.social/@ironArray,
+LinkedIn: https://www.linkedin.com/company/77649425/admin/feed/posts/
+or on Twitter: https://twitter.com/ironArray
 
-* Francesc Alted: main specifications, implementation and maintenance
-* J. David Ibáñez: pubsub design and initial implementation
-* Ivan Vilata: ideas, implementation and maintenance
-* Marta Iborra: ideas, implementation and maintenance
+You can contact us at: https://ironarray.io
 
-## Mastodon feed
 
-Please follow https://fosstodon.org/@Blosc2 to get informed about the latest
-developments.
-
-- The Blosc Development Team
-
-  **We make compression better**
+-- The ironArray Team
+   We make compression better
