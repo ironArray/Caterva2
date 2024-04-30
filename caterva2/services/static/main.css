@@ -1,3 +1,7 @@
+body {
+    background-color: #f8f9fa;
+}
+
 #page {
     display: grid;
     padding: 0.5rem;
