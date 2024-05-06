@@ -11,13 +11,17 @@ import os
 import httpx
 import pytest
 
+from caterva2.services.subscriber import users as sub_users
+
+
+def sub_auth_enabled():
+    return bool(os.environ.get(sub_users.SECRET_TOKEN_ENVVAR))
+
 
 @pytest.fixture(scope='session')
 def sub_jwt_cookie(services):
-    from caterva2.services.subscriber import users as s_users
-
-    if not os.environ.get(s_users.SECRET_TOKEN_ENVVAR):
-        return None  # user authentication disabled
+    if not sub_auth_enabled():
+        return None
 
     sub_host = services.get_endpoint('subscriber')
     username, password = services.get_sub_auth()

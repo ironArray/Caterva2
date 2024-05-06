@@ -195,17 +195,16 @@ class ManagedServices(Services):
         self._setup_done = True
 
     def _ensure_sub_user(self):
-        from caterva2.services.subscriber import users as s_users
-
-        if not os.environ.get(s_users.SECRET_TOKEN_ENVVAR):
-            return  # user authentication disabled
+        from .sub_auth import sub_auth_enabled
+        if not sub_auth_enabled:
+            return
 
         # <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
         import asyncio
         from contextlib import asynccontextmanager as cx
         from fastapi_users.exceptions import UserAlreadyExists
         from caterva2.services.subscriber import (
-            db as s_db, schemas as s_schemas)
+            db as s_db, schemas as s_schemas, users as s_users)
 
         async def create_user():
             s_state = self.state_dir / 'subscriber'
