@@ -120,6 +120,7 @@ def sub_check(conf):
 
 
 TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
+UserAuth = collections.namedtuple('UserAuth', ['username', 'password'])
 
 
 class Services:
@@ -214,8 +215,9 @@ class ManagedServices(Services):
                 async with cx(s_db.get_async_session)() as session:
                     async with cx(s_db.get_user_db)(session) as udb:
                         async with cx(s_users.get_user_manager)(udb) as umgr:
+                            uauth = self.get_sub_auth()
                             await umgr.create(s_schemas.UserCreate(
-                                email='foo@example.com', password='foobar',
+                                email=uauth.username, password=uauth.password,
                             ))
             except UserAlreadyExists:
                 pass
@@ -248,6 +250,9 @@ class ManagedServices(Services):
     def get_endpoint(self, service):
         return self._endpoints.get(service)
 
+    def get_sub_auth(self):
+        return UserAuth(username='user@example.com', password='foobar')
+
 
 class ExternalServices(Services):
     def __init__(self, roots=None, configuration=None):
@@ -278,6 +283,9 @@ class ExternalServices(Services):
         if service not in self._checks:
             return None
         return self._checks[service].host
+
+    def get_sub_auth(self):
+        return UserAuth(None, None)
 
 
 @pytest.fixture(scope='session')
