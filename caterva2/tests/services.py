@@ -189,7 +189,38 @@ class ManagedServices(Services):
             elif not data_path.exists():
                 shutil.copy(root.source, data_path)
 
+        self._ensure_sub_user()
+
         self._setup_done = True
+
+    def _ensure_sub_user(self):
+        from caterva2.services.subscriber import users as s_users
+
+        if not os.environ.get(s_users.SECRET_TOKEN_ENVVAR):
+            return  # user authentication disabled
+
+        # <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
+        import asyncio
+        from contextlib import asynccontextmanager as cx
+        from fastapi_users.exceptions import UserAlreadyExists
+        from caterva2.services.subscriber import (
+            db as s_db, schemas as s_schemas)
+
+        async def create_user():
+            s_state = self.state_dir / 'subscriber'
+            s_state.mkdir(exist_ok=True)
+            await s_db.create_db_and_tables(s_state)
+            try:
+                async with cx(s_db.get_async_session)() as session:
+                    async with cx(s_db.get_user_db)(session) as udb:
+                        async with cx(s_users.get_user_manager)(udb) as umgr:
+                            await umgr.create(s_schemas.UserCreate(
+                                email='foo@example.com', password='foobar',
+                            ))
+            except UserAlreadyExists:
+                pass
+
+        asyncio.run(create_user())
 
     def start_all(self):
         self._setup()
