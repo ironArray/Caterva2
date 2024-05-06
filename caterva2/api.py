@@ -29,7 +29,7 @@ sub_host_default = 'localhost:8002'
 
 # TODO: Add user authentication support.
 
-def get_roots(host=sub_host_default):
+def get_roots(host=sub_host_default, auth_cookie=None):
     """
     Get the list of available roots.
 
@@ -38,6 +38,8 @@ def get_roots(host=sub_host_default):
 
     host : str
         The host to query.
+    auth_cookie : str
+        An HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -45,7 +47,8 @@ def get_roots(host=sub_host_default):
         The list of available roots.
 
     """
-    return api_utils.get(f'http://{host}/api/roots')
+    headers = {'Cookie': auth_cookie} if auth_cookie else None
+    return api_utils.get(f'http://{host}/api/roots', headers=headers)
 
 
 def subscribe(root, host=sub_host_default):
