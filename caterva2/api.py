@@ -13,6 +13,8 @@ This module provides a Python API to Caterva2.
 import functools
 import pathlib
 
+import httpx
+
 from caterva2 import api_utils
 
 
@@ -163,16 +165,30 @@ def download(dataset, host=sub_host_default):
 class Root:
     """
     A root is a remote repository that can be subscribed to.
+
+    If a non-empty `user_auth` mapping is given, its items are used as data to be posted
+    for authenticating the user and get an authorization token for further requests.
     """
-    def __init__(self, name, host=sub_host_default):
+    def __init__(self, name, host=sub_host_default, user_auth=None):
         self.name = name
         self.host = host
-        ret = api_utils.post(f'http://{host}/api/subscribe/{name}')
+
+        if user_auth:
+            if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
+                user_auth = user_auth._asdict()
+            resp = httpx.post(f'http://{host}/auth/jwt/login', data=user_auth)
+            resp.raise_for_status()
+            auth_cookie = '='.join(list(resp.cookies.items())[0])
+        self._auth_cookie = auth_cookie if user_auth else None
+
+        ret = api_utils.post(f'http://{host}/api/subscribe/{name}',
+                             auth_cookie=self._auth_cookie)
         if ret != 'Ok':
             roots = get_roots(host)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = api_utils.get(f'http://{host}/api/list/{name}')
+        self.node_list = api_utils.get(f'http://{host}/api/list/{name}',
+                                       auth_cookie=self._auth_cookie)
 
     def __repr__(self):
         return f'<Root: {self.name}>'

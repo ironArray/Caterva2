@@ -45,14 +45,14 @@ def test_roots(services, pub_host, sub_host, sub_jwt_cookie):
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
-def test_root(services, sub_host):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host)
+def test_root(services, sub_host, sub_user):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host, user_auth=sub_user)
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.host == sub_host
 
 
-def test_list(services, examples_dir, sub_host):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host)
+def test_list(services, examples_dir, sub_host, sub_user):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host, user_auth=sub_user)
     example = examples_dir
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
