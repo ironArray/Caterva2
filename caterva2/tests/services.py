@@ -120,7 +120,6 @@ def sub_check(conf):
 
 
 TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
-UserAuth = collections.namedtuple('UserAuth', ['username', 'password'])
 
 
 class Services:
@@ -190,38 +189,7 @@ class ManagedServices(Services):
             elif not data_path.exists():
                 shutil.copy(root.source, data_path)
 
-        self._ensure_sub_user()
-
         self._setup_done = True
-
-    def _ensure_sub_user(self):
-        from .sub_auth import sub_auth_enabled
-        if not sub_auth_enabled:
-            return
-
-        # <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
-        import asyncio
-        from contextlib import asynccontextmanager as cx
-        from fastapi_users.exceptions import UserAlreadyExists
-        from caterva2.services.subscriber import (
-            db as s_db, schemas as s_schemas, users as s_users)
-
-        async def create_user():
-            s_state = self.state_dir / 'subscriber'
-            s_state.mkdir(exist_ok=True)
-            await s_db.create_db_and_tables(s_state)
-            try:
-                async with cx(s_db.get_async_session)() as session:
-                    async with cx(s_db.get_user_db)(session) as udb:
-                        async with cx(s_users.get_user_manager)(udb) as umgr:
-                            uauth = self.get_sub_auth()
-                            await umgr.create(s_schemas.UserCreate(
-                                email=uauth.username, password=uauth.password,
-                            ))
-            except UserAlreadyExists:
-                pass
-
-        asyncio.run(create_user())
 
     def start_all(self):
         self._setup()
@@ -248,9 +216,6 @@ class ManagedServices(Services):
 
     def get_endpoint(self, service):
         return self._endpoints.get(service)
-
-    def get_sub_auth(self):
-        return UserAuth(username='user@example.com', password='foobar')
 
 
 class ExternalServices(Services):
@@ -282,9 +247,6 @@ class ExternalServices(Services):
         if service not in self._checks:
             return None
         return self._checks[service].host
-
-    def get_sub_auth(self):
-        return UserAuth(None, None)
 
 
 @pytest.fixture(scope='session')
@@ -325,7 +287,7 @@ def defers(func):
 
 @defers
 def main(defer):
-    from . import files, conf
+    from . import files, conf, sub_auth
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
     hdf5source = files.make_examples_hdf5()
@@ -362,6 +324,7 @@ def main(defer):
                            configuration=configuration)
     try:
         srvs.start_all()
+        sub_auth.make_sub_user(srvs)
         srvs.wait_for_all()
     finally:
         srvs.stop_all()
