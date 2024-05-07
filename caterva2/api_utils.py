@@ -132,7 +132,8 @@ def get(url, params=None, headers=None, timeout=5, model=None,
     return json if model is None else model(**json)
 
 
-def post(url, json=None):
-    response = httpx.post(url, json=json)
+def post(url, json=None, auth_cookie=None):
+    headers = {'Cookie': auth_cookie} if auth_cookie else None
+    response = httpx.post(url, json=json, headers=headers)
     response.raise_for_status()
     return response.json()
