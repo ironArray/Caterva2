@@ -7,15 +7,19 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import ast
 import asyncio
 import contextlib
+import itertools
 import logging
 import os
 import pathlib
 import pickle
+import string
+import typing
 
 # FastAPI
-from fastapi import Depends, FastAPI, Request, responses
+from fastapi import Depends, FastAPI, Form, Request, responses
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -46,6 +50,7 @@ broker = None
 # State
 statedir = None
 cache = None
+scratch = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 host = None
@@ -602,24 +607,25 @@ async def html_home(
     return home(request, roots, search, context)
 
 
-@app.get("/htmx/root-list/",
-         dependencies=[Depends(current_active_user)])
+@app.get("/htmx/root-list/")
 async def htmx_root_list(
     request: Request,
     # Headers
     roots: list[str] = fastapi.Query([]),
     hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user = Depends(current_active_user),
 ):
 
     context = {
         "roots": sorted(database.roots.values(), key=lambda x: x.name),
         "checked": roots,
+        "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
 
 
-@app.get("/htmx/path-list/", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/htmx/path-list/", response_class=HTMLResponse)
 async def htmx_path_list(
     request: Request,
     # Query parameters
@@ -627,26 +633,46 @@ async def htmx_path_list(
     search: str = '',
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user = Depends(current_active_user),
 ):
 
-    paths = []
-    for root in roots:
-        if not get_root(root).subscribed:
-            follow(root)
+    def get_names():
+        n = 1
+        while True:
+            for name in itertools.product(* [string.ascii_lowercase] * n):
+                yield ''.join(name)
+            n += 1
 
-        rootdir = cache / root
+    names = get_names()
+
+    datasets = []
+    for root in roots:
+        if user and root == '@output':
+            rootdir = scratch / str(user.id)
+        else:
+            if not get_root(root).subscribed:
+                follow(root)
+            rootdir = cache / root
+
         for path, relpath in utils.walk_files(rootdir):
             if relpath.suffix == '.b2':
                 relpath = relpath.with_suffix('')
             if search in str(relpath):
-                paths.append(f'{root}/{relpath}')
+                datasets.append({
+                    'path': f'{root}/{relpath}',
+                    'name': next(names),
+                })
 
     # Render template
+    cmd_url = make_url(request, 'htmx_command')
     search_url = make_url(request, 'htmx_path_list', {'roots': roots})
     context = {
-        "paths": paths,
+        "datasets": datasets,
         "search_text": search,
         "search_url": search_url,
+        "cmd_url": cmd_url,
+        "user": user,
     }
     response = templates.TemplateResponse(request, "path_list.html", context)
 
@@ -660,8 +686,7 @@ async def htmx_path_list(
     return response
 
 
-@app.get("/roots/{path:path}", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/roots/{path:path}", response_class=HTMLResponse)
 async def html_path_info(
     request: Request,
     # Path parameters
@@ -672,6 +697,8 @@ async def html_path_info(
     # Headers
     hx_request: srv_utils.HeaderType = None,
     hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user = Depends(current_active_user),
 ):
 
     if not hx_request:
@@ -680,8 +707,16 @@ async def html_path_info(
         }
         return home(request, roots, search, context)
 
-    filepath = cache / path
-    abspath = srv_utils.cache_lookup(cache, filepath)
+    parts = list(path.parts)
+    if user and parts[0] == '@output':
+        parts[0] = str(user.id)
+        path = pathlib.Path(*parts)
+        filepath = scratch / path
+        abspath = srv_utils.cache_lookup(scratch, filepath)
+    else:
+        filepath = cache / path
+        abspath = srv_utils.cache_lookup(cache, filepath)
+
     meta = srv_utils.read_metadata(abspath)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
@@ -714,6 +749,55 @@ async def html_path_info(
     response.headers['HX-Push-Url'] = push_url.url
 
     return response
+
+
+@app.post("/htmx/command/", response_class=HTMLResponse,
+          )
+async def htmx_command(
+    request: Request,
+    # Body
+    command: typing.Annotated[str, Form()],
+    names: typing.Annotated[list[str], Form()],
+    paths: typing.Annotated[list[str], Form()],
+    # Depends
+    user = Depends(current_active_user),
+):
+
+    # Parse command
+    try:
+        mod = ast.parse(command)
+    except SyntaxError:
+        error = 'Invalid syntax'
+        return templates.TemplateResponse(request, "command.html", {'text': error})
+
+    try:
+        body = mod.body
+        assign = body[0]
+        targets = assign.targets
+        target = targets[0]
+        result_name = target.id
+    except AttributeError:
+        error = 'Expected assignment expression'
+        return templates.TemplateResponse(request, "command.html", {'text': error})
+
+    # Download datasets
+    params = {}
+    for name, path in zip(names, paths):
+        if name:
+            abspath = srv_utils.cache_lookup(cache, path)
+            await partial_download(abspath, path)
+            params[name] = cache / path
+
+    # XXX Create empty array
+    path = scratch / str(user.id)
+    path.mkdir(exist_ok=True, parents=True)
+    blosc2.empty((10, 10), urlpath=f'{path / result_name}.b2nd', mode='w')
+
+    # TODO Display info and update list
+    context = {'text': 'Output saved'}
+    response = templates.TemplateResponse(request, "command.html", context)
+    return response
+
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse,
@@ -763,6 +847,12 @@ def main():
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
     app.mount("/files", StaticFiles(directory=cache), name="files")
+
+    # Scratch dir
+    global scratch
+    scratch = statedir / 'scratch'
+    scratch.mkdir(exist_ok=True, parents=True)
+    app.mount("/scratch", StaticFiles(directory=scratch), name="scratch")
 
     # Init database
     global database

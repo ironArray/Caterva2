@@ -44,9 +44,10 @@ body {
     display: block;
 }
 
-.list-group-item.active {
+#path-list .active {
     background-color: #008287;
     border-color: #008287;
+    color: white;
 }
 
 .btn-outline-success {

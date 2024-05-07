@@ -2,8 +2,6 @@
     <img src="/static/logo-caterva2-horizontal-small.png" alt="Caterva2 logo" id="logo">
 </a>
 
-Roots:
-
 <form hx-get="/htmx/path-list/"
       hx-target="#path-list"
       hx-trigger="change"
@@ -11,13 +9,31 @@ Roots:
       hx-indicator="#path-list-wrapper .htmx-indicator"
       hx-on:htmx:before-request="clearContent('path-list');">
 
+    Roots:
+
     {% for root in roots %}
+    {% with name=root.name %}
     <div class="form-check">
         <input class="form-check-input" type="checkbox"
-               name="roots" value="{{ root.name }}" {{ "checked" if root.name in checked }}
-               id="id_root_{{ root.name }}">
-        <label class="form-check-label" for="id_root_{{ root.name }}">{{ root.name }}</label>
+               name="roots" value="{{ name }}" {{ "checked" if name in checked }}
+               id="id_root_{{ name }}">
+        <label class="form-check-label" for="id_root_{{ name }}">{{ name }}</label>
     </div>
+    {% endwith %}
     {% endfor %}
+
+    {% if user %}
+    {% with name="@output" %}
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox"
+               name="roots" value="{{ name }}" {{ "checked" if name in checked }}
+               id="id_root_{{ name }}">
+        <label class="form-check-label" for="id_root_{{ name }}"
+               title="This special root contains the results of calculations done by the user">
+            {{ name }}
+        </label>
+    </div>
+    {% endwith %}
+    {% endif %}
 
 </form>
