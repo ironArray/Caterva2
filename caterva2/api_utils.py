@@ -121,7 +121,11 @@ def download_url(url, localpath, try_unpack=True):
 #
 # HTTP client helpers
 #
-def get(url, params=None, headers=None, timeout=5, model=None):
+def get(url, params=None, headers=None, timeout=5, model=None,
+        auth_cookie=None):
+    if auth_cookie:
+        headers = headers.copy() if headers else {}
+        headers['Cookie'] = auth_cookie
     response = httpx.get(url, params=params, headers=headers, timeout=timeout)
     response.raise_for_status()
     json = response.json()

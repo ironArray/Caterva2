@@ -47,8 +47,7 @@ def get_roots(host=sub_host_default, auth_cookie=None):
         The list of available roots.
 
     """
-    headers = {'Cookie': auth_cookie} if auth_cookie else None
-    return api_utils.get(f'http://{host}/api/roots', headers=headers)
+    return api_utils.get(f'http://{host}/api/roots', auth_cookie=auth_cookie)
 
 
 def subscribe(root, host=sub_host_default):
