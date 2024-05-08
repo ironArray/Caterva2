@@ -15,7 +15,7 @@ import caterva2 as cat2
 
 
 # Use the demo server
-SUB_HOST = 'demo.caterva2.net:8002'  # why automatic redirection does not work here?
+SUB_HOST = 'demo-api.caterva2.net:8202'
 ROOT_NAME = 'example'
 
 # Get the list of available roots
