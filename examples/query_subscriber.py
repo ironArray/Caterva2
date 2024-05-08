@@ -6,11 +6,15 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import os
+from time import time
 
 # Small example of how to query a dataset on a subscriber
 
 import httpx
 import blosc2
+import numpy as np
+
 import caterva2 as cat2
 
 
@@ -35,19 +39,25 @@ print(array[:2])
 
 # There are different ways to get the data
 # 1. Direct download
+t0 = time()
 urlpath = array.get_download_url()
-print(urlpath)
 data = httpx.get(urlpath)
-#print(data.content)
+t = time() - t0
+# print(urlpath)
+print(f"Time for downloading data (HTTP): {t:.3f}s - {len(data.content) / 2**10:.2f} KB")
+mem_array = blosc2.ndarray_from_cframe(data.content)
+# print(mem_array.info)
 
 # 2. Download to a local file
+t0 = time()
 localpath = array.download()
+t = time() - t0
+print(f"Time for downloading data (API) : {t:.3f}s - {os.path.getsize(localpath) / 2**10:.2f} KB")
 data2 = open(localpath, 'rb').read()
-#print(data2)
+disk_array = blosc2.open(localpath)
 
 # Check that both methods return the same data
-assert data.content == data2
+np.testing.assert_array_equal(disk_array[:], mem_array[:])
 
 # Get some info on local (downloaded) data
-local_array = blosc2.open(localpath)
-print(local_array.info)
+print(disk_array.info)
