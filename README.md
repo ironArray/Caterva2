@@ -46,7 +46,7 @@ You may install Caterva2 in several ways:.
 - Wheel built from source code:
 
   ```sh
-  git clone https://github.com/Blosc/Caterva2
+  git clone https://github.com/ironArray/Caterva2
   cd Caterva2
   python -m build
   python -m pip install dist/caterva2-*.whl
@@ -55,7 +55,7 @@ You may install Caterva2 in several ways:.
 - Developer setup:
 
   ```sh
-  git clone https://github.com/Blosc/Caterva2
+  git clone https://github.com/ironArray/Caterva2
   cd Caterva2
   python -m pip install -e .
   ```

@@ -1,7 +1,7 @@
 ###############################################################################
 # Caterva2 - On demand access to remote Blosc2 data repositories
 #
-# Copyright (c) 2023 The Blosc Developers <blosc@blosc.org>
+# Copyright (c) 2023 ironArray SLU <contact@ironarray.io>
 # https://www.blosc.org
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
@@ -16,7 +16,7 @@ name = "caterva2"
 requires-python = ">=3.10"
 readme = "README.md"
 authors = [
-    {name = "Blosc Development Team", email = "contact@blosc.org"},
+    {name = "ironArray SLU", email = "contact@ironarray.io"},
 ]
 dynamic = ["version", "description"]
 keywords = ["pubsub", "blosc2"]
@@ -95,7 +95,7 @@ blosc2-plugins = [
 only-include = ["caterva2", "root-example"]
 
 [project.urls]
-Home = "https://github.com/Blosc/Caterva2"
+Home = "https://github.com/ironArray/Caterva2"
 
 [project.scripts]
 cat2bro = "caterva2.services.bro:main"

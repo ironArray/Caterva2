@@ -5,9 +5,9 @@
  Everyone is permitted to copy and distribute verbatim copies
  of this license document, but changing it is not allowed.
 
- For Blosc - A blocking, shuffling and lossless compression library
+ For Caterva2 - On-demand access to local/remote Blosc2 data repositories
 
- Copyright (c) 2023-present, The Blosc Development Team <blosc@blosc.org>
+ Copyright (c) 2023-present, ironArray SLU <contact@ironarray.io>
  All rights reserved.
 
                             Preamble

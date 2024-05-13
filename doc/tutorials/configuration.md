@@ -16,4 +16,4 @@ The configuration file may also hold settings for different instances of the sam
 # Settings for publisher with `--id bar`.
 ```
 
-Some of the supported settings will be explained in [](Running-independent-Caterva2-services).  See [caterva2.sample.toml](https://github.com/Blosc/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
+Some of the supported settings will be explained in [](Running-independent-Caterva2-services).  See [caterva2.sample.toml](https://github.com/ironArray/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
