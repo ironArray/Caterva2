@@ -781,6 +781,7 @@ async def htmx_command(
         return templates.TemplateResponse(request, "command.html", {'text': error})
 
     # Download datasets
+    # TODO: download only the necessary ones
     params = {}
     for name, path in zip(names, paths):
         if name:
@@ -788,10 +789,17 @@ async def htmx_command(
             await partial_download(abspath, path)
             params[name] = cache / path
 
-    # XXX Create empty array
+    # XXX Create LazyArray
+    var_dict = {'blosc2': blosc2}
+    for node in ast.walk(assign.value):
+        if isinstance(node, ast.Name):
+            var_dict[node.id] = blosc2.open(params[node.id], mode='r')
+    expr = command.split('=')[1]
+    arr = eval(expr, var_dict)
+
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
-    blosc2.empty((10, 10), urlpath=f'{path / result_name}.b2nd', mode='w')
+    arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
 
     # TODO Display info and update list
     context = {'text': 'Output saved'}
