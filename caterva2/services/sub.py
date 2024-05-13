@@ -166,7 +166,7 @@ def follow(name: str):
 #
 
 def user_auth_enabled():
-    return os.environ.get(users.SECRET_TOKEN_ENVVAR)
+    return bool(os.environ.get(users.SECRET_TOKEN_ENVVAR))
 
 
 current_active_user = (users.current_active_user if user_auth_enabled()
