@@ -179,16 +179,16 @@ class Root:
             resp = httpx.post(f'http://{host}/auth/jwt/login', data=user_auth)
             resp.raise_for_status()
             auth_cookie = '='.join(list(resp.cookies.items())[0])
-        self._auth_cookie = auth_cookie if user_auth else None
+        self.auth_cookie = auth_cookie if user_auth else None
 
         ret = api_utils.post(f'http://{host}/api/subscribe/{name}',
-                             auth_cookie=self._auth_cookie)
+                             auth_cookie=self.auth_cookie)
         if ret != 'Ok':
             roots = get_roots(host)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
         self.node_list = api_utils.get(f'http://{host}/api/list/{name}',
-                                       auth_cookie=self._auth_cookie)
+                                       auth_cookie=self.auth_cookie)
 
     def __repr__(self):
         return f'<Root: {self.name}>'
@@ -199,10 +199,10 @@ class Root:
         """
         if node.endswith((".b2nd", ".b2frame")):
             return Dataset(node, root=self.name, host=self.host,
-                           auth_cookie=self._auth_cookie)
+                           auth_cookie=self.auth_cookie)
         else:
             return File(node, root=self.name, host=self.host,
-                        auth_cookie=self._auth_cookie)
+                        auth_cookie=self.auth_cookie)
 
 
 class File:
@@ -242,9 +242,9 @@ class File:
         self.name = name
         self.host = host
         self.path = pathlib.Path(f'{self.root}/{self.name}')
-        self._auth_cookie = auth_cookie
+        self.auth_cookie = auth_cookie
         self.meta = api_utils.get(f'http://{host}/api/info/{self.path}',
-                                  auth_cookie=self._auth_cookie)
+                                  auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
 
