@@ -64,10 +64,11 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def fetch_data(path, host, params):
+def fetch_data(path, host, params, auth_cookie=None):
     if 'prefer_schunk' not in params:
         params['prefer_schunk'] = blosc2_is_here
-    response = _xget(f'http://{host}/api/fetch/{path}', params=params)
+    response = _xget(f'http://{host}/api/fetch/{path}', params=params,
+                     auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
     try:
@@ -81,8 +82,9 @@ def fetch_data(path, host, params):
     return data
 
 
-def get_download_url(path, host):
-    response = _xget(f'http://{host}/api/download-url/{path}')
+def get_download_url(path, host, auth_cookie=None):
+    response = _xget(f'http://{host}/api/download-url/{path}',
+                     auth_cookie=auth_cookie)
     return response.json()
 
 

@@ -287,7 +287,8 @@ class File:
         >>> file.get_download_url()
         'http://localhost:8002/files/foo/ds-1d.b2nd'
         """
-        download_path = api_utils.get_download_url(self.path, self.host)
+        download_path = api_utils.get_download_url(
+            self.path, self.host, auth_cookie=self.auth_cookie)
         return download_path
 
     def __getitem__(self, slice_):
@@ -344,7 +345,8 @@ class File:
         slice_ = api_utils.slice_to_string(slice_)
         prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
         data = api_utils.fetch_data(self.path, self.host,
-                                    {'slice_': slice_, 'prefer_schunk': prefer_schunk})
+                                    {'slice_': slice_, 'prefer_schunk': prefer_schunk},
+                                    auth_cookie=self.auth_cookie)
         return data
 
     def download(self):
