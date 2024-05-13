@@ -58,8 +58,8 @@ def test_list(services, examples_dir, sub_host, sub_user):
     assert set(myroot.node_list) == nodes
 
 
-def test_file(services, sub_host):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host)
+def test_file(services, sub_host, sub_user):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host, user_auth=sub_user)
     file = myroot['README.md']
     assert file.name == 'README.md'
     assert file.host == sub_host

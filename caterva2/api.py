@@ -198,9 +198,11 @@ class Root:
         Get a file or dataset from the root.
         """
         if node.endswith((".b2nd", ".b2frame")):
-            return Dataset(node, root=self.name, host=self.host)
+            return Dataset(node, root=self.name, host=self.host,
+                           auth_cookie=self._auth_cookie)
         else:
-            return File(node, root=self.name, host=self.host)
+            return File(node, root=self.name, host=self.host,
+                        auth_cookie=self._auth_cookie)
 
 
 class File:
@@ -215,6 +217,8 @@ class File:
         The name of the root.
     host : str
         The host to query.
+    auth_cookie: str
+        An optional cookie to authorize requests via HTTP.
 
     Examples
     --------
@@ -233,12 +237,14 @@ class File:
     >>> file[0]
     b'T'
     """
-    def __init__(self, name, root, host):
+    def __init__(self, name, root, host, auth_cookie=None):
         self.root = root
         self.name = name
         self.host = host
         self.path = pathlib.Path(f'{self.root}/{self.name}')
-        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}')
+        self._auth_cookie = auth_cookie
+        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}',
+                                  auth_cookie=self._auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
 
@@ -373,6 +379,8 @@ class Dataset(File):
         The name of the root.
     host : str
         The host to query.
+    auth_cookie: str
+        An optional cookie to authorize requests via HTTP.
 
     Examples
     --------
@@ -383,8 +391,8 @@ class Dataset(File):
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
     """
-    def __init__(self, name, root, host):
-        super().__init__(name, root, host)
+    def __init__(self, name, root, host, auth_cookie=None):
+        super().__init__(name, root, host, auth_cookie)
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
