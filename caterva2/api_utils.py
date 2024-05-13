@@ -67,8 +67,7 @@ def parse_slice(string):
 def fetch_data(path, host, params):
     if 'prefer_schunk' not in params:
         params['prefer_schunk'] = blosc2_is_here
-    response = httpx.get(f'http://{host}/api/fetch/{path}', params=params)
-    response.raise_for_status()
+    response = _xget(f'http://{host}/api/fetch/{path}', params=params)
     data = response.content
     # Try different deserialization methods
     try:
@@ -83,8 +82,7 @@ def fetch_data(path, host, params):
 
 
 def get_download_url(path, host):
-    response = httpx.get(f'http://{host}/api/download-url/{path}')
-    response.raise_for_status()
+    response = _xget(f'http://{host}/api/download-url/{path}')
     return response.json()
 
 
@@ -121,13 +119,18 @@ def download_url(url, localpath, try_unpack=True):
 #
 # HTTP client helpers
 #
-def get(url, params=None, headers=None, timeout=5, model=None,
-        auth_cookie=None):
+def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None):
     if auth_cookie:
         headers = headers.copy() if headers else {}
         headers['Cookie'] = auth_cookie
     response = httpx.get(url, params=params, headers=headers, timeout=timeout)
     response.raise_for_status()
+    return response
+
+
+def get(url, params=None, headers=None, timeout=5, model=None,
+        auth_cookie=None):
+    response = _xget(url, params, headers, timeout, auth_cookie)
     json = response.json()
     return json if model is None else model(**json)
 
