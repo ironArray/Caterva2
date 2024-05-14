@@ -10,17 +10,44 @@
     <button class="btn btn-outline-success" type="submit">Search</button>
 </form>
 
-<div id="path-list" class="h-75 overflow-scroll mt-1 list-group">
-    {% for path in paths %}
-        <a href="/roots/{{path}}" class="list-group-item list-group-item-action"
-           hx-boost="true" hx-target="#meta"
-           hx-indicator="#meta-wrapper .htmx-indicator"
-           hx-on:htmx:after-request="activate('#path-list a', this)"
-           >
-            {{path}}
-        </a>
-    {% endfor %}
-</div>
+<!--- Compute --->
+
+{% if user %}
+<form class="mt-1" hx-post="{{ cmd_url }}" hx-target="#meta">
+
+    <div class="d-flex">
+        <input class="form-control me-2" name="command" type="text"
+               placeholder="Prompt" aria-label="Prompt" value="">
+        <button class="btn btn-outline-success" type="submit">GO</button>
+    </div>
+{% endif %}
+
+    <div id="path-list" class="h-75 overflow-scroll mt-1">
+        {% for dataset in datasets %}
+            <div class="input-group">
+                {% if user %}
+                    <input class="form-control flex-shrink-1" type="text" name="names" value="{{dataset.name}}">
+                    <input class="form-control" type="hidden" name="paths" value="{{dataset.path}}">
+                    {# <span class="input-group-text flex-shrink-1">=</span> #}
+                {% endif %}
+                <a href="/roots/{{dataset.path}}"
+                   class="input-group-text text-decoration-none"
+                   style="width: 90%"
+                   hx-boost="true" hx-target="#meta"
+                   hx-indicator="#meta-wrapper .htmx-indicator"
+                   hx-on:htmx:after-request="activate('#path-list a', this)"
+                   >
+                    {{dataset.path}}
+                </a>
+            </div>
+
+        {% endfor %}
+    </div>
+
+{% if user %}
+</form>
+{% endif %}
+
 
 <script>
 activate('#path-list a')
