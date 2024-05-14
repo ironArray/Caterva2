@@ -166,7 +166,7 @@ def follow(name: str):
 #
 
 def user_auth_enabled():
-    return os.environ.get(users.SECRET_TOKEN_ENVVAR)
+    return bool(os.environ.get(users.SECRET_TOKEN_ENVVAR))
 
 
 current_active_user = (users.current_active_user if user_auth_enabled()
@@ -545,6 +545,34 @@ async def download_data(path: str):
 
 
 #
+# Static files (as `StaticFiles` does not support authorization)
+#
+
+async def download_static(path: str, directory: pathlib.Path):
+    abspath = srv_utils.cache_lookup(directory, path)
+    abspath = pathlib.Path(abspath)
+    # TODO: Support conditional requests, HEAD, etc.
+    return FileResponse(abspath, filename=abspath.name)
+
+
+@app.get('/files/{path:path}',
+         dependencies=[Depends(current_active_user)])
+async def download_cached(path: str):
+    if path.endswith('.b2'):
+        path = path[:-3]  # let cache lookup re-add extension
+    return await download_static(path, cache)
+
+
+@app.get('/scratch/{path:path}')
+async def download_scratch(path: str,
+                           user = Depends(current_active_user)):
+    parts = pathlib.Path(path).parts
+    if user and (not parts or parts[0] != str(user.id)):
+        raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
+    return await download_static(path, scratch)
+
+
+#
 # HTML interface
 #
 
@@ -846,13 +874,15 @@ def main():
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
-    app.mount("/files", StaticFiles(directory=cache), name="files")
+    # Use `download_cached()`, `StaticFiles` does not support authorization.
+    #app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Scratch dir
     global scratch
     scratch = statedir / 'scratch'
     scratch.mkdir(exist_ok=True, parents=True)
-    app.mount("/scratch", StaticFiles(directory=scratch), name="scratch")
+    # Use `download_scratch()`, `StaticFiles` does not support authorization.
+    #app.mount("/scratch", StaticFiles(directory=scratch), name="scratch")
 
     # Init database
     global database
