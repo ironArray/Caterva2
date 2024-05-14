@@ -62,6 +62,15 @@ def parse_slice(string):
     return tuple(obj)
 
 
+def get_auth_cookie(host, user_auth):
+    if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
+        user_auth = user_auth._asdict()
+    resp = httpx.post(f'http://{host}/auth/jwt/login', data=user_auth)
+    resp.raise_for_status()
+    auth_cookie = '='.join(list(resp.cookies.items())[0])
+    return auth_cookie
+
+
 def fetch_data(path, host, params, auth_cookie=None):
     if 'prefer_schunk' not in params:
         params['prefer_schunk'] = blosc2_is_here

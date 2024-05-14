@@ -13,8 +13,6 @@ This module provides a Python API to Caterva2.
 import functools
 import pathlib
 
-import httpx
-
 from caterva2 import api_utils
 
 
@@ -186,14 +184,8 @@ class Root:
     def __init__(self, name, host=sub_host_default, user_auth=None):
         self.name = name
         self.host = host
-
-        if user_auth:
-            if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
-                user_auth = user_auth._asdict()
-            resp = httpx.post(f'http://{host}/auth/jwt/login', data=user_auth)
-            resp.raise_for_status()
-            auth_cookie = '='.join(list(resp.cookies.items())[0])
-        self.auth_cookie = auth_cookie if user_auth else None
+        self.auth_cookie = (api_utils.get_auth_cookie(host, user_auth)
+                            if user_auth else None)
 
         ret = api_utils.post(f'http://{host}/api/subscribe/{name}',
                              auth_cookie=self.auth_cookie)

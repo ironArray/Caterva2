@@ -43,10 +43,7 @@ def with_auth_cookie(func):
         auth_cookie = None
         if args.username and args.password:
             user_auth = dict(username=args.username, password=args.password)
-            resp = httpx.post(f'http://{args.host}/auth/jwt/login',
-                              data=user_auth)
-            resp.raise_for_status()
-            auth_cookie = '='.join(list(resp.cookies.items())[0])
+            auth_cookie = api_utils.get_auth_cookie(args.host, user_auth)
         return func(args, auth_cookie=auth_cookie)
     return wrapper
 
