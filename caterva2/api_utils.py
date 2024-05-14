@@ -101,11 +101,12 @@ def b2_unpack(filepath):
     return outfile
 
 
-def download_url(url, localpath, try_unpack=True):
+def download_url(url, localpath, try_unpack=True, auth_cookie=None):
     is_b2 = url.endswith('.b2')
     if is_b2:
         localpath += '.b2'
-    with httpx.stream("GET", url) as r:
+    headers = {'Cookie': auth_cookie} if auth_cookie else None
+    with httpx.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
         # Build the local filepath
         localpath = pathlib.Path(localpath)

@@ -366,7 +366,8 @@ class File:
         PosixPath('foo/ds-1d.b2nd')
         """
         urlpath = self.get_download_url()
-        return api_utils.download_url(urlpath, str(self.path))
+        return api_utils.download_url(urlpath, str(self.path),
+                                      auth_cookie=self.auth_cookie)
 
 
 class Dataset(File):
