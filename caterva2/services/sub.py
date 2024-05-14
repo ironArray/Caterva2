@@ -559,6 +559,16 @@ async def download_file(path: str):
     return FileResponse(abspath, filename=abspath.name)
 
 
+# TODO: Forbid access to other users' datasets.
+@app.get('/scratch/{path:path}',
+         dependencies=[Depends(current_active_user)])
+async def download_scratch(path: str):
+    abspath = srv_utils.cache_lookup(scratch, path)
+    abspath = pathlib.Path(abspath)
+    # TODO: Support conditional requests, HEAD, etc.
+    return FileResponse(abspath, filename=abspath.name)
+
+
 #
 # HTML interface
 #
@@ -868,7 +878,8 @@ def main():
     global scratch
     scratch = statedir / 'scratch'
     scratch.mkdir(exist_ok=True, parents=True)
-    app.mount("/scratch", StaticFiles(directory=scratch), name="scratch")
+    # Use `download_scratch()`, `StaticFiles` does not support authorization.
+    #app.mount("/scratch", StaticFiles(directory=scratch), name="scratch")
 
     # Init database
     global database
