@@ -86,13 +86,12 @@ def cmd_list(args):
 def cmd_url(args):
     # TODO: provide a url that can be used to open the dataset in blosc2
     # TODO: add a new function to the API that returns the url
-    data = api_utils.get(f'http://{args.host}/api/url/{args.root}')
+    data = api_utils.get_download_url(args.root, args.host)
     if args.json:
         print(json.dumps(data))
         return
 
-    for url in data:
-        print(url)
+    print(data)
 
 
 @handle_errors
