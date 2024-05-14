@@ -21,8 +21,6 @@ except ImportError:
     blosc2_is_here = False
 
 
-# TODO: Add user authentication support.
-
 def split_dsname(dataset):
     ds = str(dataset)
     root_sep = ds.find('/')
