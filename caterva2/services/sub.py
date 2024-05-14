@@ -557,7 +557,7 @@ async def download_static(path: str, directory: pathlib.Path):
 
 @app.get('/files/{path:path}',
          dependencies=[Depends(current_active_user)])
-async def download_file(path: str):
+async def download_cached(path: str):
     if path.endswith('.b2'):
         path = path[:-3]  # let cache lookup re-add extension
     return await download_static(path, cache)
@@ -874,7 +874,7 @@ def main():
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
-    # Use `download_file()`, `StaticFiles` does not support authorization.
+    # Use `download_cached()`, `StaticFiles` does not support authorization.
     #app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Scratch dir
