@@ -559,10 +559,12 @@ async def download_file(path: str):
     return FileResponse(abspath, filename=abspath.name)
 
 
-# TODO: Forbid access to other users' datasets.
-@app.get('/scratch/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def download_scratch(path: str):
+@app.get('/scratch/{path:path}')
+async def download_scratch(path: str,
+                           user = Depends(current_active_user)):
+    parts = pathlib.Path(path).parts
+    if user and (not parts or parts[0] != str(user.id)):
+        raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
     abspath = srv_utils.cache_lookup(scratch, path)
     abspath = pathlib.Path(abspath)
     # TODO: Support conditional requests, HEAD, etc.
