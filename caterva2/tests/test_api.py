@@ -124,7 +124,8 @@ def test_index_dataset_nd(slice_, as_schunk, name, services, examples_dir, sub_h
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def test_download_b2nd(name, services, examples_dir, sub_host, sub_user):
+def test_download_b2nd(name, services, examples_dir, sub_host,
+                       sub_user, sub_jwt_cookie):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host, user_auth=sub_user)
     ds = myroot[name]
     path = ds.download()
@@ -138,13 +139,15 @@ def test_download_b2nd(name, services, examples_dir, sub_host, sub_user):
 
     # Using 2-step download
     urlpath = ds.get_download_url()
-    data = httpx.get(urlpath)
+    data = httpx.get(urlpath,
+                     headers={'Cookie': sub_jwt_cookie} if sub_user else None)
     assert data.status_code == 200
     b = blosc2.ndarray_from_cframe(data.content)
     np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_b2frame(services, examples_dir, sub_host, sub_user):
+def test_download_b2frame(services, examples_dir, sub_host,
+                          sub_user, sub_jwt_cookie):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host, user_auth=sub_user)
     ds = myroot['ds-hello.b2frame']
     path = ds.download()
@@ -159,7 +162,8 @@ def test_download_b2frame(services, examples_dir, sub_host, sub_user):
     # Using 2-step download
     urlpath = ds.get_download_url()
     assert urlpath == f"http://{sub_host}/files/{ds.path}"
-    data = httpx.get(urlpath)
+    data = httpx.get(urlpath,
+                     headers={'Cookie': sub_jwt_cookie} if sub_user else None)
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
     assert a[:] == b[:]
@@ -183,7 +187,8 @@ def test_index_regular_file(slice_, as_schunk, services, examples_dir, sub_host,
         assert ds.fetch(slice_, as_schunk) == a[slice_]
 
 
-def test_download_regular_file(services, examples_dir, sub_host, sub_user):
+def test_download_regular_file(services, examples_dir, sub_host,
+                               sub_user, sub_jwt_cookie):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, host=sub_host, user_auth=sub_user)
     ds = myroot['README.md']
     path = ds.download()
@@ -198,7 +203,8 @@ def test_download_regular_file(services, examples_dir, sub_host, sub_user):
     # Using 2-step download
     urlpath = ds.get_download_url()
     assert urlpath == f"http://{sub_host}/files/{ds.path}.b2"
-    data = httpx.get(urlpath)
+    data = httpx.get(urlpath,
+                     headers={'Cookie': sub_jwt_cookie} if sub_user else None)
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
     # TODO: why do we need .decode() here?
