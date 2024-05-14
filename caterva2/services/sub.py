@@ -545,6 +545,21 @@ async def download_data(path: str):
 
 
 #
+# Static files (as `StaticFiles` does not support authorization)
+#
+
+@app.get('/files/{path:path}',
+         dependencies=[Depends(current_active_user)])
+async def download_file(path: str):
+    if path.endswith('.b2'):
+        path = path[:-3]  # let cache lookup re-add extension
+    abspath = srv_utils.cache_lookup(cache, path)
+    abspath = pathlib.Path(abspath)
+    # TODO: Support conditional requests, HEAD, etc.
+    return FileResponse(abspath, filename=abspath.name)
+
+
+#
 # HTML interface
 #
 
@@ -846,7 +861,8 @@ def main():
     statedir = args.statedir.resolve()
     cache = statedir / 'cache'
     cache.mkdir(exist_ok=True, parents=True)
-    app.mount("/files", StaticFiles(directory=cache), name="files")
+    # Use `download_file()`, `StaticFiles` does not support authorization.
+    #app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Scratch dir
     global scratch
