@@ -22,6 +22,11 @@ def pub_host(services):
     return services.get_endpoint(f'publisher.{TEST_CATERVA2_ROOT}')
 
 
+@pytest.fixture
+def sub_host(services):
+    return services.get_endpoint(f'subscriber')
+
+
 def cli(cargs, binary=False, sub_user=None) -> str or dict:
     cli_path = 'caterva2.clients.cli'
     args = [sys.executable, '-m' + str(cli_path)]
@@ -43,9 +48,9 @@ def test_roots(services, pub_host, sub_user):
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
-def test_url(services, pub_host, sub_user):
-    out = cli(['url', TEST_CATERVA2_ROOT], sub_user=sub_user)
-    assert out == [f'http://{pub_host}']
+def test_url(services, sub_host, sub_user):
+    out = cli(['url', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], sub_user=sub_user)
+    assert out == f'http://{sub_host}/files/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
 
 
 def test_subscribe(services, sub_user):
