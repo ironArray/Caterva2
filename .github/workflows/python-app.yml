@@ -30,6 +30,11 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+    - name: Test with pytest (auth on)
+      run: |
+        pytest
+      env:
+        CATERVA2_AUTH_SECRET: c2sikrit
     - name: Test building docs
       run: |
         pip install -r doc/requirements.txt
