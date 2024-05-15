@@ -767,7 +767,7 @@ async def htmx_command(
     # Parse command
     try:
         result_name, expr = command.split('=')
-        vars = ne.Numexpr(expr).input_names
+        vars = ne.NumExpr(expr).input_names
     except (SyntaxError, ValueError):
         error = 'Invalid syntax'
         return templates.TemplateResponse(request, "command.html", {'text': error})
