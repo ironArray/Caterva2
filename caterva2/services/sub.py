@@ -59,8 +59,8 @@ port = None
 
 
 def make_url(request, name, query=None, **path_params):
-    url = request.url_for(name, **path_params)  # <starlette.datastructures.URL>
-    url = str(url)
+    url = request.app.url_path_for(name, **path_params)
+    url = str(url)  # <starlette.datastructures.URLPath>
 
     if query:
         url = furl.furl(url).set(query).url
