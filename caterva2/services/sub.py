@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
+import numexpr as ne
 
 # Requirements
 import blosc2
@@ -765,36 +766,19 @@ async def htmx_command(
 
     # Parse command
     try:
-        mod = ast.parse(command)
-    except SyntaxError:
+        result_name, expr = command.split('=')
+        vars = ne.Numexpr(expr).input_names
+    except (SyntaxError, ValueError):
         error = 'Invalid syntax'
         return templates.TemplateResponse(request, "command.html", {'text': error})
 
-    try:
-        body = mod.body
-        assign = body[0]
-        targets = assign.targets
-        target = targets[0]
-        result_name = target.id
-    except AttributeError:
-        error = 'Expected assignment expression'
-        return templates.TemplateResponse(request, "command.html", {'text': error})
-
     # Download datasets
-    # TODO: download only the necessary ones
-    params = {}
-    for name, path in zip(names, paths):
-        if name:
-            abspath = srv_utils.cache_lookup(cache, path)
-            await partial_download(abspath, path)
-            params[name] = cache / path
-
-    # XXX Create LazyArray
-    var_dict = {'blosc2': blosc2}
-    for node in ast.walk(assign.value):
-        if isinstance(node, ast.Name):
-            var_dict[node.id] = blosc2.open(params[node.id], mode='r')
-    expr = command.split('=')[1]
+    var_dict = {}
+    for var in vars:
+        path = paths[names.index(var)]
+        abspath = srv_utils.cache_lookup(cache, path)
+        await partial_download(abspath, path)
+        var_dict[var] = blosc2.open(cache / path, mode="r")
     arr = eval(expr, var_dict)
 
     path = scratch / str(user.id)
