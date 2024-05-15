@@ -27,13 +27,15 @@
         {% set _ = meta.schunk.__delattr__('cratio') %}
 
     {% else %}
-        {% set nbytes_value = '%d (cbytes: %d ; cratio: %.2f)' %
-            (meta.nbytes, meta.cbytes, meta.cratio) %}
-        {% set _ = meta.__setattr__('nbytes', nbytes_value) %}
-        {% set _ = meta.__delattr__('cbytes') %}
-        {% set _ = meta.__delattr__('cratio') %}
-        {% set _ = meta.cparams.__delattr__('filters') %}
-        {% set _ = meta.cparams.__delattr__('filters_meta') %}
+        {% if meta.nbytes %}
+            {% set nbytes_value = '%d (cbytes: %d ; cratio: %.2f)' %
+                (meta.nbytes, meta.cbytes, meta.cratio) %}
+            {% set _ = meta.__setattr__('nbytes', nbytes_value) %}
+            {% set _ = meta.__delattr__('cbytes') %}
+            {% set _ = meta.__delattr__('cratio') %}
+            {% set _ = meta.cparams.__delattr__('filters') %}
+            {% set _ = meta.cparams.__delattr__('filters_meta') %}
+        {% endif %}
     {% endif %}
 
     {% for key, value in meta %}

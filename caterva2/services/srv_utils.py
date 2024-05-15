@@ -80,6 +80,8 @@ def read_metadata(obj):
         cparams = reformat_cparams(cparams)
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
+    elif isinstance(obj, blosc2.LazyExpr):
+        return get_model_from_obj(obj, models.LazyArray)
     else:
         raise TypeError(f'unexpected {type(obj)}')
 

@@ -721,8 +721,10 @@ async def html_path_info(
     meta = srv_utils.read_metadata(abspath)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
-    contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
-
+    if hasattr(getattr(meta, 'schunk', meta), 'vlmeta'):
+        contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
+    else:
+        contenttype = None
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -767,6 +769,7 @@ async def htmx_command(
     # Parse command
     try:
         result_name, expr = command.split('=')
+        expr = expr.strip()
         vars = ne.NumExpr(expr).input_names
     except (SyntaxError, ValueError):
         error = 'Invalid syntax'
@@ -776,11 +779,8 @@ async def htmx_command(
     var_dict = {}
     for var in vars:
         path = paths[names.index(var)]
-        abspath = srv_utils.cache_lookup(cache, path)
-        await partial_download(abspath, path)
         var_dict[var] = blosc2.open(cache / path, mode="r")
     arr = eval(expr, var_dict)
-
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
