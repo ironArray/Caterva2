@@ -21,8 +21,6 @@ except ImportError:
     blosc2_is_here = False
 
 
-# TODO: Add user authentication support.
-
 def split_dsname(dataset):
     ds = str(dataset)
     root_sep = ds.find('/')
@@ -64,11 +62,20 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def fetch_data(path, host, params):
+def get_auth_cookie(host, user_auth):
+    if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
+        user_auth = user_auth._asdict()
+    resp = httpx.post(f'http://{host}/auth/jwt/login', data=user_auth)
+    resp.raise_for_status()
+    auth_cookie = '='.join(list(resp.cookies.items())[0])
+    return auth_cookie
+
+
+def fetch_data(path, host, params, auth_cookie=None):
     if 'prefer_schunk' not in params:
         params['prefer_schunk'] = blosc2_is_here
-    response = httpx.get(f'http://{host}/api/fetch/{path}', params=params)
-    response.raise_for_status()
+    response = _xget(f'http://{host}/api/fetch/{path}', params=params,
+                     auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
     try:
@@ -82,9 +89,9 @@ def fetch_data(path, host, params):
     return data
 
 
-def get_download_url(path, host):
-    response = httpx.get(f'http://{host}/api/download-url/{path}')
-    response.raise_for_status()
+def get_download_url(path, host, auth_cookie=None):
+    response = _xget(f'http://{host}/api/download-url/{path}',
+                     auth_cookie=auth_cookie)
     return response.json()
 
 
@@ -101,11 +108,12 @@ def b2_unpack(filepath):
     return outfile
 
 
-def download_url(url, localpath, try_unpack=True):
+def download_url(url, localpath, try_unpack=True, auth_cookie=None):
     is_b2 = url.endswith('.b2')
     if is_b2:
         localpath += '.b2'
-    with httpx.stream("GET", url) as r:
+    headers = {'Cookie': auth_cookie} if auth_cookie else None
+    with httpx.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
         # Build the local filepath
         localpath = pathlib.Path(localpath)
@@ -121,14 +129,24 @@ def download_url(url, localpath, try_unpack=True):
 #
 # HTTP client helpers
 #
-def get(url, params=None, headers=None, timeout=5, model=None):
+def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None):
+    if auth_cookie:
+        headers = headers.copy() if headers else {}
+        headers['Cookie'] = auth_cookie
     response = httpx.get(url, params=params, headers=headers, timeout=timeout)
     response.raise_for_status()
+    return response
+
+
+def get(url, params=None, headers=None, timeout=5, model=None,
+        auth_cookie=None):
+    response = _xget(url, params, headers, timeout, auth_cookie)
     json = response.json()
     return json if model is None else model(**json)
 
 
-def post(url, json=None):
-    response = httpx.post(url, json=json)
+def post(url, json=None, auth_cookie=None):
+    headers = {'Cookie': auth_cookie} if auth_cookie else None
+    response = httpx.post(url, json=json, headers=headers)
     response.raise_for_status()
     return response.json()

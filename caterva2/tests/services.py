@@ -287,7 +287,7 @@ def defers(func):
 
 @defers
 def main(defer):
-    from . import files, conf
+    from . import files, conf, sub_auth
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
     hdf5source = files.make_examples_hdf5()
@@ -324,6 +324,7 @@ def main(defer):
                            configuration=configuration)
     try:
         srvs.start_all()
+        sub_auth.make_sub_user(srvs)
         srvs.wait_for_all()
     finally:
         srvs.stop_all()

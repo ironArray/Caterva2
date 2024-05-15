@@ -46,4 +46,8 @@ loglevel = "warning"  # All service messages having this severity or worse will 
 http = "localhost:8001"
 # ... other settings as above ...
 
-# There are no sections for client programs (yet), but they may still access this file to know about other programs' configuration, like the subscriber endpoint.
+# Common configuration of client programs.
+# Only one of these is allowed for the moment.
+[client]
+username = ""  # If present and not empty, a name to be used to authenticate the user to the subscriber and get an authorization token.
+password = ""  # If present and not empty, a password for the previous user.

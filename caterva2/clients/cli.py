@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import functools
 import json
 import pathlib
 import re
@@ -36,6 +37,17 @@ def handle_errors(func):
     return wrapper
 
 
+def with_auth_cookie(func):
+    @functools.wraps(func)
+    def wrapper(args):
+        auth_cookie = None
+        if args.username and args.password:
+            user_auth = dict(username=args.username, password=args.password)
+            auth_cookie = api_utils.get_auth_cookie(args.host, user_auth)
+        return func(args, auth_cookie=auth_cookie)
+    return wrapper
+
+
 def dataset_with_slice(dataset):
     match = re.match('(.*)\\[(.*)]', dataset)
     if match is None:
@@ -48,8 +60,9 @@ def dataset_with_slice(dataset):
 
 
 @handle_errors
-def cmd_roots(args):
-    data = cat2.get_roots(host=args.host)
+@with_auth_cookie
+def cmd_roots(args, auth_cookie):
+    data = cat2.get_roots(host=args.host, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -62,8 +75,9 @@ def cmd_roots(args):
 
 
 @handle_errors
-def cmd_subscribe(args):
-    data = cat2.subscribe(args.root, host=args.host)
+@with_auth_cookie
+def cmd_subscribe(args, auth_cookie):
+    data = cat2.subscribe(args.root, host=args.host, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -72,8 +86,9 @@ def cmd_subscribe(args):
 
 
 @handle_errors
-def cmd_list(args):
-    data = cat2.get_list(args.root, host=args.host)
+@with_auth_cookie
+def cmd_list(args, auth_cookie):
+    data = cat2.get_list(args.root, host=args.host, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -83,22 +98,25 @@ def cmd_list(args):
 
 
 @handle_errors
-def cmd_url(args):
+@with_auth_cookie
+def cmd_url(args, auth_cookie):
     # TODO: provide a url that can be used to open the dataset in blosc2
     # TODO: add a new function to the API that returns the url
-    data = api_utils.get(f'http://{args.host}/api/url/{args.root}')
+    data = api_utils.get_download_url(args.root, args.host,
+                                      auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
 
-    for url in data:
-        print(url)
+    print(data)
 
 
 @handle_errors
-def cmd_info(args):
+@with_auth_cookie
+def cmd_info(args, auth_cookie):
     print(f"Getting info for {args.dataset}")
-    data = cat2.get_info(args.dataset, host=args.host)
+    data = cat2.get_info(args.dataset, host=args.host,
+                         auth_cookie=auth_cookie)
 
     # Print
     if args.json:
@@ -109,10 +127,12 @@ def cmd_info(args):
 
 
 @handle_errors
-def cmd_show(args):
+@with_auth_cookie
+def cmd_show(args, auth_cookie):
     dataset, params = args.dataset
     slice_ = params.get('slice_', None)
-    data = cat2.fetch(dataset, host=args.host, slice_=slice_)
+    data = cat2.fetch(dataset, host=args.host, slice_=slice_,
+                      auth_cookie=auth_cookie)
 
     # Display
     if isinstance(data, bytes):
@@ -127,8 +147,10 @@ def cmd_show(args):
 
 
 @handle_errors
-def cmd_download(args):
-    path = cat2.download(args.dataset, host=args.host)
+@with_auth_cookie
+def cmd_download(args, auth_cookie):
+    path = cat2.download(args.dataset, host=args.host,
+                         auth_cookie=auth_cookie)
 
     print(f'Dataset saved to {path}')
 
@@ -138,6 +160,8 @@ def main():
     parser = utils.get_parser()
     parser.add_argument('--host',
                         default=conf.get('subscriber.http', 'localhost:8002'))
+    parser.add_argument('--username', default=conf.get('client.username'))
+    parser.add_argument('--password', default=conf.get('client.password'))
     subparsers = parser.add_subparsers(required=True)
 
     # roots

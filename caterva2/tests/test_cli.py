@@ -22,9 +22,18 @@ def pub_host(services):
     return services.get_endpoint(f'publisher.{TEST_CATERVA2_ROOT}')
 
 
-def cli(args, binary=False) -> str or dict:
+@pytest.fixture
+def sub_host(services):
+    return services.get_endpoint(f'subscriber')
+
+
+def cli(cargs, binary=False, sub_user=None) -> str or dict:
     cli_path = 'caterva2.clients.cli'
-    args = [sys.executable, '-m' + str(cli_path)] + args
+    args = [sys.executable, '-m' + str(cli_path)]
+    if sub_user:
+        args += ['--username', sub_user.username,
+                 '--password', sub_user.password]
+    args += cargs
     if not binary:
         args += ['--json']
     ret = subprocess.run(args, capture_output=True, text=True)
@@ -33,27 +42,29 @@ def cli(args, binary=False) -> str or dict:
     return out if binary else json.loads(out)
 
 
-def test_roots(services, pub_host):
-    roots = cli(['roots'])
+def test_roots(services, pub_host, sub_user):
+    roots = cli(['roots'], sub_user=sub_user)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
-def test_url(services, pub_host):
-    out = cli(['url', TEST_CATERVA2_ROOT])
-    assert out == [f'http://{pub_host}']
+def test_url(services, sub_host, sub_user):
+    out = cli(['url', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], sub_user=sub_user)
+    assert out == f'http://{sub_host}/files/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
 
 
-def test_subscribe(services):
+def test_subscribe(services, sub_user):
     # Subscribe once
-    out = cli(['subscribe', TEST_CATERVA2_ROOT])
+    out = cli(['subscribe', TEST_CATERVA2_ROOT], sub_user=sub_user)
     assert out == 'Ok'
 
     # Subscribe again, should be a noop
-    out = cli(['subscribe', TEST_CATERVA2_ROOT])
+    out = cli(['subscribe', TEST_CATERVA2_ROOT], sub_user=sub_user)
     assert out == 'Ok'
 
     # Show
-    a = cli(['show', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], binary=True)
-    b = cli(['show', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], binary=True)
+    a = cli(['show', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'],
+            binary=True, sub_user=sub_user)
+    b = cli(['show', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'],
+            binary=True, sub_user=sub_user)
     assert a == b

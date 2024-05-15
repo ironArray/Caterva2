@@ -27,9 +27,7 @@ sub_host_default = 'localhost:8002'
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
 
-# TODO: Add user authentication support.
-
-def get_roots(host=sub_host_default):
+def get_roots(host=sub_host_default, auth_cookie=None):
     """
     Get the list of available roots.
 
@@ -38,6 +36,8 @@ def get_roots(host=sub_host_default):
 
     host : str
         The host to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -45,10 +45,10 @@ def get_roots(host=sub_host_default):
         The list of available roots.
 
     """
-    return api_utils.get(f'http://{host}/api/roots')
+    return api_utils.get(f'http://{host}/api/roots', auth_cookie=auth_cookie)
 
 
-def subscribe(root, host=sub_host_default):
+def subscribe(root, host=sub_host_default, auth_cookie=None):
     """
     Subscribe to a root.
 
@@ -58,16 +58,19 @@ def subscribe(root, host=sub_host_default):
         The name of the root to subscribe to.
     host : str
         The host to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
     str
         The response from the server.
     """
-    return api_utils.post(f'http://{host}/api/subscribe/{root}')
+    return api_utils.post(f'http://{host}/api/subscribe/{root}',
+                          auth_cookie=auth_cookie)
 
 
-def get_list(root, host=sub_host_default):
+def get_list(root, host=sub_host_default, auth_cookie=None):
     """
     List the nodes in a root.
 
@@ -77,16 +80,19 @@ def get_list(root, host=sub_host_default):
         The name of the root to list.
     host : str
         The host to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
     list
         The list of nodes in the root.
     """
-    return api_utils.get(f'http://{host}/api/list/{root}')
+    return api_utils.get(f'http://{host}/api/list/{root}',
+                         auth_cookie=auth_cookie)
 
 
-def get_info(dataset, host=sub_host_default):
+def get_info(dataset, host=sub_host_default, auth_cookie=None):
     """
     Get information about a dataset.
 
@@ -96,16 +102,20 @@ def get_info(dataset, host=sub_host_default):
         The name of the dataset.
     host : str
         The host to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
     dict
         The information about the dataset.
     """
-    return api_utils.get(f'http://{host}/api/info/{dataset}')
+    return api_utils.get(f'http://{host}/api/info/{dataset}',
+                         auth_cookie=auth_cookie)
 
 
-def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True):
+def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True,
+          auth_cookie=None):
     """
     Fetch a slice of a dataset.
 
@@ -122,6 +132,8 @@ def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True):
         If False, pickle will always be used instead. Default is True, so Blosc2
         serialization will be used if Blosc2 is installed (and data payload is large
         enough).
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -130,11 +142,12 @@ def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True):
     """
     prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
     data = api_utils.fetch_data(dataset, host,
-                                {'slice_': slice_, 'prefer_schunk': prefer_schunk})
+                                {'slice_': slice_, 'prefer_schunk': prefer_schunk},
+                                auth_cookie=auth_cookie)
     return data
 
 
-def download(dataset, host=sub_host_default):
+def download(dataset, host=sub_host_default, auth_cookie=None):
     """
     Download a dataset.
 
@@ -144,6 +157,8 @@ def download(dataset, host=sub_host_default):
         The name of the dataset.
     host : str
         The host to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -154,23 +169,32 @@ def download(dataset, host=sub_host_default):
      is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
      compressed with Blosc2, and with the `.b2` extension).
     """
-    url = api_utils.get_download_url(dataset, host)
-    return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here)
+    url = api_utils.get_download_url(dataset, host, auth_cookie=auth_cookie)
+    return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
+                                  auth_cookie=auth_cookie)
 
 
 class Root:
     """
     A root is a remote repository that can be subscribed to.
+
+    If a non-empty `user_auth` mapping is given, its items are used as data to be posted
+    for authenticating the user and get an authorization token for further requests.
     """
-    def __init__(self, name, host=sub_host_default):
+    def __init__(self, name, host=sub_host_default, user_auth=None):
         self.name = name
         self.host = host
-        ret = api_utils.post(f'http://{host}/api/subscribe/{name}')
+        self.auth_cookie = (api_utils.get_auth_cookie(host, user_auth)
+                            if user_auth else None)
+
+        ret = api_utils.post(f'http://{host}/api/subscribe/{name}',
+                             auth_cookie=self.auth_cookie)
         if ret != 'Ok':
             roots = get_roots(host)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = api_utils.get(f'http://{host}/api/list/{name}')
+        self.node_list = api_utils.get(f'http://{host}/api/list/{name}',
+                                       auth_cookie=self.auth_cookie)
 
     def __repr__(self):
         return f'<Root: {self.name}>'
@@ -180,9 +204,11 @@ class Root:
         Get a file or dataset from the root.
         """
         if node.endswith((".b2nd", ".b2frame")):
-            return Dataset(node, root=self.name, host=self.host)
+            return Dataset(node, root=self.name, host=self.host,
+                           auth_cookie=self.auth_cookie)
         else:
-            return File(node, root=self.name, host=self.host)
+            return File(node, root=self.name, host=self.host,
+                        auth_cookie=self.auth_cookie)
 
 
 class File:
@@ -197,6 +223,8 @@ class File:
         The name of the root.
     host : str
         The host to query.
+    auth_cookie: str
+        An optional cookie to authorize requests via HTTP.
 
     Examples
     --------
@@ -215,12 +243,14 @@ class File:
     >>> file[0]
     b'T'
     """
-    def __init__(self, name, root, host):
+    def __init__(self, name, root, host, auth_cookie=None):
         self.root = root
         self.name = name
         self.host = host
         self.path = pathlib.Path(f'{self.root}/{self.name}')
-        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}')
+        self.auth_cookie = auth_cookie
+        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}',
+                                  auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
 
@@ -263,7 +293,8 @@ class File:
         >>> file.get_download_url()
         'http://localhost:8002/files/foo/ds-1d.b2nd'
         """
-        download_path = api_utils.get_download_url(self.path, self.host)
+        download_path = api_utils.get_download_url(
+            self.path, self.host, auth_cookie=self.auth_cookie)
         return download_path
 
     def __getitem__(self, slice_):
@@ -320,7 +351,8 @@ class File:
         slice_ = api_utils.slice_to_string(slice_)
         prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
         data = api_utils.fetch_data(self.path, self.host,
-                                    {'slice_': slice_, 'prefer_schunk': prefer_schunk})
+                                    {'slice_': slice_, 'prefer_schunk': prefer_schunk},
+                                    auth_cookie=self.auth_cookie)
         return data
 
     def download(self):
@@ -340,7 +372,8 @@ class File:
         PosixPath('foo/ds-1d.b2nd')
         """
         urlpath = self.get_download_url()
-        return api_utils.download_url(urlpath, str(self.path))
+        return api_utils.download_url(urlpath, str(self.path),
+                                      auth_cookie=self.auth_cookie)
 
 
 class Dataset(File):
@@ -355,6 +388,8 @@ class Dataset(File):
         The name of the root.
     host : str
         The host to query.
+    auth_cookie: str
+        An optional cookie to authorize requests via HTTP.
 
     Examples
     --------
@@ -365,8 +400,8 @@ class Dataset(File):
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
     """
-    def __init__(self, name, root, host):
-        super().__init__(name, root, host)
+    def __init__(self, name, root, host, auth_cookie=None):
+        super().__init__(name, root, host, auth_cookie)
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
