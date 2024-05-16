@@ -44,6 +44,10 @@ class Metadata(pydantic.BaseModel):
     dtype: str
     schunk: SChunk
 
+class LazyArray(pydantic.BaseModel):
+    shape: tuple
+    dtype: str
+    expression: str
 
 class File(pydantic.BaseModel):
     mtime: float

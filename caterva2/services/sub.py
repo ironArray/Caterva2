@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
+import numexpr as ne
 
 # Requirements
 import blosc2
@@ -748,8 +749,10 @@ async def html_path_info(
     meta = srv_utils.read_metadata(abspath)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
-    contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
-
+    if hasattr(getattr(meta, 'schunk', meta), 'vlmeta'):
+        contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
+    else:
+        contenttype = None
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -793,33 +796,22 @@ async def htmx_command(
 
     # Parse command
     try:
-        mod = ast.parse(command)
-    except SyntaxError:
+        result_name, expr = command.split('=')
+        expr = expr.strip()
+        vars = ne.NumExpr(expr).input_names
+    except (SyntaxError, ValueError):
         error = 'Invalid syntax'
         return templates.TemplateResponse(request, "command.html", {'text': error})
 
-    try:
-        body = mod.body
-        assign = body[0]
-        targets = assign.targets
-        target = targets[0]
-        result_name = target.id
-    except AttributeError:
-        error = 'Expected assignment expression'
-        return templates.TemplateResponse(request, "command.html", {'text': error})
-
     # Download datasets
-    params = {}
-    for name, path in zip(names, paths):
-        if name:
-            abspath = srv_utils.cache_lookup(cache, path)
-            await partial_download(abspath, path)
-            params[name] = cache / path
-
-    # XXX Create empty array
+    var_dict = {}
+    for var in vars:
+        path = paths[names.index(var)]
+        var_dict[var] = blosc2.open(cache / path, mode="r")
+    arr = eval(expr, var_dict)
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
-    blosc2.empty((10, 10), urlpath=f'{path / result_name}.b2nd', mode='w')
+    arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
 
     # TODO Display info and update list
     context = {'text': 'Output saved'}
