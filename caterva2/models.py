@@ -39,6 +39,7 @@ class SChunk(pydantic.BaseModel, extra='allow'):
 
 class Metadata(pydantic.BaseModel):
     shape: tuple
+    ext_shape: tuple
     chunks: tuple
     blocks: tuple
     dtype: str
