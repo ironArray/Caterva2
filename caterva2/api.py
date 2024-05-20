@@ -30,15 +30,15 @@ sub_base_default = f'http://{sub_host_default}/'
 """The default base for URLs provided by the subscriber (slash-terminated)."""
 
 
-def get_roots(host=sub_host_default, auth_cookie=None):
+def get_roots(sub_base=sub_base_default, auth_cookie=None):
     """
     Get the list of available roots.
 
     Parameters
     ----------
 
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -48,10 +48,10 @@ def get_roots(host=sub_host_default, auth_cookie=None):
         The list of available roots.
 
     """
-    return api_utils.get(f'http://{host}/api/roots', auth_cookie=auth_cookie)
+    return api_utils.get(f'{sub_base}api/roots', auth_cookie=auth_cookie)
 
 
-def subscribe(root, host=sub_host_default, auth_cookie=None):
+def subscribe(root, sub_base=sub_base_default, auth_cookie=None):
     """
     Subscribe to a root.
 
@@ -59,8 +59,8 @@ def subscribe(root, host=sub_host_default, auth_cookie=None):
     ----------
     root : str
         The name of the root to subscribe to.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -69,11 +69,11 @@ def subscribe(root, host=sub_host_default, auth_cookie=None):
     str
         The response from the server.
     """
-    return api_utils.post(f'http://{host}/api/subscribe/{root}',
+    return api_utils.post(f'{sub_base}api/subscribe/{root}',
                           auth_cookie=auth_cookie)
 
 
-def get_list(root, host=sub_host_default, auth_cookie=None):
+def get_list(root, sub_base=sub_base_default, auth_cookie=None):
     """
     List the nodes in a root.
 
@@ -81,8 +81,8 @@ def get_list(root, host=sub_host_default, auth_cookie=None):
     ----------
     root : str
         The name of the root to list.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -91,11 +91,11 @@ def get_list(root, host=sub_host_default, auth_cookie=None):
     list
         The list of nodes in the root.
     """
-    return api_utils.get(f'http://{host}/api/list/{root}',
+    return api_utils.get(f'{sub_base}api/list/{root}',
                          auth_cookie=auth_cookie)
 
 
-def get_info(dataset, host=sub_host_default, auth_cookie=None):
+def get_info(dataset, sub_base=sub_base_default, auth_cookie=None):
     """
     Get information about a dataset.
 
@@ -103,8 +103,8 @@ def get_info(dataset, host=sub_host_default, auth_cookie=None):
     ----------
     dataset : str
         The name of the dataset.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -113,11 +113,11 @@ def get_info(dataset, host=sub_host_default, auth_cookie=None):
     dict
         The information about the dataset.
     """
-    return api_utils.get(f'http://{host}/api/info/{dataset}',
+    return api_utils.get(f'{sub_base}api/info/{dataset}',
                          auth_cookie=auth_cookie)
 
 
-def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True,
+def fetch(dataset, sub_base=sub_base_default, slice_=None, prefer_schunk=True,
           auth_cookie=None):
     """
     Fetch a slice of a dataset.
@@ -126,8 +126,8 @@ def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True,
     ----------
     dataset : str
         The name of the dataset.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     slice_ : str
         The slice to fetch.
     prefer_schunk : bool
@@ -144,13 +144,13 @@ def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True,
         The slice of the dataset.
     """
     prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
-    data = api_utils.fetch_data(dataset, f'http://{host}/',
+    data = api_utils.fetch_data(dataset, sub_base,
                                 {'slice_': slice_, 'prefer_schunk': prefer_schunk},
                                 auth_cookie=auth_cookie)
     return data
 
 
-def download(dataset, host=sub_host_default, auth_cookie=None):
+def download(dataset, sub_base=sub_base_default, auth_cookie=None):
     """
     Download a dataset.
 
@@ -158,8 +158,8 @@ def download(dataset, host=sub_host_default, auth_cookie=None):
     ----------
     dataset : str
         The name of the dataset.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -172,7 +172,7 @@ def download(dataset, host=sub_host_default, auth_cookie=None):
      is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
      compressed with Blosc2, and with the `.b2` extension).
     """
-    url = api_utils.get_download_url(dataset, f'http://{host}/', auth_cookie=auth_cookie)
+    url = api_utils.get_download_url(dataset, sub_base, auth_cookie=auth_cookie)
     return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 

@@ -148,7 +148,7 @@ cat2cli roots
 When using the programmatic API, you need to provide the subscriber address explicitly:
 
 ```python
-roots = caterva2.get_roots(host='sub.edu.example.org:3126')
+roots = caterva2.get_roots(sub_base='http://sub.edu.example.org:3126/')
 foo = caterva2.Root('foo', host='sub.edu.example.org:3126')
 ```
 

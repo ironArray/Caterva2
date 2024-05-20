@@ -63,7 +63,8 @@ def dataset_with_slice(dataset):
 @handle_errors
 @with_auth_cookie
 def cmd_roots(args, auth_cookie):
-    data = cat2.get_roots(host=args.host, auth_cookie=auth_cookie)
+    data = cat2.get_roots(sub_base=f'http://{args.host}/',
+                          auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -78,7 +79,8 @@ def cmd_roots(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_subscribe(args, auth_cookie):
-    data = cat2.subscribe(args.root, host=args.host, auth_cookie=auth_cookie)
+    data = cat2.subscribe(args.root, sub_base=f'http://{args.host}/',
+                          auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -89,7 +91,8 @@ def cmd_subscribe(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_list(args, auth_cookie):
-    data = cat2.get_list(args.root, host=args.host, auth_cookie=auth_cookie)
+    data = cat2.get_list(args.root, sub_base=f'http://{args.host}/',
+                         auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -116,7 +119,7 @@ def cmd_url(args, auth_cookie):
 @with_auth_cookie
 def cmd_info(args, auth_cookie):
     print(f"Getting info for {args.dataset}")
-    data = cat2.get_info(args.dataset, host=args.host,
+    data = cat2.get_info(args.dataset, sub_base=f'http://{args.host}/',
                          auth_cookie=auth_cookie)
 
     # Print
@@ -132,7 +135,7 @@ def cmd_info(args, auth_cookie):
 def cmd_show(args, auth_cookie):
     dataset, params = args.dataset
     slice_ = params.get('slice_', None)
-    data = cat2.fetch(dataset, host=args.host, slice_=slice_,
+    data = cat2.fetch(dataset, sub_base=f'http://{args.host}/', slice_=slice_,
                       auth_cookie=auth_cookie)
 
     # Display
@@ -150,7 +153,7 @@ def cmd_show(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_download(args, auth_cookie):
-    path = cat2.download(args.dataset, host=args.host,
+    path = cat2.download(args.dataset, sub_base=f'http://{args.host}/',
                          auth_cookie=auth_cookie)
 
     print(f'Dataset saved to {path}')

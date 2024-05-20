@@ -32,10 +32,11 @@ auth_cookie = (cat2.api_utils.get_auth_cookie(f'http://{SUB_HOST}/',
                if user_auth else None)
 
 # Get the list of available roots
-roots = cat2.get_roots(f"{SUB_HOST}", auth_cookie=auth_cookie)
+roots = cat2.get_roots(f"http://{SUB_HOST}/", auth_cookie=auth_cookie)
 print(roots[ROOT_NAME])
 # Subscribe to a root
-response = cat2.subscribe(ROOT_NAME, f"{SUB_HOST}", auth_cookie=auth_cookie)
+response = cat2.subscribe(ROOT_NAME, f"http://{SUB_HOST}/",
+                          auth_cookie=auth_cookie)
 # Get a handle to the root
 example = cat2.Root(ROOT_NAME, host=SUB_HOST, user_auth=user_auth)
 # List the datasets in that root

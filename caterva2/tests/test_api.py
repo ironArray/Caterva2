@@ -40,7 +40,7 @@ def my_path(dspath, slice_):
 
 
 def test_roots(services, pub_host, sub_host, sub_jwt_cookie):
-    roots = cat2.get_roots(sub_host, auth_cookie=sub_jwt_cookie)
+    roots = cat2.get_roots(f'http://{sub_host}/', auth_cookie=sub_jwt_cookie)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
