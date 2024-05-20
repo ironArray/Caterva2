@@ -7,7 +7,6 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import ast
 import asyncio
 import contextlib
 import itertools
