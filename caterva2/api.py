@@ -186,6 +186,8 @@ class Root:
     """
     def __init__(self, name, sub_base=sub_base_default, user_auth=None):
         self.name = name
+        if not sub_base.endswith('/'):
+            sub_base += '/'
         self.sub_base = sub_base
         self.auth_cookie = (
             api_utils.get_auth_cookie(sub_base, user_auth)
