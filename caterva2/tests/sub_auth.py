@@ -67,9 +67,9 @@ def sub_jwt_cookie(sub_user, services):
         return None
 
     username, password = sub_user
-    sub_host = services.get_endpoint('subscriber')
+    sub_base = services.get_urlbase('subscriber')
 
-    resp = httpx.post(f'http://{sub_host}/auth/jwt/login',
+    resp = httpx.post(f'{sub_base}auth/jwt/login',
                       data=dict(username=username, password=password))
     resp.raise_for_status()
     return '='.join(list(resp.cookies.items())[0])
