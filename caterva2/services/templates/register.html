@@ -4,13 +4,10 @@
 
 {% block main %}
 
-{% if username %}
-<div class="alert alert-info">
-    <strong>Note:</strong> You are already logged in as {{ username }}.
-</div>
-{% endif %}
+<h5 class="card-title float-end">Register</h4>
 
-<h4>Please register</h4>
+<div id="result" class="alert alert-danger" style="display: none"></div>
+
 <form action="/auth/register" method="post" onsubmit="submitFormAsJSON(this, '/login'); return false">
     <div class="form-floating mb-2">
         <input type="email" name="email" class="form-control" placeholder="">
@@ -26,8 +23,6 @@
 <p class="mt-2">
 <a href="/login">Sign in if you already have an account</a>
 </p>
-
-<div id="result"></div>
 
 {% endblock %}
 

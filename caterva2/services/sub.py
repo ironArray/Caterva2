@@ -580,25 +580,32 @@ if user_auth_enabled():
     @app.get("/login", response_class=HTMLResponse)
     async def html_login(
             request: Request,
-            opt_user: db.User = Depends(optional_user)
+            user: db.User = Depends(optional_user)
     ):
-        context = {'username': opt_user.email} if opt_user else {}
-        return templates.TemplateResponse(request, "login.html", context)
+        if user:
+            return RedirectResponse("/", status_code=307)
+
+        return templates.TemplateResponse(request, "login.html")
 
     @app.get("/logout", response_class=HTMLResponse)
     async def html_logout(
             request: Request,
-            opt_user: db.User = Depends(optional_user)
+            user: db.User = Depends(optional_user)
     ):
+        if user:
+            return RedirectResponse("/", status_code=307)
+
         return templates.TemplateResponse(request, "logout.html")
 
     @app.get("/register", response_class=HTMLResponse)
     async def html_register(
             request: Request,
-            opt_user: db.User = Depends(optional_user)
+            user: db.User = Depends(optional_user)
     ):
-        context = {'username': opt_user.email} if opt_user else {}
-        return templates.TemplateResponse(request, "register.html", context)
+        if user:
+            return RedirectResponse("/", status_code=307)
+
+        return templates.TemplateResponse(request, "register.html")
 
     # TODO: Support user verification, allow password reset and user deletion.
 

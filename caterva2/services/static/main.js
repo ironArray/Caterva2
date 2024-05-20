@@ -26,12 +26,21 @@ function clearContent(elementID) {
 }
 
 async function _submitForm(form, successURL, resultElementID, asJSON) {
-    const result = document.getElementById(resultElementID);
+    const errors = {
+        LOGIN_BAD_CREDENTIALS:
+            'Incorrect credentials, please verify the email address and password.',
+        REGISTER_USER_ALREADY_EXISTS:
+            'Email address already registered, did you forgot your password?',
+    };
 
-    if (result) {
-        result.replaceChildren();  // empty the result view
+    // Empty the result view
+    const msg = document.getElementById(resultElementID);
+    if (msg) {
+        msg.style.display = 'none';
+        msg.replaceChildren();
     }
 
+    // Send form
     const params = {};
     for (const field of form.elements)
         if (field.name != "")
@@ -46,25 +55,27 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
                    : new URLSearchParams(params))},
     );
 
-    if (result) {
-        const resd = document.createElement("div");
-        resd.setAttribute("class", ("alert alert-"
-                                    + (response.ok ? "success" : "danger")));
-        resd.appendChild(document.createTextNode(
-            response.ok ? "Submission succeeded: " : "Submission failed: "));
-        resd.appendChild(document.createElement("code"))
-            .textContent = `${response.status} ${response.statusText}`;
-        if (!response.ok)
-            resd.appendChild(document.createElement("pre"))
-                .textContent = JSON.stringify(await response.json());
-
-        result.replaceChildren(resd);
-    }
-
-    if (successURL && response.ok) {
-        // Flash successful response for 2s, then go to success URL.
-        await new Promise(r => setTimeout(r, 2000));
+    if (response.ok) {
+        // Success: redirect
         window.location.href = successURL;
+    }
+    else {
+        // Error
+        const json = await response.json();
+        const detail = json.detail;
+        if (detail) {
+            const error = errors[detail] || detail;
+            msg.appendChild(document.createTextNode(error));
+        }
+        else {
+            msg.appendChild(document.createTextNode(
+                `Unexpected error: ${response.status} ${response.statusText}`
+            ));
+            msg.appendChild(document.createElement("pre"))
+               .textContent = JSON.stringify(json);
+        }
+
+        msg.style.display = 'block';
     }
 }
 

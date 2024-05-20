@@ -4,14 +4,10 @@
 
 {% block main %}
 
-{% if username %}
-<div class="alert alert-info">
-    <strong>Note:</strong> You are already logged in as {{ username }}.
-    <a href="/logout">Logout</a>.
-</div>
-{% endif %}
+<h5 class="card-title float-end">Sign in</h5>
 
-<h4>Please sign in</h4>
+<div id="result" class="alert alert-danger" style="display: none"></div>
+
 <form action="/auth/jwt/login" method="post" onsubmit="submitForm(this, '/'); return false">
     <div class="form-floating mb-2">
         <input type="email" name="username" class="form-control" placeholder="">
@@ -27,7 +23,5 @@
 <p class="mt-2">
 <a href="/register">Register as a new user</a>
 </p>
-
-<div id="result"></div>
 
 {% endblock %}
