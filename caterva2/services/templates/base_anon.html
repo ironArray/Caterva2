@@ -14,14 +14,13 @@
 </head>
 
 <body class="vh-100 d-flex align-items-center">
-
-<main class="m-auto" style="min-width: 300px">
-    <img src="/static/logo-caterva2-horizontal-small.png" alt="Caterva2 logo"
-         id="logo" class="mb-4">
-
-    {% block main %}
-    {% endblock %}
-</main>
-
+    <main class="card m-auto" style="width: 450px" id="page-login">
+        <div class="card-body">
+            <img src="/static/logo-caterva2-horizontal-small.png" alt="Caterva2 logo" id="logo" class="mb-4">
+            {% block main %}
+            {% endblock %}
+        </div>
+    </main>
 </body>
+
 </html>
