@@ -54,9 +54,8 @@ cache = None
 scratch = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
-host = None
 locks = {}
-port = None
+urlbase = None
 
 
 def make_url(request, name, query=None, **path_params):
@@ -516,7 +515,7 @@ async def download_url(path: str):
     # in the url, if it is missing.
     if abspath.suffix == '.b2':
         path = f'{path}.b2'
-    return f'http://{host}:{port}/files/{path}'
+    return f'{urlbase}files/{path}'
 
 
 @app.get('/api/download/{path:path}',
@@ -887,8 +886,9 @@ def main():
     tomography.init(cache, partial_download)
 
     # Run
-    global host, port
+    global urlbase
     host, port = args.http
+    urlbase = args.url
     uvicorn.run(app, host=host, port=port)
 
 
