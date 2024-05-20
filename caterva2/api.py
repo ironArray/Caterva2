@@ -26,6 +26,9 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
+sub_base_default = f'http://{sub_host_default}/'
+"""The default base for URLs provided by the subscriber (slash-terminated)."""
+
 
 def get_roots(host=sub_host_default, auth_cookie=None):
     """
