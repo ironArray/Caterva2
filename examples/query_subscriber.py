@@ -43,7 +43,7 @@ print(example.node_list)
 array = example['dir1/ds-2d.b2nd']
 print(array.name, array.path)
 # Get some data out of the dataset
-print(array[:2])
+print(array[:10, :20].shape)
 
 # There are different ways to get the data
 # 1. Direct download
