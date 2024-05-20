@@ -26,7 +26,8 @@ class TreeApp(App):
         auth_cookie = None
         if args.username and args.password:
             user_auth = dict(username=args.username, password=args.password)
-            auth_cookie = api_utils.get_auth_cookie(args.host, user_auth)
+            auth_cookie = api_utils.get_auth_cookie(f'http://{args.host}/',
+                                                    user_auth)
         api.subscribe(args.root, args.host, auth_cookie=auth_cookie)
         self.data = api.get_list(args.root, args.host,
                                  auth_cookie=auth_cookie)

@@ -144,7 +144,7 @@ def fetch(dataset, host=sub_host_default, slice_=None, prefer_schunk=True,
         The slice of the dataset.
     """
     prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
-    data = api_utils.fetch_data(dataset, host,
+    data = api_utils.fetch_data(dataset, f'http://{host}/',
                                 {'slice_': slice_, 'prefer_schunk': prefer_schunk},
                                 auth_cookie=auth_cookie)
     return data
@@ -172,7 +172,7 @@ def download(dataset, host=sub_host_default, auth_cookie=None):
      is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
      compressed with Blosc2, and with the `.b2` extension).
     """
-    url = api_utils.get_download_url(dataset, host, auth_cookie=auth_cookie)
+    url = api_utils.get_download_url(dataset, f'http://{host}/', auth_cookie=auth_cookie)
     return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
@@ -187,8 +187,9 @@ class Root:
     def __init__(self, name, host=sub_host_default, user_auth=None):
         self.name = name
         self.host = host
-        self.auth_cookie = (api_utils.get_auth_cookie(host, user_auth)
-                            if user_auth else None)
+        self.auth_cookie = (
+            api_utils.get_auth_cookie(f'http://{host}/', user_auth)
+            if user_auth else None)
 
         ret = api_utils.post(f'http://{host}/api/subscribe/{name}',
                              auth_cookie=self.auth_cookie)
@@ -297,7 +298,7 @@ class File:
         'http://localhost:8002/files/foo/ds-1d.b2nd'
         """
         download_path = api_utils.get_download_url(
-            self.path, self.host, auth_cookie=self.auth_cookie)
+            self.path, f'http://{self.host}/', auth_cookie=self.auth_cookie)
         return download_path
 
     def __getitem__(self, slice_):
@@ -353,7 +354,7 @@ class File:
         """
         slice_ = api_utils.slice_to_string(slice_)
         prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
-        data = api_utils.fetch_data(self.path, self.host,
+        data = api_utils.fetch_data(self.path, f'http://{self.host}/',
                                     {'slice_': slice_, 'prefer_schunk': prefer_schunk},
                                     auth_cookie=self.auth_cookie)
         return data

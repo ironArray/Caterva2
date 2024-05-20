@@ -43,7 +43,8 @@ def with_auth_cookie(func):
         auth_cookie = None
         if args.username and args.password:
             user_auth = dict(username=args.username, password=args.password)
-            auth_cookie = api_utils.get_auth_cookie(args.host, user_auth)
+            auth_cookie = api_utils.get_auth_cookie(f'http://{args.host}/',
+                                                    user_auth)
         return func(args, auth_cookie=auth_cookie)
     return wrapper
 
@@ -102,7 +103,7 @@ def cmd_list(args, auth_cookie):
 def cmd_url(args, auth_cookie):
     # TODO: provide a url that can be used to open the dataset in blosc2
     # TODO: add a new function to the API that returns the url
-    data = api_utils.get_download_url(args.root, args.host,
+    data = api_utils.get_download_url(args.root, f'http://{args.host}/',
                                       auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))

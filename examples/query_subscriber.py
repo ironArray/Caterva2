@@ -27,7 +27,8 @@ user_auth = None
 # if the subscriber requires authentication.
 #user_auth = {'username': 'user@example.com', 'password': 'foobar'}
 
-auth_cookie = (cat2.api_utils.get_auth_cookie(SUB_HOST, user_auth)
+auth_cookie = (cat2.api_utils.get_auth_cookie(f'http://{SUB_HOST}/',
+                                              user_auth)
                if user_auth else None)
 
 # Get the list of available roots
