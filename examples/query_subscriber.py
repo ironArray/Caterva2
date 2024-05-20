@@ -19,7 +19,7 @@ import caterva2 as cat2
 
 
 # Use the demo server
-SUB_HOST = 'demo-api.caterva2.net:8202'
+SUB_BASE = 'http://demo-api.caterva2.net:8202/'
 ROOT_NAME = 'example'
 
 user_auth = None
@@ -27,19 +27,16 @@ user_auth = None
 # if the subscriber requires authentication.
 #user_auth = {'username': 'user@example.com', 'password': 'foobar'}
 
-auth_cookie = (cat2.api_utils.get_auth_cookie(f'http://{SUB_HOST}/',
-                                              user_auth)
+auth_cookie = (cat2.api_utils.get_auth_cookie(SUB_BASE, user_auth)
                if user_auth else None)
 
 # Get the list of available roots
-roots = cat2.get_roots(f"http://{SUB_HOST}/", auth_cookie=auth_cookie)
+roots = cat2.get_roots(SUB_BASE, auth_cookie=auth_cookie)
 print(roots[ROOT_NAME])
 # Subscribe to a root
-response = cat2.subscribe(ROOT_NAME, f"http://{SUB_HOST}/",
-                          auth_cookie=auth_cookie)
+response = cat2.subscribe(ROOT_NAME, SUB_BASE, auth_cookie=auth_cookie)
 # Get a handle to the root
-example = cat2.Root(ROOT_NAME, sub_base=f"http://{SUB_HOST}/",
-                    user_auth=user_auth)
+example = cat2.Root(ROOT_NAME, sub_base=SUB_BASE, user_auth=user_auth)
 # List the datasets in that root
 print(example.node_list)
 # Get a specific dataset
