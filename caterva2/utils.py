@@ -66,6 +66,7 @@ def get_parser(loglevel='warning', statedir=None, id=None,
         parser.add_argument('--broker', default=broker)
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
+        parser.add_argument('--url')  # apply default on parser run
     if statedir:
         parser.add_argument('--statedir', default=statedir,
                             type=pathlib.Path)
@@ -79,6 +80,13 @@ def run_parser(parser):
     # Logging
     loglevel = args.loglevel.upper()
     logging.basicConfig(level=loglevel)
+
+    # HTTP service
+    if hasattr(args, 'http'):
+        if not args.url:
+            args.url = f'http://{args.http[0]}:{args.http[1]}/'
+        if not args.url.endswith('/'):
+            args.url += '/'
 
     return args
 
