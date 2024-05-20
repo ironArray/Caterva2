@@ -14,7 +14,7 @@ import blosc2
 import pydantic
 
 
-class CParams(pydantic.BaseModel, extra=pydantic.Extra.allow):
+class CParams(pydantic.BaseModel, extra='allow'):
     codec: blosc2.Codec
     filters: list[blosc2.Filter]
     filters_meta: list[int]
@@ -22,7 +22,7 @@ class CParams(pydantic.BaseModel, extra=pydantic.Extra.allow):
     blocksize: int
 
 
-class SChunk(pydantic.BaseModel, extra=pydantic.Extra.allow):
+class SChunk(pydantic.BaseModel, extra='allow'):
     cbytes: int
     chunkshape: int
     chunksize: int
