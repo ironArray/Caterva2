@@ -33,7 +33,8 @@
                 <a href="/roots/{{dataset.path}}"
                    class="input-group-text text-decoration-none"
                    style="width: 90%"
-                   hx-boost="true" hx-target="#meta"
+                   hx-get="/htmx/path-info/{{dataset.path}}"
+                   hx-target="#meta"
                    hx-indicator="#meta-wrapper .htmx-indicator"
                    hx-on:htmx:after-request="activate('#path-list a', this)"
                    >

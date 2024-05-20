@@ -608,39 +608,42 @@ if user_auth_enabled():
     # TODO: Support user verification, allow password reset and user deletion.
 
 
-def home(request, roots=None, search=None, context=None):
-    context = context or {}
+@app.get("/", response_class=HTMLResponse)
+@app.get("/roots/{path:path}")
+async def html_home(
+    request: Request,
+    path: str = '',
+    # Query parameters
+    roots: list[str] = fastapi.Query([]),
+    search: str = '',
+    # Dependencies
+    opt_user: db.User = Depends(optional_user),
+):
+
+    # Redirect to login page if user not authenticated.
+    if user_auth_enabled() and not opt_user:
+        return RedirectResponse("/login", status_code=307)
+
+    context = {}
+    if opt_user:
+        context['username'] = opt_user.email
 
     context['roots_url'] = make_url(request, 'htmx_root_list', {'roots': roots})
     if roots:
         paths_url = make_url(request, 'htmx_path_list', {'roots': roots, 'search': search})
         context['paths_url'] = paths_url
 
+    if path:
+        context["meta_url"] = make_url(request, 'htmx_path_info', path=path)
+
     return templates.TemplateResponse(request, "home.html", context)
-
-
-@app.get("/", response_class=HTMLResponse)
-async def html_home(
-    request: Request,
-    # Query parameters
-    roots: list[str] = fastapi.Query([]),
-    search: str = '',
-    opt_user: db.User = Depends(optional_user),
-):
-    # Redirect to login page if user not authenticated.
-    if user_auth_enabled() and not opt_user:
-        return RedirectResponse("/login", status_code=307)
-
-    context = {'username': opt_user.email} if opt_user else {}
-    return home(request, roots, search, context)
 
 
 @app.get("/htmx/root-list/")
 async def htmx_root_list(
     request: Request,
-    # Headers
+    # Query
     roots: list[str] = fastapi.Query([]),
-    hx_current_url: srv_utils.HeaderType = None,
     # Depends
     user = Depends(current_active_user),
 ):
@@ -687,8 +690,9 @@ async def htmx_path_list(
             if relpath.suffix == '.b2':
                 relpath = relpath.with_suffix('')
             if search in str(relpath):
+                path = f'{root}/{relpath}'
                 datasets.append({
-                    'path': f'{root}/{relpath}',
+                    'path': path,
                     'name': next(names),
                 })
 
@@ -714,26 +718,16 @@ async def htmx_path_list(
     return response
 
 
-@app.get("/roots/{path:path}", response_class=HTMLResponse)
-async def html_path_info(
+@app.get("/htmx/path-info/{path:path}", response_class=HTMLResponse)
+async def htmx_path_info(
     request: Request,
     # Path parameters
     path: pathlib.Path,
-    # Query parameters
-    roots: list[str] = fastapi.Query([]),
-    search: str = '',
     # Headers
-    hx_request: srv_utils.HeaderType = None,
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
     user = Depends(current_active_user),
 ):
-
-    if not hx_request:
-        context = {
-            "meta_url": make_url(request, 'html_path_info', path=path),
-        }
-        return home(request, roots, search, context)
 
     parts = list(path.parts)
     if user and parts[0] == '@output':
@@ -769,14 +763,12 @@ async def html_path_info(
 
     # Preserve state (query)
     current_url = furl.furl(hx_current_url)
-    request_url = furl.furl(request.url)
-    push_url = request_url.copy()
-    push_url.set(current_url.query.params)
-    # Preserve fragment only if from a direct link
-    if request_url.path == current_url.path:
-        push_url.set(fragment=str(current_url.fragment))
+    current_query = current_url.query
+    push_url = make_url(request, 'html_home', path=path)
+    if current_query:
+        push_url = f'{push_url}?{current_query.encode()}'
 
-    response.headers['HX-Push-Url'] = push_url.url
+    response.headers['HX-Push-Url'] = push_url
 
     return response
 
