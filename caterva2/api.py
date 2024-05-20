@@ -184,20 +184,20 @@ class Root:
     If a non-empty `user_auth` mapping is given, its items are used as data to be posted
     for authenticating the user and get an authorization token for further requests.
     """
-    def __init__(self, name, host=sub_host_default, user_auth=None):
+    def __init__(self, name, sub_base=sub_base_default, user_auth=None):
         self.name = name
-        self.host = host
+        self.sub_base = sub_base
         self.auth_cookie = (
-            api_utils.get_auth_cookie(f'http://{host}/', user_auth)
+            api_utils.get_auth_cookie(sub_base, user_auth)
             if user_auth else None)
 
-        ret = api_utils.post(f'http://{host}/api/subscribe/{name}',
+        ret = api_utils.post(f'{sub_base}api/subscribe/{name}',
                              auth_cookie=self.auth_cookie)
         if ret != 'Ok':
-            roots = get_roots(host)
+            roots = get_roots(sub_base)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = api_utils.get(f'http://{host}/api/list/{name}',
+        self.node_list = api_utils.get(f'{sub_base}api/list/{name}',
                                        auth_cookie=self.auth_cookie)
 
     def __repr__(self):
@@ -208,10 +208,10 @@ class Root:
         Get a file or dataset from the root.
         """
         if node.endswith((".b2nd", ".b2frame")):
-            return Dataset(node, root=self.name, host=self.host,
+            return Dataset(node, root=self.name, sub_base=self.sub_base,
                            auth_cookie=self.auth_cookie)
         else:
-            return File(node, root=self.name, host=self.host,
+            return File(node, root=self.name, sub_base=self.sub_base,
                         auth_cookie=self.auth_cookie)
 
 
@@ -225,8 +225,8 @@ class File:
         The name of the file.
     root : str
         The name of the root.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -236,8 +236,8 @@ class File:
     >>> file = root['README.md']
     >>> file.name
     'README.md'
-    >>> file.host
-    'localhost:8002'
+    >>> file.sub_base
+    'http://localhost:8002/'
     >>> file.path
     PosixPath('foo/README.md')
     >>> file.meta['cparams']
@@ -247,13 +247,13 @@ class File:
     >>> file[0]
     b'T'
     """
-    def __init__(self, name, root, host, auth_cookie=None):
+    def __init__(self, name, root, sub_base, auth_cookie=None):
         self.root = root
         self.name = name
-        self.host = host
+        self.sub_base = sub_base
         self.path = pathlib.Path(f'{self.root}/{self.name}')
         self.auth_cookie = auth_cookie
-        self.meta = api_utils.get(f'http://{host}/api/info/{self.path}',
+        self.meta = api_utils.get(f'{sub_base}api/info/{self.path}',
                                   auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
@@ -298,7 +298,7 @@ class File:
         'http://localhost:8002/files/foo/ds-1d.b2nd'
         """
         download_path = api_utils.get_download_url(
-            self.path, f'http://{self.host}/', auth_cookie=self.auth_cookie)
+            self.path, self.sub_base, auth_cookie=self.auth_cookie)
         return download_path
 
     def __getitem__(self, slice_):
@@ -354,7 +354,7 @@ class File:
         """
         slice_ = api_utils.slice_to_string(slice_)
         prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
-        data = api_utils.fetch_data(self.path, f'http://{self.host}/',
+        data = api_utils.fetch_data(self.path, self.sub_base,
                                     {'slice_': slice_, 'prefer_schunk': prefer_schunk},
                                     auth_cookie=self.auth_cookie)
         return data
@@ -390,8 +390,8 @@ class Dataset(File):
         The name of the dataset.
     root : str
         The name of the root.
-    host : str
-        The host to query.
+    sub_base : str
+        The base URL of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -404,8 +404,8 @@ class Dataset(File):
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
     """
-    def __init__(self, name, root, host, auth_cookie=None):
-        super().__init__(name, root, host, auth_cookie)
+    def __init__(self, name, root, sub_base, auth_cookie=None):
+        super().__init__(name, root, sub_base, auth_cookie)
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
