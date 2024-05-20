@@ -70,3 +70,9 @@ body {
 .nav-tabs {
     margin-bottom: 0;
 }
+
+#logout-form button {
+  padding: 0;
+  border: 0;
+  vertical-align: inherit;
+}

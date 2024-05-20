@@ -12,13 +12,17 @@
 
 <body class="vh-120">
 
-<!-- Main section -->
 {% if username %}
 <div class="alert alert-info">
     Logged in as {{ username }}.
-    <a href="/logout">Logout</a>.
+    <form action="/auth/jwt/logout" method="post" class="d-inline-block" id="logout-form"
+          onsubmit="submitForm(this, '/logout'); return false">
+        <button type="submit" class="btn btn-link">Logout</button>
+    </form>
 </div>
 {% endif %}
+
+<!-- Main section -->
 <div id="page">
     <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
     <div id="path-list-wrapper">

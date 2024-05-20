@@ -590,12 +590,7 @@ if user_auth_enabled():
             request: Request,
             opt_user: db.User = Depends(optional_user)
     ):
-        # Redirect to root page if already not authenticated.
-        if user_auth_enabled() and not opt_user:
-            return RedirectResponse("/", status_code=307)
-
-        context = {'username': opt_user.email} if opt_user else {}
-        return templates.TemplateResponse(request, "logout.html", context)
+        return templates.TemplateResponse(request, "logout.html")
 
     @app.get("/register", response_class=HTMLResponse)
     async def html_register(
@@ -773,8 +768,7 @@ async def htmx_path_info(
     return response
 
 
-@app.post("/htmx/command/", response_class=HTMLResponse,
-          )
+@app.post("/htmx/command/", response_class=HTMLResponse)
 async def htmx_command(
     request: Request,
     # Body

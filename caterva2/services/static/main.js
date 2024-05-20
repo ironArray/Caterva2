@@ -27,7 +27,10 @@ function clearContent(elementID) {
 
 async function _submitForm(form, successURL, resultElementID, asJSON) {
     const result = document.getElementById(resultElementID);
-    result.replaceChildren();  // empty the result view
+
+    if (result) {
+        result.replaceChildren();  // empty the result view
+    }
 
     const params = {};
     for (const field of form.elements)
@@ -43,17 +46,20 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
                    : new URLSearchParams(params))},
     );
 
-    const resd = document.createElement("div");
-    resd.setAttribute("class", ("alert alert-"
-                                + (response.ok ? "success" : "danger")));
-    resd.appendChild(document.createTextNode(
-        response.ok ? "Submission succeeded: " : "Submission failed: "));
-    resd.appendChild(document.createElement("code"))
-        .textContent = `${response.status} ${response.statusText}`;
-    if (!response.ok)
-        resd.appendChild(document.createElement("pre"))
-            .textContent = JSON.stringify(await response.json());
-    result.replaceChildren(resd);
+    if (result) {
+        const resd = document.createElement("div");
+        resd.setAttribute("class", ("alert alert-"
+                                    + (response.ok ? "success" : "danger")));
+        resd.appendChild(document.createTextNode(
+            response.ok ? "Submission succeeded: " : "Submission failed: "));
+        resd.appendChild(document.createElement("code"))
+            .textContent = `${response.status} ${response.statusText}`;
+        if (!response.ok)
+            resd.appendChild(document.createElement("pre"))
+                .textContent = JSON.stringify(await response.json());
+
+        result.replaceChildren(resd);
+    }
 
     if (successURL && response.ok) {
         // Flash successful response for 2s, then go to success URL.
