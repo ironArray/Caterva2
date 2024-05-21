@@ -43,8 +43,7 @@ def with_auth_cookie(func):
         auth_cookie = None
         if args.username and args.password:
             user_auth = dict(username=args.username, password=args.password)
-            auth_cookie = api_utils.get_auth_cookie(f'http://{args.host}/',
-                                                    user_auth)
+            auth_cookie = api_utils.get_auth_cookie(args.sub_base, user_auth)
         return func(args, auth_cookie=auth_cookie)
     return wrapper
 
@@ -63,8 +62,7 @@ def dataset_with_slice(dataset):
 @handle_errors
 @with_auth_cookie
 def cmd_roots(args, auth_cookie):
-    data = cat2.get_roots(sub_base=f'http://{args.host}/',
-                          auth_cookie=auth_cookie)
+    data = cat2.get_roots(args.sub_base, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -79,8 +77,7 @@ def cmd_roots(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_subscribe(args, auth_cookie):
-    data = cat2.subscribe(args.root, sub_base=f'http://{args.host}/',
-                          auth_cookie=auth_cookie)
+    data = cat2.subscribe(args.root, args.sub_base, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -91,8 +88,7 @@ def cmd_subscribe(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_list(args, auth_cookie):
-    data = cat2.get_list(args.root, sub_base=f'http://{args.host}/',
-                         auth_cookie=auth_cookie)
+    data = cat2.get_list(args.root, args.sub_base, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -106,7 +102,7 @@ def cmd_list(args, auth_cookie):
 def cmd_url(args, auth_cookie):
     # TODO: provide a url that can be used to open the dataset in blosc2
     # TODO: add a new function to the API that returns the url
-    data = api_utils.get_download_url(args.root, f'http://{args.host}/',
+    data = api_utils.get_download_url(args.root, args.sub_base,
                                       auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
@@ -119,8 +115,7 @@ def cmd_url(args, auth_cookie):
 @with_auth_cookie
 def cmd_info(args, auth_cookie):
     print(f"Getting info for {args.dataset}")
-    data = cat2.get_info(args.dataset, sub_base=f'http://{args.host}/',
-                         auth_cookie=auth_cookie)
+    data = cat2.get_info(args.dataset, args.sub_base, auth_cookie=auth_cookie)
 
     # Print
     if args.json:
@@ -135,7 +130,7 @@ def cmd_info(args, auth_cookie):
 def cmd_show(args, auth_cookie):
     dataset, params = args.dataset
     slice_ = params.get('slice_', None)
-    data = cat2.fetch(dataset, sub_base=f'http://{args.host}/', slice_=slice_,
+    data = cat2.fetch(dataset, args.sub_base, slice_=slice_,
                       auth_cookie=auth_cookie)
 
     # Display
@@ -153,8 +148,7 @@ def cmd_show(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_download(args, auth_cookie):
-    path = cat2.download(args.dataset, sub_base=f'http://{args.host}/',
-                         auth_cookie=auth_cookie)
+    path = cat2.download(args.dataset, args.sub_base, auth_cookie=auth_cookie)
 
     print(f'Dataset saved to {path}')
 
@@ -219,6 +213,7 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
+    args.sub_base = f'http://{args.host}/'
     args.func(args)
 
 
