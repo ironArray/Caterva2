@@ -19,7 +19,7 @@ import caterva2 as cat2
 
 
 # Use the demo server
-SUB_URL = 'https://demo-api.caterva2.net/'
+SUB_URL = 'https://demo.caterva2.net/'
 ROOT_NAME = 'example'
 
 user_auth = None
