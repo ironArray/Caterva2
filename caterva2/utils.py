@@ -67,15 +67,14 @@ def socket_type(string):
 
 
 def get_parser(loglevel='warning', statedir=None, id=None,
-               http=None, broker=None):
+               http=None, url=None, broker=None):
     parser = argparse.ArgumentParser()
     _add_preliminary_args(parser, id=id)  # just for help purposes
     if broker:
         parser.add_argument('--broker', default=broker)
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
-        # Default value is computed after parser run.
-        parser.add_argument('--url', type=urlbase_type)
+        parser.add_argument('--url', default=url, type=urlbase_type)
     if statedir:
         parser.add_argument('--statedir', default=statedir,
                             type=pathlib.Path)

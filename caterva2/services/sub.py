@@ -851,6 +851,7 @@ def main():
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
     parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
                               http=conf.get('.http', 'localhost:8002'),
+                              url=conf.get('.url'),
                               loglevel=conf.get('.loglevel', 'warning'),
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
