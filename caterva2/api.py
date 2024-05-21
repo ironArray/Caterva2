@@ -38,7 +38,7 @@ def get_roots(sub_url=sub_url_default, auth_cookie=None):
     ----------
 
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -60,7 +60,7 @@ def subscribe(root, sub_url=sub_url_default, auth_cookie=None):
     root : str
         The name of the root to subscribe to.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -82,7 +82,7 @@ def get_list(root, sub_url=sub_url_default, auth_cookie=None):
     root : str
         The name of the root to list.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -104,7 +104,7 @@ def get_info(dataset, sub_url=sub_url_default, auth_cookie=None):
     dataset : str
         The name of the dataset.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -127,7 +127,7 @@ def fetch(dataset, sub_url=sub_url_default, slice_=None, prefer_schunk=True,
     dataset : str
         The name of the dataset.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     slice_ : str
         The slice to fetch.
     prefer_schunk : bool
@@ -159,7 +159,7 @@ def download(dataset, sub_url=sub_url_default, auth_cookie=None):
     dataset : str
         The name of the dataset.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -226,7 +226,7 @@ class File:
     root : str
         The name of the root.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -391,7 +391,7 @@ class Dataset(File):
     root : str
         The name of the root.
     sub_url : str
-        The base URL of the subscriber to query.
+        The base URL (slash-terminated) of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
