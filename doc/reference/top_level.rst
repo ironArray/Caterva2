@@ -44,4 +44,4 @@ Variables listed below as coming from the ``api`` module are available from the 
     api.bro_host_default
     api.pub_host_default
     api.sub_host_default
-    api.sub_base_default
+    api.sub_url_default
