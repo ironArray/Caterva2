@@ -53,9 +53,8 @@ cache = None
 scratch = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
-host = None
 locks = {}
-port = None
+urlbase = None
 
 
 def make_url(request, name, query=None, **path_params):
@@ -515,7 +514,7 @@ async def download_url(path: str):
     # in the url, if it is missing.
     if abspath.suffix == '.b2':
         path = f'{path}.b2'
-    return f'http://{host}:{port}/files/{path}'
+    return f'{urlbase}files/{path}'
 
 
 @app.get('/api/download/{path:path}',
@@ -844,6 +843,7 @@ def main():
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
     parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
                               http=conf.get('.http', 'localhost:8002'),
+                              url=conf.get('.url'),
                               loglevel=conf.get('.loglevel', 'warning'),
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
@@ -879,8 +879,9 @@ def main():
     tomography.init(cache, partial_download)
 
     # Run
-    global host, port
+    global urlbase
     host, port = args.http
+    urlbase = args.url
     uvicorn.run(app, host=host, port=port)
 
 

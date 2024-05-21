@@ -19,6 +19,7 @@ This document describes the minimal specifications for the project.  It is meant
 The three services (broker, publisher and subscriber) have a number of common options:
 
 - `--http`: the hostname and port that it listens, e.g. `localhost:8000`
+- `--url`: the base of URLs provided by the subscriber, if different from `http://<HTTP_HOST>:<HTTP_PORT>/` (only for subscriber)
 - `--loglevel`: by default `warning`
 - `--statedir`: directory where to store the service state files (cache, logs, pid file, etc.)
 - `--broker`: the hostname and port where the broker runs (only for publisher and subscriber)
@@ -57,6 +58,7 @@ root = "root-examples"
 
 [subscriber.1]
 http = "localhost:8002"
+url = "https://cat2.example.com/"  # e.g. served by reverse proxy
 statedir = "_caterva2/sub"
 loglevel = "warning"
 ```

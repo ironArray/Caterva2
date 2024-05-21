@@ -62,19 +62,19 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def get_auth_cookie(host, user_auth):
+def get_auth_cookie(sub_url, user_auth):
     if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
         user_auth = user_auth._asdict()
-    resp = httpx.post(f'http://{host}/auth/jwt/login', data=user_auth)
+    resp = httpx.post(f'{sub_url}auth/jwt/login', data=user_auth)
     resp.raise_for_status()
     auth_cookie = '='.join(list(resp.cookies.items())[0])
     return auth_cookie
 
 
-def fetch_data(path, host, params, auth_cookie=None):
+def fetch_data(path, sub_url, params, auth_cookie=None):
     if 'prefer_schunk' not in params:
         params['prefer_schunk'] = blosc2_is_here
-    response = _xget(f'http://{host}/api/fetch/{path}', params=params,
+    response = _xget(f'{sub_url}api/fetch/{path}', params=params,
                      auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
@@ -89,8 +89,8 @@ def fetch_data(path, host, params, auth_cookie=None):
     return data
 
 
-def get_download_url(path, host, auth_cookie=None):
-    response = _xget(f'http://{host}/api/download-url/{path}',
+def get_download_url(path, sub_url, auth_cookie=None):
+    response = _xget(f'{sub_url}api/download-url/{path}',
                      auth_cookie=auth_cookie)
     return response.json()
 

@@ -38,12 +38,13 @@ http = "localhost:8001"
 # Several of these are allowed, each with a different ID (the string after the dot). A subscriber invoked with ``--id=something`` will look its configuration up in the ``subscriber.something`` section.
 [subscriber.1]
 http = "localhost:8002"  # The ``host:port`` endpoint where the service listens for HTTP requests. Use ``*`` as a host to listen on all addresses.
+url = "https://cat2.example.com/"  # The base of URLs, if different from ``http://<subscriber.http>/``.
 statedir = "_caterva2/sub"  # The directory where the service will place state files.
 loglevel = "warning"  # All service messages having this severity or worse will be logged.
 
-# Only one of these is allowed. It will be used by a subscriber invoked with no ID, or it may be used by other programs to find how to connect to a subscriber (``subscriber.http``).
+# Only one of these is allowed. It will be used by a subscriber invoked with no ID, or it may be used by other programs to find how to connect to a subscriber (``subscriber.url``).
 [subscriber]
-http = "localhost:8001"
+url = "https://cat2.example.com/"
 # ... other settings as above ...
 
 # Common configuration of client programs.
