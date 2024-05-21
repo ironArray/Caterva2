@@ -156,8 +156,9 @@ def cmd_download(args, auth_cookie):
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
-    parser.add_argument('--host', default=conf.get('subscriber.http',
-                                                   cat2.sub_host_default))
+    parser.add_argument('--subscriber', dest='sub_base',
+                        default=conf.get('subscriber.url',
+                                         cat2.sub_base_default))
     parser.add_argument('--username', default=conf.get('client.username'))
     parser.add_argument('--password', default=conf.get('client.password'))
     subparsers = parser.add_subparsers(required=True)
@@ -213,7 +214,8 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    args.sub_base = f'http://{args.host}/'
+    if not args.sub_base.endswith('/'):
+        args.sub_base += '/'
     args.func(args)
 
 
