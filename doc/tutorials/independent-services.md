@@ -126,17 +126,17 @@ cat2sub
 
 Clients at the example workstation need to know the address of the subscriber that they will use.
 
-The command-line client `cat2cli` provides the `--host` option for that.  Running this at the workstation:
+The command-line client `cat2cli` provides the `--subscriber` option for that.  Running this at the workstation:
 
 ```sh
-cat2cli --host sub.edu.example.org:3126 roots
+cat2cli --subscriber http://sub.edu.example.org:3126/ roots
 ```
 
 Will retrieve the list of known roots from the subscriber that we set up above.  In fact, `cat2cli` also supports `caterva2.toml`, and this configuration in the current directory:
 
 ```toml
 [subscriber]
-http = "sub.edu.example.org:3126"
+url = "http://sub.edu.example.org:3126/"
 ```
 
 Should allow you to run the previous command just like this:
