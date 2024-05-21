@@ -68,8 +68,6 @@ def get_auth_cookie(sub_url, user_auth):
 
 
 def fetch_data(path, sub_url, params, auth_cookie=None):
-    if 'prefer_schunk' not in params:
-        params['prefer_schunk'] = blosc2_is_here
     response = _xget(f'{sub_url}api/fetch/{path}', params=params,
                      auth_cookie=auth_cookie)
     data = response.content

@@ -71,8 +71,6 @@ array([[ 4,  5,  6,  7],
        [24, 25, 26, 27]], dtype=uint16)
 ```
 
-If the dataset is big and well compressed, and Blosc2 is available at the client, including the `prefer_schunk=True` argument may save resources when transferring data between subscriber and client.
-
 Finally, you may want to save the whole dataset locally:
 
 ```python
