@@ -50,6 +50,14 @@ def walk_files(root, exclude=None):
 #
 # Command line helpers
 #
+def urlbase_type(string):
+    if not (string.startswith('http://') or string.startswith('https://')):
+        raise ValueError("invalid HTTP(S) URL base", string)
+    if not string.endswith('/'):
+        string += '/'
+    return string
+
+
 def socket_type(string):
     host, port = string.rsplit(':', maxsplit=1)
     port = int(port)
@@ -66,7 +74,8 @@ def get_parser(loglevel='warning', statedir=None, id=None,
         parser.add_argument('--broker', default=broker)
     if http:
         parser.add_argument('--http', default=http, type=socket_type)
-        parser.add_argument('--url')  # apply default on parser run
+        # Default value is computed after parser run.
+        parser.add_argument('--url', type=urlbase_type)
     if statedir:
         parser.add_argument('--statedir', default=statedir,
                             type=pathlib.Path)
@@ -85,8 +94,6 @@ def run_parser(parser):
     if hasattr(args, 'http'):
         if not args.url:
             args.url = f'http://{args.http[0]}:{args.http[1]}/'
-        if not args.url.endswith('/'):
-            args.url += '/'
 
     return args
 

@@ -51,7 +51,8 @@ class TreeApp(App):
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
-    parser.add_argument('--subscriber', dest='sub_base',
+    parser.add_argument('--subscriber',
+                        dest='sub_base', type=utils.urlbase_type,
                         default=conf.get('subscriber.url',
                                          api.sub_base_default))
     parser.add_argument('--username', default=conf.get('client.username'))
@@ -60,8 +61,6 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    if not args.sub_base.endswith('/'):
-        args.sub_base += '/'
     app = TreeApp(args)
     app.run()
 

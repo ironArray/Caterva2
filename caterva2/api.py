@@ -13,7 +13,7 @@ This module provides a Python API to Caterva2.
 import functools
 import pathlib
 
-from caterva2 import api_utils
+from caterva2 import api_utils, utils
 
 
 # Defaults
@@ -186,9 +186,7 @@ class Root:
     """
     def __init__(self, name, sub_base=sub_base_default, user_auth=None):
         self.name = name
-        if not sub_base.endswith('/'):
-            sub_base += '/'
-        self.sub_base = sub_base
+        self.sub_base = utils.urlbase_type(sub_base)
         self.auth_cookie = (
             api_utils.get_auth_cookie(sub_base, user_auth)
             if user_auth else None)
