@@ -51,8 +51,8 @@ class TreeApp(App):
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
-    parser.add_argument('--host',
-                        default=conf.get('subscriber.http', 'localhost:8002'))
+    parser.add_argument('--host', default=conf.get('subscriber.http',
+                                                   api.sub_host_default))
     parser.add_argument('--username', default=conf.get('client.username'))
     parser.add_argument('--password', default=conf.get('client.password'))
     parser.add_argument('--root', default='foo')
