@@ -767,38 +767,10 @@ async def htmx_path_info(
 
     # XXX
     if hasattr(meta, 'shape'):
-        shape = meta.shape
-        ndims = len(shape)
-        if ndims >= 2:
-            view_ndims = 2
-        elif ndims == 1:
-            view_ndims = 1
-        else:
-            view_ndims = 0
-
         view_url = make_url(request, "htmx_path_view", path=path)
-        inputs = []
-        for i, dim in enumerate(shape):
-            if i < ndims - 2:
-                step = 1
-            elif dim > 10:
-                step = 10
-            else:
-                step = None
-            inputs.append({'step': step, 'max': dim - 1})
-
-        inputs_size = []
-        for i, dim in enumerate(shape[-view_ndims:]):
-            inputs_size.append({
-                'max': dim,
-                'ndim': len(inputs) - view_ndims  + i,
-            })
-
         context.update({
             "view_url": view_url,
             "shape": meta.shape,
-            "view_inputs": inputs,
-            "view_inputs_size": inputs_size,
         })
 
     response = templates.TemplateResponse(request, "info.html", context=context)
@@ -830,12 +802,39 @@ async def htmx_path_view(
     abspath = srv_utils.cache_lookup(cache, cache / path)
     await partial_download(abspath, str(path))
     arr = blosc2.open(abspath)
-    ndims = len(arr.shape)
+
+    # Local variables
+    shape = arr.shape
+    ndims = len(shape)
+    if ndims >= 2:
+        view_ndims = 2
+    elif ndims == 1:
+        view_ndims = 1
+    else:
+        view_ndims = 0
 
     # Default values for input params
     index = (0,) * ndims if index is None else tuple(index)
     if size is None:
         size = [10, 10]
+
+    inputs_size = []
+    for i, dim in enumerate(shape[-view_ndims:]):
+        inputs_size.append({
+            'max': dim,
+            'ndim': ndims - view_ndims  + i,
+            'value': size[i],
+        })
+
+    inputs = []
+    for i, (value, dim) in enumerate(zip(index, shape)):
+        if i < ndims - 2:
+            step = 1
+        elif dim > 10:
+            step = inputs_size[i - (ndims - view_ndims)]['value']
+        else:
+            step = None
+        inputs.append({'step': step, 'max': dim - 1, 'value': value})
 
     # Get array view
     if ndims >= 2:
@@ -852,7 +851,13 @@ async def htmx_path_view(
         arr = [[arr[()]]]
 
     # Render
-    return templates.TemplateResponse(request, "info_view.html", {'rows': list(arr)})
+    context = {
+        "view_url": make_url(request, "htmx_path_view", path=path),
+        "inputs": inputs,
+        "inputs_size": inputs_size,
+        "rows": list(arr),
+    }
+    return templates.TemplateResponse(request, "info_view.html", context)
 
 @app.post("/htmx/command/", response_class=HTMLResponse)
 async def htmx_command(

@@ -40,35 +40,8 @@
 
         shape = {{ shape }}
 
-        <form class="mb-2">
-            {% for input in view_inputs %}
-            <div class="form-floating d-inline-block mt-2">
-                <input type="number" name="index" value="0" size="5" class="form-control"
-                       id="input-{{ loop.index0 }}" placeholder=""
-                       hx-post="{{ view_url }}" hx-target="#info-view"
-                       {% if input.step %}
-                       min="0" max="{{ input.max }}" step="{{ input.step }}"
-                       {% else %}
-                       readonly
-                       {% endif %}
-                       >
-                <label for="input-{{ loop.index0 }}">dim {{ loop.index0 }}</label>
-            </div>
-            {% endfor %}
-
-            {% for input in view_inputs_size %}
-            <div class="form-floating d-inline-block mt-2">
-                <input type="number" name="size" value="10" size="10" class="form-control"
-                       id="input-{{ loop.index0 }}" placeholder=""
-                       hx-post="{{ view_url }}" hx-target="#info-view"
-                       min="0" max="{{ input.max }}"
-                       >
-                <label for="input-{{ loop.index0 }}">size for dim {{ input.ndim }}</label>
-            </div>
-            {% endfor %}
-        </form>
-
-        <div id="info-view" hx-post="{{ view_url }}" hx-trigger="load"></div>
+        <div id="info-view" hx-post="{{ view_url }}" hx-trigger="load" hx-ext="morph" hx-swap="morph:innerHTML">
+        </div>
     </div>
     {% endif %}
 
