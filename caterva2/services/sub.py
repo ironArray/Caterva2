@@ -759,7 +759,48 @@ async def htmx_path_info(
     else:
         display = None
 
-    context = {"path": path, "meta": meta, "display": display}
+    context = {
+        "path": path,
+        "meta": meta,
+        "display": display,
+    }
+
+    # XXX
+    if hasattr(meta, 'shape'):
+        shape = meta.shape
+        ndims = len(shape)
+        if ndims >= 2:
+            view_ndims = 2
+        elif ndims == 1:
+            view_ndims = 1
+        else:
+            view_ndims = 0
+
+        view_url = make_url(request, "htmx_path_view", path=path)
+        inputs = []
+        for i, dim in enumerate(shape):
+            if i < ndims - 2:
+                step = 1
+            elif dim > 10:
+                step = 10
+            else:
+                step = None
+            inputs.append({'step': step, 'max': dim - 1})
+
+        inputs_size = []
+        for i, dim in enumerate(shape[-view_ndims:]):
+            inputs_size.append({
+                'max': dim,
+                'ndim': len(inputs) - view_ndims  + i,
+            })
+
+        context.update({
+            "view_url": view_url,
+            "shape": meta.shape,
+            "view_inputs": inputs,
+            "view_inputs_size": inputs_size,
+        })
+
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     # Preserve state (query)
@@ -773,6 +814,45 @@ async def htmx_path_info(
 
     return response
 
+
+@app.post("/htmx/path-view/{path:path}", response_class=HTMLResponse)
+async def htmx_path_view(
+    request: Request,
+    # Path parameters
+    path: pathlib.Path,
+    # Input parameters
+    index: typing.Annotated[list[int], Form()] = None,
+    size: typing.Annotated[list[int], Form()] = None,
+    # Depends
+    user = Depends(current_active_user),
+):
+    # Download array
+    abspath = srv_utils.cache_lookup(cache, cache / path)
+    await partial_download(abspath, str(path))
+    arr = blosc2.open(abspath)
+    ndims = len(arr.shape)
+
+    # Default values for input params
+    index = (0,) * ndims if index is None else tuple(index)
+    if size is None:
+        size = [10, 10]
+
+    # Get array view
+    if ndims >= 2:
+        arr = arr[index[:-2]]
+        i, j = index[-2:]
+        isize = size[0] + 1
+        jsize = size[1] + 1
+        arr = arr[i:i+isize, j:j+jsize]
+    elif ndims == 1:
+        i = index[0]
+        isize = size[0] + 1
+        arr = [arr[i:i+isize]]
+    else:
+        arr = [[arr[()]]]
+
+    # Render
+    return templates.TemplateResponse(request, "info_view.html", {'rows': list(arr)})
 
 @app.post("/htmx/command/", response_class=HTMLResponse)
 async def htmx_command(

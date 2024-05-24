@@ -23,4 +23,4 @@ pub-gris:
 	${BIN}/python3 -m caterva2.services.pub --statedir=var/pub-gris gris numbers-10x-gris-3d.h5 --http=localhost:8012
 
 sub:
-	${BIN}/python3 -m caterva2.services.sub --statedir=var/sub
+	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub --statedir=var/sub
