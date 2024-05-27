@@ -109,7 +109,7 @@ def test_index_dataset_1d(slice_, services, examples_dir, sub_url, sub_user):
 
 
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
-                                    slice(1, 5, 1)])
+                                    slice(1, 5, 1), (slice(None, 10), slice(None, 20))])
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
 def test_index_dataset_nd(slice_, name, services, examples_dir, sub_url, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_url=sub_url, user_auth=sub_user)
