@@ -873,6 +873,7 @@ async def htmx_command(
     # Parse command
     try:
         result_name, expr = command.split('=')
+        result_name = result_name.strip()
         expr = expr.strip()
         vars = ne.NumExpr(expr).input_names
     except (SyntaxError, ValueError):
