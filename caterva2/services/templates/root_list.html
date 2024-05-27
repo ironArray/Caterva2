@@ -23,7 +23,7 @@
     {% endfor %}
 
     {% if user %}
-    {% with name="@output" %}
+    {% with name="@scratch" %}
     <div class="form-check">
         <input class="form-check-input" type="checkbox"
                name="roots" value="{{ name }}" {{ "checked" if name in checked }}

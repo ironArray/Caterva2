@@ -680,7 +680,7 @@ async def htmx_path_list(
 
     datasets = []
     for root in roots:
-        if user and root == '@output':
+        if user and root == '@scratch':
             rootdir = scratch / str(user.id)
         else:
             if not get_root(root).subscribed:
@@ -731,7 +731,7 @@ async def htmx_path_info(
 ):
 
     parts = list(path.parts)
-    if user and parts[0] == '@output':
+    if user and parts[0] == '@scratch':
         parts[0] = str(user.id)
         path = pathlib.Path(*parts)
         filepath = scratch / path
