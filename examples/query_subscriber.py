@@ -40,10 +40,10 @@ example = cat2.Root(ROOT_NAME, sub_url=SUB_URL, user_auth=user_auth)
 # List the datasets in that root
 print(example.node_list)
 # Get a specific dataset
-array = example['operands/ds-0-10-linspace-float32-(True, True)-a1-(1000,)d.b2nd']
+array = example['dir1/ds-2d.b2nd']
 print(array.name, array.path)
 # Get some data out of the dataset
-print(array[990:1000])
+print(array[:2])
 
 # There are different ways to get the data
 # 1. Direct download
