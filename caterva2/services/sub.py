@@ -801,6 +801,7 @@ async def htmx_path_view(
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
+        # TODO: Download datasets required to evaluate lazy expression.
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
