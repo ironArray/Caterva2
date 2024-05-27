@@ -796,9 +796,17 @@ async def htmx_path_view(
     # Depends
     user = Depends(current_active_user),
 ):
-    # Download array
-    abspath = srv_utils.cache_lookup(cache, cache / path)
-    await partial_download(abspath, str(path))
+
+    parts = list(path.parts)
+    if user and parts[0] == '@scratch':
+        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(scratch, filepath)
+    else:
+        filepath = cache / path
+        abspath = srv_utils.cache_lookup(cache, filepath)
+        # Download array
+        await partial_download(abspath, str(path))
+
     arr = blosc2.open(abspath)
 
     # Local variables
