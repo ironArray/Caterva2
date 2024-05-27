@@ -52,7 +52,10 @@ def parse_slice(string):
         return None
     obj = []
     for segment in string.split(','):
-        segment = slice(*map(lambda x: int(x.strip()) if x.strip() else None, segment.split(':')))
+        if ':' not in segment:
+            segment = int(segment)
+        else:
+            segment = slice(*map(lambda x: int(x.strip()) if x.strip() else None, segment.split(':')))
         obj.append(segment)
 
     return tuple(obj)

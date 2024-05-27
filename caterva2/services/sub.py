@@ -458,13 +458,25 @@ async def fetch_data(path: str, slice_: str = None):
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[()] if array is not None else data[:]
 
+    iterchunk = True
     if isinstance(data, np.ndarray):
-        data = blosc2.asarray(data)
-        data = data.to_cframe()
+        if data.size == 0:
+            # Workaround until blosc2 supports b2nd of size 0
+            iterchunk = False
+            data = pickle.dumps(data, protocol=-1)
+            downloader = iter((data,))
+        else:
+            data = blosc2.asarray(data)
+            data = data.to_cframe()
+    elif isinstance(data, bytes) and len(data) == 0:
+        iterchunk = False
+        data = pickle.dumps(data, protocol=-1)
+        downloader = iter((data,))
     else:
         # A bytes object can still be compressed
         data = blosc2.compress2(data, typesize=typesize)
-    downloader = srv_utils.iterchunk(data)
+    if iterchunk:
+        downloader = srv_utils.iterchunk(data)
 
     return responses.StreamingResponse(downloader)
 
