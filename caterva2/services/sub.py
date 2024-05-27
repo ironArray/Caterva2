@@ -732,9 +732,7 @@ async def htmx_path_info(
 
     parts = list(path.parts)
     if user and parts[0] == '@scratch':
-        parts[0] = str(user.id)
-        path = pathlib.Path(*parts)
-        filepath = scratch / path
+        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
     else:
         filepath = cache / path
