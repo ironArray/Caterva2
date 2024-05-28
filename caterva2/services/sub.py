@@ -13,7 +13,6 @@ import itertools
 import logging
 import os
 import pathlib
-import pickle
 import string
 import typing
 
@@ -452,31 +451,18 @@ async def fetch_data(path: str, slice_: str = None):
     # Serialization can be done either as:
     # * a serialized NDArray
     # * a compressed SChunk (bytes, via blosc2.compress2)
-    # * a pickled NumPy array (specially scalars and 0-dim arrays)
     data = array if array is not None else schunk
     if not slice_:
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[()] if array is not None else data[:]
 
-    iterchunk = True
     if isinstance(data, np.ndarray):
-        if data.size == 0:
-            # Workaround until blosc2 supports b2nd of size 0
-            iterchunk = False
-            data = pickle.dumps(data, protocol=-1)
-            downloader = iter((data,))
-        else:
-            data = blosc2.asarray(data)
-            data = data.to_cframe()
-    elif isinstance(data, bytes) and len(data) == 0:
-        iterchunk = False
-        data = pickle.dumps(data, protocol=-1)
-        downloader = iter((data,))
-    else:
+        data = blosc2.asarray(data)
+        data = data.to_cframe()
+    elif isinstance(data, bytes):
         # A bytes object can still be compressed
         data = blosc2.compress2(data, typesize=typesize)
-    if iterchunk:
-        downloader = srv_utils.iterchunk(data)
+    downloader = srv_utils.iterchunk(data)
 
     return responses.StreamingResponse(downloader)
 
