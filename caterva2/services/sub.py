@@ -411,6 +411,27 @@ async def partial_download(abspath, path, slice_=None):
                 await download_chunk(path, schunk, n)
 
 
+async def download_expr_deps(abspath):
+    """
+    Download the datasets that the lazy expression dataset depends on.
+
+    Parameters
+    ----------
+    abspath : pathlib.Path
+        The absolute path to the lazy expression dataset.
+
+    Returns
+    -------
+    None
+        When finished, expression dependencies are available in cache.
+    """
+    def download_dep(ndarr):
+        path = pathlib.Path(ndarr.schunk.urlpath)
+        return partial_download(path, str(path.relative_to(cache)))
+    expr = blosc2.open(abspath)
+    await asyncio.gather(*[download_dep(op) for op in expr.operands.values()])
+
+
 @app.get('/api/fetch/{path:path}',
          dependencies=[Depends(current_active_user)])
 async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
@@ -801,7 +822,8 @@ async def htmx_path_view(
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
-        # TODO: Download datasets required to evaluate lazy expression.
+        # Download expression dependencies
+        await download_expr_deps(abspath)
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
