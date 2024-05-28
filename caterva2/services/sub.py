@@ -348,15 +348,17 @@ async def get_url(path: str):
     return [http]
 
 
-@app.get('/api/info/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def get_info(path: str):
+@app.get('/api/info/{path:path}')
+async def get_info(
+    path: pathlib.Path,
+    user = Depends(current_active_user),
+):
     """
     Get the metadata of a dataset.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
 
     Returns
@@ -364,7 +366,7 @@ async def get_info(path: str):
     dict
         The metadata of the dataset.
     """
-    abspath = srv_utils.cache_lookup(cache, path)
+    abspath, _ = abspath_and_dataprep(path, user)
     return srv_utils.read_metadata(abspath)
 
 
