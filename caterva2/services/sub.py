@@ -887,7 +887,7 @@ async def htmx_command(
         error = 'Invalid syntax'
         return templates.TemplateResponse(request, "command.html", {'text': error})
 
-    # Download datasets
+    # Open expression datasets and create the lazy expression dataset
     var_dict = {}
     for var in vars:
         path = paths[names.index(var)]
