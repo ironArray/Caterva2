@@ -16,6 +16,7 @@ import pathlib
 import pickle
 import string
 import typing
+from collections.abc import Awaitable, Callable
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, responses
@@ -432,6 +433,31 @@ async def download_expr_deps(abspath):
     await asyncio.gather(*[download_dep(op) for op in expr.operands.values()])
 
 
+def abspath_and_dataprep(path: pathlib.Path,
+                         user: db.User | None) -> tuple[
+                             pathlib.Path,
+                             Callable[[], Awaitable],
+                         ]:
+    """
+    Get absolute path in local storage and data preparation operation.
+
+    After awaiting for the preparation operation to complete, data in the
+    dataset should be ready for reading.
+    """
+    parts = list(path.parts)
+    if user and parts[0] == '@scratch':
+        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(scratch, filepath)
+        async def dataprep():
+            return await download_expr_deps(abspath)
+    else:
+        filepath = cache / path
+        abspath = srv_utils.cache_lookup(cache, filepath)
+        async def dataprep():
+            return await partial_download(abspath, str(path))
+    return (abspath, dataprep)
+
+
 @app.get('/api/fetch/{path:path}',
          dependencies=[Depends(current_active_user)])
 async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
@@ -751,14 +777,7 @@ async def htmx_path_info(
     user = Depends(current_active_user),
 ):
 
-    parts = list(path.parts)
-    if user and parts[0] == '@scratch':
-        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(scratch, filepath)
-    else:
-        filepath = cache / path
-        abspath = srv_utils.cache_lookup(cache, filepath)
-
+    abspath, _ = abspath_and_dataprep(path, user)
     meta = srv_utils.read_metadata(abspath)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
@@ -771,7 +790,7 @@ async def htmx_path_info(
         display = {
             "url": f"/plugins/{plugin.name}/display/{path}",
         }
-    elif filepath.suffix == ".md":
+    elif path.suffix == ".md":
         display = {
             "url": f"/markdown/{path}",
         }
@@ -818,18 +837,8 @@ async def htmx_path_view(
     user = Depends(current_active_user),
 ):
 
-    parts = list(path.parts)
-    if user and parts[0] == '@scratch':
-        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(scratch, filepath)
-        # Download expression dependencies
-        await download_expr_deps(abspath)
-    else:
-        filepath = cache / path
-        abspath = srv_utils.cache_lookup(cache, filepath)
-        # Download array
-        await partial_download(abspath, str(path))
-
+    abspath, dataprep = abspath_and_dataprep(path, user)
+    await dataprep()
     arr = blosc2.open(abspath)
 
     # Local variables
