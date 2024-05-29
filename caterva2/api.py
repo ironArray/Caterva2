@@ -18,13 +18,13 @@ from caterva2 import api_utils, utils
 
 # Defaults
 bro_host_default = 'localhost:8000'
-"""The default HTTP endpoint for the broker (URL sub_url & port)."""
+"""The default HTTP endpoint for the broker (URL host & port)."""
 
 pub_host_default = 'localhost:8001'
-"""The default HTTP endpoint for the publisher (URL sub_url & port)."""
+"""The default HTTP endpoint for the publisher (URL host & port)."""
 
 sub_host_default = 'localhost:8002'
-"""The default HTTP endpoint for the subscriber (URL sub_url & port)."""
+"""The default HTTP endpoint for the subscriber (URL host & port)."""
 
 sub_url_default = f'http://{sub_host_default}/'
 """The default base for URLs provided by the subscriber (slash-terminated)."""
