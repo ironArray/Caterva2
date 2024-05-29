@@ -351,7 +351,7 @@ async def get_url(path: str):
 @app.get('/api/info/{path:path}')
 async def get_info(
     path: pathlib.Path,
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
     """
     Get the metadata of a dataset.
@@ -613,7 +613,7 @@ async def download_cached(path: str):
 
 @app.get('/scratch/{path:path}')
 async def download_scratch(path: str,
-                           user = Depends(current_active_user)):
+                           user: db.User = Depends(current_active_user)):
     parts = pathlib.Path(path).parts
     if user and (not parts or parts[0] != str(user.id)):
         raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
@@ -695,7 +695,7 @@ async def htmx_root_list(
     # Query
     roots: list[str] = fastapi.Query([]),
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     context = {
@@ -715,7 +715,7 @@ async def htmx_path_list(
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     def get_names():
@@ -776,7 +776,7 @@ async def htmx_path_info(
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     abspath, _ = abspath_and_dataprep(path, user)
@@ -836,7 +836,7 @@ async def htmx_path_view(
     index: typing.Annotated[list[int], Form()] = None,
     size: typing.Annotated[list[int], Form()] = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     abspath, dataprep = abspath_and_dataprep(path, user)
@@ -907,7 +907,7 @@ async def htmx_command(
     names: typing.Annotated[list[str], Form()],
     paths: typing.Annotated[list[str], Form()],
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     # Parse command
