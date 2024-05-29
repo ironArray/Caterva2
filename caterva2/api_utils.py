@@ -8,7 +8,6 @@
 ###############################################################################
 import os
 import pathlib
-import pickle
 
 # Requirements
 import httpx
@@ -55,8 +54,7 @@ def parse_slice(string):
         if ':' not in segment:
             segment = int(segment)
         else:
-            segment = [int(x) if x else None for x in segment.split(':')]
-            segment = slice(*segment)
+            segment = slice(*map(lambda x: int(x.strip()) if x.strip() else None, segment.split(':')))
         obj.append(segment)
 
     return tuple(obj)
@@ -72,20 +70,15 @@ def get_auth_cookie(sub_url, user_auth):
 
 
 def fetch_data(path, sub_url, params, auth_cookie=None):
-    if 'prefer_schunk' not in params:
-        params['prefer_schunk'] = blosc2_is_here
     response = _xget(f'{sub_url}api/fetch/{path}', params=params,
                      auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
     try:
-        data = pickle.loads(data)
-    except pickle.UnpicklingError:
-        try:
-            data = blosc2.decompress2(data)
-        except (ValueError, RuntimeError):
-            data = blosc2.ndarray_from_cframe(data)
-            data = data[:] if data.ndim == 1 else data[()]
+        data = blosc2.decompress2(data)
+    except (ValueError, RuntimeError):
+        data = blosc2.ndarray_from_cframe(data)
+        data = data[:] if data.ndim == 1 else data[()]
     return data
 
 

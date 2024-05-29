@@ -117,8 +117,7 @@ def get_info(dataset, sub_url=sub_url_default, auth_cookie=None):
                          auth_cookie=auth_cookie)
 
 
-def fetch(dataset, sub_url=sub_url_default, slice_=None, prefer_schunk=True,
-          auth_cookie=None):
+def fetch(dataset, sub_url=sub_url_default, slice_=None, auth_cookie=None):
     """
     Fetch a slice of a dataset.
 
@@ -130,11 +129,6 @@ def fetch(dataset, sub_url=sub_url_default, slice_=None, prefer_schunk=True,
         The base URL (slash-terminated) of the subscriber to query.
     slice_ : str
         The slice to fetch.
-    prefer_schunk : bool
-        Whether to prefer using Blosc2 schunk serialization during data transport.
-        If False, pickle will always be used instead. Default is True, so Blosc2
-        serialization will be used if Blosc2 is installed (and data payload is large
-        enough).
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -143,9 +137,8 @@ def fetch(dataset, sub_url=sub_url_default, slice_=None, prefer_schunk=True,
     numpy.ndarray
         The slice of the dataset.
     """
-    prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
     data = api_utils.fetch_data(dataset, sub_url,
-                                {'slice_': slice_, 'prefer_schunk': prefer_schunk},
+                                {'slice_': slice_},
                                 auth_cookie=auth_cookie)
     return data
 
@@ -329,23 +322,18 @@ class File:
         data = self.fetch(slice_=slice_)
         return data
 
-    def fetch(self, slice_=None, prefer_schunk=True):
+    def fetch(self, slice_=None):
         """
         Fetch a slice of a dataset.  Can specify transport serialization.
 
         Similar to `__getitem__()` but this one lets specify whether to prefer using Blosc2
-        schunk serialization or pickle during data transport between the subscriber and the
+        schunk serialization during data transport between the subscriber and the
         client. See below.
 
         Parameters
         ----------
         slice_ : int, slice, tuple of ints and slices, or None
             The slice to fetch.
-        prefer_schunk : bool
-            Whether to prefer using Blosc2 schunk serialization during data transport.
-            If False, pickle will always be used instead. Default is True, so Blosc2
-            serialization will be used if Blosc2 is installed (and data payload is large
-            enough).
 
         Returns
         -------
@@ -353,9 +341,8 @@ class File:
             The slice of the dataset.
         """
         slice_ = api_utils.slice_to_string(slice_)
-        prefer_schunk = api_utils.blosc2_is_here and prefer_schunk
         data = api_utils.fetch_data(self.path, self.sub_url,
-                                    {'slice_': slice_, 'prefer_schunk': prefer_schunk},
+                                    {'slice_': slice_},
                                     auth_cookie=self.auth_cookie)
         return data
 

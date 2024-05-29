@@ -13,7 +13,6 @@ import itertools
 import logging
 import os
 import pathlib
-import pickle
 import string
 import typing
 
@@ -413,7 +412,7 @@ async def partial_download(abspath, path, slice_=None):
 
 @app.get('/api/fetch/{path:path}',
          dependencies=[Depends(current_active_user)])
-async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
+async def fetch_data(path: str, slice_: str = None):
     """
     Fetch a dataset.
 
@@ -423,8 +422,6 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
         The path to the dataset.
     slice_ : str
         The slice to fetch.
-    prefer_schunk : bool
-        True if the client accepts Blosc2 schunks.
 
     Returns
     -------
@@ -454,36 +451,19 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     # Serialization can be done either as:
     # * a serialized NDArray
     # * a compressed SChunk (bytes, via blosc2.compress2)
-    # * a pickled NumPy array (specially scalars and 0-dim arrays)
     data = array if array is not None else schunk
     if not slice_:
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[()] if array is not None else data[:]
 
-    # Optimizations for small data. If too small, we pickle it instead of compressing it.
-    # Some measurements have been done and it looks like this has no effect on performance.
-    # TODO: do more measurements and decide whether to keep this or not.
-    small_data = 128  # length in bytes
-    if isinstance(array, np.ndarray):
-        if array.size == 0:
-            # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
-            prefer_schunk = False
-        elif array.size * array.itemsize < small_data:
-            prefer_schunk = False
-    if isinstance(data, bytes) and len(data) < small_data:
-        prefer_schunk = False
+    if isinstance(data, np.ndarray):
+        data = blosc2.asarray(data)
+        data = data.to_cframe()
+    elif isinstance(data, bytes):
+        # A bytes object can still be compressed
+        data = blosc2.compress2(data, typesize=typesize)
+    downloader = srv_utils.iterchunk(data)
 
-    if prefer_schunk:
-        if isinstance(data, np.ndarray):
-            data = blosc2.asarray(data)
-            data = data.to_cframe()
-        else:
-            # A bytes object can still be compressed
-            data = blosc2.compress2(data, typesize=typesize)
-        downloader = srv_utils.iterchunk(data)
-    else:
-        data = pickle.dumps(data, protocol=-1)
-        downloader = iter((data,))
     return responses.StreamingResponse(downloader)
 
 
