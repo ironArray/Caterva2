@@ -50,7 +50,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj):
+def read_metadata(obj, cache=None):
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -81,7 +81,8 @@ def read_metadata(obj):
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     elif isinstance(obj, blosc2.LazyExpr):
-        return get_model_from_obj(obj, models.LazyArray)
+        operands = operands_as_paths(obj.operands, cache)
+        return get_model_from_obj(obj, models.LazyArray, operands=operands)
     else:
         raise TypeError(f'unexpected {type(obj)}')
 
@@ -93,6 +94,13 @@ def reformat_cparams(cparams):
 #   delattr(cparams, 'filters')
 #   delattr(cparams, 'filters_meta')
     return cparams
+
+
+def operands_as_paths(operands, cache):
+    def rel_to_cache(ndarr):
+        path = pathlib.Path(ndarr.schunk.urlpath)
+        return str(path.relative_to(cache))
+    return dict((nm, rel_to_cache(op)) for (nm, op) in operands.items())
 
 
 #

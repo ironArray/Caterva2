@@ -382,7 +382,7 @@ async def get_info(
         The metadata of the dataset.
     """
     abspath, _ = abspath_and_dataprep(path, user)
-    return srv_utils.read_metadata(abspath)
+    return srv_utils.read_metadata(abspath, cache=cache)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -795,7 +795,7 @@ async def htmx_path_info(
 ):
 
     abspath, _ = abspath_and_dataprep(path, user)
-    meta = srv_utils.read_metadata(abspath)
+    meta = srv_utils.read_metadata(abspath, cache=cache)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
     if hasattr(getattr(meta, 'schunk', meta), 'vlmeta'):
