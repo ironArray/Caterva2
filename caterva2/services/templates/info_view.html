@@ -1,27 +1,24 @@
 <form class="mb-2">
     {% for input in inputs %}
-    <div class="form-floating d-inline-block mt-2">
-        <input type="number" name="index" value="{{ input.value }}" size="5"
-               class="form-control" id="input-{{ loop.index0 }}" placeholder=""
+    <div class="input-group mb-3 me-2 d-inline-flex w-auto">
+        <span class="input-group-text">dim {{ loop.index0 }}</span>
+        <input type="number" class="form-control" placeholder="" size="4"
+               name="index" value="{{ input.start }}"
+               {% if input.size < input.size_max %}
                hx-post="{{ view_url }}" hx-target="#info-view"
-               {% if input.step %}
-               min="0" max="{{ input.max }}" step="{{ input.step }}"
+               min="0" max="{{ input.start_max }}" step="{{ input.size }}"
                {% else %}
                readonly
                {% endif %}
-               >
-        <label for="input-{{ loop.index0 }}">dim {{ loop.index0 }}</label>
-    </div>
-    {% endfor %}
-
-    {% for input in inputs_size %}
-    <div class="form-floating d-inline-block mt-2">
-        <input type="number" name="size" value="{{ input.value }}" size="10"
-               class="form-control" id="input-{{ loop.index0 }}" placeholder=""
+        >
+        {% if input.with_size %}
+        <input type="number" class="form-control" placeholder="" size="4"
+               name="sizes" value="{{ input.size }}"
                hx-post="{{ view_url }}" hx-target="#info-view"
-               min="0" max="{{ input.max }}"
-               >
-        <label for="input-{{ loop.index0 }}">size for dim {{ input.ndim }}</label>
+               min="0" max="{{ input.size_max }}">
+        {% else %}
+        <input type="hidden" name="sizes" value="1">
+        {% endif %}
     </div>
     {% endfor %}
 </form>

@@ -774,7 +774,7 @@ async def htmx_path_view(
     path: pathlib.Path,
     # Input parameters
     index: typing.Annotated[list[int], Form()] = None,
-    size: typing.Annotated[list[int], Form()] = None,
+    sizes: typing.Annotated[list[int], Form()] = None,
     # Depends
     user = Depends(current_active_user),
 ):
@@ -786,46 +786,42 @@ async def htmx_path_view(
     # Local variables
     shape = arr.shape
     ndims = len(shape)
+
+    # Set of dimensions that define the window
+    # TODO Allow the user to choose the window dimesions
+    dims = list(range(ndims))
     if ndims >= 2:
-        view_ndims = 2
+        view_dims = {dims[-2], dims[-1]}
     elif ndims == 1:
-        view_ndims = 1
+        view_dims = {dims[-1]}
     else:
-        view_ndims = 0
+        view_dims = {}
 
     # Default values for input params
     index = (0,) * ndims if index is None else tuple(index)
-    if size is None:
-        size = [10, 10]
-
-    inputs_size = []
-    for i, dim in enumerate(shape[-view_ndims:]):
-        inputs_size.append({
-            'max': dim,
-            'ndim': ndims - view_ndims  + i,
-            'value': size[i],
-        })
+    if sizes is None:
+        sizes = [min(dim, 10) if i in view_dims else 1 for i, dim in enumerate(shape)]
 
     inputs = []
-    for i, (value, dim) in enumerate(zip(index, shape)):
-        if i < ndims - 2:
-            step = 1
-        elif dim > 10:
-            step = inputs_size[i - (ndims - view_ndims)]['value']
-        else:
-            step = None
-        inputs.append({'step': step, 'max': dim - 1, 'value': value})
+    for i, (start, size, size_max) in enumerate(zip(index, sizes, shape)):
+        mod = size_max % size
+        start_max = size_max - (mod or size)
+        inputs.append({
+            'start': start,
+            'start_max': start_max,
+            'size': size,
+            'size_max': size_max,
+            'with_size': i in view_dims,
+        })
 
     # Get array view
     if ndims >= 2:
         arr = arr[index[:-2]]
-        i, j = index[-2:]
-        isize = size[0] + 1
-        jsize = size[1] + 1
+        i, isize = index[-2], sizes[-2]
+        j, jsize = index[-1], sizes[-1]
         arr = arr[i:i+isize, j:j+jsize]
     elif ndims == 1:
-        i = index[0]
-        isize = size[0] + 1
+        i, isize = index[0], sizes[0]
         arr = [arr[i:i+isize]]
     else:
         arr = [[arr[()]]]
@@ -834,7 +830,6 @@ async def htmx_path_view(
     context = {
         "view_url": make_url(request, "htmx_path_view", path=path),
         "inputs": inputs,
-        "inputs_size": inputs_size,
         "rows": list(arr),
     }
     return templates.TemplateResponse(request, "info_view.html", context)
