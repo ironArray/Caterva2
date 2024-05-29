@@ -18,7 +18,7 @@ import typing
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, responses
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
@@ -756,9 +756,8 @@ async def htmx_path_info(
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     # Preserve state (query)
-    current_url = furl.furl(hx_current_url)
-    current_query = current_url.query
     push_url = make_url(request, 'html_home', path=path)
+    current_query = furl.furl(hx_current_url).query
     if current_query:
         push_url = f'{push_url}?{current_query.encode()}'
 
@@ -841,6 +840,8 @@ async def htmx_command(
     command: typing.Annotated[str, Form()],
     names: typing.Annotated[list[str], Form()],
     paths: typing.Annotated[list[str], Form()],
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
     # Depends
     user = Depends(current_active_user),
 ):
@@ -865,9 +866,18 @@ async def htmx_command(
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
 
-    # TODO Display info and update list
-    context = {'text': 'Output saved'}
-    response = templates.TemplateResponse(request, "command.html", context)
+    # Redirect to display new dataset
+    response = JSONResponse('OK')
+
+    path = f'@scratch/{result_name}.b2nd'
+    url = make_url(request, "html_home", path=path)
+    query = furl.furl(hx_current_url).query
+    roots = query.params.getlist('roots')
+    if '@scratch' not in roots:
+        query = query.add({'roots': '@scratch'})
+    url = f'{url}?{query.encode()}'
+
+    response.headers['HX-Redirect'] = url
     return response
 
 
