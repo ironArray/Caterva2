@@ -247,9 +247,8 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@app.get('/api/roots',
-         dependencies=[Depends(current_active_user)])
-async def get_roots() -> dict:
+@app.get('/api/roots')
+async def get_roots(user: db.User = Depends(current_active_user)) -> dict:
     """
     Get a dict of roots, with root names as keys and properties as values.
 
@@ -258,7 +257,12 @@ async def get_roots() -> dict:
     dict
         The dict of roots.
     """
-    return database.roots
+    if not user:
+        return database.roots
+    roots = database.roots.copy()
+    scratch_root = models.Root(name='@scratch', http='', subscribed=True)
+    roots[scratch_root.name] = scratch_root
+    return roots
 
 
 def get_root(name):
