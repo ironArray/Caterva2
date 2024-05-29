@@ -332,6 +332,7 @@ async def get_list(
     ]
 
 
+# TODO: This endpoint should probably be removed.
 @app.get('/api/url/{path:path}',
          dependencies=[Depends(current_active_user)])
 async def get_url(path: str):
