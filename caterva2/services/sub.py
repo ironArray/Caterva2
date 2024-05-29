@@ -273,9 +273,11 @@ def get_root(name):
     return root
 
 
-@app.post('/api/subscribe/{name}',
-          dependencies=[Depends(current_active_user)])
-async def post_subscribe(name: str):
+@app.post('/api/subscribe/{name}')
+async def post_subscribe(
+    name: str,
+    user: db.User = Depends(current_active_user),
+):
     """
     Subscribe to a root.
 
@@ -289,8 +291,9 @@ async def post_subscribe(name: str):
     str
         'Ok' if successful.
     """
-    get_root(name)  # Not Found
-    follow(name)
+    if name != '@scratch' or not user:
+        get_root(name)  # Not Found
+        follow(name)
     return 'Ok'
 
 
