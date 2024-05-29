@@ -297,9 +297,11 @@ async def post_subscribe(
     return 'Ok'
 
 
-@app.get('/api/list/{name}',
-         dependencies=[Depends(current_active_user)])
-async def get_list(name: str):
+@app.get('/api/list/{name}')
+async def get_list(
+    name: str,
+    user: db.User = Depends(current_active_user),
+):
     """
     List the datasets in a root.
 
@@ -313,10 +315,15 @@ async def get_list(name: str):
     list
         The list of datasets in the root.
     """
-    root = get_root(name)
+    if user and name == '@scratch':
+        rootdir = scratch / str(user.id)
+    else:
+        root = get_root(name)
+        rootdir = cache / root.name
 
-    rootdir = cache / root.name
     if not rootdir.exists():
+        if name == '@scratch':
+            return []
         srv_utils.raise_not_found(f'Not subscribed to {name}')
 
     return [
