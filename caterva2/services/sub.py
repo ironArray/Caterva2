@@ -481,7 +481,7 @@ def abspath_and_dataprep(path: pathlib.Path,
 async def fetch_data(
     path: pathlib.Path,
     slice_: str = None,
-    prefer_schunk: bool = False,
+    prefer_schunk: (bool | None) = False,  # None for internal use only
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -533,13 +533,16 @@ async def fetch_data(
     # Some measurements have been done and it looks like this has no effect on performance.
     # TODO: do more measurements and decide whether to keep this or not.
     small_data = 128  # length in bytes
-    if isinstance(array, np.ndarray):
+    if prefer_schunk is None:  # internal use, force schunk format
+        assert not slice_
+        prefer_schunk = True
+    elif isinstance(array, np.ndarray):
         if array.size == 0:
             # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
             prefer_schunk = False
         elif array.size * array.itemsize < small_data:
             prefer_schunk = False
-    if isinstance(data, bytes) and len(data) < small_data:
+    elif isinstance(data, bytes) and len(data) < small_data:
         prefer_schunk = False
 
     if prefer_schunk:
@@ -607,6 +610,8 @@ async def download_data(
     -------
     The file's data.
     """
+    if path.parts and path.parts[0] == '@scratch':
+        return await fetch_data(path, prefer_schunk=None, user=user)
 
     # Download and update the necessary chunks of the schunk in cache
     abspath, dataprep = abspath_and_dataprep(path, user=user)
