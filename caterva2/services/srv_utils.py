@@ -245,7 +245,7 @@ def open_b2(abspath):
     suffix = abspath.suffix
     if suffix == '.b2nd':
         array = blosc2.open(abspath)
-        schunk = array.schunk
+        schunk = getattr(array, 'schunk', None)  # may be lazy
     elif suffix == '.b2frame':
         array = None
         schunk = blosc2.open(abspath)

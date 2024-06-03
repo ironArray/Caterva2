@@ -503,7 +503,7 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
     await partial_download(abspath, path, slice_)
 
     array, schunk = srv_utils.open_b2(abspath)
-    typesize = schunk.typesize
+    typesize = array.dtype.itemsize if array is not None else schunk.typesize
     if slice_:
         if array is not None:
             array = array[slice_] if array.ndim > 0 else array[()]
