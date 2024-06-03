@@ -477,15 +477,19 @@ def abspath_and_dataprep(path: pathlib.Path,
     return (abspath, dataprep)
 
 
-@app.get('/api/fetch/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False):
+@app.get('/api/fetch/{path:path}')
+async def fetch_data(
+    path: pathlib.Path,
+    slice_: str = None,
+    prefer_schunk: bool = False,
+    user: db.User = Depends(current_active_user),
+):
     """
     Fetch a dataset.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
     slice_ : str
         The slice to fetch.
@@ -498,11 +502,10 @@ async def fetch_data(path: str, slice_: str = None, prefer_schunk: bool = False)
         The (slice of) dataset as a NumPy array or a Blosc2 schunk.
     """
 
-    abspath = srv_utils.cache_lookup(cache, path)
     slice_ = api_utils.parse_slice(slice_)
-
     # Download and update the necessary chunks of the schunk in cache
-    await partial_download(abspath, path, slice_)
+    abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
+    await dataprep()
 
     array, schunk = srv_utils.open_b2(abspath)
     typesize = array.dtype.itemsize if array is not None else schunk.typesize
