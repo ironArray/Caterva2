@@ -966,15 +966,15 @@ async def htmx_command(
 
 
 
-@app.get("/markdown/{path:path}", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/markdown/{path:path}", response_class=HTMLResponse)
 async def markdown(
         request: Request,
         # Path parameters
         path: pathlib.Path,
+        user: db.User = Depends(current_active_user),
 ):
-    abspath = srv_utils.cache_lookup(cache, cache / path)
-    await partial_download(abspath, str(path))
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
     arr = blosc2.open(abspath)
     content = arr[:]
 
