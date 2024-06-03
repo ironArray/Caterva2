@@ -463,7 +463,7 @@ def abspath_and_dataprep(path: pathlib.Path,
     dataset should be ready for reading, either that covered by the slice if
     given, or the whole data otherwise.
     """
-    parts = list(path.parts)
+    parts = path.parts
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
