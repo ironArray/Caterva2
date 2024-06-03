@@ -556,34 +556,38 @@ async def fetch_data(
     return responses.StreamingResponse(downloader)
 
 
-@app.get('/api/download-url/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def download_url(path: str):
+@app.get('/api/download-url/{path:path}')
+async def download_url(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
     """
     Return the download URL from the publisher.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
 
     Returns
     -------
     url
-        The url of the file in 'files/' to be downloaded later on.
+        The url of the file in 'files/' or 'scratch/' to be downloaded later
+        on.
     """
 
-    abspath = srv_utils.cache_lookup(cache, path)
-
     # Download and update the necessary chunks of the schunk in cache
-    await partial_download(abspath, path)
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
 
     # The complete file is already in the static files/ dir, so return the url.
     # We don't currently decompress data before downloading, so let's add the extension
     # in the url, if it is missing.
-    if abspath.suffix == '.b2':
-        path = f'{path}.b2'
-    return f'{urlbase}files/{path}'
+    spath = f'{path}.b2' if abspath.suffix == '.b2' else str(path)
+    if path.parts and path.parts[0] == '@scratch':
+        spath = spath.replace('@scratch', str(user.id), 1)
+        return f'{urlbase}scratch/{spath}'
+    return f'{urlbase}files/{spath}'
 
 
 @app.get('/api/download/{path:path}',
