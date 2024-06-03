@@ -381,7 +381,7 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    abspath, _ = abspath_and_dataprep(path, user)
+    abspath, _ = abspath_and_dataprep(path, user=user)
     return srv_utils.read_metadata(abspath, cache=cache)
 
 
@@ -451,7 +451,8 @@ async def download_expr_deps(abspath):
 
 
 def abspath_and_dataprep(path: pathlib.Path,
-                         user: db.User | None) -> tuple[
+                         slice_: (tuple | None) = None,
+                         user: (db.User | None) = None) -> tuple[
                              pathlib.Path,
                              Callable[[], Awaitable],
                          ]:
@@ -459,7 +460,8 @@ def abspath_and_dataprep(path: pathlib.Path,
     Get absolute path in local storage and data preparation operation.
 
     After awaiting for the preparation operation to complete, data in the
-    dataset should be ready for reading.
+    dataset should be ready for reading, either that covered by the slice if
+    given, or the whole data otherwise.
     """
     parts = list(path.parts)
     if user and parts[0] == '@scratch':
@@ -471,7 +473,7 @@ def abspath_and_dataprep(path: pathlib.Path,
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
         async def dataprep():
-            return await partial_download(abspath, str(path))
+            return await partial_download(abspath, str(path), slice_)
     return (abspath, dataprep)
 
 
@@ -794,7 +796,7 @@ async def htmx_path_info(
     user: db.User = Depends(current_active_user),
 ):
 
-    abspath, _ = abspath_and_dataprep(path, user)
+    abspath, _ = abspath_and_dataprep(path, user=user)
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
@@ -854,7 +856,7 @@ async def htmx_path_view(
     user: db.User = Depends(current_active_user),
 ):
 
-    abspath, dataprep = abspath_and_dataprep(path, user)
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
     await dataprep()
     arr = blosc2.open(abspath)
 
