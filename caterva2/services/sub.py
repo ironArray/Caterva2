@@ -590,15 +590,17 @@ async def download_url(
     return f'{urlbase}files/{spath}'
 
 
-@app.get('/api/download/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def download_data(path: str):
+@app.get('/api/download/{path:path}')
+async def download_data(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
     """
     Download a dataset.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
 
     Returns
@@ -606,13 +608,11 @@ async def download_data(path: str):
     The file's data.
     """
 
-    abspath = srv_utils.cache_lookup(cache, path)
-
     # Download and update the necessary chunks of the schunk in cache
-    await partial_download(abspath, path)
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
 
     # Send the data to the client
-    abspath = pathlib.Path(abspath)
     return FileResponse(abspath, filename=abspath.name)
 
 
