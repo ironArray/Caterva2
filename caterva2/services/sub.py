@@ -15,6 +15,7 @@ import os
 import pathlib
 import string
 import typing
+from collections.abc import Awaitable, Callable
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, responses
@@ -35,7 +36,6 @@ import uvicorn
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
 from caterva2.services.subscriber import db, schemas, users
-from .plugins import tomography
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -179,6 +179,15 @@ optional_user = (users.fastapi_users.current_user(
 """Depend on this if the route may do something with no authentication."""
 
 
+def _setup_plugin_globals():
+    from . import plugins
+    # These need to be available for plugins at import time.
+    plugins.current_active_user = current_active_user
+
+
+_setup_plugin_globals()
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
@@ -245,9 +254,8 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-@app.get('/api/roots',
-         dependencies=[Depends(current_active_user)])
-async def get_roots() -> dict:
+@app.get('/api/roots')
+async def get_roots(user: db.User = Depends(current_active_user)) -> dict:
     """
     Get a dict of roots, with root names as keys and properties as values.
 
@@ -256,7 +264,12 @@ async def get_roots() -> dict:
     dict
         The dict of roots.
     """
-    return database.roots
+    if not user:
+        return database.roots
+    roots = database.roots.copy()
+    scratch_root = models.Root(name='@scratch', http='', subscribed=True)
+    roots[scratch_root.name] = scratch_root
+    return roots
 
 
 def get_root(name):
@@ -267,9 +280,11 @@ def get_root(name):
     return root
 
 
-@app.post('/api/subscribe/{name}',
-          dependencies=[Depends(current_active_user)])
-async def post_subscribe(name: str):
+@app.post('/api/subscribe/{name}')
+async def post_subscribe(
+    name: str,
+    user: db.User = Depends(current_active_user),
+):
     """
     Subscribe to a root.
 
@@ -283,14 +298,17 @@ async def post_subscribe(name: str):
     str
         'Ok' if successful.
     """
-    get_root(name)  # Not Found
-    follow(name)
+    if name != '@scratch' or not user:
+        get_root(name)  # Not Found
+        follow(name)
     return 'Ok'
 
 
-@app.get('/api/list/{name}',
-         dependencies=[Depends(current_active_user)])
-async def get_list(name: str):
+@app.get('/api/list/{name}')
+async def get_list(
+    name: str,
+    user: db.User = Depends(current_active_user),
+):
     """
     List the datasets in a root.
 
@@ -304,10 +322,15 @@ async def get_list(name: str):
     list
         The list of datasets in the root.
     """
-    root = get_root(name)
+    if user and name == '@scratch':
+        rootdir = scratch / str(user.id)
+    else:
+        root = get_root(name)
+        rootdir = cache / root.name
 
-    rootdir = cache / root.name
     if not rootdir.exists():
+        if name == '@scratch':
+            return []
         srv_utils.raise_not_found(f'Not subscribed to {name}')
 
     return [
@@ -316,6 +339,7 @@ async def get_list(name: str):
     ]
 
 
+# TODO: This endpoint should probably be removed.
 @app.get('/api/url/{path:path}',
          dependencies=[Depends(current_active_user)])
 async def get_url(path: str):
@@ -346,15 +370,17 @@ async def get_url(path: str):
     return [http]
 
 
-@app.get('/api/info/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def get_info(path: str):
+@app.get('/api/info/{path:path}')
+async def get_info(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
     """
     Get the metadata of a dataset.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
 
     Returns
@@ -362,8 +388,8 @@ async def get_info(path: str):
     dict
         The metadata of the dataset.
     """
-    abspath = srv_utils.cache_lookup(cache, path)
-    return srv_utils.read_metadata(abspath)
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    return srv_utils.read_metadata(abspath, cache=cache)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -410,15 +436,66 @@ async def partial_download(abspath, path, slice_=None):
                 await download_chunk(path, schunk, n)
 
 
-@app.get('/api/fetch/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def fetch_data(path: str, slice_: str = None):
+async def download_expr_deps(abspath):
+    """
+    Download the datasets that the lazy expression dataset depends on.
+
+    Parameters
+    ----------
+    abspath : pathlib.Path
+        The absolute path to the lazy expression dataset.
+
+    Returns
+    -------
+    None
+        When finished, expression dependencies are available in cache.
+    """
+    def download_dep(ndarr):
+        path = pathlib.Path(ndarr.schunk.urlpath)
+        return partial_download(path, str(path.relative_to(cache)))
+    expr = blosc2.open(abspath)
+    await asyncio.gather(*[download_dep(op) for op in expr.operands.values()])
+
+
+def abspath_and_dataprep(path: pathlib.Path,
+                         slice_: (tuple | None) = None,
+                         user: (db.User | None) = None) -> tuple[
+                             pathlib.Path,
+                             Callable[[], Awaitable],
+                         ]:
+    """
+    Get absolute path in local storage and data preparation operation.
+
+    After awaiting for the preparation operation to complete, data in the
+    dataset should be ready for reading, either that covered by the slice if
+    given, or the whole data otherwise.
+    """
+    parts = path.parts
+    if user and parts[0] == '@scratch':
+        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(scratch, filepath)
+        async def dataprep():
+            return await download_expr_deps(abspath)
+    else:
+        filepath = cache / path
+        abspath = srv_utils.cache_lookup(cache, filepath)
+        async def dataprep():
+            return await partial_download(abspath, str(path), slice_)
+    return (abspath, dataprep)
+
+
+@app.get('/api/fetch/{path:path}')
+async def fetch_data(
+    path: pathlib.Path,
+    slice_: str = None,
+    user: db.User = Depends(current_active_user),
+):
     """
     Fetch a dataset.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
     slice_ : str
         The slice to fetch.
@@ -429,14 +506,13 @@ async def fetch_data(path: str, slice_: str = None):
         The (slice of) dataset as a NumPy array or a Blosc2 schunk.
     """
 
-    abspath = srv_utils.cache_lookup(cache, path)
     slice_ = api_utils.parse_slice(slice_)
-
     # Download and update the necessary chunks of the schunk in cache
-    await partial_download(abspath, path, slice_)
+    abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
+    await dataprep()
 
     array, schunk = srv_utils.open_b2(abspath)
-    typesize = schunk.typesize
+    typesize = array.dtype.itemsize if array is not None else schunk.typesize
     if slice_:
         if array is not None:
             array = array[slice_] if array.ndim > 0 else array[()]
@@ -467,59 +543,65 @@ async def fetch_data(path: str, slice_: str = None):
     return responses.StreamingResponse(downloader)
 
 
-@app.get('/api/download-url/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def download_url(path: str):
+@app.get('/api/download-url/{path:path}')
+async def download_url(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
     """
     Return the download URL from the publisher.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
 
     Returns
     -------
     url
-        The url of the file in 'files/' to be downloaded later on.
+        The url of the file in 'files/' or 'scratch/' to be downloaded later
+        on.
     """
 
-    abspath = srv_utils.cache_lookup(cache, path)
-
     # Download and update the necessary chunks of the schunk in cache
-    await partial_download(abspath, path)
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
 
     # The complete file is already in the static files/ dir, so return the url.
     # We don't currently decompress data before downloading, so let's add the extension
     # in the url, if it is missing.
-    if abspath.suffix == '.b2':
-        path = f'{path}.b2'
-    return f'{urlbase}files/{path}'
+    spath = f'{path}.b2' if abspath.suffix == '.b2' else str(path)
+    if path.parts and path.parts[0] == '@scratch':
+        spath = spath.replace('@scratch', str(user.id), 1)
+        return f'{urlbase}scratch/{spath}'
+    return f'{urlbase}files/{spath}'
 
 
-@app.get('/api/download/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def download_data(path: str):
+@app.get('/api/download/{path:path}')
+async def download_data(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
     """
     Download a dataset.
 
     Parameters
     ----------
-    path : str
+    path : pathlib.Path
         The path to the dataset.
 
     Returns
     -------
     The file's data.
     """
-
-    abspath = srv_utils.cache_lookup(cache, path)
+    if path.parts and path.parts[0] == '@scratch':
+        return await fetch_data(path, user=user)
 
     # Download and update the necessary chunks of the schunk in cache
-    await partial_download(abspath, path)
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
 
     # Send the data to the client
-    abspath = pathlib.Path(abspath)
     return FileResponse(abspath, filename=abspath.name)
 
 
@@ -544,7 +626,7 @@ async def download_cached(path: str):
 
 @app.get('/scratch/{path:path}')
 async def download_scratch(path: str,
-                           user = Depends(current_active_user)):
+                           user: db.User = Depends(current_active_user)):
     parts = pathlib.Path(path).parts
     if user and (not parts or parts[0] != str(user.id)):
         raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
@@ -626,7 +708,7 @@ async def htmx_root_list(
     # Query
     roots: list[str] = fastapi.Query([]),
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     context = {
@@ -646,7 +728,7 @@ async def htmx_path_list(
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     def get_names():
@@ -707,20 +789,11 @@ async def htmx_path_info(
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
-    parts = list(path.parts)
-    if user and parts[0] == '@scratch':
-        parts[0] = str(user.id)
-        path = pathlib.Path(*parts)
-        filepath = scratch / path
-        abspath = srv_utils.cache_lookup(scratch, filepath)
-    else:
-        filepath = cache / path
-        abspath = srv_utils.cache_lookup(cache, filepath)
-
-    meta = srv_utils.read_metadata(abspath)
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    meta = srv_utils.read_metadata(abspath, cache=cache)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
     if hasattr(getattr(meta, 'schunk', meta), 'vlmeta'):
@@ -732,7 +805,7 @@ async def htmx_path_info(
         display = {
             "url": f"/plugins/{plugin.name}/display/{path}",
         }
-    elif filepath.suffix == ".md":
+    elif path.suffix == ".md":
         display = {
             "url": f"/markdown/{path}",
         }
@@ -775,11 +848,11 @@ async def htmx_path_view(
     index: typing.Annotated[list[int], Form()] = None,
     sizes: typing.Annotated[list[int], Form()] = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
-    # Download array
-    abspath = srv_utils.cache_lookup(cache, cache / path)
-    await partial_download(abspath, str(path))
+
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
     arr = blosc2.open(abspath)
 
     # Local variables
@@ -843,7 +916,7 @@ async def htmx_command(
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
-    user = Depends(current_active_user),
+    user: db.User = Depends(current_active_user),
 ):
 
     # Parse command
@@ -856,7 +929,7 @@ async def htmx_command(
         error = 'Invalid syntax'
         return templates.TemplateResponse(request, "command.html", {'text': error})
 
-    # Download datasets
+    # Open expression datasets and create the lazy expression dataset
     var_dict = {}
     for var in vars:
         path = paths[names.index(var)]
@@ -882,15 +955,15 @@ async def htmx_command(
 
 
 
-@app.get("/markdown/{path:path}", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/markdown/{path:path}", response_class=HTMLResponse)
 async def markdown(
         request: Request,
         # Path parameters
         path: pathlib.Path,
+        user: db.User = Depends(current_active_user),
 ):
-    abspath = srv_utils.cache_lookup(cache, cache / path)
-    await partial_download(abspath, str(path))
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
     arr = blosc2.open(abspath)
     content = arr[:]
 
@@ -945,9 +1018,10 @@ def main():
     database = srv_utils.Database(statedir / 'db.json', model)
 
     # Register display plugins
+    from .plugins import tomography  # delay module load
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(cache, partial_download)
+    tomography.init(abspath_and_dataprep)
 
     # Run
     global urlbase
