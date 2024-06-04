@@ -10,11 +10,11 @@
 
 <form action="/auth/register" method="post" onsubmit="submitFormAsJSON(this, '/login'); return false">
     <div class="form-floating mb-2">
-        <input type="email" name="email" class="form-control" placeholder="">
+        <input type="email" name="email" class="form-control" placeholder="" required>
         <label class="form-label">Email address</label>
     </div>
     <div class="form-floating mb-2">
-        <input type="password" name="password" class="form-control" placeholder="">
+        <input type="password" name="password" class="form-control" placeholder="" required>
         <label class="form-label">Password</label>
     </div>
     <button type="submit" class="btn btn-primary">Register</button>

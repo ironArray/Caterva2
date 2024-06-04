@@ -63,7 +63,15 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
         // Error
         const json = await response.json();
         const detail = json.detail;
-        if (detail) {
+        if (Array.isArray(detail)) {
+            // TODO Improve error display
+            for (let error of detail) {
+                msg.appendChild(document.createTextNode(
+                    `${error.msg}, `
+                ));
+            }
+        }
+        else if (detail) {
             const error = errors[detail] || detail;
             msg.appendChild(document.createTextNode(error));
         }

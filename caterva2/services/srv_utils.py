@@ -212,7 +212,12 @@ def _init_b2(make_b2, metadata, urlpath=None):
 
 def init_b2nd(metadata, urlpath=None):
     def make_b2nd(**kwargs):
-        return blosc2.uninit(metadata.shape, np.dtype(metadata.dtype),
+        dtype = metadata.dtype
+        if dtype.startswith('['):
+            # TODO: eval is dangerous, but we mostly trust the metadata
+            # This is a list, so we need to convert it to a string
+            dtype = eval(dtype)
+        return blosc2.uninit(metadata.shape, np.dtype(dtype),
                              chunks=metadata.chunks, blocks=metadata.blocks,
                              **kwargs)
     return _init_b2(make_b2nd, metadata, urlpath)

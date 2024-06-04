@@ -13,14 +13,13 @@ import itertools
 import logging
 import os
 import pathlib
-import pickle
 import string
 import typing
 from collections.abc import Awaitable, Callable
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, responses
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
@@ -489,7 +488,6 @@ def abspath_and_dataprep(path: pathlib.Path,
 async def fetch_data(
     path: pathlib.Path,
     slice_: str = None,
-    prefer_schunk: (bool | None) = False,  # None for internal use only
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -501,8 +499,6 @@ async def fetch_data(
         The path to the dataset.
     slice_ : str
         The slice to fetch.
-    prefer_schunk : bool
-        True if the client accepts Blosc2 schunks.
 
     Returns
     -------
@@ -531,39 +527,19 @@ async def fetch_data(
     # Serialization can be done either as:
     # * a serialized NDArray
     # * a compressed SChunk (bytes, via blosc2.compress2)
-    # * a pickled NumPy array (specially scalars and 0-dim arrays)
     data = array if array is not None else schunk
     if not slice_:
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[()] if array is not None else data[:]
 
-    # Optimizations for small data. If too small, we pickle it instead of compressing it.
-    # Some measurements have been done and it looks like this has no effect on performance.
-    # TODO: do more measurements and decide whether to keep this or not.
-    small_data = 128  # length in bytes
-    if prefer_schunk is None:  # internal use, force schunk format
-        assert not slice_
-        prefer_schunk = True
-    elif isinstance(array, np.ndarray):
-        if array.size == 0:
-            # NumPy scalars or 0-dim are not supported by blosc2 yet, so we need to use pickle better
-            prefer_schunk = False
-        elif array.size * array.itemsize < small_data:
-            prefer_schunk = False
-    elif isinstance(data, bytes) and len(data) < small_data:
-        prefer_schunk = False
+    if isinstance(data, np.ndarray):
+        data = blosc2.asarray(data)
+        data = data.to_cframe()
+    elif isinstance(data, bytes):
+        # A bytes object can still be compressed
+        data = blosc2.compress2(data, typesize=typesize)
+    downloader = srv_utils.iterchunk(data)
 
-    if prefer_schunk:
-        if isinstance(data, np.ndarray):
-            data = blosc2.asarray(data)
-            data = data.to_cframe()
-        else:
-            # A bytes object can still be compressed
-            data = blosc2.compress2(data, typesize=typesize)
-        downloader = srv_utils.iterchunk(data)
-    else:
-        data = pickle.dumps(data, protocol=-1)
-        downloader = iter((data,))
     return responses.StreamingResponse(downloader)
 
 
@@ -619,7 +595,7 @@ async def download_data(
     The file's data.
     """
     if path.parts and path.parts[0] == '@scratch':
-        return await fetch_data(path, prefer_schunk=None, user=user)
+        return await fetch_data(path, user=user)
 
     # Download and update the necessary chunks of the schunk in cache
     abspath, dataprep = abspath_and_dataprep(path, user=user)
@@ -853,9 +829,8 @@ async def htmx_path_info(
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     # Preserve state (query)
-    current_url = furl.furl(hx_current_url)
-    current_query = current_url.query
     push_url = make_url(request, 'html_home', path=path)
+    current_query = furl.furl(hx_current_url).query
     if current_query:
         push_url = f'{push_url}?{current_query.encode()}'
 
@@ -871,7 +846,7 @@ async def htmx_path_view(
     path: pathlib.Path,
     # Input parameters
     index: typing.Annotated[list[int], Form()] = None,
-    size: typing.Annotated[list[int], Form()] = None,
+    sizes: typing.Annotated[list[int], Form()] = None,
     # Depends
     user: db.User = Depends(current_active_user),
 ):
@@ -883,46 +858,42 @@ async def htmx_path_view(
     # Local variables
     shape = arr.shape
     ndims = len(shape)
+
+    # Set of dimensions that define the window
+    # TODO Allow the user to choose the window dimesions
+    dims = list(range(ndims))
     if ndims >= 2:
-        view_ndims = 2
+        view_dims = {dims[-2], dims[-1]}
     elif ndims == 1:
-        view_ndims = 1
+        view_dims = {dims[-1]}
     else:
-        view_ndims = 0
+        view_dims = {}
 
     # Default values for input params
     index = (0,) * ndims if index is None else tuple(index)
-    if size is None:
-        size = [10, 10]
-
-    inputs_size = []
-    for i, dim in enumerate(shape[-view_ndims:]):
-        inputs_size.append({
-            'max': dim,
-            'ndim': ndims - view_ndims  + i,
-            'value': size[i],
-        })
+    if sizes is None:
+        sizes = [min(dim, 10) if i in view_dims else 1 for i, dim in enumerate(shape)]
 
     inputs = []
-    for i, (value, dim) in enumerate(zip(index, shape)):
-        if i < ndims - 2:
-            step = 1
-        elif dim > 10:
-            step = inputs_size[i - (ndims - view_ndims)]['value']
-        else:
-            step = None
-        inputs.append({'step': step, 'max': dim - 1, 'value': value})
+    for i, (start, size, size_max) in enumerate(zip(index, sizes, shape)):
+        mod = size_max % size
+        start_max = size_max - (mod or size)
+        inputs.append({
+            'start': start,
+            'start_max': start_max,
+            'size': size,
+            'size_max': size_max,
+            'with_size': i in view_dims,
+        })
 
     # Get array view
     if ndims >= 2:
         arr = arr[index[:-2]]
-        i, j = index[-2:]
-        isize = size[0] + 1
-        jsize = size[1] + 1
+        i, isize = index[-2], sizes[-2]
+        j, jsize = index[-1], sizes[-1]
         arr = arr[i:i+isize, j:j+jsize]
     elif ndims == 1:
-        i = index[0]
-        isize = size[0] + 1
+        i, isize = index[0], sizes[0]
         arr = [arr[i:i+isize]]
     else:
         arr = [[arr[()]]]
@@ -931,7 +902,6 @@ async def htmx_path_view(
     context = {
         "view_url": make_url(request, "htmx_path_view", path=path),
         "inputs": inputs,
-        "inputs_size": inputs_size,
         "rows": list(arr),
     }
     return templates.TemplateResponse(request, "info_view.html", context)
@@ -943,6 +913,8 @@ async def htmx_command(
     command: typing.Annotated[str, Form()],
     names: typing.Annotated[list[str], Form()],
     paths: typing.Annotated[list[str], Form()],
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
     # Depends
     user: db.User = Depends(current_active_user),
 ):
@@ -967,9 +939,18 @@ async def htmx_command(
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
 
-    # TODO Display info and update list
-    context = {'text': 'Output saved'}
-    response = templates.TemplateResponse(request, "command.html", context)
+    # Redirect to display new dataset
+    response = JSONResponse('OK')
+
+    path = f'@scratch/{result_name}.b2nd'
+    url = make_url(request, "html_home", path=path)
+    query = furl.furl(hx_current_url).query
+    roots = query.params.getlist('roots')
+    if '@scratch' not in roots:
+        query = query.add({'roots': '@scratch'})
+    url = f'{url}?{query.encode()}'
+
+    response.headers['HX-Redirect'] = url
     return response
 
 

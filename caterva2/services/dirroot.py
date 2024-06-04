@@ -139,6 +139,16 @@ def create_example_root(path):
     blosc2.asarray(a, chunks=(100,), blocks=(10,),
                    urlpath=path / "ds-1d-b.b2nd", mode="w")
 
+    # A 1D array (dtype with fields).
+    a = np.empty(1000, dtype=[("a", "int32"), ("b", "float64"), ("c", "S10"), ("d", "?")])
+    a["a"] = np.arange(1000, dtype="int32")
+    a["b"] = np.linspace(0, 1, 1000, dtype="float64")
+    a["c"] = np.array([f"foobar{i}" for i in range(1000)], dtype="S10")
+    # A field with random booleans
+    a["d"] = np.random.choice([True, False], 1000)
+    blosc2.asarray(a, chunks=(100,), blocks=(10,),
+                   urlpath=path / "ds-1d-fields.b2nd", mode="w")
+
     # A scalar (string) with variable-length metalayers (user attributes).
     a = np.str_("foobar")
     b = blosc2.asarray(a, urlpath=path / "ds-sc-attr.b2nd", mode="w")
