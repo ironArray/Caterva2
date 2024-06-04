@@ -37,7 +37,6 @@ import uvicorn
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
 from caterva2.services.subscriber import db, schemas, users
-from .plugins import tomography
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -179,6 +178,15 @@ optional_user = (users.fastapi_users.current_user(
                  if user_auth_enabled()
                  else (lambda: None))
 """Depend on this if the route may do something with no authentication."""
+
+
+def _setup_plugin_globals():
+    from . import plugins
+    # These need to be available for plugins at import time.
+    plugins.current_active_user = current_active_user
+
+
+_setup_plugin_globals()
 
 
 @contextlib.asynccontextmanager
@@ -1029,6 +1037,7 @@ def main():
     database = srv_utils.Database(statedir / 'db.json', model)
 
     # Register display plugins
+    from .plugins import tomography  # delay module load
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(cache, partial_download)
