@@ -3,10 +3,11 @@ import pathlib
 
 import blosc2
 
-from fastapi import FastAPI, Request, responses
+from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from .. import current_active_user
 from ... import srv_utils
 
 
@@ -28,7 +29,8 @@ def init(sub_cache, f):
     global partial_download
     partial_download = f
 
-@app.get("/display/{path:path}", response_class=HTMLResponse)
+@app.get("/display/{path:path}", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 def display(
     request: Request,
     # Path parameters
@@ -57,7 +59,8 @@ async def __get_image(path, i):
     return Image.fromarray(img)
 
 
-@app.get("/display_one/{path:path}", response_class=HTMLResponse)
+@app.get("/display_one/{path:path}", response_class=HTMLResponse,
+         dependencies=[Depends(current_active_user)])
 async def display_one(
     request: Request,
     # Path parameters
@@ -86,7 +89,7 @@ async def display_one(
     return templates.TemplateResponse(request, "display_one.html", context=context)
 
 
-@app.get("/image/{path:path}")
+@app.get("/image/{path:path}", dependencies=[Depends(current_active_user)])
 async def image_file(
     request: Request,
     # Path parameters
