@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from .. import current_active_user
-from ... import srv_utils
+from ...subscriber import db
 
 
 app = FastAPI()
@@ -19,25 +19,21 @@ name = "tomography" # Identifies the plugin
 contenttype = "tomography"
 
 
-cache = None
-partial_download = None
+abspath_and_dataprep = None
 
-def init(sub_cache, f):
-    #print("INIT", sub_cache)
-    global cache
-    cache = sub_cache
-    global partial_download
-    partial_download = f
+def init(absp_n_datap):
+    global abspath_and_dataprep
+    abspath_and_dataprep = absp_n_datap
 
-@app.get("/display/{path:path}", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/display/{path:path}", response_class=HTMLResponse)
 def display(
     request: Request,
     # Path parameters
     path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
 ):
 
-    abspath = srv_utils.cache_lookup(cache, cache / path)
+    abspath, _ = abspath_and_dataprep(path, user=user)
     arr = blosc2.open(abspath)
 
     base = f"/plugins/{name}"
@@ -48,28 +44,29 @@ def display(
     return templates.TemplateResponse(request, "display.html", context=context)
 
 
-async def __get_image(path, i):
+async def __get_image(path, i, user):
     from PIL import Image
 
-    abspath = srv_utils.cache_lookup(cache, cache / path)
-    await partial_download(abspath, str(path))
+    # TODO: This accepts a slice, pass it in.
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
     arr = blosc2.open(abspath)
 
     img = arr[i,:]
     return Image.fromarray(img)
 
 
-@app.get("/display_one/{path:path}", response_class=HTMLResponse,
-         dependencies=[Depends(current_active_user)])
+@app.get("/display_one/{path:path}", response_class=HTMLResponse)
 async def display_one(
     request: Request,
     # Path parameters
     path: pathlib.Path,
     # Query parameters
     i: int,
+    user: db.User = Depends(current_active_user),
 ):
 
-    img = await __get_image(path, i)
+    img = await __get_image(path, i, user)
     width = 768  # Max size
 
     base = f"/plugins/{name}"
@@ -89,7 +86,7 @@ async def display_one(
     return templates.TemplateResponse(request, "display_one.html", context=context)
 
 
-@app.get("/image/{path:path}", dependencies=[Depends(current_active_user)])
+@app.get("/image/{path:path}")
 async def image_file(
     request: Request,
     # Path parameters
@@ -97,9 +94,10 @@ async def image_file(
     # Query parameters
     i: int,
     width: int | None = None,
+    user: db.User = Depends(current_active_user),
 ):
 
-    img = await __get_image(path, i)
+    img = await __get_image(path, i, user)
 
     if width and img.width > width:
         height = (img.height * width) // img.width

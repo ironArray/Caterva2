@@ -1021,7 +1021,7 @@ def main():
     from .plugins import tomography  # delay module load
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(cache, partial_download)
+    tomography.init(abspath_and_dataprep)
 
     # Run
     global urlbase
