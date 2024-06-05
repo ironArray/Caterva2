@@ -21,8 +21,8 @@ function activate(selector, trigger) {
     }
 }
 
-function clearContent(elementID) {
-    document.getElementById(elementID).innerHTML = "";
+function clearContent(selector) {
+    document.querySelector(selector).innerHTML = "";
 }
 
 async function _submitForm(form, successURL, resultElementID, asJSON) {
