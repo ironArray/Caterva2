@@ -29,7 +29,7 @@
                     <input class="form-control" type="hidden" name="paths" value="{{dataset.path}}">
                     {# <span class="input-group-text flex-shrink-1">=</span> #}
                 {% endif %}
-                <a href="/roots/{{dataset.path}}"
+                <a href="{{dataset.url}}"
                    class="input-group-text text-decoration-none"
                    style="width: 90%"
                    hx-get="/htmx/path-info/{{dataset.path}}"

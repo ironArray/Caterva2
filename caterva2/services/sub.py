@@ -732,6 +732,9 @@ async def htmx_path_list(
     user: db.User = Depends(current_active_user),
 ):
 
+    hx_current_url = furl.furl(hx_current_url)
+
+    # Prepare datasets context
     def get_names():
         n = 1
         while True:
@@ -741,6 +744,7 @@ async def htmx_path_list(
 
     names = get_names()
 
+    query = {'roots': roots, 'search': search}
     datasets = []
     for root in roots:
         if user and root == '@scratch':
@@ -755,9 +759,11 @@ async def htmx_path_list(
                 relpath = relpath.with_suffix('')
             if search in str(relpath):
                 path = f'{root}/{relpath}'
+                url = make_url(request, "html_home", path=path, query=query)
                 datasets.append({
                     'path': path,
                     'name': next(names),
+                    'url': url,
                 })
 
     # Render template
@@ -776,7 +782,7 @@ async def htmx_path_list(
     args = {'roots': roots}
     if search:
         args['search'] = search
-    push_url = furl.furl(hx_current_url).set(args).url
+    push_url = hx_current_url.set(args).url
     response.headers['HX-Push-Url'] = push_url
 
     return response
