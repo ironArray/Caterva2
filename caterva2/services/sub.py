@@ -23,13 +23,14 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import fastapi
-import numexpr as ne
 
 # Requirements
 import blosc2
 import furl
-import numpy as np
 import httpx
+import markdown
+import numexpr as ne
+import numpy as np
 import uvicorn
 
 # Project
@@ -919,6 +920,10 @@ async def htmx_command(
     user: db.User = Depends(current_active_user),
 ):
 
+    def error(msg):
+        context = {'error': msg}
+        return templates.TemplateResponse(request, "error.html", context, status_code=400)
+
     # Parse command
     try:
         result_name, expr = command.split('=')
@@ -926,14 +931,19 @@ async def htmx_command(
         expr = expr.strip()
         vars = ne.NumExpr(expr).input_names
     except (SyntaxError, ValueError):
-        error = 'Invalid syntax'
-        return templates.TemplateResponse(request, "command.html", {'text': error})
+        return error('Invalid syntax: expected <varname> = <expression>')
 
-    # Open expression datasets and create the lazy expression dataset
+    # Open expression datasets
     var_dict = {}
     for var in vars:
-        path = paths[names.index(var)]
+        try:
+            key = names.index(var)
+        except ValueError:
+            return error(f'Expression error: {var} is not in the list of available datasets')
+        path = paths[key]
         var_dict[var] = blosc2.open(cache / path, mode="r")
+
+    # Create the lazy expression dataset
     arr = eval(expr, var_dict)
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
@@ -956,7 +966,7 @@ async def htmx_command(
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)
-async def markdown(
+async def html_markdown(
         request: Request,
         # Path parameters
         path: pathlib.Path,
@@ -967,13 +977,13 @@ async def markdown(
     arr = blosc2.open(abspath)
     content = arr[:]
 
-    import markdown
     temp_html = markdown.markdown(content.decode('utf-8'))
+    # TODO Don't write in the filesystem
     f = open(f"{BASE_DIR}/templates/markdown.html", "w")
     f.write(temp_html)
     f.close()
 
-    return templates.TemplateResponse(request, "markdown.html", context={})
+    return templates.TemplateResponse(request, "markdown.html")
 
 
 #
