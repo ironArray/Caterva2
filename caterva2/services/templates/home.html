@@ -52,7 +52,6 @@
 document.body.addEventListener('htmx:beforeSwap', function(evt) {
     // Allow 400 responses to swap, we treat these as form validation errors
     let detail = evt.detail;
-    console.log(detail);
     if (detail.xhr.status === 400) {
         detail.isError = false;  // Avoid error message in console
         detail.shouldSwap = true;
