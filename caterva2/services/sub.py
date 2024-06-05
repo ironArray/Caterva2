@@ -967,23 +967,20 @@ async def htmx_command(
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)
 async def html_markdown(
-        request: Request,
-        # Path parameters
-        path: pathlib.Path,
-        user: db.User = Depends(current_active_user),
+    request: Request,
+    # Path parameters
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+    # Response
+    response_class=HTMLResponse,
 ):
+
     abspath, dataprep = abspath_and_dataprep(path, user=user)
     await dataprep()
     arr = blosc2.open(abspath)
     content = arr[:]
-
-    temp_html = markdown.markdown(content.decode('utf-8'))
-    # TODO Don't write in the filesystem
-    f = open(f"{BASE_DIR}/templates/markdown.html", "w")
-    f.write(temp_html)
-    f.close()
-
-    return templates.TemplateResponse(request, "markdown.html")
+    # Markdown
+    return markdown.markdown(content.decode('utf-8'))
 
 
 #
