@@ -75,10 +75,11 @@ def fetch_data(path, sub_url, params, auth_cookie=None):
     data = response.content
     # Try different deserialization methods
     try:
-        data = blosc2.decompress2(data)
-    except (ValueError, RuntimeError):
         data = blosc2.ndarray_from_cframe(data)
         data = data[:] if data.ndim == 1 else data[()]
+    except RuntimeError:
+        data = blosc2.schunk_from_cframe(data)
+        data = data[:]
     return data
 
 

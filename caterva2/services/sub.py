@@ -537,8 +537,9 @@ async def fetch_data(
         data = blosc2.asarray(data)
         data = data.to_cframe()
     elif isinstance(data, bytes):
-        # A bytes object can still be compressed
-        data = blosc2.compress2(data, typesize=typesize)
+        # A bytes object can still be compressed as a SChunk
+        schunk = blosc2.SChunk(data=data, cparams={'typesize': typesize})
+        data = schunk.to_cframe()
     downloader = srv_utils.iterchunk(data)
 
     return responses.StreamingResponse(downloader)
