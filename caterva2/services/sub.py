@@ -504,13 +504,20 @@ async def fetch_data(
     Returns
     -------
     StreamingResponse
-        The (slice of) dataset as a NumPy array or a Blosc2 schunk.
+        The (slice of) dataset as a Blosc2 schunk.
     """
 
     slice_ = api_utils.parse_slice(slice_)
     # Download and update the necessary chunks of the schunk in cache
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
     await dataprep()
+
+    # TODO: Also slices covering all data (step 1 or none).
+    whole = slice_ is None or slice_ == () or slice_ == slice(None)
+    if whole and path.parts[0] != '@scratch':
+        # Send the data in the file straight to the client,
+        # avoiding slicing and re-compression.
+        return FileResponse(abspath, filename=abspath.name)
 
     array, schunk = srv_utils.open_b2(abspath)
     typesize = array.dtype.itemsize if array is not None else schunk.typesize
