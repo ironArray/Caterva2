@@ -603,15 +603,7 @@ async def download_data(
     -------
     The file's data.
     """
-    if path.parts and path.parts[0] == '@scratch':
-        return await fetch_data(path, user=user)
-
-    # Download and update the necessary chunks of the schunk in cache
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-
-    # Send the data to the client
-    return FileResponse(abspath, filename=abspath.name)
+    return await fetch_data(path, user=user)
 
 
 #
