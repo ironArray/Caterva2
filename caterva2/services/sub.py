@@ -868,7 +868,7 @@ async def htmx_path_view(
     ndims = len(shape)
 
     # Set of dimensions that define the window
-    # TODO Allow the user to choose the window dimesions
+    # TODO Allow the user to choose the window dimensions
     dims = list(range(ndims))
     if ndims >= 2:
         view_dims = {dims[-2], dims[-1]}
@@ -894,23 +894,33 @@ async def htmx_path_view(
             'with_size': i in view_dims,
         })
 
-    # Get array view
-    if ndims >= 2:
-        arr = arr[index[:-2]]
-        i, isize = index[-2], sizes[-2]
-        j, jsize = index[-1], sizes[-1]
-        arr = arr[i:i+isize, j:j+jsize]
-    elif ndims == 1:
+    if arr.fields != {} and ndims == 1:
+        keys = arr.fields.keys()
+        rows = [[f for f in keys]]
+
+        # Get array view
         i, isize = index[0], sizes[0]
-        arr = [arr[i:i+isize]]
+        arr = arr[i:i + isize]
+        rows += arr.tolist()
     else:
-        arr = [[arr[()]]]
+        # Get array view
+        if ndims >= 2:
+            arr = arr[index[:-2]]
+            i, isize = index[-2], sizes[-2]
+            j, jsize = index[-1], sizes[-1]
+            arr = arr[i:i+isize, j:j+jsize]
+        elif ndims == 1:
+            i, isize = index[0], sizes[0]
+            arr = [arr[i:i+isize]]
+        else:
+            arr = [[arr[()]]]
+        rows = list(arr)
 
     # Render
     context = {
         "view_url": make_url(request, "htmx_path_view", path=path),
         "inputs": inputs,
-        "rows": list(arr),
+        "rows": rows,
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 
