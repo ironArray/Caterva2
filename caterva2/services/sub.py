@@ -855,6 +855,7 @@ async def htmx_path_view(
     # Input parameters
     index: typing.Annotated[list[int], Form()] = None,
     sizes: typing.Annotated[list[int], Form()] = None,
+    fields: typing.Annotated[list[str], Form()] = None,
     # Depends
     user: db.User = Depends(current_active_user),
 ):
@@ -895,13 +896,15 @@ async def htmx_path_view(
         })
 
     if hasattr(arr, 'fields') and arr.fields != {} and ndims == 1:
-        keys = arr.fields.keys()
-        rows = [[f for f in keys]]
+        cols = list(arr.fields.keys())
+        fields = fields or cols[:5]
+        idxs = [cols.index(f) for f in fields]
+        rows = [fields]
 
         # Get array view
         i, isize = index[0], sizes[0]
         arr = arr[i:i + isize]
-        rows += arr.tolist()
+        rows += [[row[i] for i in idxs] for row in arr.tolist()]
     else:
         # Get array view
         if ndims >= 2:
@@ -915,12 +918,15 @@ async def htmx_path_view(
         else:
             arr = [[arr[()]]]
         rows = list(arr)
+        cols = None
 
     # Render
     context = {
         "view_url": make_url(request, "htmx_path_view", path=path),
         "inputs": inputs,
         "rows": rows,
+        "cols": cols,
+        "fields": fields,
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 
