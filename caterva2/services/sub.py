@@ -894,7 +894,7 @@ async def htmx_path_view(
             'with_size': i in view_dims,
         })
 
-    if arr.fields != {} and ndims == 1:
+    if hasattr(arr, 'fields') and arr.fields != {} and ndims == 1:
         keys = arr.fields.keys()
         rows = [[f for f in keys]]
 
