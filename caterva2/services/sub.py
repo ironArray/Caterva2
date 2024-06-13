@@ -867,16 +867,17 @@ async def htmx_path_view(
     # Local variables
     shape = arr.shape
     ndims = len(shape)
+    has_ndfields = hasattr(arr, 'fields') and arr.fields != {}
 
     # Set of dimensions that define the window
     # TODO Allow the user to choose the window dimensions
     dims = list(range(ndims))
-    if ndims >= 2:
-        view_dims = {dims[-2], dims[-1]}
-    elif ndims == 1:
+    if ndims == 0:
+        view_dims = {}
+    elif ndims == 1 or has_ndfields:
         view_dims = {dims[-1]}
     else:
-        view_dims = {}
+        view_dims = {dims[-2], dims[-1]}
 
     # Default values for input params
     index = (0,) * ndims if index is None else tuple(index)
@@ -894,17 +895,25 @@ async def htmx_path_view(
             'size_max': size_max,
             'with_size': i in view_dims,
         })
-
-    if hasattr(arr, 'fields') and arr.fields != {} and ndims == 1:
+    if has_ndfields:
         cols = list(arr.fields.keys())
         fields = fields or cols[:5]
         idxs = [cols.index(f) for f in fields]
         rows = [fields]
 
         # Get array view
-        i, isize = index[0], sizes[0]
-        arr = arr[i:i + isize]
-        rows += [[row[i] for i in idxs] for row in arr.tolist()]
+        if ndims >= 2:
+            arr = arr[index[:-1]]
+            i, isize = index[-1], sizes[-1]
+            arr = arr[i:i + isize]
+            arr = arr.tolist()
+        elif ndims == 1:
+            i, isize = index[0], sizes[0]
+            arr = arr[i:i + isize]
+            arr = arr.tolist()
+        else:
+            arr = [arr[()].tolist()]
+        rows += [[row[i] for i in idxs] for row in arr]
     else:
         # Get array view
         if ndims >= 2:
