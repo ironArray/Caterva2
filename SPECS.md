@@ -34,7 +34,7 @@ The client must implement the following commands:
 - `roots`: List all the available roots in a broker.
 - `subscribe <root>`: Request access to the datasets in a root.
 - `list <root>`: List all the available datasets in a root.  Needs to be subscribed to the root.
-- `url <root>`: Publisher URL for the REST API that serves the root.
+- `url <root>`: Subscriber URL from where a dataset can be downloaded.
 - `info <dataset>`: Get metadata about a dataset.
 - `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
 - `download <dataset> <output_dir>`: Get the data of a dataset and save it to a local `output_dir` folder.
@@ -76,7 +76,7 @@ The client must be implemented in Python 3 (3.10 being the minimal supported ver
 
 - When a `list` command is issued, the client must send a request to the subscriber to list the datasets in the given root.  The subscriber will reply with a list of datasets.
 
-- When a `url` command is issued, the client must send a request to the subscriber to get the URL of the REST API of the root.  The subscriber will reply with the URL.
+- When a `url` command is issued, the client must show the URL from where the given dataset may be downloaded.
 
 - When an `info` command is issued, the client must send a request to the subscriber to get the metadata of the given dataset.  The subscriber will reply with the [metadata](#metadata).  See below for the [metadata](#metadata) format.
 
