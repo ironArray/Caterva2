@@ -542,26 +542,6 @@ async def download_url(
     return f'{urlbase}api/fetch/{path}'
 
 
-@app.get('/api/download/{path:path}')
-async def download_data(
-    path: pathlib.Path,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Download a dataset.
-
-    Parameters
-    ----------
-    path : pathlib.Path
-        The path to the dataset.
-
-    Returns
-    -------
-    The file's data.
-    """
-    return await fetch_data(path, user=user)
-
-
 #
 # HTML interface
 #
