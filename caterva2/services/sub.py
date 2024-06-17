@@ -558,7 +558,7 @@ async def download_url(
     user: db.User = Depends(current_active_user),
 ):
     """
-    Return the download URL from the publisher.
+    Return the download URL for a dataset.
 
     Parameters
     ----------
@@ -568,22 +568,9 @@ async def download_url(
     Returns
     -------
     url
-        The url of the file in 'files/' or 'scratch/' to be downloaded later
-        on.
+        The url of the file to be downloaded later on.
     """
-
-    # Download and update the necessary chunks of the schunk in cache
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-
-    # The complete file is already in the static files/ dir, so return the url.
-    # We don't currently decompress data before downloading, so let's add the extension
-    # in the url, if it is missing.
-    spath = f'{path}.b2' if abspath.suffix == '.b2' else str(path)
-    if path.parts and path.parts[0] == '@scratch':
-        spath = spath.replace('@scratch', str(user.id), 1)
-        return f'{urlbase}scratch/{spath}'
-    return f'{urlbase}files/{spath}'
+    return f'{urlbase}api/fetch/{path}'
 
 
 @app.get('/api/download/{path:path}')

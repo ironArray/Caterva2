@@ -50,7 +50,7 @@ def test_roots(services, pub_host, sub_user):
 
 def test_url(services, sub_url, sub_user):
     out = cli(['url', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], sub_user=sub_user)
-    assert out == f'{sub_url}files/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    assert out == f'{sub_url}api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
 
 
 def test_subscribe(services, sub_user):

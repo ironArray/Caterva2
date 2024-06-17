@@ -313,7 +313,7 @@ class File:
         >>> root = cat2.Root('foo')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
-        'http://localhost:8002/files/foo/ds-1d.b2nd'
+        'http://localhost:8002/api/fetch/foo/ds-1d.b2nd'
         """
         download_path = api_utils.get_download_url(
             self.path, self.sub_url, auth_cookie=self.auth_cookie)
