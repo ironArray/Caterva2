@@ -340,37 +340,6 @@ async def get_list(
     ]
 
 
-# TODO: This endpoint should probably be removed.
-@app.get('/api/url/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def get_url(path: str):
-    """
-    Get the URLs to access a dataset.
-
-    Parameters
-    ----------
-    path : str
-        The path to the dataset.
-
-    Returns
-    -------
-    list
-        The URLs to access the dataset.
-    """
-    root, *dataset = path.split('/', 1)
-    scheme = 'http'
-    http = get_root(root).http
-    http = f'{scheme}://{http}'
-    if dataset:
-        dataset = dataset[0]
-        return [
-            f'{http}/api/info/{dataset}',
-            f'{http}/api/download/{dataset}',
-        ]
-
-    return [http]
-
-
 @app.get('/api/info/{path:path}')
 async def get_info(
     path: pathlib.Path,
