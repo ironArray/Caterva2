@@ -30,6 +30,22 @@ sub_url_default = f'http://{sub_host_default}/'
 """The default base for URLs provided by the subscriber (slash-terminated)."""
 
 
+def _format_paths(sub_url, path=None):
+    if sub_url is not None:
+        if isinstance(sub_url, pathlib.Path):
+            sub_url = sub_url.as_posix()
+        if not sub_url.endswith("/"):
+            sub_url += "/"
+            sub_url = pathlib.Path(sub_url)
+    if path is not None:
+        p = path.as_posix() if isinstance(path, pathlib.Path) else path
+        if p.startswith("/"):
+            raise ValueError("The path should not start with a slash")
+        if p.endswith("/"):
+            raise ValueError("The path should not end with a slash")
+    return sub_url, path
+
+
 def get_roots(sub_url=sub_url_default, auth_cookie=None):
     """
     Get the list of available roots.
@@ -48,6 +64,7 @@ def get_roots(sub_url=sub_url_default, auth_cookie=None):
         The list of available roots.
 
     """
+    sub_url, _ = _format_paths(sub_url)
     return api_utils.get(f'{sub_url}api/roots', auth_cookie=auth_cookie)
 
 
@@ -69,6 +86,7 @@ def subscribe(root, sub_url=sub_url_default, auth_cookie=None):
     str
         The response from the server.
     """
+    sub_url, root = _format_paths(sub_url, root)
     return api_utils.post(f'{sub_url}api/subscribe/{root}',
                           auth_cookie=auth_cookie)
 
@@ -91,6 +109,7 @@ def get_list(root, sub_url=sub_url_default, auth_cookie=None):
     list
         The list of nodes in the root.
     """
+    sub_url, root = _format_paths(sub_url, root)
     return api_utils.get(f'{sub_url}api/list/{root}',
                          auth_cookie=auth_cookie)
 
@@ -113,6 +132,7 @@ def get_info(dataset, sub_url=sub_url_default, auth_cookie=None):
     dict
         The information about the dataset.
     """
+    sub_url, dataset = _format_paths(sub_url, dataset)
     return api_utils.get(f'{sub_url}api/info/{dataset}',
                          auth_cookie=auth_cookie)
 
@@ -137,6 +157,7 @@ def fetch(dataset, sub_url=sub_url_default, slice_=None, auth_cookie=None):
     numpy.ndarray
         The slice of the dataset.
     """
+    sub_url, dataset = _format_paths(sub_url, dataset)
     data = api_utils.fetch_data(dataset, sub_url,
                                 {'slice_': slice_},
                                 auth_cookie=auth_cookie)
@@ -165,6 +186,7 @@ def download(dataset, sub_url=sub_url_default, auth_cookie=None):
      is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
      compressed with Blosc2, and with the `.b2` extension).
     """
+    sub_url, dataset = _format_paths(sub_url, dataset)
     url = api_utils.get_download_url(dataset, sub_url, auth_cookie=auth_cookie)
     return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
@@ -178,6 +200,7 @@ class Root:
     for authenticating the user and get an authorization token for further requests.
     """
     def __init__(self, name, sub_url=sub_url_default, user_auth=None):
+        sub_url, name = _format_paths(sub_url, name)
         self.name = name
         self.sub_url = utils.urlbase_type(sub_url)
         self.auth_cookie = (
@@ -241,6 +264,8 @@ class File:
     b'T'
     """
     def __init__(self, name, root, sub_url, auth_cookie=None):
+        sub_url, name = _format_paths(sub_url, name)
+        _, root = _format_paths(None, root)
         self.root = root
         self.name = name
         self.sub_url = sub_url

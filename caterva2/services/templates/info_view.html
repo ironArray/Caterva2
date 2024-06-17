@@ -21,6 +21,28 @@
         {% endif %}
     </div>
     {% endfor %}
+    {% if cols %}
+    <div class="dropdown d-inline-flex" id="id_fields">
+        <button type="button" class="btn btn-light dropdown-toggle"
+                data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside"
+                hx-post="{{ view_url }}" hx-target="#info-view" hx-trigger="hidden.bs.dropdown"
+                >
+            Fields
+        </button>
+        <div class="dropdown-menu p-2">
+            {% for col in cols %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="fields"
+                       value="{{ col }}"
+                       id="id_{{ col }}"
+                       {% if col in fields %}checked{% endif %}>
+                <label class="form-check-label" for="id_{{ col }}">{{ col }}</label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </form>
 
 <table class="table table-sm">
