@@ -102,8 +102,7 @@ def cmd_list(args, auth_cookie):
 def cmd_url(args, auth_cookie):
     # TODO: provide a url that can be used to open the dataset in blosc2
     # TODO: add a new function to the API that returns the url
-    data = api_utils.get_download_url(args.root, args.sub_url,
-                                      auth_cookie=auth_cookie)
+    data = api_utils.get_download_url(args.root, args.sub_url)
     if args.json:
         print(json.dumps(data))
         return

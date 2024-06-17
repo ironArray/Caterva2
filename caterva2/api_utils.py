@@ -84,10 +84,8 @@ def fetch_data(path, sub_url, params, auth_cookie=None):
     return data
 
 
-def get_download_url(path, sub_url, auth_cookie=None):
-    response = _xget(f'{sub_url}api/download-url/{path}',
-                     auth_cookie=auth_cookie)
-    return response.json()
+def get_download_url(path, sub_url):
+    return f'{sub_url}api/fetch/{path}'
 
 
 def b2_unpack(filepath):
