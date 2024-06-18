@@ -21,13 +21,6 @@ except ImportError:
     blosc2_is_here = False
 
 
-def split_dsname(path):
-    ds = str(path)
-    root_sep = ds.find('/')
-    root, dsname = ds[:root_sep], ds[root_sep + 1:]
-    return dsname, root
-
-
 def slice_to_string(slice_):
     if slice_ is None or slice_ == () or slice_ == slice(None):
         return ''
