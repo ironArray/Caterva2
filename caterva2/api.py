@@ -121,7 +121,7 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     Parameters
     ----------
     path : str
-        The name of the dataset.
+        The path of the dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -145,7 +145,7 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
     Parameters
     ----------
     path : str
-        The name of the dataset.
+        The path of the dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     slice_ : str
@@ -172,7 +172,7 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     Parameters
     ----------
     path : str
-        The name of the dataset.
+        The path of the dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
