@@ -26,9 +26,9 @@ class TreeApp(App):
         auth_cookie = None
         if args.username and args.password:
             user_auth = dict(username=args.username, password=args.password)
-            auth_cookie = api_utils.get_auth_cookie(args.sub_url, user_auth)
-        api.subscribe(args.root, args.sub_url, auth_cookie=auth_cookie)
-        self.data = api.get_list(args.root, args.sub_url,
+            auth_cookie = api_utils.get_auth_cookie(args.urlbase, user_auth)
+        api.subscribe(args.root, args.urlbase, auth_cookie=auth_cookie)
+        self.data = api.get_list(args.root, args.urlbase,
                                  auth_cookie=auth_cookie)
 
     def compose(self) -> ComposeResult:
@@ -52,7 +52,7 @@ def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
     parser.add_argument('--subscriber',
-                        dest='sub_url', type=utils.urlbase_type,
+                        dest='urlbase', type=utils.urlbase_type,
                         default=conf.get('subscriber.url',
                                          api.sub_urlbase_default))
     parser.add_argument('--username', default=conf.get('client.username'))
