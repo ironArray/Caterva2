@@ -27,7 +27,7 @@ sub_host_default = 'localhost:8002'
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
 sub_urlbase_default = f'http://{sub_host_default}/'
-"""The default base for URLs provided by the subscriber (slash-terminated)."""
+"""The default base of URLs provided by the subscriber (slash-terminated)."""
 
 
 def _format_paths(urlbase, path=None):
@@ -54,7 +54,7 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
     ----------
 
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -77,7 +77,7 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
     root : str
         The name of the root to subscribe to.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -100,7 +100,7 @@ def get_list(root, urlbase=sub_urlbase_default, auth_cookie=None):
     root : str
         The name of the root to list.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -123,7 +123,7 @@ def get_info(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     dataset : str
         The name of the dataset.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -147,7 +147,7 @@ def fetch(dataset, urlbase=sub_urlbase_default, slice_=None,
     dataset : str
         The name of the dataset.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     slice_ : str
         The slice to fetch.
     auth_cookie : str
@@ -174,7 +174,7 @@ def download(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     dataset : str
         The name of the dataset.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -243,7 +243,7 @@ class File:
     root : str
         The name of the root.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -402,7 +402,7 @@ class Dataset(File):
     root : str
         The name of the root.
     urlbase : str
-        The base URL (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
