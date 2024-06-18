@@ -27,7 +27,7 @@ def sub_url(services):
 
 @pytest.fixture
 def api_root(sub_url, sub_user):
-    return cat2.Root(TEST_HDF5_ROOT, sub_url=sub_url, user_auth=sub_user)
+    return cat2.Root(TEST_HDF5_ROOT, urlbase=sub_url, user_auth=sub_user)
 
 
 def test_not_unsupported(api_root):

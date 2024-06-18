@@ -30,30 +30,30 @@ sub_urlbase_default = f'http://{sub_host_default}/'
 """The default base for URLs provided by the subscriber (slash-terminated)."""
 
 
-def _format_paths(sub_url, path=None):
-    if sub_url is not None:
-        if isinstance(sub_url, pathlib.Path):
-            sub_url = sub_url.as_posix()
-        if not sub_url.endswith("/"):
-            sub_url += "/"
-            sub_url = pathlib.Path(sub_url)
+def _format_paths(urlbase, path=None):
+    if urlbase is not None:
+        if isinstance(urlbase, pathlib.Path):
+            urlbase = urlbase.as_posix()
+        if not urlbase.endswith("/"):
+            urlbase += "/"
+            urlbase = pathlib.Path(urlbase)
     if path is not None:
         p = path.as_posix() if isinstance(path, pathlib.Path) else path
         if p.startswith("/"):
             raise ValueError("The path should not start with a slash")
         if p.endswith("/"):
             raise ValueError("The path should not end with a slash")
-    return sub_url, path
+    return urlbase, path
 
 
-def get_roots(sub_url=sub_urlbase_default, auth_cookie=None):
+def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Get the list of available roots.
 
     Parameters
     ----------
 
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
@@ -64,11 +64,11 @@ def get_roots(sub_url=sub_urlbase_default, auth_cookie=None):
         The list of available roots.
 
     """
-    sub_url, _ = _format_paths(sub_url)
-    return api_utils.get(f'{sub_url}api/roots', auth_cookie=auth_cookie)
+    urlbase, _ = _format_paths(urlbase)
+    return api_utils.get(f'{urlbase}api/roots', auth_cookie=auth_cookie)
 
 
-def subscribe(root, sub_url=sub_urlbase_default, auth_cookie=None):
+def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Subscribe to a root.
 
@@ -76,7 +76,7 @@ def subscribe(root, sub_url=sub_urlbase_default, auth_cookie=None):
     ----------
     root : str
         The name of the root to subscribe to.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
@@ -86,12 +86,12 @@ def subscribe(root, sub_url=sub_urlbase_default, auth_cookie=None):
     str
         The response from the server.
     """
-    sub_url, root = _format_paths(sub_url, root)
-    return api_utils.post(f'{sub_url}api/subscribe/{root}',
+    urlbase, root = _format_paths(urlbase, root)
+    return api_utils.post(f'{urlbase}api/subscribe/{root}',
                           auth_cookie=auth_cookie)
 
 
-def get_list(root, sub_url=sub_urlbase_default, auth_cookie=None):
+def get_list(root, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     List the nodes in a root.
 
@@ -99,7 +99,7 @@ def get_list(root, sub_url=sub_urlbase_default, auth_cookie=None):
     ----------
     root : str
         The name of the root to list.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
@@ -109,12 +109,12 @@ def get_list(root, sub_url=sub_urlbase_default, auth_cookie=None):
     list
         The list of nodes in the root.
     """
-    sub_url, root = _format_paths(sub_url, root)
-    return api_utils.get(f'{sub_url}api/list/{root}',
+    urlbase, root = _format_paths(urlbase, root)
+    return api_utils.get(f'{urlbase}api/list/{root}',
                          auth_cookie=auth_cookie)
 
 
-def get_info(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
+def get_info(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Get information about a dataset.
 
@@ -122,7 +122,7 @@ def get_info(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
     ----------
     dataset : str
         The name of the dataset.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
@@ -132,12 +132,12 @@ def get_info(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
     dict
         The information about the dataset.
     """
-    sub_url, dataset = _format_paths(sub_url, dataset)
-    return api_utils.get(f'{sub_url}api/info/{dataset}',
+    urlbase, dataset = _format_paths(urlbase, dataset)
+    return api_utils.get(f'{urlbase}api/info/{dataset}',
                          auth_cookie=auth_cookie)
 
 
-def fetch(dataset, sub_url=sub_urlbase_default, slice_=None,
+def fetch(dataset, urlbase=sub_urlbase_default, slice_=None,
           auth_cookie=None):
     """
     Fetch a slice of a dataset.
@@ -146,7 +146,7 @@ def fetch(dataset, sub_url=sub_urlbase_default, slice_=None,
     ----------
     dataset : str
         The name of the dataset.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     slice_ : str
         The slice to fetch.
@@ -158,14 +158,14 @@ def fetch(dataset, sub_url=sub_urlbase_default, slice_=None,
     numpy.ndarray
         The slice of the dataset.
     """
-    sub_url, dataset = _format_paths(sub_url, dataset)
-    data = api_utils.fetch_data(dataset, sub_url,
+    urlbase, dataset = _format_paths(urlbase, dataset)
+    data = api_utils.fetch_data(dataset, urlbase,
                                 {'slice_': slice_},
                                 auth_cookie=auth_cookie)
     return data
 
 
-def download(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
+def download(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Download a dataset.
 
@@ -173,7 +173,7 @@ def download(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
     ----------
     dataset : str
         The name of the dataset.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
@@ -187,8 +187,8 @@ def download(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
      is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
      compressed with Blosc2, and with the `.b2` extension).
     """
-    sub_url, dataset = _format_paths(sub_url, dataset)
-    url = api_utils.get_download_url(dataset, sub_url)
+    urlbase, dataset = _format_paths(urlbase, dataset)
+    url = api_utils.get_download_url(dataset, urlbase)
     return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
@@ -200,21 +200,21 @@ class Root:
     If a non-empty `user_auth` mapping is given, its items are used as data to be posted
     for authenticating the user and get an authorization token for further requests.
     """
-    def __init__(self, name, sub_url=sub_urlbase_default, user_auth=None):
-        sub_url, name = _format_paths(sub_url, name)
+    def __init__(self, name, urlbase=sub_urlbase_default, user_auth=None):
+        urlbase, name = _format_paths(urlbase, name)
         self.name = name
-        self.sub_url = utils.urlbase_type(sub_url)
+        self.urlbase = utils.urlbase_type(urlbase)
         self.auth_cookie = (
-            api_utils.get_auth_cookie(sub_url, user_auth)
+            api_utils.get_auth_cookie(urlbase, user_auth)
             if user_auth else None)
 
-        ret = api_utils.post(f'{sub_url}api/subscribe/{name}',
+        ret = api_utils.post(f'{urlbase}api/subscribe/{name}',
                              auth_cookie=self.auth_cookie)
         if ret != 'Ok':
-            roots = get_roots(sub_url)
+            roots = get_roots(urlbase)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = api_utils.get(f'{sub_url}api/list/{name}',
+        self.node_list = api_utils.get(f'{urlbase}api/list/{name}',
                                        auth_cookie=self.auth_cookie)
 
     def __repr__(self):
@@ -225,10 +225,10 @@ class Root:
         Get a file or dataset from the root.
         """
         if node.endswith((".b2nd", ".b2frame")):
-            return Dataset(node, root=self.name, sub_url=self.sub_url,
+            return Dataset(node, root=self.name, urlbase=self.urlbase,
                            auth_cookie=self.auth_cookie)
         else:
-            return File(node, root=self.name, sub_url=self.sub_url,
+            return File(node, root=self.name, urlbase=self.urlbase,
                         auth_cookie=self.auth_cookie)
 
 
@@ -242,7 +242,7 @@ class File:
         The name of the file.
     root : str
         The name of the root.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
@@ -253,7 +253,7 @@ class File:
     >>> file = root['README.md']
     >>> file.name
     'README.md'
-    >>> file.sub_url
+    >>> file.urlbase
     'http://localhost:8002/'
     >>> file.path
     PosixPath('foo/README.md')
@@ -264,15 +264,15 @@ class File:
     >>> file[0]
     b'T'
     """
-    def __init__(self, name, root, sub_url, auth_cookie=None):
-        sub_url, name = _format_paths(sub_url, name)
+    def __init__(self, name, root, urlbase, auth_cookie=None):
+        urlbase, name = _format_paths(urlbase, name)
         _, root = _format_paths(None, root)
         self.root = root
         self.name = name
-        self.sub_url = sub_url
+        self.urlbase = urlbase
         self.path = pathlib.Path(f'{self.root}/{self.name}')
         self.auth_cookie = auth_cookie
-        self.meta = api_utils.get(f'{sub_url}api/info/{self.path}',
+        self.meta = api_utils.get(f'{urlbase}api/info/{self.path}',
                                   auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
@@ -316,7 +316,7 @@ class File:
         >>> file.get_download_url()
         'http://localhost:8002/api/fetch/foo/ds-1d.b2nd'
         """
-        return api_utils.get_download_url(self.path, self.sub_url)
+        return api_utils.get_download_url(self.path, self.urlbase)
 
     def __getitem__(self, slice_):
         """
@@ -365,7 +365,7 @@ class File:
             The slice of the dataset.
         """
         slice_ = api_utils.slice_to_string(slice_)
-        data = api_utils.fetch_data(self.path, self.sub_url,
+        data = api_utils.fetch_data(self.path, self.urlbase,
                                     {'slice_': slice_},
                                     auth_cookie=self.auth_cookie)
         return data
@@ -401,7 +401,7 @@ class Dataset(File):
         The name of the dataset.
     root : str
         The name of the root.
-    sub_url : str
+    urlbase : str
         The base URL (slash-terminated) of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
@@ -415,8 +415,8 @@ class Dataset(File):
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
     """
-    def __init__(self, name, root, sub_url, auth_cookie=None):
-        super().__init__(name, root, sub_url, auth_cookie)
+    def __init__(self, name, root, urlbase, auth_cookie=None):
+        super().__init__(name, root, urlbase, auth_cookie)
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.

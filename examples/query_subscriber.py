@@ -36,7 +36,7 @@ print(roots[ROOT_NAME])
 # Subscribe to a root
 response = cat2.subscribe(ROOT_NAME, SUB_URL, auth_cookie=auth_cookie)
 # Get a handle to the root
-example = cat2.Root(ROOT_NAME, sub_url=SUB_URL, user_auth=user_auth)
+example = cat2.Root(ROOT_NAME, urlbase=SUB_URL, user_auth=user_auth)
 # List the datasets in that root
 print(example.node_list)
 # Get a specific dataset

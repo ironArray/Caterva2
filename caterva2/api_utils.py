@@ -61,17 +61,17 @@ def parse_slice(string):
     return tuple(obj)
 
 
-def get_auth_cookie(sub_url, user_auth):
+def get_auth_cookie(urlbase, user_auth):
     if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
         user_auth = user_auth._asdict()
-    resp = httpx.post(f'{sub_url}auth/jwt/login', data=user_auth)
+    resp = httpx.post(f'{urlbase}auth/jwt/login', data=user_auth)
     resp.raise_for_status()
     auth_cookie = '='.join(list(resp.cookies.items())[0])
     return auth_cookie
 
 
-def fetch_data(path, sub_url, params, auth_cookie=None):
-    response = _xget(f'{sub_url}api/fetch/{path}', params=params,
+def fetch_data(path, urlbase, params, auth_cookie=None):
+    response = _xget(f'{urlbase}api/fetch/{path}', params=params,
                      auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
@@ -84,8 +84,8 @@ def fetch_data(path, sub_url, params, auth_cookie=None):
     return data
 
 
-def get_download_url(path, sub_url):
-    return f'{sub_url}api/fetch/{path}'
+def get_download_url(path, urlbase):
+    return f'{urlbase}api/fetch/{path}'
 
 
 def b2_unpack(filepath):
