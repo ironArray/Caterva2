@@ -488,7 +488,7 @@ async def fetch_data(
     whole = slice_ is None or slice_ == ()
     if not whole and isinstance(slice_, tuple):
         whole = all(isinstance(sl, slice)
-                    and (sl.start or 0) <= 0
+                    and (sl.start or 0) == 0
                     and (sl.stop is None or sl.stop >= sh)
                     and sl.step in (None, 1)
                     for sl, sh in zip(slice_, shape))
