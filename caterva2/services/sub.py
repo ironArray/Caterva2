@@ -481,15 +481,23 @@ async def fetch_data(
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
     await dataprep()
 
-    # TODO: Also slices covering all data (step 1 or none).
-    whole = slice_ is None or slice_ == () or slice_ == slice(None)
+    array, schunk = srv_utils.open_b2(abspath)
+    typesize = array.dtype.itemsize if array is not None else schunk.typesize
+    shape = array.shape if array is not None else (len(schunk),)
+
+    whole = slice_ is None or slice_ == ()
+    if not whole and isinstance(slice_, tuple):
+        whole = all(isinstance(sl, slice)
+                    and (sl.start or 0) <= 0
+                    and (sl.stop is None or sl.stop >= sh)
+                    and sl.step in (None, 1)
+                    for sl, sh in zip(slice_, shape))
+
     if whole and path.parts[0] != '@scratch':
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name)
 
-    array, schunk = srv_utils.open_b2(abspath)
-    typesize = array.dtype.itemsize if array is not None else schunk.typesize
     if slice_:
         if array is not None:
             array = array[slice_] if array.ndim > 0 else array[()]
