@@ -156,7 +156,7 @@ def main():
     parser.add_argument('--subscriber',
                         dest='sub_url', type=utils.urlbase_type,
                         default=conf.get('subscriber.url',
-                                         cat2.sub_url_default))
+                                         cat2.sub_urlbase_default))
     parser.add_argument('--username', default=conf.get('client.username'))
     parser.add_argument('--password', default=conf.get('client.password'))
     subparsers = parser.add_subparsers(required=True)

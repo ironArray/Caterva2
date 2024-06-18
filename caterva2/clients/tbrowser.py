@@ -54,7 +54,7 @@ def main():
     parser.add_argument('--subscriber',
                         dest='sub_url', type=utils.urlbase_type,
                         default=conf.get('subscriber.url',
-                                         api.sub_url_default))
+                                         api.sub_urlbase_default))
     parser.add_argument('--username', default=conf.get('client.username'))
     parser.add_argument('--password', default=conf.get('client.password'))
     parser.add_argument('--root', default='foo')

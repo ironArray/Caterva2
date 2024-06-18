@@ -26,7 +26,7 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
-sub_url_default = f'http://{sub_host_default}/'
+sub_urlbase_default = f'http://{sub_host_default}/'
 """The default base for URLs provided by the subscriber (slash-terminated)."""
 
 
@@ -46,7 +46,7 @@ def _format_paths(sub_url, path=None):
     return sub_url, path
 
 
-def get_roots(sub_url=sub_url_default, auth_cookie=None):
+def get_roots(sub_url=sub_urlbase_default, auth_cookie=None):
     """
     Get the list of available roots.
 
@@ -68,7 +68,7 @@ def get_roots(sub_url=sub_url_default, auth_cookie=None):
     return api_utils.get(f'{sub_url}api/roots', auth_cookie=auth_cookie)
 
 
-def subscribe(root, sub_url=sub_url_default, auth_cookie=None):
+def subscribe(root, sub_url=sub_urlbase_default, auth_cookie=None):
     """
     Subscribe to a root.
 
@@ -91,7 +91,7 @@ def subscribe(root, sub_url=sub_url_default, auth_cookie=None):
                           auth_cookie=auth_cookie)
 
 
-def get_list(root, sub_url=sub_url_default, auth_cookie=None):
+def get_list(root, sub_url=sub_urlbase_default, auth_cookie=None):
     """
     List the nodes in a root.
 
@@ -114,7 +114,7 @@ def get_list(root, sub_url=sub_url_default, auth_cookie=None):
                          auth_cookie=auth_cookie)
 
 
-def get_info(dataset, sub_url=sub_url_default, auth_cookie=None):
+def get_info(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
     """
     Get information about a dataset.
 
@@ -137,7 +137,8 @@ def get_info(dataset, sub_url=sub_url_default, auth_cookie=None):
                          auth_cookie=auth_cookie)
 
 
-def fetch(dataset, sub_url=sub_url_default, slice_=None, auth_cookie=None):
+def fetch(dataset, sub_url=sub_urlbase_default, slice_=None,
+          auth_cookie=None):
     """
     Fetch a slice of a dataset.
 
@@ -164,7 +165,7 @@ def fetch(dataset, sub_url=sub_url_default, slice_=None, auth_cookie=None):
     return data
 
 
-def download(dataset, sub_url=sub_url_default, auth_cookie=None):
+def download(dataset, sub_url=sub_urlbase_default, auth_cookie=None):
     """
     Download a dataset.
 
@@ -199,7 +200,7 @@ class Root:
     If a non-empty `user_auth` mapping is given, its items are used as data to be posted
     for authenticating the user and get an authorization token for further requests.
     """
-    def __init__(self, name, sub_url=sub_url_default, user_auth=None):
+    def __init__(self, name, sub_url=sub_urlbase_default, user_auth=None):
         sub_url, name = _format_paths(sub_url, name)
         self.name = name
         self.sub_url = utils.urlbase_type(sub_url)
