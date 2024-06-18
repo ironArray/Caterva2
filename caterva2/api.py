@@ -114,13 +114,13 @@ def get_list(root, urlbase=sub_urlbase_default, auth_cookie=None):
                          auth_cookie=auth_cookie)
 
 
-def get_info(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
+def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Get information about a dataset.
 
     Parameters
     ----------
-    dataset : str
+    path : str
         The name of the dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
@@ -132,19 +132,19 @@ def get_info(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     dict
         The information about the dataset.
     """
-    urlbase, dataset = _format_paths(urlbase, dataset)
-    return api_utils.get(f'{urlbase}api/info/{dataset}',
+    urlbase, path = _format_paths(urlbase, path)
+    return api_utils.get(f'{urlbase}api/info/{path}',
                          auth_cookie=auth_cookie)
 
 
-def fetch(dataset, urlbase=sub_urlbase_default, slice_=None,
+def fetch(path, urlbase=sub_urlbase_default, slice_=None,
           auth_cookie=None):
     """
     Fetch a slice of a dataset.
 
     Parameters
     ----------
-    dataset : str
+    path : str
         The name of the dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
@@ -158,20 +158,20 @@ def fetch(dataset, urlbase=sub_urlbase_default, slice_=None,
     numpy.ndarray
         The slice of the dataset.
     """
-    urlbase, dataset = _format_paths(urlbase, dataset)
-    data = api_utils.fetch_data(dataset, urlbase,
+    urlbase, path = _format_paths(urlbase, path)
+    data = api_utils.fetch_data(path, urlbase,
                                 {'slice_': slice_},
                                 auth_cookie=auth_cookie)
     return data
 
 
-def download(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
+def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Download a dataset.
 
     Parameters
     ----------
-    dataset : str
+    path : str
         The name of the dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
@@ -187,9 +187,9 @@ def download(dataset, urlbase=sub_urlbase_default, auth_cookie=None):
      is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
      compressed with Blosc2, and with the `.b2` extension).
     """
-    urlbase, dataset = _format_paths(urlbase, dataset)
-    url = api_utils.get_download_url(dataset, urlbase)
-    return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
+    urlbase, path = _format_paths(urlbase, path)
+    url = api_utils.get_download_url(path, urlbase)
+    return api_utils.download_url(url, path, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
 

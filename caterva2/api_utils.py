@@ -21,8 +21,8 @@ except ImportError:
     blosc2_is_here = False
 
 
-def split_dsname(dataset):
-    ds = str(dataset)
+def split_dsname(path):
+    ds = str(path)
     root_sep = ds.find('/')
     root, dsname = ds[:root_sep], ds[root_sep + 1:]
     return dsname, root

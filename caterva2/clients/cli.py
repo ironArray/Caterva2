@@ -48,15 +48,15 @@ def with_auth_cookie(func):
     return wrapper
 
 
-def dataset_with_slice(dataset):
-    match = re.match('(.*)\\[(.*)]', dataset)
+def dataset_with_slice(path):
+    match = re.match('(.*)\\[(.*)]', path)
     if match is None:
         params = {}
     else:
-        dataset, slice_ = match.groups()
+        path, slice_ = match.groups()
         params = {'slice_': slice_}
 
-    return pathlib.Path(dataset), params
+    return pathlib.Path(path), params
 
 
 @handle_errors
@@ -125,9 +125,9 @@ def cmd_info(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_show(args, auth_cookie):
-    dataset, params = args.dataset
+    path, params = args.dataset
     slice_ = params.get('slice_', None)
-    data = cat2.fetch(dataset, args.urlbase, slice_=slice_,
+    data = cat2.fetch(path, args.urlbase, slice_=slice_,
                       auth_cookie=auth_cookie)
 
     # Display
