@@ -697,7 +697,6 @@ async def htmx_path_info(
     abspath, _ = abspath_and_dataprep(path, user=user)
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
-    #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
     contenttype = (getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
                    or meta_looks_like(meta))
     plugin = plugins.get(contenttype)
