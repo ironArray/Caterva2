@@ -13,6 +13,6 @@ __version__ = "0.2.1.dev0"
 """The version in use of the Caterva2 package."""
 
 from .api import (bro_host_default, pub_host_default, sub_host_default,
-                  sub_url_default)
+                  sub_urlbase_default)
 from .api import get_roots, subscribe, get_list, get_info, fetch, download
 from .api import Root, File, Dataset

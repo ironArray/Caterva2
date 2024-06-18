@@ -13,7 +13,7 @@ Running `cat2cli --help` should provide a list of supported commands that may be
 cat2cli [GENERIC_OPTION...] COMMAND [COMMAND_OPTION...] COMMAND_ARGUMENTS...
 ```
 
-A relevant generic option (besides `--help` itself) is `--subscriber`, which overrides the subscriber URL base used by default.  It should be a slash-terminated HTTP(S) URL, for example `http://sub.edu.example.org:3126/`.
+A relevant generic option (besides `--help` itself) is `--subscriber`, which overrides the base of subscriber URLs used by default.  It should be a slash-terminated HTTP(S) URL, for example `http://sub.edu.example.org:3126/`.
 
 `cat2cli` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the `--conf` option).  Currently, it may only get the subscriber address from there (`http` setting in `[subscriber]` section).  Command-line options override settings read from the configuration file.
 

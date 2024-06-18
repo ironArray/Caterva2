@@ -43,26 +43,26 @@ def with_auth_cookie(func):
         auth_cookie = None
         if args.username and args.password:
             user_auth = dict(username=args.username, password=args.password)
-            auth_cookie = api_utils.get_auth_cookie(args.sub_url, user_auth)
+            auth_cookie = api_utils.get_auth_cookie(args.urlbase, user_auth)
         return func(args, auth_cookie=auth_cookie)
     return wrapper
 
 
-def dataset_with_slice(dataset):
-    match = re.match('(.*)\\[(.*)]', dataset)
+def dataset_with_slice(path):
+    match = re.match('(.*)\\[(.*)]', path)
     if match is None:
         params = {}
     else:
-        dataset, slice_ = match.groups()
+        path, slice_ = match.groups()
         params = {'slice_': slice_}
 
-    return pathlib.Path(dataset), params
+    return pathlib.Path(path), params
 
 
 @handle_errors
 @with_auth_cookie
 def cmd_roots(args, auth_cookie):
-    data = cat2.get_roots(args.sub_url, auth_cookie=auth_cookie)
+    data = cat2.get_roots(args.urlbase, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -77,7 +77,7 @@ def cmd_roots(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_subscribe(args, auth_cookie):
-    data = cat2.subscribe(args.root, args.sub_url, auth_cookie=auth_cookie)
+    data = cat2.subscribe(args.root, args.urlbase, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -88,7 +88,7 @@ def cmd_subscribe(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_list(args, auth_cookie):
-    data = cat2.get_list(args.root, args.sub_url, auth_cookie=auth_cookie)
+    data = cat2.get_list(args.root, args.urlbase, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -100,7 +100,7 @@ def cmd_list(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_url(args, auth_cookie):
-    data = api_utils.get_download_url(args.dataset, args.sub_url)
+    data = api_utils.get_download_url(args.dataset, args.urlbase)
     if args.json:
         print(json.dumps(data))
         return
@@ -112,7 +112,7 @@ def cmd_url(args, auth_cookie):
 @with_auth_cookie
 def cmd_info(args, auth_cookie):
     print(f"Getting info for {args.dataset}")
-    data = cat2.get_info(args.dataset, args.sub_url, auth_cookie=auth_cookie)
+    data = cat2.get_info(args.dataset, args.urlbase, auth_cookie=auth_cookie)
 
     # Print
     if args.json:
@@ -125,9 +125,9 @@ def cmd_info(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_show(args, auth_cookie):
-    dataset, params = args.dataset
+    path, params = args.dataset
     slice_ = params.get('slice_', None)
-    data = cat2.fetch(dataset, args.sub_url, slice_=slice_,
+    data = cat2.fetch(path, args.urlbase, slice_=slice_,
                       auth_cookie=auth_cookie)
 
     # Display
@@ -145,7 +145,7 @@ def cmd_show(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_download(args, auth_cookie):
-    path = cat2.download(args.dataset, args.sub_url, auth_cookie=auth_cookie)
+    path = cat2.download(args.dataset, args.urlbase, auth_cookie=auth_cookie)
 
     print(f'Dataset saved to {path}')
 
@@ -154,9 +154,9 @@ def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
     parser.add_argument('--subscriber',
-                        dest='sub_url', type=utils.urlbase_type,
+                        dest='urlbase', type=utils.urlbase_type,
                         default=conf.get('subscriber.url',
-                                         cat2.sub_url_default))
+                                         cat2.sub_urlbase_default))
     parser.add_argument('--username', default=conf.get('client.username'))
     parser.add_argument('--password', default=conf.get('client.password'))
     subparsers = parser.add_subparsers(required=True)

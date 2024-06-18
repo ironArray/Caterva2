@@ -21,13 +21,13 @@ hdf5root = pytest.importorskip('caterva2.services.hdf5root',
 
 
 @pytest.fixture
-def sub_url(services):
+def sub_urlbase(services):
     return services.get_urlbase('subscriber')
 
 
 @pytest.fixture
-def api_root(sub_url, sub_user):
-    return cat2.Root(TEST_HDF5_ROOT, sub_url=sub_url, user_auth=sub_user)
+def api_root(sub_urlbase, sub_user):
+    return cat2.Root(TEST_HDF5_ROOT, urlbase=sub_urlbase, user_auth=sub_user)
 
 
 def test_not_unsupported(api_root):
