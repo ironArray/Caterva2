@@ -23,7 +23,7 @@ def pub_host(services):
 
 
 @pytest.fixture
-def sub_url(services):
+def sub_urlbase(services):
     return services.get_urlbase('subscriber')
 
 
@@ -48,9 +48,9 @@ def test_roots(services, pub_host, sub_user):
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
-def test_url(services, sub_url, sub_user):
+def test_url(services, sub_urlbase, sub_user):
     out = cli(['url', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], sub_user=sub_user)
-    assert out == f'{sub_url}api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    assert out == f'{sub_urlbase}api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
 
 
 def test_subscribe(services, sub_user):
