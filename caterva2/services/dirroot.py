@@ -149,6 +149,17 @@ def create_example_root(path):
     blosc2.asarray(a, chunks=(100,), blocks=(10,),
                    urlpath=path / "ds-1d-fields.b2nd", mode="w")
 
+    # A 2D array with 2 fields
+    shape = (100, 200)
+    npa = np.linspace(0, 1, np.prod(shape), dtype=np.float32).reshape(shape)
+    npb = np.linspace(1, 2, np.prod(shape), dtype=np.float64).reshape(shape)
+    nps = np.empty(shape, dtype=[("a", npa.dtype), ("b", npb.dtype)])
+    nps["a"] = npa
+    nps["b"] = npb
+    s = blosc2.asarray(nps, mode="w", urlpath=path / "ds-2d-fields.b2nd")
+    a = blosc2.NDField(s, "a")
+    b = blosc2.NDField(s, "b")
+
     # A scalar (string) with variable-length metalayers (user attributes).
     a = np.str_("foobar")
     b = blosc2.asarray(a, urlpath=path / "ds-sc-attr.b2nd", mode="w")
