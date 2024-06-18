@@ -3,6 +3,7 @@ import pathlib
 
 import blosc2
 
+import numpy
 from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -24,6 +25,19 @@ abspath_and_dataprep = None
 def init(absp_n_datap):
     global abspath_and_dataprep
     abspath_and_dataprep = absp_n_datap
+
+
+def meta_looks_like(meta):
+    if not hasattr(meta, 'dtype'):
+        return None  # not an array
+    dtype = numpy.dtype(meta.dtype)
+    shape = tuple(meta.shape)
+    if (dtype.kind == "u"
+        and (len(shape) == 3  # grayscale
+             or (len(shape) == 4 and shape[-1] in (3, 4)))):  # RGB(A)
+        return contenttype
+    return None
+
 
 @app.get("/display/{path:path}", response_class=HTMLResponse)
 def display(

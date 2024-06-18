@@ -962,6 +962,7 @@ def main():
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(abspath_and_dataprep)
+    meta_looks_like_funcs.append(tomography.meta_looks_like)
 
     # Run
     global urlbase
