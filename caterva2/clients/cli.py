@@ -100,10 +100,7 @@ def cmd_list(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_url(args, auth_cookie):
-    # TODO: provide a url that can be used to open the dataset in blosc2
-    # TODO: add a new function to the API that returns the url
-    data = api_utils.get_download_url(args.root, args.sub_url,
-                                      auth_cookie=auth_cookie)
+    data = api_utils.get_download_url(args.dataset, args.sub_url)
     if args.json:
         print(json.dumps(data))
         return
@@ -185,10 +182,10 @@ def main():
     subparser.set_defaults(func=cmd_list)
 
     # url
-    help = 'URL for the rest API that serves the root.'
+    help = 'URL from where a dataset can be downloaded.'
     subparser = subparsers.add_parser('url', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('root')
+    subparser.add_argument('dataset', type=str)
     subparser.set_defaults(func=cmd_url)
 
     # info

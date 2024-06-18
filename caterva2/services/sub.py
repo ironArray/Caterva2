@@ -340,37 +340,6 @@ async def get_list(
     ]
 
 
-# TODO: This endpoint should probably be removed.
-@app.get('/api/url/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def get_url(path: str):
-    """
-    Get the URLs to access a dataset.
-
-    Parameters
-    ----------
-    path : str
-        The path to the dataset.
-
-    Returns
-    -------
-    list
-        The URLs to access the dataset.
-    """
-    root, *dataset = path.split('/', 1)
-    scheme = 'http'
-    http = get_root(root).http
-    http = f'{scheme}://{http}'
-    if dataset:
-        dataset = dataset[0]
-        return [
-            f'{http}/api/info/{dataset}',
-            f'{http}/api/download/{dataset}',
-        ]
-
-    return [http]
-
-
 @app.get('/api/info/{path:path}')
 async def get_info(
     path: pathlib.Path,
@@ -504,7 +473,7 @@ async def fetch_data(
     Returns
     -------
     StreamingResponse
-        The (slice of) dataset as a NumPy array or a Blosc2 schunk.
+        The (slice of) dataset as a Blosc2 schunk.
     """
 
     slice_ = api_utils.parse_slice(slice_)
@@ -514,6 +483,21 @@ async def fetch_data(
 
     array, schunk = srv_utils.open_b2(abspath)
     typesize = array.dtype.itemsize if array is not None else schunk.typesize
+    shape = array.shape if array is not None else (len(schunk),)
+
+    whole = slice_ is None or slice_ == ()
+    if not whole and isinstance(slice_, tuple):
+        whole = all(isinstance(sl, slice)
+                    and (sl.start or 0) == 0
+                    and (sl.stop is None or sl.stop >= sh)
+                    and sl.step in (None, 1)
+                    for sl, sh in zip(slice_, shape))
+
+    if whole and path.parts[0] != '@scratch':
+        # Send the data in the file straight to the client,
+        # avoiding slicing and re-compression.
+        return FileResponse(abspath, filename=abspath.name)
+
     if slice_:
         if array is not None:
             array = array[slice_] if array.ndim > 0 else array[()]
@@ -543,96 +527,6 @@ async def fetch_data(
     downloader = srv_utils.iterchunk(data)
 
     return responses.StreamingResponse(downloader)
-
-
-@app.get('/api/download-url/{path:path}')
-async def download_url(
-    path: pathlib.Path,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Return the download URL from the publisher.
-
-    Parameters
-    ----------
-    path : pathlib.Path
-        The path to the dataset.
-
-    Returns
-    -------
-    url
-        The url of the file in 'files/' or 'scratch/' to be downloaded later
-        on.
-    """
-
-    # Download and update the necessary chunks of the schunk in cache
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-
-    # The complete file is already in the static files/ dir, so return the url.
-    # We don't currently decompress data before downloading, so let's add the extension
-    # in the url, if it is missing.
-    spath = f'{path}.b2' if abspath.suffix == '.b2' else str(path)
-    if path.parts and path.parts[0] == '@scratch':
-        spath = spath.replace('@scratch', str(user.id), 1)
-        return f'{urlbase}scratch/{spath}'
-    return f'{urlbase}files/{spath}'
-
-
-@app.get('/api/download/{path:path}')
-async def download_data(
-    path: pathlib.Path,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Download a dataset.
-
-    Parameters
-    ----------
-    path : pathlib.Path
-        The path to the dataset.
-
-    Returns
-    -------
-    The file's data.
-    """
-    if path.parts and path.parts[0] == '@scratch':
-        return await fetch_data(path, user=user)
-
-    # Download and update the necessary chunks of the schunk in cache
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-
-    # Send the data to the client
-    return FileResponse(abspath, filename=abspath.name)
-
-
-#
-# Static files (as `StaticFiles` does not support authorization)
-#
-
-async def download_static(path: str, directory: pathlib.Path):
-    abspath = srv_utils.cache_lookup(directory, path)
-    abspath = pathlib.Path(abspath)
-    # TODO: Support conditional requests, HEAD, etc.
-    return FileResponse(abspath, filename=abspath.name)
-
-
-@app.get('/files/{path:path}',
-         dependencies=[Depends(current_active_user)])
-async def download_cached(path: str):
-    if path.endswith('.b2'):
-        path = path[:-3]  # let cache lookup re-add extension
-    return await download_static(path, cache)
-
-
-@app.get('/scratch/{path:path}')
-async def download_scratch(path: str,
-                           user: db.User = Depends(current_active_user)):
-    parts = pathlib.Path(path).parts
-    if user and (not parts or parts[0] != str(user.id)):
-        raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
-    return await download_static(path, scratch)
 
 
 #

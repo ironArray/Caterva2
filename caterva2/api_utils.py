@@ -8,6 +8,7 @@
 ###############################################################################
 import os
 import pathlib
+import re
 
 # Requirements
 import httpx
@@ -83,10 +84,8 @@ def fetch_data(path, sub_url, params, auth_cookie=None):
     return data
 
 
-def get_download_url(path, sub_url, auth_cookie=None):
-    response = _xget(f'{sub_url}api/download-url/{path}',
-                     auth_cookie=auth_cookie)
-    return response.json()
+def get_download_url(path, sub_url):
+    return f'{sub_url}api/fetch/{path}'
 
 
 def b2_unpack(filepath):
@@ -102,14 +101,19 @@ def b2_unpack(filepath):
     return outfile
 
 
+# Not completely RFC6266-compliant, but probably good enough.
+_attachment_b2fname_rx = re.compile(r';\s*filename\*?\s*=\s*"([^"]+\.b2)"')
+
+
 def download_url(url, localpath, try_unpack=True, auth_cookie=None):
-    is_b2 = url.endswith('.b2')
-    if is_b2:
-        localpath += '.b2'
     headers = {'Cookie': auth_cookie} if auth_cookie else None
     with httpx.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
         # Build the local filepath
+        cdisp = r.headers.get('content-disposition', '')
+        is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
+        if is_b2:
+            localpath += '.b2'
         localpath = pathlib.Path(localpath)
         localpath.parent.mkdir(parents=True, exist_ok=True)
         with open(localpath, "wb") as f:

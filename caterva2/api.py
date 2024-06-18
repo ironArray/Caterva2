@@ -187,7 +187,7 @@ def download(dataset, sub_url=sub_url_default, auth_cookie=None):
      compressed with Blosc2, and with the `.b2` extension).
     """
     sub_url, dataset = _format_paths(sub_url, dataset)
-    url = api_utils.get_download_url(dataset, sub_url, auth_cookie=auth_cookie)
+    url = api_utils.get_download_url(dataset, sub_url)
     return api_utils.download_url(url, dataset, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
@@ -313,11 +313,9 @@ class File:
         >>> root = cat2.Root('foo')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
-        'http://localhost:8002/files/foo/ds-1d.b2nd'
+        'http://localhost:8002/api/fetch/foo/ds-1d.b2nd'
         """
-        download_path = api_utils.get_download_url(
-            self.path, self.sub_url, auth_cookie=self.auth_cookie)
-        return download_path
+        return api_utils.get_download_url(self.path, self.sub_url)
 
     def __getitem__(self, slice_):
         """
