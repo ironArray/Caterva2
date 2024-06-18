@@ -698,7 +698,8 @@ async def htmx_path_info(
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
     #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
-    contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
+    contenttype = (getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
+                   or meta_looks_like(meta))
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -911,6 +912,15 @@ async def html_markdown(
 #
 
 plugins = {}
+meta_looks_like_funcs = []
+
+
+def meta_looks_like(meta):
+    for looks_like in meta_looks_like_funcs:
+        if ctype := looks_like(meta):
+            return ctype
+    return None
+
 
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
