@@ -496,7 +496,7 @@ async def fetch_data(
                     and sl.step in (None, 1)
                     for sl, sh in zip(slice_, shape))
 
-    if whole and path.parts[0] != '@scratch':
+    if whole and schunk is not None:  # whole and not lazy expr
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name,
