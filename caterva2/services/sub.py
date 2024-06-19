@@ -472,8 +472,11 @@ async def fetch_data(
 
     Returns
     -------
-    StreamingResponse
-        The (slice of) dataset as a Blosc2 schunk.
+    FileResponse or StreamingResponse
+        The (slice of) dataset as a Blosc2 schunk.  When the whole dataset is
+        to be downloaded (instead of some slice which does not cover it fully),
+        its stored image is served containing all data and metadata (including
+        variable length fields).
     """
 
     slice_ = api_utils.parse_slice(slice_)
@@ -493,10 +496,11 @@ async def fetch_data(
                     and sl.step in (None, 1)
                     for sl, sh in zip(slice_, shape))
 
-    if whole and path.parts[0] != '@scratch':
+    if whole and schunk is not None:  # whole and not lazy expr
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
-        return FileResponse(abspath, filename=abspath.name)
+        return FileResponse(abspath, filename=abspath.name,
+                            media_type='application/octet-stream')
 
     if slice_:
         if array is not None:
@@ -526,7 +530,8 @@ async def fetch_data(
         data = schunk.to_cframe()
     downloader = srv_utils.iterchunk(data)
 
-    return responses.StreamingResponse(downloader)
+    return responses.StreamingResponse(downloader,
+                                       media_type='application/octet-stream')
 
 
 #
@@ -697,8 +702,8 @@ async def htmx_path_info(
     abspath, _ = abspath_and_dataprep(path, user=user)
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
-    contenttype = (getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
-                   or meta_looks_like(meta))
+    vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
+    contenttype = vlmeta.get('contenttype') or meta_looks_like(meta)
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -842,6 +847,9 @@ async def htmx_command(
     # Depends
     user: db.User = Depends(current_active_user),
 ):
+
+    if not user:
+        raise fastapi.HTTPException(status_code=401)  # unauthorized
 
     def error(msg):
         context = {'error': msg}
