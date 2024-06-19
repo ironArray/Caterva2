@@ -702,8 +702,8 @@ async def htmx_path_info(
     abspath, _ = abspath_and_dataprep(path, user=user)
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
-    contenttype = (getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
-                   or meta_looks_like(meta))
+    vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
+    contenttype = vlmeta.get('contenttype') or meta_looks_like(meta)
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
