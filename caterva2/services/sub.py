@@ -919,13 +919,13 @@ async def html_markdown(
 #
 
 plugins = {}
-meta_looks_like_funcs = []
 
 
 def meta_looks_like(meta):
-    for looks_like in meta_looks_like_funcs:
-        if ctype := looks_like(meta):
-            return ctype
+    for plugin in plugins.values():
+        if hasattr(plugin, 'meta_looks_like'):
+            if ctype := plugin.meta_looks_like(meta):
+                return ctype
     return None
 
 
@@ -969,7 +969,6 @@ def main():
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(abspath_and_dataprep)
-    meta_looks_like_funcs.append(tomography.meta_looks_like)
 
     # Run
     global urlbase
