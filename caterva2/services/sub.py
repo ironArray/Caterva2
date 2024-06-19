@@ -496,7 +496,8 @@ async def fetch_data(
     if whole and path.parts[0] != '@scratch':
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
-        return FileResponse(abspath, filename=abspath.name)
+        return FileResponse(abspath, filename=abspath.name,
+                            media_type='application/octet-stream')
 
     if slice_:
         if array is not None:
@@ -526,7 +527,8 @@ async def fetch_data(
         data = schunk.to_cframe()
     downloader = srv_utils.iterchunk(data)
 
-    return responses.StreamingResponse(downloader)
+    return responses.StreamingResponse(downloader,
+                                       media_type='application/octet-stream')
 
 
 #
