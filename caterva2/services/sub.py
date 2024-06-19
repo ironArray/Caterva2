@@ -472,8 +472,11 @@ async def fetch_data(
 
     Returns
     -------
-    StreamingResponse
-        The (slice of) dataset as a Blosc2 schunk.
+    FileResponse or StreamingResponse
+        The (slice of) dataset as a Blosc2 schunk.  When the whole dataset is
+        to be downloaded (instead of some slice which does not cover it fully),
+        its stored image is served containing all data and metadata (including
+        variable length fields).
     """
 
     slice_ = api_utils.parse_slice(slice_)
