@@ -27,16 +27,18 @@ def init(absp_n_datap):
     abspath_and_dataprep = absp_n_datap
 
 
-def meta_looks_like(meta):
+def meta_looks_like_it(meta):
     if not hasattr(meta, 'dtype'):
-        return None  # not an array
+        return False  # not an array
     dtype = numpy.dtype(meta.dtype)
     shape = tuple(meta.shape)
-    if (dtype.kind == "u"
-        and (len(shape) == 3  # grayscale
-             or (len(shape) == 4 and shape[-1] in (3, 4)))):  # RGB(A)
-        return contenttype
-    return None
+    if dtype.kind != "u":
+        return False
+    if len(shape) == 3:
+        return True  # grayscale
+    if len(shape) == 4 and shape[-1] in (3, 4):
+        return True  # RGB(A)
+    return False
 
 
 @app.get("/display/{path:path}", response_class=HTMLResponse)

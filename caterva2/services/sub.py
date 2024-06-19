@@ -922,10 +922,10 @@ plugins = {}
 
 
 def meta_looks_like(meta):
-    for plugin in plugins.values():
-        if hasattr(plugin, 'meta_looks_like'):
-            if ctype := plugin.meta_looks_like(meta):
-                return ctype
+    for (ctype, plugin) in plugins.items():
+        if (hasattr(plugin, 'meta_looks_like_it')
+                and plugin.meta_looks_like_it(meta)):
+            return ctype
     return None
 
 
