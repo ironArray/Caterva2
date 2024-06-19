@@ -848,6 +848,9 @@ async def htmx_command(
     user: db.User = Depends(current_active_user),
 ):
 
+    if not user:
+        raise fastapi.HTTPException(status_code=401)  # unauthorized
+
     def error(msg):
         context = {'error': msg}
         return templates.TemplateResponse(request, "error.html", context, status_code=400)
