@@ -27,7 +27,7 @@ def init(absp_n_datap):
     abspath_and_dataprep = absp_n_datap
 
 
-def meta_looks_like_it(meta):
+def dset_looks_like_it(path, meta):
     if not hasattr(meta, 'dtype'):
         return False  # not an array
     dtype = numpy.dtype(meta.dtype)

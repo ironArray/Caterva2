@@ -703,7 +703,7 @@ async def htmx_path_info(
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
-    contenttype = vlmeta.get('contenttype') or meta_looks_like(meta)
+    contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -921,10 +921,10 @@ async def html_markdown(
 plugins = {}
 
 
-def meta_looks_like(meta):
+def guess_dset_ctype(path, meta):
     for (ctype, plugin) in plugins.items():
-        if (hasattr(plugin, 'meta_looks_like_it')
-                and plugin.meta_looks_like_it(meta)):
+        if (hasattr(plugin, 'dset_looks_like_it')
+                and plugin.dset_looks_like_it(path, meta)):
             return ctype
     return None
 
