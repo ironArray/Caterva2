@@ -697,11 +697,8 @@ async def htmx_path_info(
     abspath, _ = abspath_and_dataprep(path, user=user)
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
-    #getattr(meta, 'schunk', meta).vlmeta['contenttype'] = 'tomography'
-    if hasattr(getattr(meta, 'schunk', meta), 'vlmeta'):
-        contenttype = getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
-    else:
-        contenttype = None
+    contenttype = (getattr(meta, 'schunk', meta).vlmeta.get('contenttype')
+                   or meta_looks_like(meta))
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -914,6 +911,15 @@ async def html_markdown(
 #
 
 plugins = {}
+meta_looks_like_funcs = []
+
+
+def meta_looks_like(meta):
+    for looks_like in meta_looks_like_funcs:
+        if ctype := looks_like(meta):
+            return ctype
+    return None
+
 
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
@@ -955,6 +961,7 @@ def main():
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(abspath_and_dataprep)
+    meta_looks_like_funcs.append(tomography.meta_looks_like)
 
     # Run
     global urlbase
