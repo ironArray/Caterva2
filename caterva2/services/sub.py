@@ -865,13 +865,13 @@ async def htmx_command(
         return error('Invalid syntax: expected <varname> = <expression>')
 
     # Open expression datasets
+    operands = dict(zip(names, paths))
     var_dict = {}
     for var in vars:
         try:
-            key = names.index(var)
-        except ValueError:
+            path = operands[var]
+        except KeyError:
             return error(f'Expression error: {var} is not in the list of available datasets')
-        path = paths[key]
         var_dict[var] = blosc2.open(cache / path, mode="r")
 
     # Create the lazy expression dataset
