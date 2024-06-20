@@ -534,8 +534,8 @@ async def fetch_data(
                                        media_type='application/octet-stream')
 
 
-def make_lazy_expr(name: str, expr: str, operands: dict[str, str],
-                   user: db.User) -> str:
+def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
+                  user: db.User) -> str:
     # TODO: document
     if not user:
         raise fastapi.HTTPException(
@@ -884,7 +884,7 @@ async def htmx_command(
     operands = dict(zip(names, paths))
     try:
         result_name, expr = command.split('=')
-        result_path = make_lazy_expr(result_name, expr, operands, user)
+        result_path = make_lazyexpr(result_name, expr, operands, user)
     except (SyntaxError, ValueError):
         return error('Invalid syntax: expected <varname> = <expression>')
     except KeyError as ke:
