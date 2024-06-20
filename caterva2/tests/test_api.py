@@ -61,12 +61,18 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
     assert lxpath == f'@scratch/{lxname}.b2nd'
-    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
 
+    # Check result metadata.
+    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxinfo['shape'] == opinfo['shape']
     assert lxinfo['dtype'] == opinfo['dtype']
     assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
     assert lxinfo['operands'] == dict(o0=operands[opnm])
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:], b[:])
 
 
 def test_root(services, sub_urlbase, sub_user):
