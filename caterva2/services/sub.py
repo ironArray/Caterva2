@@ -536,7 +536,29 @@ async def fetch_data(
 
 def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
                   user: db.User) -> str:
-    # TODO: document
+    """
+    Create a lazy expression dataset in scratch space.
+
+    This may raise exceptions if there are problems parsing the dataset name
+    or expression, or if the expression refers to operands which have not been
+    defined.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset to be created (without extension).
+    expr : str
+        The expression to be evaluated.  It must result in a lazy expression.
+    operands : dictionary of strings mapping to strings
+        The variables used in the expression and which dataset paths they
+        refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
+
     if not user:
         raise fastapi.HTTPException(
             status_code=401,  # unauthorized
@@ -573,7 +595,19 @@ async def lazyexpr(
     expr: models.NewLazyExpr,
     user: db.User = Depends(current_active_user),
 ) -> str:
-    # TODO: document
+    """
+    Create a lazy expression dataset in scratch space.
+
+    The JSON request body must contain a "name" for the dataset to be created
+    (without extension), an "expression" to be evaluated, which must result in
+    a lazy expression, and an "operands" object which maps variable names used
+    in the expression to the dataset paths that they refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
 
     def error(msg):
         return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
