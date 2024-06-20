@@ -32,6 +32,16 @@ Fetch / download datasets
     download
 
 
+Evaluating expressions
+----------------------
+
+.. autosummary::
+   :toctree: autofiles/top_level/
+   :nosignatures:
+
+    lazyexpr
+
+
 Utility variables
 -----------------
 
