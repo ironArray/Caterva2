@@ -565,6 +565,27 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     return f'@scratch/{name}.b2nd'
 
 
+@app.post('/api/lazyexpr/')
+async def lazyexpr(
+    expr: models.NewLazyExpr,
+    user: db.User = Depends(current_active_user),
+) -> str:
+    # TODO: document
+
+    def error(msg):
+        return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
+
+    try:
+        result_path = make_lazyexpr(expr.name, expr.expression, expr.operands,
+                                    user)
+    except (SyntaxError, ValueError) as exc:
+        raise error(f'Invalid name or expression: {exc}')
+    except KeyError as ke:
+        raise error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+
+    return result_path
+
+
 #
 # HTML interface
 #
