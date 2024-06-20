@@ -561,7 +561,7 @@ def make_lazy_expr(command: str, operands: dict[str, str],
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
 
-    return result_name
+    return f'@scratch/{result_name}.b2nd'
 
 
 #
@@ -884,7 +884,7 @@ async def htmx_command(
 
     operands = dict(zip(names, paths))
     try:
-        result_name = make_lazy_expr(command, operands, user)
+        result_path = make_lazy_expr(command, operands, user)
     except (SyntaxError, ValueError):
         return error('Invalid syntax: expected <varname> = <expression>')
     except KeyError as ke:
@@ -893,8 +893,7 @@ async def htmx_command(
     # Redirect to display new dataset
     response = JSONResponse('OK')
 
-    path = f'@scratch/{result_name}.b2nd'
-    url = make_url(request, "html_home", path=path)
+    url = make_url(request, "html_home", path=result_path)
     query = furl.furl(hx_current_url).query
     roots = query.params.getlist('roots')
     if '@scratch' not in roots:
