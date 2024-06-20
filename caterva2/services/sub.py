@@ -923,8 +923,8 @@ plugins = {}
 
 def guess_dset_ctype(path, meta):
     for (ctype, plugin) in plugins.items():
-        if (hasattr(plugin, 'dset_looks_like_it')
-                and plugin.dset_looks_like_it(path, meta)):
+        if (hasattr(plugin, 'guess')
+                and plugin.guess(path, meta)):
             return ctype
     return None
 
