@@ -65,8 +65,8 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
 
     assert lxinfo['shape'] == opinfo['shape']
     assert lxinfo['dtype'] == opinfo['dtype']
-    assert lxinfo['expression'] == expression
-    assert lxinfo['operands'] == operands
+    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
+    assert lxinfo['operands'] == dict(o0=operands[opnm])
 
 
 def test_root(services, sub_urlbase, sub_user):
