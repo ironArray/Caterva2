@@ -703,7 +703,7 @@ async def htmx_path_info(
     meta = srv_utils.read_metadata(abspath, cache=cache)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
-    contenttype = vlmeta.get('contenttype') or meta_looks_like(meta)
+    contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -919,12 +919,13 @@ async def html_markdown(
 #
 
 plugins = {}
-meta_looks_like_funcs = []
 
 
-def meta_looks_like(meta):
-    for looks_like in meta_looks_like_funcs:
-        if ctype := looks_like(meta):
+def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
+    """Try to guess dataset's content type (given path and metadata)."""
+    for (ctype, plugin) in plugins.items():
+        if (hasattr(plugin, 'guess')
+                and plugin.guess(path, meta)):
             return ctype
     return None
 
@@ -969,7 +970,6 @@ def main():
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(abspath_and_dataprep)
-    meta_looks_like_funcs.append(tomography.meta_looks_like)
 
     # Run
     global urlbase
