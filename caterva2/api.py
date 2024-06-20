@@ -193,6 +193,12 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
                                   auth_cookie=auth_cookie)
 
 
+def lazyexpr(name, expression, operands,
+             urlbase=sub_urlbase_default, auth_cookie=None):
+    # TODO: document
+    raise NotImplementedError  # TODO: implement
+
+
 class Root:
     """
     A root is a remote repository that can be subscribed to.
