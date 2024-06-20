@@ -538,7 +538,10 @@ def make_lazy_expr(command: str, operands: dict[str, str],
                    user: db.User) -> str:
     # TODO: document
     if not user:
-        raise fastapi.HTTPException(status_code=401)  # unauthorized
+        raise fastapi.HTTPException(
+            status_code=401,  # unauthorized
+            detail="Creating lazy expressions requires enabling user authentication",
+        )
 
     # Parse command
     result_name, expr = command.split('=')
