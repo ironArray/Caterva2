@@ -558,6 +558,9 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
 
     # Create the lazy expression dataset
     arr = eval(expr, var_dict)
+    if not isinstance(arr, blosc2.LazyExpr):
+        cname = type(arr).__name__
+        raise TypeError(f"Evaluates to {cname} instead of lazy expression")
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / name}.b2nd', mode="w")
@@ -578,7 +581,7 @@ async def lazyexpr(
     try:
         result_path = make_lazyexpr(expr.name, expr.expression, expr.operands,
                                     user)
-    except (SyntaxError, ValueError) as exc:
+    except (SyntaxError, ValueError, TypeError) as exc:
         raise error(f'Invalid name or expression: {exc}')
     except KeyError as ke:
         raise error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
@@ -910,6 +913,8 @@ async def htmx_command(
         result_path = make_lazyexpr(result_name, expr, operands, user)
     except (SyntaxError, ValueError):
         return error('Invalid syntax: expected <varname> = <expression>')
+    except TypeError as te:
+        return error(f'Invalid expression: {te}')
     except KeyError as ke:
         return error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
 
