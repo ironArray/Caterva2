@@ -196,7 +196,10 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
 def lazyexpr(name, expression, operands,
              urlbase=sub_urlbase_default, auth_cookie=None):
     # TODO: document
-    raise NotImplementedError  # TODO: implement
+    urlbase, _ = _format_paths(urlbase)
+    expr = dict(name=name, expression=expression, operands=operands)
+    return api_utils.post(f'{urlbase}api/lazyexpr/', expr,
+                          auth_cookie=auth_cookie)
 
 
 class Root:
