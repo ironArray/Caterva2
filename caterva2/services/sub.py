@@ -546,6 +546,8 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     # Parse expression
     name = name.strip()
     expr = expr.strip()
+    if not name or not expr:
+        raise ValueError("Name or expression should not be empty")
     vars = ne.NumExpr(expr).input_names
 
     # Open expression datasets
