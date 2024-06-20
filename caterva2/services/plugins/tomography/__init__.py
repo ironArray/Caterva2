@@ -27,7 +27,7 @@ def init(absp_n_datap):
     abspath_and_dataprep = absp_n_datap
 
 
-def guess(path, meta):
+def guess(path: pathlib.Path, meta) -> bool:
     if not hasattr(meta, 'dtype'):
         return False  # not an array
     dtype = numpy.dtype(meta.dtype)

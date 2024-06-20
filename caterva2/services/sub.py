@@ -921,7 +921,7 @@ async def html_markdown(
 plugins = {}
 
 
-def guess_dset_ctype(path, meta):
+def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
     for (ctype, plugin) in plugins.items():
         if (hasattr(plugin, 'guess')
                 and plugin.guess(path, meta)):
