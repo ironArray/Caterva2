@@ -28,6 +28,7 @@ def init(absp_n_datap):
 
 
 def guess(path: pathlib.Path, meta) -> bool:
+    """Does dataset (given path and metadata) seem of this content type?"""
     if not hasattr(meta, 'dtype'):
         return False  # not an array
     dtype = numpy.dtype(meta.dtype)

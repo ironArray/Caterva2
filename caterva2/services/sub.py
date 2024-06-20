@@ -922,6 +922,7 @@ plugins = {}
 
 
 def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
+    """Try to guess dataset's content type (given path and metadata)."""
     for (ctype, plugin) in plugins.items():
         if (hasattr(plugin, 'guess')
                 and plugin.guess(path, meta)):
