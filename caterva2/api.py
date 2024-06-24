@@ -309,7 +309,10 @@ class File:
     @functools.cached_property
     def vlmeta(self):
         """
-        Access variable-length metalayers (i.e. user attributes) for a file.
+        A mapping of metalayer names to their respective values.
+
+        Used to access variable-length metalayers (i.e. user attributes) for a
+        file.
 
         Examples
         --------
@@ -317,11 +320,6 @@ class File:
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
         {'a': 1, 'b': 'foo', 'c': 123.456}
-
-        Returns
-        -------
-        dict
-            The mapping of metalayer names to their respective values.
         """
         schunk_meta = self.meta.get('schunk', self.meta)
         return schunk_meta.get('vlmeta', {})
