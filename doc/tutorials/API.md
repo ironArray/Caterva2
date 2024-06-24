@@ -18,7 +18,14 @@ We just connected to the default subscriber at `localhost:8002` (you may specify
 {'foo': {'name': 'foo', 'http': 'localhost:8001', 'subscribed': None}}
 ```
 
-**Note:** If the subscriber requires user authentication, you may first get an authorization cookie with `caterva2.api_utils.get_auth_cookie('http://localhost:8002/', {'username': '<USER>', 'password': '<PASS>'})`, then pass the returned cookie to API functions as the `auth_cookie` keyword argument.
+**Note:** If the subscriber requires user authentication (and you get a `401 Unauthorized` error), you may first get an authorization cookie with `caterva2.api_utils.get_auth_cookie()`, then pass the returned cookie to API functions as the `auth_cookie` keyword argument, for instance:
+
+```python
+cookie = caterva2.api_utils.get_auth_cookie(
+    'http://localhost:8002/',
+    {'username': 'user@example.com', 'password': 'foobar'})
+roots = caterva2.get_roots(auth_cookie=cookie)
+```
 
 Besides its name, it contains the address of the publisher providing it, and an indication that we're not subscribed to it.  Getting a list of datasets in that root with `caterva2.get_list('foo')` will fail with `404 Not Found`.  So let's try again by first subscribing to it:
 
