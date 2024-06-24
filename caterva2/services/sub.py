@@ -406,7 +406,7 @@ async def partial_download(abspath, path, slice_=None):
                 await download_chunk(path, schunk, n)
 
 
-async def download_expr_deps(abspath):
+async def download_expr_deps(expr):
     """
     Download the datasets that the lazy expression dataset depends on.
 
@@ -420,8 +420,6 @@ async def download_expr_deps(abspath):
     None
         When finished, expression dependencies are available in cache.
     """
-    expr = blosc2.open(abspath)
-
     coroutines = []
     for ndarr in expr.operands.values():
         relpath = srv_utils.get_relpath(ndarr, cache, scratch)
@@ -450,13 +448,20 @@ def abspath_and_dataprep(path: pathlib.Path,
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
-        async def dataprep():
-            return await download_expr_deps(abspath)
+        expr = blosc2.open(abspath)
+        if isinstance(expr, blosc2.LazyArray):
+            async def dataprep():
+                return await download_expr_deps(expr)
+        else:
+            async def dataprep():
+                pass
+
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
         async def dataprep():
             return await partial_download(abspath, str(path), slice_)
+
     return (abspath, dataprep)
 
 
