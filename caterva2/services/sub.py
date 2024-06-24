@@ -420,17 +420,16 @@ async def download_expr_deps(abspath):
     None
         When finished, expression dependencies are available in cache.
     """
-    def download_dep(ndarr):
-        relpath = srv_utils.get_relpath(ndarr, cache, scratch)
-        if relpath.parts[0] == '@scratch':
-            return None
-        else:
-            abspath = ndarr.schunk.urlpath
-            return partial_download(abspath, relpath)
-
     expr = blosc2.open(abspath)
-    coroutines = [download_dep(op) for op in expr.operands.values()]
-    coroutines = [x for x in coroutines if x is not None]
+
+    coroutines = []
+    for ndarr in expr.operands.values():
+        relpath = srv_utils.get_relpath(ndarr, cache, scratch)
+        if relpath.parts[0] != '@scratch':
+            abspath = pathlib.Path(ndarr.schunk.urlpath)
+            coroutine = partial_download(abspath, relpath)
+            coroutines.append(coroutine)
+
     await asyncio.gather(*coroutines)
 
 
