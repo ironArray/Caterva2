@@ -810,7 +810,11 @@ async def htmx_path_info(
     user: db.User = Depends(current_active_user),
 ):
 
-    abspath, _ = abspath_and_dataprep(path, user=user)
+    try:
+        abspath, _ = abspath_and_dataprep(path, user=user)
+    except FileNotFoundError:
+        return htmx_error(request, 'FileNotFoundError: missing operand(s)')
+
     meta = srv_utils.read_metadata(abspath, cache=cache, scratch=scratch)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
@@ -960,26 +964,27 @@ async def htmx_command(
     user: db.User = Depends(current_active_user),
 ):
 
-    def error(msg):
-        context = {'error': msg}
-        return templates.TemplateResponse(request, "error.html", context, status_code=400)
-
     operands = dict(zip(names, paths))
     try:
         result_name, expr = command.split('=')
         result_path = make_lazyexpr(result_name, expr, operands, user)
     except (SyntaxError, ValueError):
-        return error('Invalid syntax: expected <varname> = <expression>')
+        return htmx_error('Invalid syntax: expected <varname> = <expression>')
     except TypeError as te:
-        return error(f'Invalid expression: {te}')
+        return htmx_error(f'Invalid expression: {te}')
     except KeyError as ke:
-        return error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+        return htmx_error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
     except RuntimeError as exc:
-        return error(str(exc))
+        return htmx_error(str(exc))
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
     return htmx_redirect(hx_current_url, url)
+
+
+def htmx_error(request, msg):
+    context = {'error': msg}
+    return templates.TemplateResponse(request, "error.html", context, status_code=400)
 
 
 def htmx_redirect(current_url, target_url):
