@@ -50,7 +50,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj, cache=None):
+def read_metadata(obj, cache=None, scratch=None):
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -81,7 +81,7 @@ def read_metadata(obj, cache=None):
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     elif isinstance(obj, blosc2.LazyExpr):
-        operands = operands_as_paths(obj.operands, cache)
+        operands = operands_as_paths(obj.operands, cache, scratch)
         return get_model_from_obj(obj, models.LazyArray, operands=operands)
     else:
         raise TypeError(f'unexpected {type(obj)}')
@@ -96,11 +96,25 @@ def reformat_cparams(cparams):
     return cparams
 
 
-def operands_as_paths(operands, cache):
-    def rel_to_cache(ndarr):
-        path = pathlib.Path(ndarr.schunk.urlpath)
-        return str(path.relative_to(cache))
-    return dict((nm, rel_to_cache(op)) for (nm, op) in operands.items())
+def get_relpath(ndarr, cache, scratch):
+    path = pathlib.Path(ndarr.schunk.urlpath)
+    try:
+        # Cache: /.../<root>/<subpath> to <root>/<subpath>
+        path = path.relative_to(cache)
+    except ValueError:
+        # Scratch: /.../<uid>/<subpath> to @scratch/<subpath>
+        path = path.relative_to(scratch)
+        parts = list(path.parts)
+        parts[0] = '@scratch'
+        path = pathlib.Path(*parts)
+
+    return path
+
+def operands_as_paths(operands, cache, scratch):
+    return dict(
+        (nm, str(get_relpath(op, cache, scratch)))
+        for (nm, op) in operands.items()
+    )
 
 
 #

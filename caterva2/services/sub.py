@@ -421,10 +421,17 @@ async def download_expr_deps(abspath):
         When finished, expression dependencies are available in cache.
     """
     def download_dep(ndarr):
-        path = pathlib.Path(ndarr.schunk.urlpath)
-        return partial_download(path, str(path.relative_to(cache)))
+        relpath = srv_utils.get_relpath(ndarr, cache, scratch)
+        if relpath.parts[0] == '@scratch':
+            return None
+        else:
+            abspath = ndarr.schunk.urlpath
+            return partial_download(abspath, relpath)
+
     expr = blosc2.open(abspath)
-    await asyncio.gather(*[download_dep(op) for op in expr.operands.values()])
+    coroutines = [download_dep(op) for op in expr.operands.values()]
+    coroutines = [x for x in coroutines if x is not None]
+    await asyncio.gather(*coroutines)
 
 
 def abspath_and_dataprep(path: pathlib.Path,
@@ -800,7 +807,7 @@ async def htmx_path_info(
 ):
 
     abspath, _ = abspath_and_dataprep(path, user=user)
-    meta = srv_utils.read_metadata(abspath, cache=cache)
+    meta = srv_utils.read_metadata(abspath, cache=cache, scratch=scratch)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
     contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
@@ -996,7 +1003,7 @@ async def htmx_upload(
     # Read file
     filename = pathlib.Path(file.filename)
     data = await file.read()
-    if filename.suffix not in {'b2frame', 'b2nd'}:
+    if filename.suffix not in {'.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f'{filename}.b2frame'
