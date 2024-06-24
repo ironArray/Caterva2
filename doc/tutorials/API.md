@@ -12,7 +12,7 @@ import caterva2
 roots = caterva2.get_roots()
 ```
 
-**Note:** If the subscriber requires user authentication (and you get a `401 Unauthorized` error), you may first get an authorization cookie with `caterva2.api_utils.get_auth_cookie()`, then pass the returned cookie to API functions as the `auth_cookie` keyword argument, for instance:
+**Note:** If the subscriber requires user authentication (and you get a `401 Unauthorized` error), you may first get an authorization cookie with `caterva2.api_utils.get_auth_cookie()`, then pass the returned cookie to API functions as the `auth_cookie` keyword argument.  For instance:
 
 ```python
 cookie = caterva2.api_utils.get_auth_cookie(
@@ -116,7 +116,13 @@ First, let's create a `caterva2.Root` instance for the `foo` root (using the def
 foo = caterva2.Root('foo')
 ```
 
-**Note:** If the subscriber requires user authentication, you may provide credentials to the `Root` constructor with the `user_auth={'username': '<USER>', 'password': '<PASS>'}` keyword argument, to get authorization for further access.
+**Note:** If the subscriber requires user authentication, you may provide credentials to the `Root` constructor with the `user_auth` keyword argument, to get authorization for further access.  For instance:
+
+```python
+foo = caterva2.Root(
+    'foo',
+    user_auth={'username': 'user@example.com', 'password': 'foobar'})
+```
 
 This also takes care of subscribing to `foo` if it hasn't been done yet.  To get the list of datasets in the root, just access `foo.node_list`:
 
