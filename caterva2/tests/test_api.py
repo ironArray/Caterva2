@@ -6,6 +6,7 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import contextlib
 import pathlib
 
 import httpx
@@ -18,6 +19,19 @@ import numpy as np
 
 from .services import TEST_CATERVA2_ROOT
 from .. import api_utils
+
+
+try:
+    chdir_ctxt = contextlib.chdir
+except AttributeError:  # Python < 3.11
+    import os
+
+    @contextlib.contextmanager
+    def chdir_ctxt(path):
+        cwd = os.getcwd()
+        os.chdir(path)
+        yield
+        os.chdir(cwd)
 
 
 @pytest.fixture
@@ -162,18 +176,20 @@ def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
 def test_download_b2nd(name, services, examples_dir, sub_urlbase,
-                       sub_user, sub_jwt_cookie):
+                       sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
                        user_auth=sub_user)
     ds = myroot[name]
-    path = ds.download()
-    assert path == ds.path
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
 
     # Data contents
     example = examples_dir / name
     a = blosc2.open(example)
-    b = blosc2.open(path)
-    np.testing.assert_array_equal(a[:], b[:])
+    with chdir_ctxt(tmp_path):
+        b = blosc2.open(path)
+        np.testing.assert_array_equal(a[:], b[:])
 
     # Using 2-step download
     urlpath = ds.get_download_url()
@@ -185,17 +201,19 @@ def test_download_b2nd(name, services, examples_dir, sub_urlbase,
 
 
 def test_download_b2frame(services, examples_dir, sub_urlbase,
-                          sub_user, sub_jwt_cookie):
+                          sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, user_auth=sub_user)
     ds = myroot['ds-hello.b2frame']
-    path = ds.download()
-    assert path == ds.path
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = blosc2.open(example)
-    b = blosc2.open(path)
-    assert a[:] == b[:]
+    with chdir_ctxt(tmp_path):
+        b = blosc2.open(path)
+        assert a[:] == b[:]
 
     # Using 2-step download
     urlpath = ds.get_download_url()
@@ -227,18 +245,20 @@ def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
 
 
 def test_download_regular_file(services, examples_dir, sub_urlbase,
-                               sub_user, sub_jwt_cookie):
+                               sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
                        user_auth=sub_user)
     ds = myroot['README.md']
-    path = ds.download()
-    assert path == ds.path
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = open(example).read()
-    b = open(path).read()
-    assert a[:] == b[:]
+    with chdir_ctxt(tmp_path):
+        b = open(path).read()
+        assert a[:] == b[:]
 
     # Using 2-step download
     urlpath = ds.get_download_url()
