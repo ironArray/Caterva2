@@ -15,8 +15,8 @@ cat2cli [GENERIC_OPTION...] COMMAND [COMMAND_OPTION...] COMMAND_ARGUMENTS...
 
 Another relevant generic option besides `--help` is `--subscriber`, which overrides the base of subscriber URLs used by default.  It should be a slash-terminated HTTP(S) URL, for example `http://sub.edu.example.org:3126/`.
 
-`cat2cli` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the `--conf` option).  Currently, it may only get the subscriber address from there (`http` setting in `[subscriber]` section).  Command-line options override settings read from the configuration file.
-
 `--help` is also available as a command option which shows the options and arguments accepted by that command (e.g. `cat2cli roots --help`).  Another command option is `--json`, which forces the output of commands that accept it to be in JSON format, as that may be more amenable for parsing by other programs.
+
+`cat2cli` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the generic `--conf` option).  Currently, it may only get the subscriber address from there (`http` setting in `[subscriber]` section).  Command-line options override settings read from the configuration file.
 
 For a short tutorial on `cat2cli`, see [](Using-the-command-line-client).
