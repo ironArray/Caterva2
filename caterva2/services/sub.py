@@ -831,6 +831,7 @@ async def htmx_path_info(
         "path": path,
         "meta": meta,
         "display": display,
+        "scratch": path.parts[0] == '@scratch',
     }
 
     # XXX
@@ -977,18 +978,19 @@ async def htmx_command(
         return error(str(exc))
 
     # Redirect to display new dataset
-    response = JSONResponse('OK')
-
     url = make_url(request, "html_home", path=result_path)
-    query = furl.furl(hx_current_url).query
+    return htmx_redirect(hx_current_url, url)
+
+
+def htmx_redirect(current_url, target_url):
+    response = JSONResponse('OK')
+    query = furl.furl(current_url).query
     roots = query.params.getlist('roots')
     if '@scratch' not in roots:
         query = query.add({'roots': '@scratch'})
-    url = f'{url}?{query.encode()}'
 
-    response.headers['HX-Redirect'] = url
+    response.headers['HX-Redirect'] = f'{target_url}?{query.encode()}'
     return response
-
 
 @app.post("/htmx/upload/")
 async def htmx_upload(
@@ -1019,18 +1021,33 @@ async def htmx_upload(
         dst.write(data)
 
     # Redirect to display new dataset
-    response = JSONResponse('OK')
-
     path = f'@scratch/{filename}'
     url = make_url(request, "html_home", path=path)
-    query = furl.furl(hx_current_url).query
-    roots = query.params.getlist('roots')
-    if '@scratch' not in roots:
-        query = query.add({'roots': '@scratch'})
-    url = f'{url}?{query.encode()}'
+    return htmx_redirect(hx_current_url, url)
 
-    response.headers['HX-Redirect'] = url
-    return response
+
+@app.delete("/htmx/delete/{path:path}", response_class=HTMLResponse)
+async def htmx_delete(
+    request: Request,
+    # Path parameters
+    path: pathlib.Path,
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user: db.User = Depends(current_active_user),
+):
+
+    parts = list(path.parts)
+    assert parts[0] == '@scratch'
+
+    # Remove
+    parts[0] = str(user.id)
+    path = pathlib.Path(*parts)
+    (scratch / path).unlink()
+
+    # Redirect to home
+    url = make_url(request, "html_home")
+    return htmx_redirect(hx_current_url, url)
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)
