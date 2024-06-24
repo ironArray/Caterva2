@@ -4,18 +4,12 @@ To follow these instructions, make sure that you have started test Caterva2 serv
 
 ## The top level client API
 
-Let's try Caterva2's top level client API (fully described in [](ref-API-top-level)).  Run your Python interpreter and enter:
+Let's try Caterva2's top level client API (fully described in [](ref-API-top-level)) against the default subscriber at `http://localhost:8002/` (you may specify a different one via the `urlbase` argument) .  Run your Python interpreter and enter:
 
 ```python
 import caterva2
 
 roots = caterva2.get_roots()
-```
-
-We just connected to the default subscriber at `localhost:8002` (you may specify a different one as an argument) and asked about all roots known by the broker.  If you print `roots` you'll see a dictionary with a `foo` entry:
-
-```python
-{'foo': {'name': 'foo', 'http': 'localhost:8001', 'subscribed': None}}
 ```
 
 **Note:** If the subscriber requires user authentication (and you get a `401 Unauthorized` error), you may first get an authorization cookie with `caterva2.api_utils.get_auth_cookie()`, then pass the returned cookie to API functions as the `auth_cookie` keyword argument, for instance:
@@ -25,6 +19,12 @@ cookie = caterva2.api_utils.get_auth_cookie(
     'http://localhost:8002/',
     {'username': 'user@example.com', 'password': 'foobar'})
 roots = caterva2.get_roots(auth_cookie=cookie)
+```
+
+We just connected to the subscriber and asked about all roots known by the broker.  If you print `roots` you'll see a dictionary with a `foo` entry:
+
+```python
+{'foo': {'name': 'foo', 'http': 'localhost:8001', 'subscribed': None}}
 ```
 
 Besides its name, it contains the address of the publisher providing it, and an indication that we're not subscribed to it.  Getting a list of datasets in that root with `caterva2.get_list('foo')` will fail with `404 Not Found`.  So let's try again by first subscribing to it:
