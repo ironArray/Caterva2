@@ -13,7 +13,7 @@
 <!--- Compute --->
 
 {% if user %}
-<form class="mt-1" hx-post="{{ cmd_url }}" hx-target="#meta">
+<form class="mt-1" hx-post="{{ cmd_url }}">
     <div class="d-flex">
         <input class="form-control me-2" name="command" type="text"
                placeholder="Prompt" aria-label="Prompt" value="">

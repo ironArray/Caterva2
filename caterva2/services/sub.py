@@ -18,7 +18,7 @@ import typing
 from collections.abc import Awaitable, Callable
 
 # FastAPI
-from fastapi import Depends, FastAPI, Form, Request, responses
+from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -576,13 +576,22 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     var_dict = {}
     for var in vars:
         path = operands[var]
-        var_dict[var] = blosc2.open(cache / path, mode="r")
+
+        # Detect @scratch
+        path = pathlib.Path(path)
+        if path.parts[0] == '@scratch':
+            abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+        else:
+            abspath = cache / path
+
+        var_dict[var] = blosc2.open(abspath, mode="r")
 
     # Create the lazy expression dataset
     arr = eval(expr, var_dict)
     if not isinstance(arr, blosc2.LazyExpr):
         cname = type(arr).__name__
         raise TypeError(f"Evaluates to {cname} instead of lazy expression")
+
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / name}.b2nd', mode="w")
@@ -619,6 +628,8 @@ async def lazyexpr(
         raise error(f'Invalid name or expression: {exc}')
     except KeyError as ke:
         raise error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+    except RuntimeError as exc:
+        raise error(str(exc))
 
     return result_path
 
@@ -951,6 +962,8 @@ async def htmx_command(
         return error(f'Invalid expression: {te}')
     except KeyError as ke:
         return error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+    except RuntimeError as exc:
+        return error(str(exc))
 
     # Redirect to display new dataset
     response = JSONResponse('OK')
@@ -965,6 +978,48 @@ async def htmx_command(
     response.headers['HX-Redirect'] = url
     return response
 
+
+@app.post("/htmx/upload/")
+async def htmx_upload(
+    request: Request,
+    # Body
+    file: UploadFile,
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user: db.User = Depends(current_active_user),
+):
+
+    if not user:
+        raise fastapi.HTTPException(status_code=401)  # unauthorized
+
+    # Read file
+    filename = pathlib.Path(file.filename)
+    data = await file.read()
+    if filename.suffix not in {'b2frame', 'b2nd'}:
+        schunk = blosc2.SChunk(data=data)
+        data = schunk.to_cframe()
+        filename = f'{filename}.b2frame'
+
+    # Save file
+    path = scratch / str(user.id)
+    path.mkdir(exist_ok=True, parents=True)
+    with open(path / filename, 'wb') as dst:
+        dst.write(data)
+
+    # Redirect to display new dataset
+    response = JSONResponse('OK')
+
+    path = f'@scratch/{filename}'
+    url = make_url(request, "html_home", path=path)
+    query = furl.furl(hx_current_url).query
+    roots = query.params.getlist('roots')
+    if '@scratch' not in roots:
+        query = query.add({'roots': '@scratch'})
+    url = f'{url}?{query.encode()}'
+
+    response.headers['HX-Redirect'] = url
+    return response
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)
