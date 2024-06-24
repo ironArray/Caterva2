@@ -233,8 +233,16 @@ class Root:
     """
     A root is a remote repository that can be subscribed to.
 
-    If a non-empty `user_auth` mapping is given, its items are used as data to be posted
-    for authenticating the user and get an authorization token for further requests.
+    Parameters
+    ----------
+    root : str
+        The name of the root to subscribe to.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    user_auth : dict
+        An optional mapping of fields and values to be used as data to be
+        posted for authenticating the user and get an authorization token for
+        further requests.
     """
     def __init__(self, name, urlbase=sub_urlbase_default, user_auth=None):
         urlbase, name = _format_paths(urlbase, name)
@@ -259,6 +267,16 @@ class Root:
     def __getitem__(self, node):
         """
         Get a file or dataset from the root.
+
+        Parameters
+        ----------
+        node : str
+            The path of the file or dataset.
+
+        Returns
+        -------
+        File
+            A :class:`File` or :class:`Dataset` instance.
         """
         if node.endswith((".b2nd", ".b2frame")):
             return Dataset(node, root=self.name, urlbase=self.urlbase,
@@ -271,6 +289,9 @@ class Root:
 class File:
     """
     A file is either a Blosc2 dataset or a regular file on a root repository.
+
+    This is not intended to be instantiated directly, but accessed via a
+    :class:`Root` instance instead.
 
     Parameters
     ----------
@@ -362,7 +383,7 @@ class File:
         Returns
         -------
         numpy.ndarray
-            The slice.
+            The slice of the dataset.
 
         Examples
         --------
@@ -380,11 +401,9 @@ class File:
 
     def fetch(self, slice_=None):
         """
-        Fetch a slice of a dataset.  Can specify transport serialization.
+        Fetch a slice of a dataset.
 
-        Similar to `__getitem__()` but this one lets specify whether to prefer using Blosc2
-        schunk serialization during data transport between the subscriber and the
-        client. See below.
+        Equivalent to `__getitem__()`.
 
         Parameters
         ----------
@@ -404,11 +423,11 @@ class File:
 
     def download(self):
         """
-        Download a file.
+        Download a file to storage.
 
         Returns
         -------
-        PosixPath
+        pathlib.PosixPath
             The path to the downloaded file.
 
         Examples
@@ -426,6 +445,9 @@ class File:
 class Dataset(File):
     """
     A dataset is a Blosc2 container in a file.
+
+    This is not intended to be instantiated directly, but accessed via a
+    :class:`Root` instance instead.
 
     Parameters
     ----------
