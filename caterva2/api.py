@@ -314,8 +314,6 @@ class File:
         Used to access variable-length metalayers (i.e. user attributes) for a
         file.
 
-        Examples
-        --------
         >>> root = cat2.Root('foo')
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
