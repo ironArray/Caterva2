@@ -45,6 +45,36 @@ def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
+def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    opnm = 'ds'
+    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    expression = f'{opnm} + 0'
+    operands = {opnm: oppt}
+    lxname = 'my_expr'
+
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
+                   auth_cookie=sub_jwt_cookie)
+    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
+                           auth_cookie=sub_jwt_cookie)
+    assert lxpath == f'@scratch/{lxname}.b2nd'
+
+    # Check result metadata.
+    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert lxinfo['shape'] == opinfo['shape']
+    assert lxinfo['dtype'] == opinfo['dtype']
+    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
+    assert lxinfo['operands'] == dict(o0=operands[opnm])
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:], b[:])
+
+
 def test_root(services, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
                        user_auth=sub_user)

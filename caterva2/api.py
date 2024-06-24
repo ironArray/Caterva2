@@ -193,6 +193,32 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
                                   auth_cookie=auth_cookie)
 
 
+def lazyexpr(name, expression, operands,
+             urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Create a lazy expression dataset in scratch space.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset to be created (without extension).
+    expression : str
+        The expression to be evaluated.  It must result in a lazy expression.
+    operands : dictionary of strings mapping to strings
+        The variables used in the expression and which dataset paths they
+        refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
+    urlbase, _ = _format_paths(urlbase)
+    expr = dict(name=name, expression=expression, operands=operands)
+    return api_utils.post(f'{urlbase}api/lazyexpr/', expr,
+                          auth_cookie=auth_cookie)
+
+
 class Root:
     """
     A root is a remote repository that can be subscribed to.

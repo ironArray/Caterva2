@@ -534,6 +534,95 @@ async def fetch_data(
                                        media_type='application/octet-stream')
 
 
+def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
+                  user: db.User) -> str:
+    """
+    Create a lazy expression dataset in scratch space.
+
+    This may raise exceptions if there are problems parsing the dataset name
+    or expression, or if the expression refers to operands which have not been
+    defined.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset to be created (without extension).
+    expr : str
+        The expression to be evaluated.  It must result in a lazy expression.
+    operands : dictionary of strings mapping to strings
+        The variables used in the expression and which dataset paths they
+        refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
+
+    if not user:
+        raise fastapi.HTTPException(
+            status_code=401,  # unauthorized
+            detail="Creating lazy expressions requires enabling user authentication",
+        )
+
+    # Parse expression
+    name = name.strip()
+    expr = expr.strip()
+    if not name or not expr:
+        raise ValueError("Name or expression should not be empty")
+    vars = ne.NumExpr(expr).input_names
+
+    # Open expression datasets
+    var_dict = {}
+    for var in vars:
+        path = operands[var]
+        var_dict[var] = blosc2.open(cache / path, mode="r")
+
+    # Create the lazy expression dataset
+    arr = eval(expr, var_dict)
+    if not isinstance(arr, blosc2.LazyExpr):
+        cname = type(arr).__name__
+        raise TypeError(f"Evaluates to {cname} instead of lazy expression")
+    path = scratch / str(user.id)
+    path.mkdir(exist_ok=True, parents=True)
+    arr.save(urlpath=f'{path / name}.b2nd', mode="w")
+
+    return f'@scratch/{name}.b2nd'
+
+
+@app.post('/api/lazyexpr/')
+async def lazyexpr(
+    expr: models.NewLazyExpr,
+    user: db.User = Depends(current_active_user),
+) -> str:
+    """
+    Create a lazy expression dataset in scratch space.
+
+    The JSON request body must contain a "name" for the dataset to be created
+    (without extension), an "expression" to be evaluated, which must result in
+    a lazy expression, and an "operands" object which maps variable names used
+    in the expression to the dataset paths that they refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
+
+    def error(msg):
+        return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
+
+    try:
+        result_path = make_lazyexpr(expr.name, expr.expression, expr.operands,
+                                    user)
+    except (SyntaxError, ValueError, TypeError) as exc:
+        raise error(f'Invalid name or expression: {exc}')
+    except KeyError as ke:
+        raise error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+
+    return result_path
+
+
 #
 # HTML interface
 #
@@ -848,43 +937,25 @@ async def htmx_command(
     user: db.User = Depends(current_active_user),
 ):
 
-    if not user:
-        raise fastapi.HTTPException(status_code=401)  # unauthorized
-
     def error(msg):
         context = {'error': msg}
         return templates.TemplateResponse(request, "error.html", context, status_code=400)
 
-    # Parse command
+    operands = dict(zip(names, paths))
     try:
         result_name, expr = command.split('=')
-        result_name = result_name.strip()
-        expr = expr.strip()
-        vars = ne.NumExpr(expr).input_names
+        result_path = make_lazyexpr(result_name, expr, operands, user)
     except (SyntaxError, ValueError):
         return error('Invalid syntax: expected <varname> = <expression>')
-
-    # Open expression datasets
-    var_dict = {}
-    for var in vars:
-        try:
-            key = names.index(var)
-        except ValueError:
-            return error(f'Expression error: {var} is not in the list of available datasets')
-        path = paths[key]
-        var_dict[var] = blosc2.open(cache / path, mode="r")
-
-    # Create the lazy expression dataset
-    arr = eval(expr, var_dict)
-    path = scratch / str(user.id)
-    path.mkdir(exist_ok=True, parents=True)
-    arr.save(urlpath=f'{path / result_name}.b2nd', mode="w")
+    except TypeError as te:
+        return error(f'Invalid expression: {te}')
+    except KeyError as ke:
+        return error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
 
     # Redirect to display new dataset
     response = JSONResponse('OK')
 
-    path = f'@scratch/{result_name}.b2nd'
-    url = make_url(request, "html_home", path=path)
+    url = make_url(request, "html_home", path=result_path)
     query = furl.furl(hx_current_url).query
     roots = query.params.getlist('roots')
     if '@scratch' not in roots:
