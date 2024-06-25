@@ -897,6 +897,7 @@ async def htmx_path_view(
         sizes = [min(dim, 10) if i in view_dims else 1 for i, dim in enumerate(shape)]
 
     inputs = []
+    tags = []
     for i, (start, size, size_max) in enumerate(zip(index, sizes, shape)):
         mod = size_max % size
         start_max = size_max - (mod or size)
@@ -907,6 +908,8 @@ async def htmx_path_view(
             'size_max': size_max,
             'with_size': i in view_dims,
         })
+        if inputs[-1]['with_size']:
+            tags.append([k for k in range(start, min(start+size, size_max))])
     if has_ndfields:
         cols = list(arr.fields.keys())
         fields = fields or cols[:5]
@@ -938,8 +941,8 @@ async def htmx_path_view(
             arr = [arr[i:i+isize]]
         else:
             arr = [[arr[()]]]
-        rows = list(arr)
         cols = None
+        rows = [tags[-1]] + list(arr)
 
     # Render
     context = {
@@ -948,6 +951,7 @@ async def htmx_path_view(
         "rows": rows,
         "cols": cols,
         "fields": fields,
+        "tags": tags if len(tags) == 0 else tags[0],
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 
