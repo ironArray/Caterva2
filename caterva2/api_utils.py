@@ -55,6 +55,25 @@ def parse_slice(string):
 
 
 def get_auth_cookie(urlbase, user_auth):
+    """
+    Authenticate to a subscriber as a user and get an authorization cookie.
+
+    Authentication fields will usually be ``username`` and ``password``.
+
+    Parameters
+    ----------
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    user_auth : dict
+        A mapping of fields and values used as data to be posted for
+        authenticating the user.
+
+    Returns
+    -------
+    str
+        An authentication token that may be used as a cookie in further
+        requests to the subscriber.
+    """
     if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
         user_auth = user_auth._asdict()
     resp = httpx.post(f'{urlbase}auth/jwt/login', data=user_auth)
