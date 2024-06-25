@@ -18,7 +18,7 @@ import typing
 from collections.abc import Awaitable, Callable
 
 # FastAPI
-from fastapi import Depends, FastAPI, Form, Request, responses
+from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -406,7 +406,7 @@ async def partial_download(abspath, path, slice_=None):
                 await download_chunk(path, schunk, n)
 
 
-async def download_expr_deps(abspath):
+async def download_expr_deps(expr):
     """
     Download the datasets that the lazy expression dataset depends on.
 
@@ -420,11 +420,15 @@ async def download_expr_deps(abspath):
     None
         When finished, expression dependencies are available in cache.
     """
-    def download_dep(ndarr):
-        path = pathlib.Path(ndarr.schunk.urlpath)
-        return partial_download(path, str(path.relative_to(cache)))
-    expr = blosc2.open(abspath)
-    await asyncio.gather(*[download_dep(op) for op in expr.operands.values()])
+    coroutines = []
+    for ndarr in expr.operands.values():
+        relpath = srv_utils.get_relpath(ndarr, cache, scratch)
+        if relpath.parts[0] != '@scratch':
+            abspath = pathlib.Path(ndarr.schunk.urlpath)
+            coroutine = partial_download(abspath, str(relpath))
+            coroutines.append(coroutine)
+
+    await asyncio.gather(*coroutines)
 
 
 def abspath_and_dataprep(path: pathlib.Path,
@@ -444,13 +448,20 @@ def abspath_and_dataprep(path: pathlib.Path,
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
-        async def dataprep():
-            return await download_expr_deps(abspath)
+        expr = blosc2.open(abspath)
+        if isinstance(expr, blosc2.LazyArray):
+            async def dataprep():
+                return await download_expr_deps(expr)
+        else:
+            async def dataprep():
+                pass
+
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
         async def dataprep():
             return await partial_download(abspath, str(path), slice_)
+
     return (abspath, dataprep)
 
 
@@ -576,13 +587,22 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     var_dict = {}
     for var in vars:
         path = operands[var]
-        var_dict[var] = blosc2.open(cache / path, mode="r")
+
+        # Detect @scratch
+        path = pathlib.Path(path)
+        if path.parts[0] == '@scratch':
+            abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+        else:
+            abspath = cache / path
+
+        var_dict[var] = blosc2.open(abspath, mode="r")
 
     # Create the lazy expression dataset
     arr = eval(expr, var_dict)
     if not isinstance(arr, blosc2.LazyExpr):
         cname = type(arr).__name__
         raise TypeError(f"Evaluates to {cname} instead of lazy expression")
+
     path = scratch / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / name}.b2nd', mode="w")
@@ -619,6 +639,8 @@ async def lazyexpr(
         raise error(f'Invalid name or expression: {exc}')
     except KeyError as ke:
         raise error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+    except RuntimeError as exc:
+        raise error(str(exc))
 
     return result_path
 
@@ -788,8 +810,12 @@ async def htmx_path_info(
     user: db.User = Depends(current_active_user),
 ):
 
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    meta = srv_utils.read_metadata(abspath, cache=cache)
+    try:
+        abspath, _ = abspath_and_dataprep(path, user=user)
+    except FileNotFoundError:
+        return htmx_error(request, 'FileNotFoundError: missing operand(s)')
+
+    meta = srv_utils.read_metadata(abspath, cache=cache, scratch=scratch)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
     contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
@@ -809,6 +835,7 @@ async def htmx_path_info(
         "path": path,
         "meta": meta,
         "display": display,
+        "scratch": path.parts[0] == '@scratch',
     }
 
     # XXX
@@ -870,6 +897,7 @@ async def htmx_path_view(
         sizes = [min(dim, 10) if i in view_dims else 1 for i, dim in enumerate(shape)]
 
     inputs = []
+    tags = []
     for i, (start, size, size_max) in enumerate(zip(index, sizes, shape)):
         mod = size_max % size
         start_max = size_max - (mod or size)
@@ -880,6 +908,8 @@ async def htmx_path_view(
             'size_max': size_max,
             'with_size': i in view_dims,
         })
+        if inputs[-1]['with_size']:
+            tags.append([k for k in range(start, min(start+size, size_max))])
     if has_ndfields:
         cols = list(arr.fields.keys())
         fields = fields or cols[:5]
@@ -911,8 +941,8 @@ async def htmx_path_view(
             arr = [arr[i:i+isize]]
         else:
             arr = [[arr[()]]]
-        rows = list(arr)
         cols = None
+        rows = [tags[-1]] + list(arr)
 
     # Render
     context = {
@@ -921,6 +951,7 @@ async def htmx_path_view(
         "rows": rows,
         "cols": cols,
         "fields": fields,
+        "tags": tags if len(tags) == 0 else tags[0],
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 
@@ -937,34 +968,97 @@ async def htmx_command(
     user: db.User = Depends(current_active_user),
 ):
 
-    def error(msg):
-        context = {'error': msg}
-        return templates.TemplateResponse(request, "error.html", context, status_code=400)
-
     operands = dict(zip(names, paths))
     try:
         result_name, expr = command.split('=')
         result_path = make_lazyexpr(result_name, expr, operands, user)
     except (SyntaxError, ValueError):
-        return error('Invalid syntax: expected <varname> = <expression>')
+        return htmx_error(request,
+                          'Invalid syntax: expected <varname> = <expression>')
     except TypeError as te:
-        return error(f'Invalid expression: {te}')
+        return htmx_error(request, f'Invalid expression: {te}')
     except KeyError as ke:
-        return error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+        return htmx_error(request,
+                          f'Expression error: {ke.args[0]} is not in the list of available datasets')
+    except RuntimeError as exc:
+        return htmx_error(request, str(exc))
 
     # Redirect to display new dataset
-    response = JSONResponse('OK')
-
     url = make_url(request, "html_home", path=result_path)
-    query = furl.furl(hx_current_url).query
+    return htmx_redirect(hx_current_url, url)
+
+
+def htmx_error(request, msg):
+    context = {'error': msg}
+    return templates.TemplateResponse(request, "error.html", context, status_code=400)
+
+
+def htmx_redirect(current_url, target_url):
+    response = JSONResponse('OK')
+    query = furl.furl(current_url).query
     roots = query.params.getlist('roots')
     if '@scratch' not in roots:
         query = query.add({'roots': '@scratch'})
-    url = f'{url}?{query.encode()}'
 
-    response.headers['HX-Redirect'] = url
+    response.headers['HX-Redirect'] = f'{target_url}?{query.encode()}'
     return response
 
+@app.post("/htmx/upload/")
+async def htmx_upload(
+    request: Request,
+    # Body
+    file: UploadFile,
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user: db.User = Depends(current_active_user),
+):
+
+    if not user:
+        raise fastapi.HTTPException(status_code=401)  # unauthorized
+
+    # Read file
+    filename = pathlib.Path(file.filename)
+    data = await file.read()
+    if filename.suffix not in {'.b2frame', '.b2nd'}:
+        schunk = blosc2.SChunk(data=data)
+        data = schunk.to_cframe()
+        filename = f'{filename}.b2frame'
+
+    # Save file
+    path = scratch / str(user.id)
+    path.mkdir(exist_ok=True, parents=True)
+    with open(path / filename, 'wb') as dst:
+        dst.write(data)
+
+    # Redirect to display new dataset
+    path = f'@scratch/{filename}'
+    url = make_url(request, "html_home", path=path)
+    return htmx_redirect(hx_current_url, url)
+
+
+@app.delete("/htmx/delete/{path:path}", response_class=HTMLResponse)
+async def htmx_delete(
+    request: Request,
+    # Path parameters
+    path: pathlib.Path,
+    # Headers
+    hx_current_url: srv_utils.HeaderType = None,
+    # Depends
+    user: db.User = Depends(current_active_user),
+):
+
+    parts = list(path.parts)
+    assert parts[0] == '@scratch'
+
+    # Remove
+    parts[0] = str(user.id)
+    path = pathlib.Path(*parts)
+    (scratch / path).unlink()
+
+    # Redirect to home
+    url = make_url(request, "html_home")
+    return htmx_redirect(hx_current_url, url)
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)

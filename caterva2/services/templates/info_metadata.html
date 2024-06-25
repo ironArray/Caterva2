@@ -1,3 +1,14 @@
+<p class="d-flex gap-4">
+    <a href="/api/fetch/{{ path }}" class="text-decoration-none"><i class="fa-solid fa-download"></i> Download</a>
+    {% if scratch %}
+    <a href="#" class="text-decoration-none link-danger"
+        hx-delete="/htmx/delete/{{path}}" hx-confirm="Do you confirm deletion?"
+    >
+        <i class="fa-solid fa-trash"></i> Delete
+    </a>
+    {% endif %}
+</p>
+
 <table class="table table-sm">
     <!---  Adapt meta to desired output --->
     {% if meta.schunk %}
@@ -63,15 +74,13 @@
     {% endfor %}
 </table>
 
-<h4>VLmeta (user attributes):</h4>
 {% if meta.schunk %}
     {% set vlmeta = meta.schunk.vlmeta %}
 {% else %}
     {% set vlmeta = meta.vlmeta %}
 {% endif %}
-{% if not vlmeta %}
-    (none)
-{% else %}
+{% if vlmeta %}
+    <h4>VLmeta (user attributes)</h4>
     <table class="table table-sm">
         {% for key, value in vlmeta.items() %}
             <tr>
@@ -81,7 +90,3 @@
         {% endfor %}
     </table>
 {% endif %}
-
-<h4>Download</h4>
-
-<a href="/api/fetch/{{ path }}">Download</a>
