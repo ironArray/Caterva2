@@ -132,6 +132,14 @@ env CATERVA2_AUTH_SECRET=c2sikrit cat2sub
 
 Then users will need to register via the [Web client](Using-the-Web-client).
 
+Of course, use of HTTPS is very encouraged in this scenario, e.g. by placing the subscriber behind a reverse proxy, with a configuration like this:
+
+```toml
+[subscriber]
+http = "localhost:8002"  # reverse proxy target
+url = "https://sub.edu.example.org:3126/"  # reverse proxy address
+```
+
 ## Client setup
 
 Clients at the example workstation need to know the address of the subscriber that they will use.
