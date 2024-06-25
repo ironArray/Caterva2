@@ -39,6 +39,28 @@ scale: 50%
 Viewing metadata #TODO update
 ```
 
-Clicking on "Download" will allow you to save the whole dataset to your computer.
+Clicking on "Download" will allow you to save the whole dataset to your computer.  Depending on the dataset, you will also get "View" or "Display" tabs next to the "Metadata" tab that we just saw.  Click on the "View" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
+
+```{figure} images/web-view.png
+---
+class: with-border
+scale: 50%
+---
+
+Viewing data #TODO update
+```
+
+The "Display" tab renders certain files and datasets according to their declared or guessed content type.  Try entering `.md` in the search box, clicking on `foo/README.md`, then on the "Display" tab.  The dataset was recognized as a text file with Markdown-formatted content, which is rendered here.
+
+```{figure} images/web-display-md.png
+---
+class: with-border
+scale: 50%
+---
+
+Displaying Markdown text #TODO
+```
+
+Other datasets with a dedicated display are tomographies, i.e. stacks of images stored as 3D (greyscale) or 4D (color) arrays of unsigned integers.  Display support for other kinds of datasets may be added in the future.
 
 The Web client is a work in progress, and it will be improved in future versions.
