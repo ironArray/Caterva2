@@ -973,13 +973,15 @@ async def htmx_command(
         result_name, expr = command.split('=')
         result_path = make_lazyexpr(result_name, expr, operands, user)
     except (SyntaxError, ValueError):
-        return htmx_error('Invalid syntax: expected <varname> = <expression>')
+        return htmx_error(request,
+                          'Invalid syntax: expected <varname> = <expression>')
     except TypeError as te:
-        return htmx_error(f'Invalid expression: {te}')
+        return htmx_error(request, f'Invalid expression: {te}')
     except KeyError as ke:
-        return htmx_error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+        return htmx_error(request,
+                          f'Expression error: {ke.args[0]} is not in the list of available datasets')
     except RuntimeError as exc:
-        return htmx_error(str(exc))
+        return htmx_error(request, str(exc))
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
