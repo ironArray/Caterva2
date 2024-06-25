@@ -28,7 +28,7 @@ scale: 50%
 Searching for datasets #TODO update
 ```
 
-Choosing a dataset will show its metadata.  Click on `foo/dir1/ds-2d.b2nd`, and you shall get the full name of the dataset plus the same metadata that we got from clients in previous examples, all in a nicely formatted table.
+Choosing a dataset will show its metadata.  Click on `foo/dir1/ds-2d.b2nd`, and you shall get the full name of the dataset, a download link for you to save the whole dataset to your computer, plus the same metadata that we got from clients in previous examples, all in a nicely formatted table.
 
 ```{figure} images/web-metadata.png
 ---
@@ -39,7 +39,7 @@ scale: 50%
 Viewing metadata #TODO update
 ```
 
-Clicking on "Download" will allow you to save the whole dataset to your computer.  Depending on the dataset, you will also get "View" or "Display" tabs next to the "Metadata" tab that we just saw.  Click on the "View" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
+Depending on the dataset, you will also get "View" or "Display" tabs next to the "Metadata" tab that we just saw.  Click on the "View" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
 
 ```{figure} images/web-view.png
 ---
