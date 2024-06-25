@@ -425,7 +425,7 @@ async def download_expr_deps(expr):
         relpath = srv_utils.get_relpath(ndarr, cache, scratch)
         if relpath.parts[0] != '@scratch':
             abspath = pathlib.Path(ndarr.schunk.urlpath)
-            coroutine = partial_download(abspath, relpath)
+            coroutine = partial_download(abspath, str(relpath))
             coroutines.append(coroutine)
 
     await asyncio.gather(*coroutines)
