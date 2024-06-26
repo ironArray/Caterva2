@@ -28,29 +28,29 @@ scale: 50%
 Searching for datasets #TODO update
 ```
 
-Choosing a dataset will show its metadata.  Click on `foo/dir1/ds-2d.b2nd`, and you shall get the full name of the dataset, a download link for you to save the whole dataset to your computer, plus the same metadata that we got from clients in previous examples, all in a nicely formatted table.
+Click on `foo/dir1/ds-2d.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
 
-```{figure} images/web-metadata.png
+```{figure} images/web-main.png
 ---
 class: with-border
 scale: 50%
 ---
 
-Viewing metadata #TODO update
+Viewing metadata #TODO
 ```
 
-Depending on the dataset, you will also get "View" or "Display" tabs next to the "Metadata" tab that we just saw.  Click on the "View" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
+Depending on the dataset, you will also get "Data" and other tabs next to the "Main" tab that we just saw.  Click on the "Data" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
 
-```{figure} images/web-view.png
+```{figure} images/web-data.png
 ---
 class: with-border
 scale: 50%
 ---
 
-Viewing data #TODO update
+Viewing data #TODO
 ```
 
-The "Display" tab renders certain files and datasets according to their declared or guessed content type.  Try entering `.md` in the search box, clicking on `foo/README.md`, then on the "Display" tab.  The dataset was recognized as a text file with Markdown-formatted content, which is rendered here.
+Other tabs render certain files and datasets according to their declared or guessed content type.  Try entering `.md` in the search box, clicking on `foo/README.md`, then on the "Display" tab.  The dataset was recognized as a text file with Markdown-formatted content, which is rendered here.
 
 ```{figure} images/web-display-md.png
 ---
