@@ -46,8 +46,12 @@
            ondragleave="dragleaveHandler(event)"
     >
         <i class="fa-solid fa-upload fa-2xl"></i>
+        {% include 'loading.html' %}
     </label>
-    <input type="file" name="file" id="id_file" hx-post="/htmx/upload/" hx-encoding="multipart/form-data">
+    <input type="file" name="file" id="id_file"
+           hx-post="/htmx/upload/" hx-encoding="multipart/form-data"
+           hx-indicator="#id_file_upload label"
+    >
 </div>
 {% endif %}
 

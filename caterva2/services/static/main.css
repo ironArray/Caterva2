@@ -101,3 +101,7 @@ body {
     height: 1;
     opacity: 0;
 }
+
+#id_file_upload .htmx-request i {
+    display: none;
+}
