@@ -17,7 +17,7 @@ Initial view of the roots known to the subscriber #TODO update
 
 Check `foo`, and you shall also get the list of datasets in the root, along with a search box.  Enabling an unsubscribed root will subscribe to it automatically.
 
-Entering a string in the search box allows you to narrow the list of datasets down to those whose name contains that string.  Try entering `ds-` and clicking on "Search" to limit the list to example datasets (tip: entering `.b2` may help filtering out non-Blosc2 datasets).
+Entering a string in the search box allows you to narrow the list of datasets down to those whose name contains that string, which is specially useful if you have many datasets.  Try entering `ds-` and clicking on "Search" to limit the list to example datasets (tip: entering `.b2` may help filtering out non-Blosc2 datasets).
 
 ```{figure} images/web-dataset-search.png
 ---
