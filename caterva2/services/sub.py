@@ -912,6 +912,7 @@ async def htmx_path_view(
         })
         if inputs[-1]['with_size']:
             tags.append([k for k in range(start, min(start+size, size_max))])
+
     if has_ndfields:
         cols = list(arr.fields.keys())
         fields = fields or cols[:5]
@@ -933,18 +934,20 @@ async def htmx_path_view(
         rows += [[row[i] for i in idxs] for row in arr]
     else:
         # Get array view
+        cols = None
         if ndims >= 2:
             arr = arr[index[:-2]]
             i, isize = index[-2], sizes[-2]
             j, jsize = index[-1], sizes[-1]
             arr = arr[i:i+isize, j:j+jsize]
+            rows = [tags[-1]] + list(arr)
         elif ndims == 1:
             i, isize = index[0], sizes[0]
             arr = [arr[i:i+isize]]
+            rows = [tags[-1]] + list(arr)
         else:
             arr = [[arr[()]]]
-        cols = None
-        rows = [tags[-1]] + list(arr)
+            rows = list(arr)
 
     # Render
     context = {
