@@ -2,18 +2,18 @@
 
 <ul class="nav nav-tabs" id="tabs">
     <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link active" id="metadata-tab"
-                data-bs-toggle="tab" data-bs-target="#metadata-tab-pane"
-                role="tab" aria-controls="metadata-tab-pane" aria-selected="true">
-            Metadata
+        <button type="button" class="nav-link active" id="main-tab"
+                data-bs-toggle="tab" data-bs-target="#main-tab-pane"
+                role="tab" aria-controls="main-tab-pane" aria-selected="true">
+            Main
         </button>
     </li>
     {% if view_url %}
     <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link" id="view-tab"
-                data-bs-toggle="tab" data-bs-target="#view-tab-pane"
-                role="tab" aria-controls="view-tab-pane" aria-selected="true">
-            View
+        <button type="button" class="nav-link" id="data-tab"
+                data-bs-toggle="tab" data-bs-target="#data-tab-pane"
+                role="tab" aria-controls="data-tab-pane" aria-selected="true">
+            Data
         </button>
     </li>
     {% endif %}
@@ -22,21 +22,21 @@
             <button type="button" class="nav-link" id="display-tab"
                     data-bs-toggle="tab" data-bs-target="#display-tab-pane"
                     role="tab" aria-controls="display-tab-pane" aria-selected="false">
-                Display
+                {{ display.label }}
             </button>
         </li>
     {% endif %}
 </ul>
 
 <div class="tab-content" id="myTabContent">
-    <div class="tab-pane fade show active" id="metadata-tab-pane" tabindex="0"
-         role="tabpanel" aria-labelledby="tab-metadata">
+    <div class="tab-pane fade show active" id="main-tab-pane" tabindex="0"
+         role="tabpanel" aria-labelledby="tab-main">
         {% include 'info_metadata.html' %}
     </div>
 
     {% if view_url %}
-    <div class="tab-pane fade" id="view-tab-pane" tabindex="0"
-         role="tabpanel" aria-labelledby="tab-view">
+    <div class="tab-pane fade" id="data-tab-pane" tabindex="0"
+         role="tabpanel" aria-labelledby="tab-data">
 
         shape = {{ shape }}
 

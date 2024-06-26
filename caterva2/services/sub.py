@@ -823,10 +823,12 @@ async def htmx_path_info(
     if plugin:
         display = {
             "url": f"/plugins/{plugin.name}/display/{path}",
+            "label": plugin.label,
         }
     elif path.suffix == ".md":
         display = {
             "url": f"/markdown/{path}",
+            "label": "Display",
         }
     else:
         display = None
