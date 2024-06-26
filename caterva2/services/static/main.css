@@ -83,12 +83,13 @@ body {
     vertical-align: inherit;
 }
 
-#id_file_upload {
-}
-
 #id_file_upload label {
     border: 3px dashed gray;
     border-radius: 16px;
+}
+
+#id_file_upload.active label {
+    border-color: lightblue;
 }
 
 #id_file_upload label:hover {

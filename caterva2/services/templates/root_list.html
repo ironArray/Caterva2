@@ -40,7 +40,30 @@
 
 {% if user %}
 <div id="id_file_upload" title="Upload file to scratch">
-    <label for="id_file" role="button" class="p-4 mt-3"><i class="fa-solid fa-upload fa-2xl"></i></label>
+    <label for="id_file" role="button" class="p-4 mt-3"
+           ondrop="dropHandler(event)"
+           ondragover="dragoverHandler(event)"
+           ondragleave="dragleaveHandler(event)"
+    >
+        <i class="fa-solid fa-upload fa-2xl"></i>
+    </label>
     <input type="file" name="file" id="id_file" hx-post="/htmx/upload/" hx-encoding="multipart/form-data">
 </div>
 {% endif %}
+
+<script>
+function dropHandler(ev) {
+    ev.preventDefault();
+    const input = ev.target.closest('div').querySelector('input');
+    input.files = ev.dataTransfer.files;
+    input.dispatchEvent(new Event('change'));
+}
+function dragoverHandler(ev) {
+    ev.preventDefault();
+    ev.target.closest('div').classList.add('active');
+}
+function dragleaveHandler(ev) {
+    ev.preventDefault();
+    ev.target.closest('div').classList.remove('active');
+}
+</script>
