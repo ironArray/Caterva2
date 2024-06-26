@@ -380,27 +380,27 @@ async def partial_download(abspath, path, slice_=None):
     None
         When finished, the dataset is available in cache.
     """
-    # Build the list of chunks we need to download from the publisher
-    array, schunk = srv_utils.open_b2(abspath)
-    if slice_:
-        if not array:
-            if isinstance(slice_[0], slice):
-                # TODO: support schunk.nitems to avoid computations like these
-                nitems = schunk.nbytes // schunk.typesize
-                start, stop, _ = slice_[0].indices(nitems)
-            else:
-                start, stop = slice_[0], slice_[0] + 1
-            # get_slice_nchunks() does not support slices for schunks yet
-            # TODO: support slices for schunks in python-blosc2
-            nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
-        else:
-            nchunks = blosc2.get_slice_nchunks(array, slice_)
-    else:
-        nchunks = range(schunk.nchunks)
-
-    # Fetch the chunks
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
+        # Build the list of chunks we need to download from the publisher
+        array, schunk = srv_utils.open_b2(abspath)
+        if slice_:
+            if not array:
+                if isinstance(slice_[0], slice):
+                    # TODO: support schunk.nitems to avoid computations like these
+                    nitems = schunk.nbytes // schunk.typesize
+                    start, stop, _ = slice_[0].indices(nitems)
+                else:
+                    start, stop = slice_[0], slice_[0] + 1
+                # get_slice_nchunks() does not support slices for schunks yet
+                # TODO: support slices for schunks in python-blosc2
+                nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
+            else:
+                nchunks = blosc2.get_slice_nchunks(array, slice_)
+        else:
+            nchunks = range(schunk.nchunks)
+
+        # Fetch the chunks
         for n in nchunks:
             if not srv_utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
