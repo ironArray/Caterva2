@@ -73,7 +73,33 @@ You may find a richer variety of example datasets in the demo Caterva2 subscribe
 
 ## User authentication and scratch space
 
-TODO
+Up until now we've seen the read-only operations that may be performed on a Caterva2 subscriber.  However, it also allows some useful writing operations that we'll see next.  These require user authentication to be enabled at the subscriber.
+
+First, stop the current services and start new ones while setting the `CATERVA2_AUTH_SECRET` environment variable, as detailed in [](Launching-Caterva2-services), then reload <http://localhost:8002/> in your browser (or click on the Caterva2 logo).  You'll be greeted with a login screen; enter `user@example.com` as email address and `foobar` as password, then click on "Login".
+
+```{figure} images/web-login.png
+---
+class: with-border
+scale: 50%
+---
+
+The login screen #TODO
+```
+
+The main Web client screen has some changes now: besides the indication of the logged in user, a new root called `@scratch` just appeared, along with an upload icon.
+
+This `@scratch` is a pseudo-root offered to each user by the subscriber (i.e. it doesn't come from a publisher).  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own scratch space.
+
+Check both `foo` and `@scratch`.  The resulting list of datasets is also slightly different, with an extra input box and each listed dataset being accompanied by a short tag.  Let's see the new stuff that you can do with all these!
+
+```{figure} images/web-user.png
+---
+class: with-border
+scale: 50%
+---
+
+The main screen showing new user features #TODO
+```
 
 ## Uploading datasets
 
