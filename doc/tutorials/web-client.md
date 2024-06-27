@@ -1,7 +1,11 @@
 (Using-the-Web-client)=
 # Using the Web client
 
-Caterva2 subscribers also offer a way to browse roots and datasets without a dedicated client program. At the HTTP root of a subscriber, you may find a Web client that provides some basic functionality.  Make sure that test Caterva2 services are running (see [](Launching-Caterva2-services)) and point your Web browser to <http://localhost:8002/>. You shall see a list of roots known to the subscriber, which only includes `foo` in our case:
+Caterva2 subscribers also offer a way to browse roots and datasets without a dedicated client program.  At the HTTP root of a subscriber, you may find a Web client that provides some basic functionality.  This client is a work in progress, and it will be improved in future versions.
+
+## Browsing datasets
+
+First, make sure that test Caterva2 services are running (see [](Launching-Caterva2-services)) and point your Web browser to <http://localhost:8002/>. You shall see a list of roots known to the subscriber, which only includes `foo` in our case:
 
 <!-- For image options, see # (https://myst-parser.readthedocs.io/en/latest/syntax/images_and_figures.html)
 -->
@@ -27,6 +31,8 @@ scale: 50%
 
 Searching for datasets #TODO update
 ```
+
+## Accessing a dataset
 
 Click on `foo/dir1/ds-2d.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
 
@@ -64,5 +70,3 @@ Displaying Markdown text #TODO
 Other datasets with a dedicated display are tomographies, i.e. stacks of images stored as 3D (greyscale) or 4D (color) arrays of unsigned integers.  Display support for other kinds of datasets may be added in the future.
 
 You may find a richer variety of example datasets in the demo Caterva2 subscriber at <https://demo.caterva2.net/>.
-
-The Web client is a work in progress, and it will be improved in future versions.
