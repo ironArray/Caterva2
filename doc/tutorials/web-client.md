@@ -70,3 +70,15 @@ Displaying Markdown text #TODO
 Other datasets with a dedicated display are tomographies, i.e. stacks of images stored as 3D (greyscale) or 4D (color) arrays of unsigned integers.  Display support for other kinds of datasets may be added in the future.
 
 You may find a richer variety of example datasets in the demo Caterva2 subscriber at <https://demo.caterva2.net/>.
+
+## User authentication and scratch space
+
+TODO
+
+## Uploading datasets
+
+TODO
+
+## Computing expressions on datasets
+
+TODO
