@@ -61,7 +61,8 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
     Returns
     -------
     dict
-        The list of available roots.
+        A mapping of available root names to their ``name``, ``http``
+        endpoint and whether they are ``subscribed`` or not.
 
     """
     urlbase, _ = _format_paths(urlbase)
@@ -107,7 +108,7 @@ def get_list(root, urlbase=sub_urlbase_default, auth_cookie=None):
     Returns
     -------
     list
-        The list of nodes in the root.
+        The list of nodes in the root, as name strings relative to it.
     """
     urlbase, root = _format_paths(urlbase, root)
     return api_utils.get(f'{urlbase}api/list/{root}',
@@ -130,7 +131,8 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     Returns
     -------
     dict
-        The information about the dataset.
+        The information about the dataset, as a mapping of property names to
+        their respective values.
     """
     urlbase, path = _format_paths(urlbase, path)
     return api_utils.get(f'{urlbase}api/info/{path}',
@@ -140,7 +142,7 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
 def fetch(path, urlbase=sub_urlbase_default, slice_=None,
           auth_cookie=None):
     """
-    Fetch a slice of a dataset.
+    Fetch (a slice of) the data in a dataset.
 
     Parameters
     ----------
@@ -149,7 +151,7 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     slice_ : str
-        The slice to fetch.
+        The slice to fetch (the whole dataset if missing).
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -167,7 +169,12 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
 
 def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    Download a dataset.
+    Download a dataset to storage.
+
+    **Note:** If the dataset is a regular file, it will be downloaded and
+    decompressed if Blosc2 is installed.  Otherwise, it will be downloaded
+    as-is from the internal caches (i.e. compressed with Blosc2, and with the
+    `.b2` extension).
 
     Parameters
     ----------
@@ -182,10 +189,6 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     str
         The path to the downloaded file.
-
-    Note: If dataset is a regular file, it will be downloaded and decompressed if blosc2
-     is installed. Otherwise, it will be downloaded as-is from the internal caches (i.e.
-     compressed with Blosc2, and with the `.b2` extension).
     """
     urlbase, path = _format_paths(urlbase, path)
     url = api_utils.get_download_url(path, urlbase)
@@ -198,20 +201,27 @@ def lazyexpr(name, expression, operands,
     """
     Create a lazy expression dataset in scratch space.
 
+    A dataset with the given name is created anew (or overwritten if already
+    existing).
+
     Parameters
     ----------
     name : str
         The name of the dataset to be created (without extension).
     expression : str
         The expression to be evaluated.  It must result in a lazy expression.
-    operands : dictionary of strings mapping to strings
-        The variables used in the expression and which dataset paths they
-        refer to.
+    operands : dict
+        A mapping of the variables used in the expression to the dataset paths
+        that they refer to.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
     str
-        The path of the newly created (or overwritten) dataset.
+        The path of the created dataset.
     """
     urlbase, _ = _format_paths(urlbase)
     expr = dict(name=name, expression=expression, operands=operands)
@@ -223,8 +233,16 @@ class Root:
     """
     A root is a remote repository that can be subscribed to.
 
-    If a non-empty `user_auth` mapping is given, its items are used as data to be posted
-    for authenticating the user and get an authorization token for further requests.
+    Parameters
+    ----------
+    root : str
+        The name of the root to subscribe to.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    user_auth : dict
+        An optional mapping of fields and values to be used as data to be
+        posted for authenticating the user and get an authorization token for
+        further requests.
     """
     def __init__(self, name, urlbase=sub_urlbase_default, user_auth=None):
         urlbase, name = _format_paths(urlbase, name)
@@ -249,6 +267,16 @@ class Root:
     def __getitem__(self, node):
         """
         Get a file or dataset from the root.
+
+        Parameters
+        ----------
+        node : str
+            The path of the file or dataset.
+
+        Returns
+        -------
+        File
+            A :class:`File` or :class:`Dataset` instance.
         """
         if node.endswith((".b2nd", ".b2frame")):
             return Dataset(node, root=self.name, urlbase=self.urlbase,
@@ -261,6 +289,9 @@ class Root:
 class File:
     """
     A file is either a Blosc2 dataset or a regular file on a root repository.
+
+    This is not intended to be instantiated directly, but accessed via a
+    :class:`Root` instance instead.
 
     Parameters
     ----------
@@ -309,19 +340,15 @@ class File:
     @functools.cached_property
     def vlmeta(self):
         """
-        Access variable-length metalayers (i.e. user attributes) for a file.
+        A mapping of metalayer names to their respective values.
 
-        Examples
-        --------
+        Used to access variable-length metalayers (i.e. user attributes) for a
+        file.
+
         >>> root = cat2.Root('foo')
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
         {'a': 1, 'b': 'foo', 'c': 123.456}
-
-        Returns
-        -------
-        dict
-            The mapping of metalayer names to their respective values.
         """
         schunk_meta = self.meta.get('schunk', self.meta)
         return schunk_meta.get('vlmeta', {})
@@ -356,7 +383,7 @@ class File:
         Returns
         -------
         numpy.ndarray
-            The slice.
+            The slice of the dataset.
 
         Examples
         --------
@@ -374,11 +401,9 @@ class File:
 
     def fetch(self, slice_=None):
         """
-        Fetch a slice of a dataset.  Can specify transport serialization.
+        Fetch a slice of a dataset.
 
-        Similar to `__getitem__()` but this one lets specify whether to prefer using Blosc2
-        schunk serialization during data transport between the subscriber and the
-        client. See below.
+        Equivalent to `__getitem__()`.
 
         Parameters
         ----------
@@ -398,11 +423,11 @@ class File:
 
     def download(self):
         """
-        Download a file.
+        Download a file to storage.
 
         Returns
         -------
-        PosixPath
+        pathlib.PosixPath
             The path to the downloaded file.
 
         Examples
@@ -420,6 +445,9 @@ class File:
 class Dataset(File):
     """
     A dataset is a Blosc2 container in a file.
+
+    This is not intended to be instantiated directly, but accessed via a
+    :class:`Root` instance instead.
 
     Parameters
     ----------

@@ -19,4 +19,6 @@ This will run a broker, a publisher and a subscriber listening for HTTP requests
 
 **Note:** You may provide command-line arguments to `caterva2.tests.services` to use a different state directory, root name and dataset source instead of `_caterva2` and `foo=root-example`.  Multiple `ROOT_NAME=DATASET_SOURCE` arguments may be given, each to be served by a different publisher (run `caterva2.tests.services` with `--help` for more information).  Moreover, you may customize some service settings (except those set by the previous arguments) via a `caterva2.toml` configuration file in the current directory (see [](caterva2.toml) and [](Running-independent-Caterva2-services) for more information).
 
+**Note:** If you want to test user authentication, you may run the previous command with some secret value in the `CATERVA2_AUTH_SECRET` environment variable, e.g. `env CATERVA2_AUTH_SECRET=c2sikrit python -m caterva2.tests.services`.  This will also create a sample user named `user@example.com` with password `foobar`.
+
 Since this terminal will be used by services to output their logs, you will need to run other commands in other terminals.  When you want to stop the services, go back to their terminal and press Ctrl+C (this should work for any service mentioned in other tutorials).

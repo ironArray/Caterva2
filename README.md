@@ -226,13 +226,10 @@ All the services mentioned above (and clients, to some limited extent) may get t
 
 The Caterva2 subscriber includes some initial and incomplete support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_AUTH_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web client will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
 
-Also note that, although the subscriber side of the client API does support user authentication (using cookies), it is not yet supported by the client API implementation shipped with Caterva2.  You may still play with it using an HTTP client like cURL:
+To tell the command line client to authenticate against a subscriber, add the `--username` and `--password` options:
 
 ```sh
-C2SUB=http://localhost:8002
-curl -v --json '{"email":"foo@example.com","password":"bar"}' $C2SUB/auth/register
-curl -v -d'username=foo@example.com' -d'password=bar' $C2SUB/auth/jwt/login #→Set-Cookie: c2subauth=…xxx;…
-curl -v -b'c2subauth=…xxx' $C2SUB/api/roots
+cat2cli --user "user@example.com" --pass "foobar" info foo/README.md
 ```
 
 ## Tools

@@ -122,6 +122,24 @@ To start the subscriber, just run:
 cat2sub
 ```
 
+### User authentication
+
+If the subscriber is to support user authentication (to restrict access, allow computing expressions or uploading files), it will need a `CATERVA2_AUTH_SECRET` environment variable to be defined with its own secret token.  That token should be persisted somewhere so as to use the same one every time the subscriber runs. You may start the subscriber like this:
+
+```sh
+env CATERVA2_AUTH_SECRET=c2sikrit cat2sub
+```
+
+Then users will need to register via the [Web client](Using-the-Web-client).
+
+Of course, use of HTTPS is very encouraged in this scenario, e.g. by placing the subscriber behind a reverse proxy, with a configuration like this:
+
+```toml
+[subscriber]
+http = "localhost:8002"  # reverse proxy target
+url = "https://sub.edu.example.org:3126/"  # reverse proxy address
+```
+
 ## Client setup
 
 Clients at the example workstation need to know the address of the subscriber that they will use.
@@ -132,11 +150,17 @@ The command-line client `cat2cli` provides the `--subscriber` option for that.  
 cat2cli --subscriber http://sub.edu.example.org:3126/ roots
 ```
 
-Will retrieve the list of known roots from the subscriber that we set up above.  In fact, `cat2cli` also supports `caterva2.toml`, and this configuration in the current directory:
+Will retrieve the list of known roots from the subscriber that we set up above.  Should authentication be needed, `--username` and `--password` options may also be used.
+
+Since `cat2cli` also supports `caterva2.toml`, this configuration in the current directory:
 
 ```toml
 [subscriber]
-url = "http://sub.edu.example.org:3126/"
+url = "http://sub.edu.example.org:3126/"  # "https://..." if needed
+
+#[client]  # uncomment section if needed
+#username = "user@example.com"
+#password = "foobar"
 ```
 
 Should allow you to run the previous command just like this:
@@ -158,5 +182,10 @@ Since parsing TOML is very easy with Python, your API client may just access the
 from tomllib import load as toml_load  # "from tomli" on Python < 3.11
 with open('caterva2.toml', 'rb') as conf_file:
     conf = toml_load(conf_file)
-foo = caterva2.Root('foo', urlbase=conf['subscriber']['url'])
+#user_auth = dict(username=conf['client]['username'],
+#                 password=conf['client]['password'])
+foo = caterva2.Root('foo',
+                    urlbase=conf['subscriber']['url'],
+                    #user_auth=user_auth,
+)
 ```

@@ -13,10 +13,10 @@ Running `cat2cli --help` should provide a list of supported commands that may be
 cat2cli [GENERIC_OPTION...] COMMAND [COMMAND_OPTION...] COMMAND_ARGUMENTS...
 ```
 
-A relevant generic option (besides `--help` itself) is `--subscriber`, which overrides the base of subscriber URLs used by default.  It should be a slash-terminated HTTP(S) URL, for example `http://sub.edu.example.org:3126/`.
+Another relevant generic option besides `--help` is `--subscriber`, which overrides the base of subscriber URLs used by default.  It should be a slash-terminated HTTP(S) URL, for example `http://sub.edu.example.org:3126/`.  Finally, the generic options `--username` and `--password` may be used in case your subscriber requires user authentication.
 
-`cat2cli` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the `--conf` option).  Currently, it may only get the subscriber address from there (`http` setting in `[subscriber]` section).  Command-line options override settings read from the configuration file.
+`--help` is also available as a command option which shows the options and arguments accepted by that command (e.g. `cat2cli roots --help`).  Another command option is `--json`, which forces the output of commands that accept it to be in JSON format, as that may be more amenable for parsing by other programs.
 
-A relevant command option is `--help`, which shows the options and arguments accepted by a particular command.  Another one is `--json`, which forces the output of commands that accept it to be in JSON format, as that may be more amenable for parsing by other programs.
+`cat2cli` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the generic `--conf` option).  It may get the subscriber address from there (`url` or `http` settings in `[subscriber]` section), as well as user authentication options (in the `[client]` section).  Command-line options override settings read from the configuration file.
 
 For a short tutorial on `cat2cli`, see [](Using-the-command-line-client).

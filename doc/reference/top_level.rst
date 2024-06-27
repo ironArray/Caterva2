@@ -55,3 +55,13 @@ Variables listed below as coming from the ``api`` module are available from the 
     api.pub_host_default
     api.sub_host_default
     api.sub_urlbase_default
+
+Helper functions
+----------------
+
+These functions from the ``api_utils`` module may ease the use of the top level API.
+
+.. autosummary::
+   :toctree: autofiles/top_level/
+
+   api_utils.get_auth_cookie
