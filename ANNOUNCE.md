@@ -1,10 +1,15 @@
-Announcing Caterva2 0.2
-=======================
+Announcing Caterva2 2024.06.27
+==============================
 
-This is Caterva2, a high-performance storage and communication system for
+Caterva2 is a high-performance storage and communication system for
 on-demand access to Blosc2 data repositories.
 
-#XXX version-specific blurb XXX#
+This release includes improved navigation and display of dataset information
+in the web client, support for displaying MarkDown files, support for
+authentication, and a new @scratch area (pseudo-root) when logged in.
+The @scratch support allows creating new datasets, uploading and deleting files.
+Also, a new Prompt box allows creating lazy expressions in the server that
+evaluate on-demand.
 
 For more info, you can have a look at the release notes in:
 
@@ -41,4 +46,4 @@ You can contact us at: https://ironarray.io
 
 
 -- The ironArray Team
-   We make compression better
+   Make compression better
