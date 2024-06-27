@@ -103,7 +103,20 @@ The main screen showing new user features #TODO
 
 ## Uploading datasets
 
-TODO
+The upload icon below the list of roots allows you to upload new datasets to your scratch space, either by clicking it and choosing a file, or by dragging and dropping the file on it.
+
+Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory (which happens to be the same file as the dataset `foo/ds-1d.b2nd` served by your local publisher).  You'll see a new dataset `@scratch/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your scratch space (after asking for confirmation).  Try it, but don't remove the dataset yet!
+
+```{figure} images/web-upload.png
+---
+class: with-border
+scale: 50%
+---
+
+A newly uploaded dataset #TODO
+```
+
+You may now use the uploaded dataset as a normal one: download it, view its data and metadata, display it…
 
 ## Computing expressions on datasets
 
