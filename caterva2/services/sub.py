@@ -380,27 +380,27 @@ async def partial_download(abspath, path, slice_=None):
     None
         When finished, the dataset is available in cache.
     """
-    # Build the list of chunks we need to download from the publisher
-    array, schunk = srv_utils.open_b2(abspath)
-    if slice_:
-        if not array:
-            if isinstance(slice_[0], slice):
-                # TODO: support schunk.nitems to avoid computations like these
-                nitems = schunk.nbytes // schunk.typesize
-                start, stop, _ = slice_[0].indices(nitems)
-            else:
-                start, stop = slice_[0], slice_[0] + 1
-            # get_slice_nchunks() does not support slices for schunks yet
-            # TODO: support slices for schunks in python-blosc2
-            nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
-        else:
-            nchunks = blosc2.get_slice_nchunks(array, slice_)
-    else:
-        nchunks = range(schunk.nchunks)
-
-    # Fetch the chunks
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
+        # Build the list of chunks we need to download from the publisher
+        array, schunk = srv_utils.open_b2(abspath)
+        if slice_:
+            if not array:
+                if isinstance(slice_[0], slice):
+                    # TODO: support schunk.nitems to avoid computations like these
+                    nitems = schunk.nbytes // schunk.typesize
+                    start, stop, _ = slice_[0].indices(nitems)
+                else:
+                    start, stop = slice_[0], slice_[0] + 1
+                # get_slice_nchunks() does not support slices for schunks yet
+                # TODO: support slices for schunks in python-blosc2
+                nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
+            else:
+                nchunks = blosc2.get_slice_nchunks(array, slice_)
+        else:
+            nchunks = range(schunk.nchunks)
+
+        # Fetch the chunks
         for n in nchunks:
             if not srv_utils.chunk_is_available(schunk, n):
                 await download_chunk(path, schunk, n)
@@ -823,10 +823,12 @@ async def htmx_path_info(
     if plugin:
         display = {
             "url": f"/plugins/{plugin.name}/display/{path}",
+            "label": plugin.label,
         }
     elif path.suffix == ".md":
         display = {
             "url": f"/markdown/{path}",
+            "label": "Display",
         }
     else:
         display = None
@@ -910,6 +912,7 @@ async def htmx_path_view(
         })
         if inputs[-1]['with_size']:
             tags.append([k for k in range(start, min(start+size, size_max))])
+
     if has_ndfields:
         cols = list(arr.fields.keys())
         fields = fields or cols[:5]
@@ -931,18 +934,20 @@ async def htmx_path_view(
         rows += [[row[i] for i in idxs] for row in arr]
     else:
         # Get array view
+        cols = None
         if ndims >= 2:
             arr = arr[index[:-2]]
             i, isize = index[-2], sizes[-2]
             j, jsize = index[-1], sizes[-1]
             arr = arr[i:i+isize, j:j+jsize]
+            rows = [tags[-1]] + list(arr)
         elif ndims == 1:
             i, isize = index[0], sizes[0]
             arr = [arr[i:i+isize]]
+            rows = [tags[-1]] + list(arr)
         else:
             arr = [[arr[()]]]
-        cols = None
-        rows = [tags[-1]] + list(arr)
+            rows = list(arr)
 
     # Render
     context = {

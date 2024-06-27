@@ -17,6 +17,7 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 name = "tomography" # Identifies the plugin
+label = "Tomography"
 contenttype = "tomography"
 
 
