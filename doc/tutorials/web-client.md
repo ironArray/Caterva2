@@ -16,7 +16,7 @@ class: with-border
 scale: 50%
 ---
 
-Initial view of the roots known to the subscriber #TODO update
+Initial view of the roots known to the subscriber
 ```
 
 Check `foo`, and you shall also get the list of datasets in the root, along with a search box.  Enabling an unsubscribed root will subscribe to it automatically.
@@ -29,7 +29,7 @@ class: with-border
 scale: 50%
 ---
 
-Searching for datasets #TODO update
+Searching for datasets
 ```
 
 ## Accessing a dataset
@@ -42,7 +42,7 @@ class: with-border
 scale: 50%
 ---
 
-Viewing metadata #TODO
+Viewing metadata
 ```
 
 Depending on the dataset, you will also get "Data" and other tabs next to the "Main" tab that we just saw.  Click on the "Data" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
@@ -53,7 +53,7 @@ class: with-border
 scale: 50%
 ---
 
-Viewing data #TODO
+Viewing data
 ```
 
 Other tabs render certain files and datasets according to their declared or guessed content type.  Try entering `.md` in the search box, clicking on `foo/README.md`, then on the "Display" tab.  The dataset was recognized as a text file with Markdown-formatted content, which is rendered here.
@@ -64,7 +64,7 @@ class: with-border
 scale: 50%
 ---
 
-Displaying Markdown text #TODO
+Displaying Markdown text
 ```
 
 Other datasets with a dedicated display are tomographies, i.e. stacks of images stored as 3D (greyscale) or 4D (color) arrays of unsigned integers.  Display support for other kinds of datasets may be added in the future.
@@ -83,7 +83,7 @@ class: with-border
 scale: 50%
 ---
 
-The login screen #TODO
+The login screen
 ```
 
 The main Web client screen has some changes now: besides the indication of the logged in user, a new root called `@scratch` just appeared, along with an upload icon.
@@ -98,7 +98,7 @@ class: with-border
 scale: 50%
 ---
 
-The main screen showing new user features #TODO
+The main screen showing new user features
 ```
 
 ## Uploading datasets
@@ -113,7 +113,7 @@ class: with-border
 scale: 50%
 ---
 
-A newly uploaded dataset #TODO
+A newly uploaded dataset
 ```
 
 You may now use the uploaded dataset as a normal one: download it, view its data and metadata, display it…
@@ -132,7 +132,7 @@ class: with-border
 scale: 50%
 ---
 
-The newly created laxy expression #TODO
+The newly created lazy expression
 ```
 
 The dataset has very reduced metadata that just describes its shape, type, expression and operands.  However, you may still use it as any other dataset, e.g. to view its data (which will be computed on-the-fly), have it participate in other lazy expressions, or download it (with fully computed data) to your device.  As any dataset in your scratch space, it can also be deleted.
