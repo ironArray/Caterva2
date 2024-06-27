@@ -31,7 +31,7 @@ The Caterva2 package includes all the aforementioned components, although its ma
 
 ## Use with caution
 
-Currently, this project is in early alpha stage, and it is not meant for production use yet.  In case you are interested in Caterva2, please contact us at <contact@blosc.org>.
+Although this project is in advanced beta stage, it is not meant for production use yet.  In case you are interested in Caterva2, please contact us at <contact@blosc.org>.
 
 ## Installation
 
