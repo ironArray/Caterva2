@@ -105,7 +105,7 @@ The main screen showing new user features #TODO
 
 The upload icon below the list of roots allows you to upload new datasets to your scratch space, either by clicking it and choosing a file, or by dragging and dropping the file on it.
 
-Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory (which happens to be the same file as the dataset `foo/ds-1d.b2nd` served by your local publisher).  You'll see a new dataset `@scratch/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your scratch space (after asking for confirmation).  Try it, but don't remove the dataset yet!
+Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory.  You'll see a new dataset `@scratch/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your scratch space (after asking for confirmation).  Try it, but don't remove the dataset yet!
 
 ```{figure} images/web-upload.png
 ---
@@ -120,4 +120,24 @@ You may now use the uploaded dataset as a normal one: download it, view its data
 
 ## Computing expressions on datasets
 
-TODO
+What about the input box that appeared below the search box?  It allows you to send commands to the subscriber.  The only kind of commands supported for the moment is the creation of **lazy expressions** involving the datasets accessible via the subscriber.  Such an expression is evaluated dynamically on the subscriber, so creating it is very cheap, and its result always reflects the latest state of the involved datasets.
+
+First, let's select the dataset `foo/ds-1d.b2nd` and view its data: simply the range 0...9.  Now select the dataset `@scratch/ds-1d.b2nd`: an array of the same shape, type and values.  Actually, the file that you uploaded *is* the source of `foo/ds-1d.b2nd` as served by your local publisher, hence the coincidence!
+
+This means that we can safely create an expression that adds them together into a new dataset that we'll call `double`.  The command box accepts Python-like expressions, but how do we refer to the added datasets acting as operands to the addition?  That's the use of the tag that appears next to their name in the dataset list.  In our case, `foo/ds-1d.b2nd` is tagged as `a`, and `@scratch/ds-1d.b2nd` as `k`, thus the command to be entered in the command box is `double = a + k`.  Try entering that command (mind that the tags may differ in your case) and click on "GO".  The resulting new dataset `@scratch/double.b2nd` should be shown instantly.
+
+```{figure} images/web-lazyexpr.png
+---
+class: with-border
+scale: 50%
+---
+
+The newly created laxy expression #TODO
+```
+
+The dataset has very reduced metadata that just describes its shape, type, expression and operands.  However, you may still use it as any other dataset, e.g. to view its data (which will be computed on-the-fly), have it participate in other lazy expressions, or download it (with fully computed data) to your device.  As any dataset in your scratch space, it can also be deleted.
+
+Lazy expressions are a very versatile tool to have complex computations performed by a powerful and well-connected machine (the subscriber), and get the result to your device once satisfied with the result.  Many [arithmetic and reduction operations][b2-lazyexpr] are supported, just play with them and find out!
+
+[b2-lazyexpr]: https://www.blosc.org/python-blosc2/getting_started/tutorials/03.lazyarray-expressions.html
+    "LazyArray: Expressions containing NDArray objects (and others) (Python-Blosc2 documentation)"
