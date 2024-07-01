@@ -1,15 +1,10 @@
-Announcing Caterva2 2024.06.27
+Announcing Caterva2 2024.07.01
 ==============================
 
 Caterva2 is a high-performance storage and communication system for
 on-demand access to Blosc2 data repositories.
 
-This release includes improved navigation and display of dataset information
-in the web client, support for displaying MarkDown files, support for
-authentication, and a new @scratch area (pseudo-root) when logged in.
-The @scratch support allows creating new datasets, uploading and deleting files.
-Also, a new Prompt box allows creating lazy expressions in the server that
-evaluate on-demand.
+This release is a minor release to fix the blosc2 version dependency to blosc2 3.0.0b1.
 
 For more info, you can have a look at the release notes in:
 
