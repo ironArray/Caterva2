@@ -4,7 +4,7 @@
 
 Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets (either native or converted on-the-fly from HDF5) among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
 
-![Figure: Caterva2 publish-subscribe](./doc/_static/Caterva2-PubSub.png)
+<img src="./doc/_static/Caterva2-PubSub.png" alt="Figure: Caterva2 publish-subscribe" width="90%"/>
 
 [Blosc2]: https://www.blosc.org/pages/blosc-in-depth/
     "What Is Blosc? (Blosc blog)"
