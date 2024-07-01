@@ -21,7 +21,7 @@ Testing
 Follow the steps in ``README-DEVELOPERS.md`` file for locally creating and
 installing the wheel, then test it::
 
-  $ python -m pip install -e .[tests,hdf5]
+  $ python -m pip install -e ".[tests,hdf5]"
   $ cd ..   # to avoid using the source code
   $ python -m caterva2.tests -v
   $ cd -

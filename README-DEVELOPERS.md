@@ -10,7 +10,7 @@ There is a `caterva2.tests.services` script that does this.
 Testing needs Caterva2 to be installed with the `tests` extra:
 
 ```sh
-pip install -e .[tests]
+pip install -e ".[tests]"
 ```
 
 ### With managed daemons
