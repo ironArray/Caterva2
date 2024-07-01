@@ -1,5 +1,7 @@
 # Release notes
 
+#XXX version-specific blurb XXX#
+
 ## Changes from 2024.06.27 to 2024.07.01
 
 * Fixed blosc2 dependency version to blosc2 3.0.0b1.

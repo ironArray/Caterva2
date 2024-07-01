@@ -1,4 +1,4 @@
-Announcing Caterva2 2024.07.01
+Announcing Caterva2 #XXX version-specific blurb XXX#
 ==============================
 
 Caterva2 is a high-performance storage and communication system for
