@@ -545,6 +545,28 @@ async def fetch_data(
                                        media_type='application/octet-stream')
 
 
+@app.get('/api/chunk/{path:path}')
+async def get_chunk(path: pathlib.Path,
+                    nchunk: int,
+):
+    if isinstance(path, pathlib.PosixPath):
+        path = str(path)
+    root, name = path.split('/', 1)
+    host = database.roots[root].http
+    url = f'http://{host}/api/download/{name}'
+    params = {'nchunk': nchunk}
+
+    client = httpx.AsyncClient()
+    async with client.stream('GET', url, params=params, timeout=5) as resp:
+        buffer = []
+        async for chunk in resp.aiter_bytes():
+            buffer.append(chunk)
+        chunk = b''.join(buffer)
+    downloader = srv_utils.iterchunk(chunk)
+
+    return responses.StreamingResponse(downloader)
+
+
 def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
                   user: db.User) -> str:
     """
