@@ -67,8 +67,8 @@ def make_url(request, name, query=None, **path_params):
     return url
 
 
-async def download_chunk(path, schunk, nchunk):
-    root, name = path.split('/', 1)
+async def _get_chunk(path, nchunk):
+    root, name = path.parts[0], pathlib.Path(*path.parts[1:])
     host = database.roots[root].http
     url = f'http://{host}/api/download/{name}'
     params = {'nchunk': nchunk}
@@ -79,8 +79,11 @@ async def download_chunk(path, schunk, nchunk):
         async for chunk in resp.aiter_bytes():
             buffer.append(chunk)
         chunk = b''.join(buffer)
-        schunk.update_chunk(nchunk, chunk)
+        return chunk
 
+async def download_chunk(path, schunk, nchunk):
+    chunk = await _get_chunk(path, nchunk)
+    schunk.update_chunk(nchunk, chunk)
 
 async def new_root(data, topic):
     logger.info(f'NEW root {topic} {data=}')
@@ -387,8 +390,7 @@ async def partial_download(abspath, path, slice_=None):
         if slice_:
             if not array:
                 if isinstance(slice_[0], slice):
-                    # TODO: support schunk.nitems to avoid computations like these
-                    nitems = schunk.nbytes // schunk.typesize
+                    nitems = len(schunk)
                     start, stop, _ = slice_[0].indices(nitems)
                 else:
                     start, stop = slice_[0], slice_[0] + 1
@@ -460,7 +462,7 @@ def abspath_and_dataprep(path: pathlib.Path,
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
         async def dataprep():
-            return await partial_download(abspath, str(path), slice_)
+            return await partial_download(abspath, path, slice_)
 
     return (abspath, dataprep)
 
@@ -546,22 +548,10 @@ async def fetch_data(
 
 
 @app.get('/api/chunk/{path:path}')
-async def get_chunk(path: pathlib.Path,
+async def get_chunk(path: pathlib.PosixPath,
                     nchunk: int,
 ):
-    if isinstance(path, pathlib.PosixPath):
-        path = str(path)
-    root, name = path.split('/', 1)
-    host = database.roots[root].http
-    url = f'http://{host}/api/download/{name}'
-    params = {'nchunk': nchunk}
-
-    client = httpx.AsyncClient()
-    async with client.stream('GET', url, params=params, timeout=5) as resp:
-        buffer = []
-        async for chunk in resp.aiter_bytes():
-            buffer.append(chunk)
-        chunk = b''.join(buffer)
+    chunk = await _get_chunk(path, nchunk)
     downloader = srv_utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
