@@ -57,6 +57,45 @@ locks = {}
 urlbase = None
 
 
+class PubDataset:
+    def __init__(self, abspath, path, metadata=None):
+        self.path = path
+        if metadata is not None:
+            suffix = abspath.suffix
+            if suffix == '.b2nd':
+                metadata = models.Metadata(**metadata)
+                self.shape = metadata.shape
+                self.chunks = metadata.chunks
+                self.blocks = metadata.blocks
+                self.dtype = np.dtype(metadata.dtype)
+            else:
+                if suffix == '.b2frame':
+                    metadata = models.SChunk(**metadata)
+                else:
+                    abspath = pathlib.Path(f'{abspath}.b2')
+                    metadata = models.SChunk(**metadata)
+                self.typesize = metadata.cparams.typesize
+                self.chunksize = metadata.chunksize
+                self.nbytes = metadata.nbytes
+            self.abspath = abspath
+            if self.abspath is not None:
+                self.abspath.parent.mkdir(exist_ok=True, parents=True)
+
+    def get_chunk(self, nchunk):
+        # # TODO: auth_token???
+        # # response = httpx.get(url, params=params, headers=headers, timeout=timeout)
+
+        root, name = self.path.parts[0], pathlib.Path(*self.path.parts[1:])
+        host = database.roots[root].http
+        url = f'http://{host}/api/download/{name}'
+        params = {'nchunk': nchunk}
+
+        response = httpx.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        chunk = response.content
+        return chunk
+
+
 def make_url(request, name, query=None, **path_params):
     url = request.app.url_path_for(name, **path_params)
     url = str(url)  # <starlette.datastructures.URLPath>
@@ -150,7 +189,9 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        srv_utils.init_b2(abspath, metadata)
+        print(name + "/" + relpath)
+        dataset = PubDataset(abspath, name + "/" + relpath, metadata)
+        blosc2.ProxySChunk(dataset, urlpath=dataset.abspath)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -387,25 +428,13 @@ async def partial_download(abspath, path, slice_=None):
     async with lock:
         # Build the list of chunks we need to download from the publisher
         array, schunk = srv_utils.open_b2(abspath)
+        dataset = PubDataset(abspath, path)
+        container = array if array is not None else schunk
+        proxy = blosc2.ProxySChunk(dataset, _cache=container)
         if slice_:
-            if not array:
-                if isinstance(slice_[0], slice):
-                    nitems = len(schunk)
-                    start, stop, _ = slice_[0].indices(nitems)
-                else:
-                    start, stop = slice_[0], slice_[0] + 1
-                # get_slice_nchunks() does not support slices for schunks yet
-                # TODO: support slices for schunks in python-blosc2
-                nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
-            else:
-                nchunks = blosc2.get_slice_nchunks(array, slice_)
+            proxy.eval(slice_)
         else:
-            nchunks = range(schunk.nchunks)
-
-        # Fetch the chunks
-        for n in nchunks:
-            if not srv_utils.chunk_is_available(schunk, n):
-                await download_chunk(path, schunk, n)
+            proxy.eval()
 
 
 async def download_expr_deps(expr):
