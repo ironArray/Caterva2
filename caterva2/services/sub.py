@@ -67,7 +67,10 @@ class PubDataset:
                 self.shape = metadata.shape
                 self.chunks = metadata.chunks
                 self.blocks = metadata.blocks
-                self.dtype = np.dtype(metadata.dtype)
+                dtype = metadata.dtype
+                if metadata.dtype.startswith('['):
+                    dtype = eval(dtype)
+                self.dtype = np.dtype(dtype)
             else:
                 if suffix == '.b2frame':
                     metadata = models.SChunk(**metadata)
@@ -191,7 +194,11 @@ def follow(name: str):
         abspath = rootdir / relpath
         print(name + "/" + relpath)
         dataset = PubDataset(abspath, name + "/" + relpath, metadata)
-        blosc2.ProxySChunk(dataset, urlpath=dataset.abspath)
+        schunk_meta = metadata.get('schunk', metadata)
+        vlmeta = {}
+        for k, v in schunk_meta['vlmeta'].items():
+            vlmeta[k] = v
+        blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -527,6 +534,10 @@ async def fetch_data(
     await dataprep()
 
     array, schunk = srv_utils.open_b2(abspath)
+    dataset = PubDataset(abspath, path)
+    container = array if array is not None else schunk
+    proxy = blosc2.ProxySChunk(dataset, _cache=container)
+
     typesize = array.dtype.itemsize if array is not None else schunk.typesize
     shape = array.shape if array is not None else (len(schunk),)
 
@@ -546,14 +557,12 @@ async def fetch_data(
 
     if slice_:
         if array is not None:
-            array = array[slice_] if array.ndim > 0 else array[()]
+            array = proxy[slice_] if array.ndim > 0 else proxy[()]
         else:
-            assert len(slice_) == 1
-            slice_ = slice_[0]
             if isinstance(slice_, int):
                 # TODO: make SChunk support integer as slice
                 slice_ = slice(slice_, slice_ + 1)
-            schunk = schunk[slice_]
+            schunk = proxy[slice_]
 
     # Serialization can be done either as:
     # * a serialized NDArray
