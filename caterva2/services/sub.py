@@ -109,8 +109,9 @@ def make_url(request, name, query=None, **path_params):
     return url
 
 
-async def _get_chunk(path, nchunk):
+async def _get_chunk(path, nchunk, user=None):
     root, name = path.parts[0], pathlib.Path(*path.parts[1:])
+    # TODO: Handle scratch if user and root == '@scratch'.
     host = database.roots[root].http
     url = f'http://{host}/api/download/{name}'
     params = {'nchunk': nchunk}
@@ -586,10 +587,12 @@ async def fetch_data(
 
 
 @app.get('/api/chunk/{path:path}')
-async def get_chunk(path: pathlib.PosixPath,
-                    nchunk: int,
+async def get_chunk(
+    path: pathlib.PosixPath,
+    nchunk: int,
+    user: db.User = Depends(current_active_user),
 ):
-    chunk = await _get_chunk(path, nchunk)
+    chunk = await _get_chunk(path, nchunk, user)
     downloader = srv_utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
