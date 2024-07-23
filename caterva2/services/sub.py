@@ -585,12 +585,17 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(current_active_user),
 ):
-    # TODO: Handle scratch if user and root == '@scratch'.
+    # TODO: Use caching via ProxySChunk, mind locking cache file.
     abspath, _ = abspath_and_dataprep(path, user=user)
-    sub_dset = PubDataset(abspath, path)
-    chunk = await sub_dset.aget_chunk(nchunk)
-    downloader = srv_utils.iterchunk(chunk)
+    if user and path.parts[0] == '@scratch':
+        array, schunk = srv_utils.open_b2(abspath)
+        # TODO: Support lazy expressions.
+        chunk = schunk.get_chunk(nchunk)  # TODO: async?
+    else:
+        sub_dset = PubDataset(abspath, path)
+        chunk = await sub_dset.aget_chunk(nchunk)
 
+    downloader = srv_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
 
 
