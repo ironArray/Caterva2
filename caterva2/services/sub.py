@@ -186,13 +186,12 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        print(name + "/" + relpath)
-        dataset = PubDataset(abspath, name + "/" + relpath, metadata)
+        dataset = PubDataset(abspath, key, metadata)
         schunk_meta = metadata.get('schunk', metadata)
         vlmeta = {}
         for k, v in schunk_meta['vlmeta'].items():
             vlmeta[k] = v
-        blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta)
+        blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -431,11 +430,12 @@ async def partial_download(abspath, path, slice_=None):
         array, schunk = srv_utils.open_b2(abspath)
         dataset = PubDataset(abspath, path)
         container = array if array is not None else schunk
+        # No need to pass caterva2_env=True since _cache has already been created
         proxy = blosc2.ProxySChunk(dataset, _cache=container)
         if slice_:
-            proxy.eval(slice_)
+            proxy.fetch(slice_)
         else:
-            proxy.eval()
+            proxy.fetch()
 
 
 async def download_expr_deps(expr):
@@ -530,6 +530,7 @@ async def fetch_data(
     array, schunk = srv_utils.open_b2(abspath)
     dataset = PubDataset(abspath, path)
     container = array if array is not None else schunk
+    # No need to pass caterva2_env=True since _cache has already been created
     proxy = blosc2.ProxySChunk(dataset, _cache=container)
 
     typesize = array.dtype.itemsize if array is not None else schunk.typesize
