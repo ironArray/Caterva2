@@ -141,7 +141,16 @@ async def updated_dataset(data, topic):
         if abspath.is_file():
             abspath.unlink()
     else:
-        srv_utils.init_b2(abspath, metadata)
+        init_b2(abspath, name, metadata)
+
+
+def init_b2(abspath, path, metadata):
+    dataset = PubDataset(abspath, path, metadata)
+    schunk_meta = metadata.get('schunk', metadata)
+    vlmeta = {}
+    for k, v in schunk_meta['vlmeta'].items():
+        vlmeta[k] = v
+    blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
 
 #
@@ -186,12 +195,7 @@ def follow(name: str):
 
         # Save metadata
         abspath = rootdir / relpath
-        dataset = PubDataset(abspath, key, metadata)
-        schunk_meta = metadata.get('schunk', metadata)
-        vlmeta = {}
-        for k, v in schunk_meta['vlmeta'].items():
-            vlmeta[k] = v
-        blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
+        init_b2(abspath, key, metadata)
 
         # Save etag
         database.etags[key] = response.headers['etag']
