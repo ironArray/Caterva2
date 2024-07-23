@@ -85,9 +85,6 @@ class PubDataset:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
 
     def get_chunk(self, nchunk):
-        # # TODO: auth_token???
-        # # response = httpx.get(url, params=params, headers=headers, timeout=timeout)
-
         root, name = self.path.parts[0], pathlib.Path(*self.path.parts[1:])
         host = database.roots[root].http
         url = f'http://{host}/api/download/{name}'
