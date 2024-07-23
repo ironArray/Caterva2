@@ -85,11 +85,11 @@ class PubDataset:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
 
     def _get_request_args(self, nchunk):
-        root, name = self.path.parts[0], pathlib.Path(*self.path.parts[1:])
-        host = database.roots[root].http
-        url = f'http://{host}/api/download/{name}'
-        params = {'nchunk': nchunk}
-        return dict(url=url, params=params, timeout=5)
+        root, *name = self.path.parts
+        root = database.roots[root]
+        name = pathlib.Path(*name)
+        return dict(url=f'http://{root.http}/api/download/{name}',
+                    params={'nchunk': nchunk}, timeout=5)
 
     def get_chunk(self, nchunk):
         req_args = self._get_request_args(nchunk)
