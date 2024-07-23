@@ -124,9 +124,6 @@ async def _get_chunk(path, nchunk, user=None):
         chunk = b''.join(buffer)
         return chunk
 
-async def download_chunk(path, schunk, nchunk):
-    chunk = await _get_chunk(path, nchunk)
-    schunk.update_chunk(nchunk, chunk)
 
 async def new_root(data, topic):
     logger.info(f'NEW root {topic} {data=}')
