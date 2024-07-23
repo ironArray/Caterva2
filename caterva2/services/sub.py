@@ -59,7 +59,7 @@ urlbase = None
 
 class PubDataset:
     def __init__(self, abspath, path, metadata=None):
-        self.path = path
+        self.path = pathlib.Path(path)
         if metadata is not None:
             suffix = abspath.suffix
             if suffix == '.b2nd':
