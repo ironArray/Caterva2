@@ -84,16 +84,31 @@ class PubDataset:
             if self.abspath is not None:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
 
-    def get_chunk(self, nchunk):
+    def _get_request_args(self, nchunk):
         root, name = self.path.parts[0], pathlib.Path(*self.path.parts[1:])
         host = database.roots[root].http
         url = f'http://{host}/api/download/{name}'
         params = {'nchunk': nchunk}
+        return dict(url=url, params=params, timeout=5)
 
-        response = httpx.get(url, params=params, timeout=15)
+    def get_chunk(self, nchunk):
+        req_args = self._get_request_args(nchunk)
+
+        response = httpx.get(**req_args)
         response.raise_for_status()
         chunk = response.content
         return chunk
+
+    async def aget_chunk(self, nchunk):
+        req_args = self._get_request_args(nchunk)
+
+        client = httpx.AsyncClient()
+        async with client.stream('GET', **req_args) as resp:
+            buffer = []
+            async for chunk in resp.aiter_bytes():
+                buffer.append(chunk)
+            chunk = b''.join(buffer)
+            return chunk
 
 
 def make_url(request, name, query=None, **path_params):
@@ -104,22 +119,6 @@ def make_url(request, name, query=None, **path_params):
         url = furl.furl(url).set(query).url
 
     return url
-
-
-async def _get_chunk(path, nchunk, user=None):
-    root, name = path.parts[0], pathlib.Path(*path.parts[1:])
-    # TODO: Handle scratch if user and root == '@scratch'.
-    host = database.roots[root].http
-    url = f'http://{host}/api/download/{name}'
-    params = {'nchunk': nchunk}
-
-    client = httpx.AsyncClient()
-    async with client.stream('GET', url, params=params, timeout=5) as resp:
-        buffer = []
-        async for chunk in resp.aiter_bytes():
-            buffer.append(chunk)
-        chunk = b''.join(buffer)
-        return chunk
 
 
 async def new_root(data, topic):
@@ -586,7 +585,10 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(current_active_user),
 ):
-    chunk = await _get_chunk(path, nchunk, user)
+    # TODO: Handle scratch if user and root == '@scratch'.
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    sub_dset = PubDataset(abspath, path)
+    chunk = await sub_dset.aget_chunk(nchunk)
     downloader = srv_utils.iterchunk(chunk)
 
     return responses.StreamingResponse(downloader)
