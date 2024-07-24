@@ -69,6 +69,8 @@ class PubDataset:
                 self.blocks = metadata.blocks
                 dtype = metadata.dtype
                 if metadata.dtype.startswith('['):
+                    # TODO: eval is dangerous, but we mostly trust the metadata
+                    # This is a list, so we need to convert it to a string
                     dtype = eval(dtype)
                 self.dtype = np.dtype(dtype)
             else:

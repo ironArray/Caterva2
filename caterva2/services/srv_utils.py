@@ -204,62 +204,6 @@ def compress(data, dst=None):
     return schunk
 
 
-def _init_b2(make_b2, metadata, urlpath=None):
-    if urlpath is not None:
-        urlpath.parent.mkdir(exist_ok=True, parents=True)
-        if urlpath.exists():
-            urlpath.unlink()
-
-    schunk_meta = getattr(metadata, 'schunk', metadata)
-    # Let default behaviour decide whether to use contiguous storage or not,
-    # depending on where the dataset is going to be stored.
-    # The original value is irrelevant.
-    b2_args = dict(urlpath=urlpath, dparams={},
-                   cparams=schunk_meta.cparams.model_dump())
-    b2 = make_b2(**b2_args)
-
-    b2_vlmeta = getattr(b2, 'schunk', b2).vlmeta
-    for k, v in schunk_meta.vlmeta.items():
-        b2_vlmeta[k] = v
-    return b2
-
-
-def init_b2nd(metadata, urlpath=None):
-    def make_b2nd(**kwargs):
-        dtype = metadata.dtype
-        if dtype.startswith('['):
-            # TODO: eval is dangerous, but we mostly trust the metadata
-            # This is a list, so we need to convert it to a string
-            dtype = eval(dtype)
-        return blosc2.uninit(metadata.shape, np.dtype(dtype),
-                             chunks=metadata.chunks, blocks=metadata.blocks,
-                             **kwargs)
-    return _init_b2(make_b2nd, metadata, urlpath)
-
-
-def init_b2frame(metadata, urlpath=None):
-    def make_b2frame(**kwargs):
-        sc = blosc2.SChunk(metadata.chunksize, **kwargs)
-        sc.fill_special(metadata.nbytes / sc.typesize,
-                        special_value=blosc2.SpecialValue.UNINIT)
-        return sc
-    return _init_b2(make_b2frame, metadata, urlpath)
-
-
-def init_b2(abspath, metadata):
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        metadata = models.Metadata(**metadata)
-        init_b2nd(metadata, abspath)
-    elif suffix == '.b2frame':
-        metadata = models.SChunk(**metadata)
-        init_b2frame(metadata, abspath)
-    else:
-        abspath = pathlib.Path(f'{abspath}.b2')
-        metadata = models.SChunk(**metadata)
-        init_b2frame(metadata, abspath)
-
-
 def open_b2(abspath):
     suffix = abspath.suffix
     if suffix == '.b2nd':
