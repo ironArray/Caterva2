@@ -141,7 +141,8 @@ async def updated_dataset(data, topic):
         if abspath.is_file():
             abspath.unlink()
     else:
-        init_b2(abspath, name, metadata)
+        key = f'{name}/{relpath}'
+        init_b2(abspath, key, metadata)
 
 
 def init_b2(abspath, path, metadata):
