@@ -154,6 +154,13 @@ def init_b2(abspath, path, metadata):
     blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
 
+def open_b2(abspath, path):
+    dataset = PubDataset(abspath, path)
+    container = blosc2.open(abspath)
+    # No need to pass caterva2_env=True since _cache has already been created
+    return blosc2.ProxySChunk(dataset, _cache=container)
+
+
 #
 # Internal API
 #
@@ -431,12 +438,7 @@ async def partial_download(abspath, path, slice_=None):
     """
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
-        # Build the list of chunks we need to download from the publisher
-        array, schunk = srv_utils.open_b2(abspath)
-        dataset = PubDataset(abspath, path)
-        container = array if array is not None else schunk
-        # No need to pass caterva2_env=True since _cache has already been created
-        proxy = blosc2.ProxySChunk(dataset, _cache=container)
+        proxy = open_b2(abspath, path)
         if slice_:
             proxy.fetch(slice_)
         else:
@@ -532,14 +534,19 @@ async def fetch_data(
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
     await dataprep()
 
-    array, schunk = srv_utils.open_b2(abspath)
-    dataset = PubDataset(abspath, path)
-    container = array if array is not None else schunk
-    # No need to pass caterva2_env=True since _cache has already been created
-    proxy = blosc2.ProxySChunk(dataset, _cache=container)
+    proxy = open_b2(abspath, path)
 
-    typesize = array.dtype.itemsize if array is not None else schunk.typesize
-    shape = array.shape if array is not None else (len(schunk),)
+    if isinstance(proxy._cache, blosc2.NDArray):
+        array = proxy._cache
+        schunk = array.schunk
+        typesize = array.dtype.itemsize
+        shape = array.shape
+    else:
+        # SChunk
+        array = None
+        schunk = proxy._cache
+        typesize = schunk.typesize
+        shape = (len(schunk),)
 
     whole = slice_ is None or slice_ == ()
     if not whole and isinstance(slice_, tuple):
