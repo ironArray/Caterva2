@@ -57,7 +57,7 @@ locks = {}
 urlbase = None
 
 
-class PubDataset:
+class PubDataset(blosc2.ProxySource):
     def __init__(self, abspath, path, metadata=None):
         self.path = pathlib.Path(path)
         if metadata is not None:
