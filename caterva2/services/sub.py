@@ -441,10 +441,7 @@ async def partial_download(abspath, path, slice_=None):
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         proxy = open_b2(abspath, path)
-        if slice_:
-            proxy.fetch(slice_)
-        else:
-            proxy.fetch()
+        proxy.fetch(slice_)
 
 
 async def download_expr_deps(expr):
