@@ -204,30 +204,6 @@ def compress(data, dst=None):
     return schunk
 
 
-def open_b2(abspath):
-    suffix = abspath.suffix
-    if suffix == '.b2nd':
-        array = blosc2.open(abspath)
-        schunk = getattr(array, 'schunk', None)  # may be lazy
-    elif suffix == '.b2frame':
-        array = None
-        schunk = blosc2.open(abspath)
-    elif suffix == '.b2':
-        array = None
-        schunk = blosc2.open(abspath)
-    else:
-        raise NotImplementedError()
-
-    return array, schunk
-
-
-def chunk_is_available(schunk, nchunk):
-    # Blosc2 flags are at offset 31
-    # (see https://github.com/Blosc/c-blosc2/blob/main/README_CHUNK_FORMAT.rst)
-    flag = (schunk.get_lazychunk(nchunk)[31] & 0b01110000) >> 4
-    return flag != blosc2.SpecialValue.UNINIT.value
-
-
 def iterchunk(chunk):
     # TODO Yield block by block
     yield chunk

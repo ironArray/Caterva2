@@ -156,7 +156,10 @@ def init_b2(abspath, path, metadata):
     blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
 
-def open_b2(abspath, path):
+def open_b2(abspath, path=None):
+    if path is None:
+        # Container in scratch
+        return blosc2.open(abspath)
     dataset = PubDataset(abspath, path)
     container = blosc2.open(abspath)
     # No need to pass caterva2_env=True since _cache has already been created
@@ -600,7 +603,8 @@ async def get_chunk(
     # TODO: Use caching via ProxySChunk, mind locking cache file.
     abspath, _ = abspath_and_dataprep(path, user=user)
     if user and path.parts[0] == '@scratch':
-        array, schunk = srv_utils.open_b2(abspath)
+        container = open_b2(abspath)
+        schunk = getattr(container, 'schunk', container)
         # TODO: Support lazy expressions.
         chunk = schunk.get_chunk(nchunk)  # TODO: async?
     else:
