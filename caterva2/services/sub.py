@@ -665,7 +665,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
         else:
             abspath = cache / path
 
-        var_dict[var] = blosc2.open(abspath, mode="r")
+        var_dict[var] = open_b2(abspath)
 
     # Create the lazy expression dataset
     arr = eval(expr, var_dict)
