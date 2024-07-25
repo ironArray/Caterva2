@@ -600,15 +600,15 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(current_active_user),
 ):
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    abspath, _ = abspath_and_dataprep(path, user=user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         if user and path.parts[0] == '@scratch':
             container = open_b2(abspath)
             schunk = getattr(container, 'schunk', container)
             if 'LazyArray' in schunk.meta:
-                # TODO: only evaluate the requested chunk
-                await dataprep()
+                # TODO: Support this
+                raise NotImplementedError
             chunk = schunk.get_chunk(nchunk)
         else:
             sub_dset = PubDataset(abspath, path)
