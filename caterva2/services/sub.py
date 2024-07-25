@@ -206,7 +206,7 @@ def follow(name: str):
         response.raise_for_status()
         metadata = response.json()
 
-        # Save metadata
+        # Save metadata and create ProxySChunk
         abspath = rootdir / relpath
         init_b2(abspath, key, metadata)
 
@@ -444,7 +444,7 @@ async def partial_download(abspath, path, slice_=None):
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         proxy = open_b2(abspath, path)
-        proxy.fetch(slice_)
+        await proxy.afetch(slice_)
 
 
 async def download_expr_deps(expr):
