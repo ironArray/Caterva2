@@ -158,7 +158,7 @@ def init_b2(abspath, path, metadata):
 
 def open_b2(abspath, path=None):
     if path is None:
-        # Container in scratch
+        # Return object in scratch or proxy._cache container
         return blosc2.open(abspath)
     dataset = PubDataset(abspath, path)
     container = blosc2.open(abspath)
@@ -600,16 +600,19 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(current_active_user),
 ):
-    # TODO: Use caching via ProxySChunk, mind locking cache file.
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    if user and path.parts[0] == '@scratch':
-        container = open_b2(abspath)
-        schunk = getattr(container, 'schunk', container)
-        # TODO: Support lazy expressions.
-        chunk = schunk.get_chunk(nchunk)  # TODO: async?
-    else:
-        sub_dset = PubDataset(abspath, path)
-        chunk = await sub_dset.aget_chunk(nchunk)
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    lock = locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        if user and path.parts[0] == '@scratch':
+            container = open_b2(abspath)
+            schunk = getattr(container, 'schunk', container)
+            if 'LazyArray' in schunk.meta:
+                # TODO: only evaluate the requested chunk
+                await dataprep()
+            chunk = schunk.get_chunk(nchunk)
+        else:
+            sub_dset = PubDataset(abspath, path)
+            chunk = await sub_dset.aget_chunk(nchunk)
 
     downloader = srv_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
@@ -665,6 +668,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
         else:
             abspath = cache / path
 
+        # LazyExpr operands cannot be ProxySChunk, get a NDArray instead
         var_dict[var] = open_b2(abspath)
 
     # Create the lazy expression dataset
