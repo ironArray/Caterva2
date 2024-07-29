@@ -156,7 +156,7 @@ def init_b2(abspath, path, metadata):
     vlmeta = {}
     for k, v in schunk_meta['vlmeta'].items():
         vlmeta[k] = v
-    blosc2.ProxySChunk(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
+    blosc2.Proxy(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
 
 def open_b2(abspath, path=None):
@@ -166,7 +166,7 @@ def open_b2(abspath, path=None):
     dataset = PubDataset(abspath, path)
     container = blosc2.open(abspath)
     # No need to pass caterva2_env=True since _cache has already been created
-    return blosc2.ProxySChunk(dataset, _cache=container)
+    return blosc2.Proxy(dataset, _cache=container)
 
 
 #
@@ -209,7 +209,7 @@ def follow(name: str):
         response.raise_for_status()
         metadata = response.json()
 
-        # Save metadata and create ProxySChunk
+        # Save metadata and create Proxy
         abspath = rootdir / relpath
         init_b2(abspath, key, metadata)
 
@@ -671,7 +671,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
         else:
             abspath = cache / path
 
-        # LazyExpr operands cannot be ProxySChunk, get a NDArray instead
+        # LazyExpr operands cannot be Proxy, get a NDArray instead
         var_dict[var] = open_b2(abspath)
 
     # Create the lazy expression dataset
