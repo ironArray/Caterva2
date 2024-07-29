@@ -58,6 +58,9 @@ urlbase = None
 
 
 class PubDataset(blosc2.ProxySource):
+    """
+    Class for getting chunks from a dataset on a publisher service.
+    """
     def __init__(self, abspath, path, metadata=None):
         self.path = pathlib.Path(path)
         if metadata is not None:
