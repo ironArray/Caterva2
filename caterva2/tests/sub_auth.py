@@ -23,7 +23,7 @@ UserAuth = collections.namedtuple('UserAuth', ['username', 'password'])
 
 
 def sub_auth_enabled():
-    return bool(os.environ.get(sub_users.SECRET_TOKEN_ENVVAR))
+    return bool(os.environ.get('CATERVA2_AUTH_SECRET'))
 
 
 def make_sub_user(services):
