@@ -159,10 +159,27 @@ def init_b2(abspath, path, metadata):
     blosc2.Proxy(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
 
-def open_b2(abspath, path=None):
-    if path is None:
-        # Return object in scratch or proxy._cache container
-        return blosc2.open(abspath)
+def open_b2(abspath, path):
+    """
+    Return a Proxy if the dataset is in a publisher(path not in @scratch),
+    or the LazyExpr or blosc2 container otherwise.
+    """
+    if pathlib.Path(path).parts[0] == '@scratch':
+        # Return object in scratch
+        container = blosc2.open(abspath)
+        if isinstance(container, blosc2.LazyExpr):
+            # Open the operands properly
+            operands = container.operands
+            for key, value in operands.items():
+                if 'proxy-source' in value.schunk.meta:
+                    # Save operand as Proxy, see blosc2.open doc for more info
+                    relpath = srv_utils.get_relpath(value, cache, scratch)
+                    operands[key] = open_b2(value.schunk.urlpath, relpath)
+            return container
+        else:
+            return container
+
+    # Return Proxy
     dataset = PubDataset(abspath, path)
     container = blosc2.open(abspath)
     # No need to pass caterva2_env=True since _cache has already been created
@@ -538,18 +555,20 @@ async def fetch_data(
     # Download and update the necessary chunks of the schunk in cache
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
     await dataprep()
+    container = open_b2(abspath, path)
 
-    proxy = open_b2(abspath, path)
+    if isinstance(container, blosc2.Proxy):
+        container = container._cache
 
-    if isinstance(proxy._cache, blosc2.NDArray):
-        array = proxy._cache
-        schunk = array.schunk
+    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr):
+        array = container
+        schunk = getattr(array, 'schunk', None)
         typesize = array.dtype.itemsize
         shape = array.shape
     else:
         # SChunk
         array = None
-        schunk = proxy._cache
+        schunk = container
         typesize = schunk.typesize
         shape = (len(schunk),)
 
@@ -569,12 +588,12 @@ async def fetch_data(
 
     if slice_:
         if array is not None:
-            array = proxy[slice_] if array.ndim > 0 else proxy[()]
+            array = container[slice_] if array.ndim > 0 else container[()]
         else:
             if isinstance(slice_, int):
                 # TODO: make SChunk support integer as slice
                 slice_ = slice(slice_, slice_ + 1)
-            schunk = proxy[slice_]
+            schunk = container[slice_]
 
     # Serialization can be done either as:
     # * a serialized NDArray
@@ -607,11 +626,11 @@ async def get_chunk(
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         if user and path.parts[0] == '@scratch':
-            container = open_b2(abspath)
-            schunk = getattr(container, 'schunk', container)
-            if 'LazyArray' in schunk.meta:
+            container = open_b2(abspath, path)
+            if isinstance(container, blosc2.LazyArray):
                 # TODO: Support this
                 raise NotImplementedError
+            schunk = getattr(container, 'schunk', container)
             chunk = schunk.get_chunk(nchunk)
         else:
             sub_dset = PubDataset(abspath, path)
@@ -670,9 +689,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
             abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
         else:
             abspath = cache / path
-
-        # LazyExpr operands cannot be Proxy, get a NDArray instead
-        var_dict[var] = open_b2(abspath)
+        var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
     arr = eval(expr, var_dict)
