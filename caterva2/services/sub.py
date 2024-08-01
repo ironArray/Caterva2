@@ -467,31 +467,6 @@ async def partial_download(abspath, path, slice_=None):
         await proxy.afetch(slice_)
 
 
-async def download_expr_deps(expr):
-    """
-    Download the datasets that the lazy expression dataset depends on.
-
-    Parameters
-    ----------
-    abspath : pathlib.Path
-        The absolute path to the lazy expression dataset.
-
-    Returns
-    -------
-    None
-        When finished, expression dependencies are available in cache.
-    """
-    coroutines = []
-    for ndarr in expr.operands.values():
-        relpath = srv_utils.get_relpath(ndarr, cache, scratch)
-        if relpath.parts[0] != '@scratch':
-            abspath = pathlib.Path(ndarr.schunk.urlpath)
-            coroutine = partial_download(abspath, str(relpath))
-            coroutines.append(coroutine)
-
-    await asyncio.gather(*coroutines)
-
-
 def abspath_and_dataprep(path: pathlib.Path,
                          slice_: (tuple | None) = None,
                          user: (db.User | None) = None) -> tuple[
