@@ -51,7 +51,7 @@ def parse_slice(string):
             segment = slice(*map(lambda x: int(x.strip()) if x.strip() else None, segment.split(':')))
         obj.append(segment)
 
-    return tuple(obj)
+    return tuple(obj) if len(obj) > 1 else obj[0]
 
 
 def get_auth_cookie(urlbase, user_auth):

@@ -13,8 +13,7 @@ Used for user authentication (for the moment), based on FastAPI Users example:
 https://fastapi-users.github.io/fastapi-users/latest/configuration/full-example/
 
 The database should only be used if a (non-empty) secret token for the
-management of users is set in the environment variable named by
-`SECRET_TOKEN_ENVVAR`.
+management of users is set in the 'CATERVA2_AUTH_SECRET' environment variable.
 """
 
 import functools
@@ -34,17 +33,14 @@ from fastapi_users.db import SQLAlchemyUserDatabase
 from .db import User, get_user_db
 
 
-SECRET_TOKEN_ENVVAR = 'CATERVA2_AUTH_SECRET'
-
-
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     @functools.cached_property
     def reset_password_token_secret(self):
-        return os.environ.get(SECRET_TOKEN_ENVVAR)
+        return os.environ.get('CATERVA2_AUTH_SECRET')
 
     @functools.cached_property
     def verification_token_secret(self):
-        return os.environ.get(SECRET_TOKEN_ENVVAR)
+        return os.environ.get('CATERVA2_AUTH_SECRET')
 
     # TODO: Replace with actual functionality;
     # support user verification, allow password reset and user deletion.
@@ -77,7 +73,7 @@ def get_jwt_strategy() -> JWTStrategy:
     # The token itself is valid for an hour, even after an explicit logout
     # (however the cookie transport would delete the cookie anyway).
     lifetime_seconds = 3600 * 12
-    return JWTStrategy(secret=os.environ.get(SECRET_TOKEN_ENVVAR),
+    return JWTStrategy(secret=os.environ.get('CATERVA2_AUTH_SECRET'),
                        lifetime_seconds=lifetime_seconds)
 
 

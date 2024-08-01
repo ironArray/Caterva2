@@ -57,6 +57,65 @@ locks = {}
 urlbase = None
 
 
+class PubDataset(blosc2.ProxySource):
+    """
+    Class for getting chunks from a dataset on a publisher service.
+    """
+    def __init__(self, abspath, path, metadata=None):
+        self.path = pathlib.Path(path)
+        if metadata is not None:
+            suffix = abspath.suffix
+            if suffix == '.b2nd':
+                metadata = models.Metadata(**metadata)
+                self.shape = metadata.shape
+                self.chunks = metadata.chunks
+                self.blocks = metadata.blocks
+                dtype = metadata.dtype
+                if metadata.dtype.startswith('['):
+                    # TODO: eval is dangerous, but we mostly trust the metadata
+                    # This is a list, so we need to convert it to a string
+                    dtype = eval(dtype)
+                self.dtype = np.dtype(dtype)
+            else:
+                if suffix == '.b2frame':
+                    metadata = models.SChunk(**metadata)
+                else:
+                    abspath = pathlib.Path(f'{abspath}.b2')
+                    metadata = models.SChunk(**metadata)
+                self.typesize = metadata.cparams.typesize
+                self.chunksize = metadata.chunksize
+                self.nbytes = metadata.nbytes
+            self.abspath = abspath
+            if self.abspath is not None:
+                self.abspath.parent.mkdir(exist_ok=True, parents=True)
+
+    def _get_request_args(self, nchunk):
+        root, *name = self.path.parts
+        root = database.roots[root]
+        name = pathlib.Path(*name)
+        return dict(url=f'http://{root.http}/api/download/{name}',
+                    params={'nchunk': nchunk}, timeout=5)
+
+    def get_chunk(self, nchunk):
+        req_args = self._get_request_args(nchunk)
+
+        response = httpx.get(**req_args)
+        response.raise_for_status()
+        chunk = response.content
+        return chunk
+
+    async def aget_chunk(self, nchunk):
+        req_args = self._get_request_args(nchunk)
+
+        client = httpx.AsyncClient()
+        async with client.stream('GET', **req_args) as resp:
+            buffer = []
+            async for chunk in resp.aiter_bytes():
+                buffer.append(chunk)
+            chunk = b''.join(buffer)
+            return chunk
+
+
 def make_url(request, name, query=None, **path_params):
     url = request.app.url_path_for(name, **path_params)
     url = str(url)  # <starlette.datastructures.URLPath>
@@ -65,21 +124,6 @@ def make_url(request, name, query=None, **path_params):
         url = furl.furl(url).set(query).url
 
     return url
-
-
-async def download_chunk(path, schunk, nchunk):
-    root, name = path.split('/', 1)
-    host = database.roots[root].http
-    url = f'http://{host}/api/download/{name}'
-    params = {'nchunk': nchunk}
-
-    client = httpx.AsyncClient()
-    async with client.stream('GET', url, params=params, timeout=5) as resp:
-        buffer = []
-        async for chunk in resp.aiter_bytes():
-            buffer.append(chunk)
-        chunk = b''.join(buffer)
-        schunk.update_chunk(nchunk, chunk)
 
 
 async def new_root(data, topic):
@@ -102,7 +146,44 @@ async def updated_dataset(data, topic):
         if abspath.is_file():
             abspath.unlink()
     else:
-        srv_utils.init_b2(abspath, metadata)
+        key = f'{name}/{relpath}'
+        init_b2(abspath, key, metadata)
+
+
+def init_b2(abspath, path, metadata):
+    dataset = PubDataset(abspath, path, metadata)
+    schunk_meta = metadata.get('schunk', metadata)
+    vlmeta = {}
+    for k, v in schunk_meta['vlmeta'].items():
+        vlmeta[k] = v
+    blosc2.Proxy(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
+
+
+def open_b2(abspath, path):
+    """
+    Return a Proxy if the dataset is in a publisher(path not in @scratch),
+    or the LazyExpr or blosc2 container otherwise.
+    """
+    if pathlib.Path(path).parts[0] == '@scratch':
+        # Return object in scratch
+        container = blosc2.open(abspath)
+        if isinstance(container, blosc2.LazyExpr):
+            # Open the operands properly
+            operands = container.operands
+            for key, value in operands.items():
+                if 'proxy-source' in value.schunk.meta:
+                    # Save operand as Proxy, see blosc2.open doc for more info
+                    relpath = srv_utils.get_relpath(value, cache, scratch)
+                    operands[key] = open_b2(value.schunk.urlpath, relpath)
+            return container
+        else:
+            return container
+
+    # Return Proxy
+    dataset = PubDataset(abspath, path)
+    container = blosc2.open(abspath)
+    # No need to pass caterva2_env=True since _cache has already been created
+    return blosc2.Proxy(dataset, _cache=container)
 
 
 #
@@ -145,9 +226,9 @@ def follow(name: str):
         response.raise_for_status()
         metadata = response.json()
 
-        # Save metadata
+        # Save metadata and create Proxy
         abspath = rootdir / relpath
-        srv_utils.init_b2(abspath, metadata)
+        init_b2(abspath, key, metadata)
 
         # Save etag
         database.etags[key] = response.headers['etag']
@@ -165,7 +246,7 @@ def follow(name: str):
 #
 
 def user_auth_enabled():
-    return bool(os.environ.get(users.SECRET_TOKEN_ENVVAR))
+    return bool(os.environ.get('CATERVA2_AUTH_SECRET'))
 
 
 current_active_user = (users.current_active_user if user_auth_enabled()
@@ -382,53 +463,8 @@ async def partial_download(abspath, path, slice_=None):
     """
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
-        # Build the list of chunks we need to download from the publisher
-        array, schunk = srv_utils.open_b2(abspath)
-        if slice_:
-            if not array:
-                if isinstance(slice_[0], slice):
-                    # TODO: support schunk.nitems to avoid computations like these
-                    nitems = schunk.nbytes // schunk.typesize
-                    start, stop, _ = slice_[0].indices(nitems)
-                else:
-                    start, stop = slice_[0], slice_[0] + 1
-                # get_slice_nchunks() does not support slices for schunks yet
-                # TODO: support slices for schunks in python-blosc2
-                nchunks = blosc2.get_slice_nchunks(schunk, (start, stop))
-            else:
-                nchunks = blosc2.get_slice_nchunks(array, slice_)
-        else:
-            nchunks = range(schunk.nchunks)
-
-        # Fetch the chunks
-        for n in nchunks:
-            if not srv_utils.chunk_is_available(schunk, n):
-                await download_chunk(path, schunk, n)
-
-
-async def download_expr_deps(expr):
-    """
-    Download the datasets that the lazy expression dataset depends on.
-
-    Parameters
-    ----------
-    abspath : pathlib.Path
-        The absolute path to the lazy expression dataset.
-
-    Returns
-    -------
-    None
-        When finished, expression dependencies are available in cache.
-    """
-    coroutines = []
-    for ndarr in expr.operands.values():
-        relpath = srv_utils.get_relpath(ndarr, cache, scratch)
-        if relpath.parts[0] != '@scratch':
-            abspath = pathlib.Path(ndarr.schunk.urlpath)
-            coroutine = partial_download(abspath, str(relpath))
-            coroutines.append(coroutine)
-
-    await asyncio.gather(*coroutines)
+        proxy = open_b2(abspath, path)
+        await proxy.afetch(slice_)
 
 
 def abspath_and_dataprep(path: pathlib.Path,
@@ -448,19 +484,14 @@ def abspath_and_dataprep(path: pathlib.Path,
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
-        expr = blosc2.open(abspath)
-        if isinstance(expr, blosc2.LazyArray):
-            async def dataprep():
-                return await download_expr_deps(expr)
-        else:
-            async def dataprep():
-                pass
+        async def dataprep():
+            pass
 
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
         async def dataprep():
-            return await partial_download(abspath, str(path), slice_)
+            return await partial_download(abspath, path, slice_)
 
     return (abspath, dataprep)
 
@@ -493,11 +524,24 @@ async def fetch_data(
     slice_ = api_utils.parse_slice(slice_)
     # Download and update the necessary chunks of the schunk in cache
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
+    # This is still needed and will only update the necessary chunks
     await dataprep()
+    container = open_b2(abspath, path)
 
-    array, schunk = srv_utils.open_b2(abspath)
-    typesize = array.dtype.itemsize if array is not None else schunk.typesize
-    shape = array.shape if array is not None else (len(schunk),)
+    if isinstance(container, blosc2.Proxy):
+        container = container._cache
+
+    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr):
+        array = container
+        schunk = getattr(array, 'schunk', None)
+        typesize = array.dtype.itemsize
+        shape = array.shape
+    else:
+        # SChunk
+        array = None
+        schunk = container
+        typesize = schunk.typesize
+        shape = (len(schunk),)
 
     whole = slice_ is None or slice_ == ()
     if not whole and isinstance(slice_, tuple):
@@ -515,14 +559,12 @@ async def fetch_data(
 
     if slice_:
         if array is not None:
-            array = array[slice_] if array.ndim > 0 else array[()]
+            array = container[slice_] if array.ndim > 0 else container[()]
         else:
-            assert len(slice_) == 1
-            slice_ = slice_[0]
             if isinstance(slice_, int):
                 # TODO: make SChunk support integer as slice
                 slice_ = slice(slice_, slice_ + 1)
-            schunk = schunk[slice_]
+            schunk = container[slice_]
 
     # Serialization can be done either as:
     # * a serialized NDArray
@@ -543,6 +585,30 @@ async def fetch_data(
 
     return responses.StreamingResponse(downloader,
                                        media_type='application/octet-stream')
+
+
+@app.get('/api/chunk/{path:path}')
+async def get_chunk(
+    path: pathlib.PosixPath,
+    nchunk: int,
+    user: db.User = Depends(current_active_user),
+):
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    lock = locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        if user and path.parts[0] == '@scratch':
+            container = open_b2(abspath, path)
+            if isinstance(container, blosc2.LazyArray):
+                # TODO: Support this
+                raise NotImplementedError
+            schunk = getattr(container, 'schunk', container)
+            chunk = schunk.get_chunk(nchunk)
+        else:
+            sub_dset = PubDataset(abspath, path)
+            chunk = await sub_dset.aget_chunk(nchunk)
+
+    downloader = srv_utils.iterchunk(chunk)
+    return responses.StreamingResponse(downloader)
 
 
 def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
@@ -594,8 +660,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
             abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
         else:
             abspath = cache / path
-
-        var_dict[var] = blosc2.open(abspath, mode="r")
+        var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
     arr = eval(expr, var_dict)
@@ -873,10 +938,8 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(current_active_user),
 ):
-
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-    arr = blosc2.open(abspath)
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    arr = open_b2(abspath, path)
 
     # Local variables
     shape = arr.shape
@@ -1076,9 +1139,8 @@ async def html_markdown(
     response_class=HTMLResponse,
 ):
 
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-    arr = blosc2.open(abspath)
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    arr = open_b2(abspath, path)
     content = arr[:]
     # Markdown
     return markdown.markdown(content.decode('utf-8'))

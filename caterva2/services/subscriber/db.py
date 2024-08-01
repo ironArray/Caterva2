@@ -13,10 +13,9 @@ Used for user authentication (for the moment), based on FastAPI Users example:
 https://fastapi-users.github.io/fastapi-users/latest/configuration/full-example/
 
 The database should only be used if a (non-empty) secret token for the
-management of users is set in the environment variable named by
-`caterva2.services.subscriber.users.SECRET_TOKEN_ENVVAR`.
+management of users is set in the 'CATERVA2_AUTH_SECRET' environment variable.
 
-The database will be stored in SQLite format inside of the state directory
+The database will be stored in SQLite format inside the state directory
 given to `create_db_and_tables()`.
 """
 
