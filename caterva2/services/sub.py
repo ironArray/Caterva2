@@ -509,13 +509,8 @@ def abspath_and_dataprep(path: pathlib.Path,
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
-        expr = blosc2.open(abspath)
-        if isinstance(expr, blosc2.LazyArray):
-            async def dataprep():
-                return await download_expr_deps(expr)
-        else:
-            async def dataprep():
-                pass
+        async def dataprep():
+            pass
 
     else:
         filepath = cache / path
@@ -554,6 +549,7 @@ async def fetch_data(
     slice_ = api_utils.parse_slice(slice_)
     # Download and update the necessary chunks of the schunk in cache
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
+    # This is still needed and will only update the necessary chunks
     await dataprep()
     container = open_b2(abspath, path)
 
@@ -967,10 +963,8 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(current_active_user),
 ):
-
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-    arr = blosc2.open(abspath)
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    arr = open_b2(abspath, path)
 
     # Local variables
     shape = arr.shape
@@ -1170,9 +1164,8 @@ async def html_markdown(
     response_class=HTMLResponse,
 ):
 
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-    arr = blosc2.open(abspath)
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    arr = open_b2(abspath, path)
     content = arr[:]
     # Markdown
     return markdown.markdown(content.decode('utf-8'))

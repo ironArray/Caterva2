@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import current_active_user
 from ...subscriber import db
+from ...sub import open_b2
 
 
 app = FastAPI()
@@ -59,7 +60,7 @@ def display(
 ):
 
     abspath, _ = abspath_and_dataprep(path, user=user)
-    arr = blosc2.open(abspath)
+    arr = open_b2(abspath, path)
 
     base = f"/plugins/{name}"
     context = {
@@ -72,10 +73,9 @@ def display(
 async def __get_image(path, i, user):
     from PIL import Image
 
-    # TODO: This accepts a slice, pass it in.
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
-    arr = blosc2.open(abspath)
+    # Alternatively, call abspath_and_dataprep with the corresponding slice to download data async
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    arr = open_b2(abspath, path)
 
     img = arr[i,:]
     return Image.fromarray(img)
