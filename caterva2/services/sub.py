@@ -31,7 +31,6 @@ import httpx
 import markdown
 import numexpr as ne
 import numpy as np
-import uvicorn
 
 # Project
 from caterva2 import utils, api_utils, models
@@ -89,25 +88,27 @@ class PubDataset(blosc2.ProxySource):
             if self.abspath is not None:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
 
-    def _get_request_args(self, nchunk):
+    def _get_request_args(self, nchunk, return_async_client):
         root, *name = self.path.parts
         root = database.roots[root]
         name = pathlib.Path(*name)
-        return dict(url=f'http://{root.http}/api/download/{name}',
-                    params={'nchunk': nchunk}, timeout=5)
+
+        url = f'/api/download/{name}'
+        client, url = api_utils.get_client_and_url(root.http, url, return_async_client=return_async_client)
+        args = dict(url=url, params={'nchunk': nchunk}, timeout=5)
+        return client, args
 
     def get_chunk(self, nchunk):
-        req_args = self._get_request_args(nchunk)
+        client, req_args = self._get_request_args(nchunk, return_async_client=False)
 
-        response = httpx.get(**req_args)
+        response = client.get(**req_args)
         response.raise_for_status()
         chunk = response.content
         return chunk
 
     async def aget_chunk(self, nchunk):
-        req_args = self._get_request_args(nchunk)
+        client, req_args = self._get_request_args(nchunk, return_async_client=True)
 
-        client = httpx.AsyncClient()
         async with client.stream('GET', **req_args) as resp:
             buffer = []
             async for chunk in resp.aiter_bytes():
@@ -207,7 +208,7 @@ def follow(name: str):
 
     # Get list of datasets
     try:
-        data = api_utils.get(f'http://{root.http}/api/list')
+        data = api_utils.get('/api/list', server=root.http)
     except httpx.ConnectError:
         return
 
@@ -219,7 +220,9 @@ def follow(name: str):
         headers = None if val is None else {'If-None-Match': val}
 
         # Call API
-        response = httpx.get(f'http://{root.http}/api/info/{relpath}', headers=headers)
+        response = api_utils.get(f'/api/info/{relpath}', headers=headers,
+                                 server=root.http, raise_for_status=False,
+                                 return_response=True)
         if response.status_code == 304:
             continue
 
@@ -278,7 +281,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize roots from the broker
     try:
-        data = api_utils.get(f'http://{broker}/api/roots')
+        data = api_utils.get('/api/roots', server=broker)
     except httpx.ConnectError:
         logger.warning('Broker not available')
         client = None
@@ -1205,9 +1208,8 @@ def main():
 
     # Run
     global urlbase
-    host, port = args.http
     urlbase = args.url
-    uvicorn.run(app, host=host, port=port)
+    utils.uvicorn_run(app, args)
 
 
 if __name__ == '__main__':

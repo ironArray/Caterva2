@@ -13,6 +13,9 @@ import re
 # Requirements
 import httpx
 
+# Caterva2
+from caterva2 import utils
+
 # Optional requirements
 try:
     import blosc2
@@ -54,7 +57,7 @@ def parse_slice(string):
     return tuple(obj) if len(obj) > 1 else obj[0]
 
 
-def get_auth_cookie(urlbase, user_auth):
+def get_auth_cookie(urlbase, user_auth, server=None):
     """
     Authenticate to a subscriber as a user and get an authorization cookie.
 
@@ -74,17 +77,20 @@ def get_auth_cookie(urlbase, user_auth):
         An authentication token that may be used as a cookie in further
         requests to the subscriber.
     """
+    url = f'{urlbase}auth/jwt/login'
+    client, url = get_client_and_url(server, url)
+
     if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
         user_auth = user_auth._asdict()
-    resp = httpx.post(f'{urlbase}auth/jwt/login', data=user_auth)
+    resp = client.post(url, data=user_auth)
     resp.raise_for_status()
     auth_cookie = '='.join(list(resp.cookies.items())[0])
     return auth_cookie
 
 
-def fetch_data(path, urlbase, params, auth_cookie=None):
+def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
     response = _xget(f'{urlbase}api/fetch/{path}', params=params,
-                     auth_cookie=auth_cookie)
+                     auth_cookie=auth_cookie, server=server)
     data = response.content
     # Try different deserialization methods
     try:
@@ -117,9 +123,11 @@ def b2_unpack(filepath):
 _attachment_b2fname_rx = re.compile(r';\s*filename\*?\s*=\s*"([^"]+\.b2)"')
 
 
-def download_url(url, localpath, try_unpack=True, auth_cookie=None):
+def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None):
+    client, url = get_client_and_url(server, url)
+
     headers = {'Cookie': auth_cookie} if auth_cookie else None
-    with httpx.stream("GET", url, headers=headers) as r:
+    with client.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
         # Build the local filepath
         cdisp = r.headers.get('content-disposition', '')
@@ -139,24 +147,59 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None):
 #
 # HTTP client helpers
 #
-def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None):
+def get_client_and_url(server, url, return_async_client=False):
+    if return_async_client:
+        client_class = httpx.AsyncClient
+        transport_class = httpx.AsyncHTTPTransport
+    else:
+        client_class = httpx.Client
+        transport_class = httpx.HTTPTransport
+
+    if server is None:
+        client = client_class()
+    elif server:
+        if type(server) is str:
+            server = utils.Socket(server)
+
+        assert url.startswith('/'), f'expected absolute path, got "{url}"'
+        if server.uds:
+            transport = transport_class(uds=server.uds)
+            client = client_class(transport=transport)
+            url = f'http://localhost{url}'
+        else:
+            client = client_class()
+            url = f'http://{server}{url}'
+
+    return client, url
+
+
+def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None, server=None,
+          raise_for_status=True):
+    client, url = get_client_and_url(server, url)
     if auth_cookie:
         headers = headers.copy() if headers else {}
         headers['Cookie'] = auth_cookie
-    response = httpx.get(url, params=params, headers=headers, timeout=timeout)
-    response.raise_for_status()
+    response = client.get(url, params=params, headers=headers, timeout=timeout)
+    if raise_for_status:
+        response.raise_for_status()
     return response
 
 
-def get(url, params=None, headers=None, timeout=5, model=None,
-        auth_cookie=None):
-    response = _xget(url, params, headers, timeout, auth_cookie)
+def get(url, params=None, headers=None, timeout=5, model=None, auth_cookie=None,
+        server=None, raise_for_status=True, return_response=False):
+
+    response = _xget(url, params, headers, timeout, auth_cookie, server=server,
+                     raise_for_status=raise_for_status)
+    if return_response:
+        return response
+
     json = response.json()
     return json if model is None else model(**json)
 
 
-def post(url, json=None, auth_cookie=None):
+def post(url, json=None, auth_cookie=None, server=None):
+    client, url = get_client_and_url(server, url)
     headers = {'Cookie': auth_cookie} if auth_cookie else None
-    response = httpx.post(url, json=json, headers=headers)
+    response = client.post(url, json=json, headers=headers)
     response.raise_for_status()
     return response.json()

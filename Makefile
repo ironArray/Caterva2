@@ -11,16 +11,16 @@ install:
 	${BIN}/pip install -e .[tests]
 
 bro:
-	${BIN}/python3 -m caterva2.services.bro --statedir=var/bro
+	${BIN}/python3 -m caterva2.services.bro
 
 pub-dir:
-	${BIN}/python3 -m caterva2.services.pub --statedir=var/pub-dir foo root-example --http=localhost:8010
+	${BIN}/python3 -m caterva2.services.pub --id dir
 
 pub-color:
-	${BIN}/python3 -m caterva2.services.pub --statedir=var/pub-color color numbers-default.h5 --http=localhost:8011
+	${BIN}/python3 -m caterva2.services.pub --id color
 
 pub-gris:
-	${BIN}/python3 -m caterva2.services.pub --statedir=var/pub-gris gris numbers-10x-gris-3d.h5 --http=localhost:8012
+	${BIN}/python3 -m caterva2.services.pub --id gris
 
 sub:
-	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub --statedir=var/sub
+	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub

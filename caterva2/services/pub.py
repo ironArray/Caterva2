@@ -14,7 +14,6 @@ import logging
 # Requirements
 import blosc2
 from fastapi import FastAPI, Response, responses
-import uvicorn
 
 # Project
 from caterva2 import utils, api_utils, models
@@ -219,13 +218,11 @@ def main():
     database = srv_utils.Database(statedir / 'db.json', model)
 
     # Register
-    host, port = args.http
-    data = {'name': name, 'http': f'{host}:{port}'}
-    api_utils.post(f'http://{broker}/api/roots', json=data)
+    data = {'name': name, 'http': args.http}
+    api_utils.post('/api/roots', json=data, server=args.broker)
 
     # Run
-    host, port = args.http
-    uvicorn.run(app, host=host, port=port)
+    utils.uvicorn_run(app, args)
 
 
 if __name__ == '__main__':

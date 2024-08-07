@@ -13,7 +13,6 @@ import typing
 from fastapi import FastAPI
 from fastapi.routing import APIRouter
 from fastapi_websocket_pubsub import PubSubEndpoint
-import uvicorn
 
 # Project
 from caterva2 import utils, models
@@ -62,8 +61,7 @@ def main():
     print(database.data)
 
     # Run
-    host, port = args.http
-    uvicorn.run(app, host=host, port=port)
+    utils.uvicorn_run(app, args)
 
 
 if __name__ == '__main__':

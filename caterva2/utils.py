@@ -9,10 +9,12 @@
 
 import argparse
 import contextlib
+import logging
 import os
 import pathlib
-import sys
-import logging
+
+# Requirements
+import uvicorn
 
 try:
     import tomllib as toml
@@ -58,12 +60,28 @@ def urlbase_type(string):
     return string
 
 
-def socket_type(string):
-    host, port = string.rsplit(':', maxsplit=1)
-    port = int(port)
-    if host.startswith('[') and host.endswith(']'):
-        host = host[1:-1]
-    return host, port
+class Socket(str):
+
+    host = None
+    port = None
+    uds = None
+
+    def __init__(self, string):
+        try:
+            host, port = string.rsplit(':', maxsplit=1)
+        except ValueError:
+            host = port = None
+
+        if host and port:
+            # Host and port
+            self.host = host
+            self.port = int(port)
+            # Remove brackets from IPv6 addresses
+            if host.startswith('[') and host.endswith(']'):
+                self.host = host[1:-1]
+        else:
+            # Unix domain socket
+            self.uds = string
 
 
 def get_parser(loglevel='warning', statedir=None, id=None,
@@ -71,13 +89,14 @@ def get_parser(loglevel='warning', statedir=None, id=None,
     parser = argparse.ArgumentParser()
     _add_preliminary_args(parser, id=id)  # just for help purposes
     if broker:
-        parser.add_argument('--broker', default=broker)
+        parser.add_argument('--broker', default=broker, type=Socket,
+                            help='socket address of the broker')
     if http:
-        parser.add_argument('--http', default=http, type=socket_type)
+        parser.add_argument('--http', default=http, type=Socket,
+                            help='Listen to given hostname:port or unix socket')
         parser.add_argument('--url', default=url, type=urlbase_type)
     if statedir:
-        parser.add_argument('--statedir', default=statedir,
-                            type=pathlib.Path)
+        parser.add_argument('--statedir', default=statedir, type=pathlib.Path)
     parser.add_argument('--loglevel', default=loglevel)
     return parser
 
@@ -95,6 +114,18 @@ def run_parser(parser):
             args.url = f'http://{args.http[0]}:{args.http[1]}/'
 
     return args
+
+
+#
+# Web server related
+#
+
+def uvicorn_run(app, args):
+    http = args.http
+    if http.uds:
+        uvicorn.run(app, uds=http.uds)
+    else:
+        uvicorn.run(app, host=http.host, port=http.port)
 
 
 #
