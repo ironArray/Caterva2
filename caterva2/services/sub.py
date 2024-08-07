@@ -88,7 +88,7 @@ class PubDataset(blosc2.ProxySource):
             if self.abspath is not None:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
 
-    def _get_client_and_request_args(self, nchunk, return_async_client):
+    def _get_request_args(self, nchunk, return_async_client):
         root, *name = self.path.parts
         root = database.roots[root]
         name = pathlib.Path(*name)
@@ -99,7 +99,7 @@ class PubDataset(blosc2.ProxySource):
         return client, args
 
     def get_chunk(self, nchunk):
-        client, req_args = self._get_client_and_request_args(nchunk, return_async_client=False)
+        client, req_args = self._get_request_args(nchunk, return_async_client=False)
 
         response = client.get(**req_args)
         response.raise_for_status()
@@ -107,7 +107,7 @@ class PubDataset(blosc2.ProxySource):
         return chunk
 
     async def aget_chunk(self, nchunk):
-        client, req_args = self._get_client_and_request_args(nchunk, return_async_client=True)
+        client, req_args = self._get_request_args(nchunk, return_async_client=True)
 
         async with client.stream('GET', **req_args) as resp:
             buffer = []
