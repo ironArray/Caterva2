@@ -280,41 +280,42 @@ async def lifespan(app: FastAPI):
         await db.create_db_and_tables(statedir)
 
     # Initialize roots from the broker
-    try:
-        data = api_utils.get('/api/roots', server=broker)
-    except httpx.ConnectError:
-        logger.warning('Broker not available')
-        client = None
-    else:
-        changed = False
-        # Deleted
-        d = list(database.roots.items())
-        for name, root in d:
-            if name not in data:
-                del database.roots[name]
-                changed = True
+    client = None
+    if broker:
+        try:
+            data = api_utils.get('/api/roots', server=broker)
+        except httpx.ConnectError:
+            logger.warning(f'Broker "{broker}" not available')
+        else:
+            changed = False
+            # Deleted
+            d = list(database.roots.items())
+            for name, root in d:
+                if name not in data:
+                    del database.roots[name]
+                    changed = True
 
-        # New or updated
-        for name, data in data.items():
-            root = models.Root(**data)
-            if name not in database.roots:
-                database.roots[root.name] = root
-                changed = True
-            elif database.roots[root.name].http != root.http:
-                database.roots[root.name].http = root.http
-                changed = True
+            # New or updated
+            for name, data in data.items():
+                root = models.Root(**data)
+                if name not in database.roots:
+                    database.roots[root.name] = root
+                    changed = True
+                elif database.roots[root.name].http != root.http:
+                    database.roots[root.name].http = root.http
+                    changed = True
 
-        if changed:
-            database.save()
+            if changed:
+                database.save()
 
-        # Follow the @new channel to know when a new root is added
-        client = srv_utils.start_client(f'ws://{broker}/pubsub')
-        client.subscribe('@new', new_root)
+            # Follow the @new channel to know when a new root is added
+            client = srv_utils.start_client(f'ws://{broker}/pubsub')
+            client.subscribe('@new', new_root)
 
-        # Resume following
-        for path in cache.iterdir():
-            if path.is_dir():
-                follow(path.name)
+            # Resume following
+            for path in cache.iterdir():
+                if path.is_dir():
+                    follow(path.name)
 
     yield
 
@@ -1168,7 +1169,7 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
-    parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
+    parser = utils.get_parser(broker=conf.get('broker.http', ''),
                               http=conf.get('.http', 'localhost:8002'),
                               url=conf.get('.url'),
                               loglevel=conf.get('.loglevel', 'warning'),
