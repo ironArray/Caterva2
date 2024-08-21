@@ -1,0 +1,31 @@
+{% if upload %}
+<div class="d-flex gap-1 justify-content-between">
+{% endif %}
+
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox"
+               name="roots" value="{{ name }}" {{ "checked" if name in checked }}
+               id="id_root_{{ name }}">
+        <label class="form-check-label" for="id_root_{{ name }}"
+            {% if title %}title="{{ title }}"{% endif %}
+        >
+            {{ name }}
+        </label>
+    </div>
+
+{% if upload %}
+    <div id="id_file_upload" title="Upload file to scratch">
+        <label for="id_file" role="button"
+               ondrop="dropHandler(event)"
+               ondragover="dragoverHandler(event)"
+               ondragleave="dragleaveHandler(event)"
+        >
+            <i class="fa-solid fa-upload"></i>
+            {% include 'includes/loading.html' %}
+        </label>
+        <input type="file" name="file" id="id_file"
+               hx-post="/htmx/upload/" hx-encoding="multipart/form-data"
+               hx-indicator="#id_file_upload label">
+    </div>
+</div>
+{% endif %}

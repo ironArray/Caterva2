@@ -793,8 +793,8 @@ async def htmx_root_list(
 ):
 
     context = {
-        "roots": sorted(database.roots.values(), key=lambda x: x.name),
         "checked": roots,
+        "roots": sorted(database.roots.values(), key=lambda x: x.name),
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1188,6 +1188,11 @@ def main():
     cache.mkdir(exist_ok=True, parents=True)
     # Use `download_cached()`, `StaticFiles` does not support authorization.
     #app.mount("/files", StaticFiles(directory=cache), name="files")
+
+    # Shared dir
+    global shared
+    shared = statedir / 'shared'
+    shared.mkdir(exist_ok=True, parents=True)
 
     # Scratch dir
     global scratch

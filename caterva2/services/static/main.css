@@ -84,21 +84,19 @@ body {
 }
 
 #id_file_upload label {
-    border: 3px dashed gray;
-    border-radius: 16px;
 }
 
 #id_file_upload.active label {
-    border-color: lightblue;
+    color: blue;
 }
 
 #id_file_upload label:hover {
-    border-color: lightblue;
+    color: blue;
 }
 
 #id_file_upload input {
-    width: 1;
-    height: 1;
+    width: 1px;
+    height: 1px;
     opacity: 0;
 }
 
