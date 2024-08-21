@@ -844,14 +844,16 @@ async def htmx_path_list(
             rootdir = cache / root
 
         for path, relpath in utils.walk_files(rootdir):
+            size = path.stat().st_size
             if relpath.suffix == '.b2':
                 relpath = relpath.with_suffix('')
             if search in str(relpath):
                 path = f'{root}/{relpath}'
                 url = make_url(request, "html_home", path=path, query=query)
                 datasets.append({
-                    'path': path,
                     'name': next(names),
+                    'path': path,
+                    'size': size,
                     'url': url,
                 })
 
