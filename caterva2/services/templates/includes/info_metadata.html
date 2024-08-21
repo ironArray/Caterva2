@@ -1,6 +1,6 @@
 <p class="d-flex gap-4">
     <a href="/api/fetch/{{ path }}" class="text-decoration-none"><i class="fa-solid fa-download"></i> Download</a>
-    {% if scratch %}
+    {% if can_delete %}
     <a href="#" class="text-decoration-none link-danger"
         hx-delete="/htmx/delete/{{path}}" hx-confirm="Do you confirm deletion?"
     >

@@ -50,6 +50,7 @@ broker = None
 statedir = None
 cache = None
 scratch = None
+shared = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 locks = {}
@@ -491,6 +492,12 @@ def abspath_and_dataprep(path: pathlib.Path,
         async def dataprep():
             pass
 
+    elif user and parts[0] == '@shared':
+        filepath = shared / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(shared, filepath)
+        async def dataprep():
+            pass
+
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath)
@@ -829,6 +836,8 @@ async def htmx_path_list(
     for root in roots:
         if user and root == '@scratch':
             rootdir = scratch / str(user.id)
+        elif user and root == '@shared':
+            rootdir = shared
         else:
             if not get_root(root).subscribed:
                 follow(root)
@@ -906,7 +915,7 @@ async def htmx_path_info(
         "path": path,
         "meta": meta,
         "display": display,
-        "scratch": path.parts[0] == '@scratch',
+        "can_delete": path.parts[0] in {"@scratch", "@shared"},
     }
 
     # XXX
@@ -1075,9 +1084,10 @@ def htmx_redirect(current_url, target_url):
     response.headers['HX-Redirect'] = f'{target_url}?{query.encode()}'
     return response
 
-@app.post("/htmx/upload/")
+@app.post("/htmx/upload/{name}")
 async def htmx_upload(
     request: Request,
+    name: str,
     # Body
     file: UploadFile,
     # Headers
@@ -1087,7 +1097,10 @@ async def htmx_upload(
 ):
 
     if not user:
-        raise fastapi.HTTPException(status_code=401)  # unauthorized
+        raise fastapi.HTTPException(status_code=401)  # Unauthorized
+
+    if name not in {'@shared', '@scratch'}:
+        raise fastapi.HTTPException(status_code=404)  # NotFound
 
     # Read file
     filename = pathlib.Path(file.filename)
@@ -1098,13 +1111,16 @@ async def htmx_upload(
         filename = f'{filename}.b2frame'
 
     # Save file
-    path = scratch / str(user.id)
+    if name == '@scratch':
+        path = scratch / str(user.id)
+    elif name == '@shared':
+        path = shared
     path.mkdir(exist_ok=True, parents=True)
     with open(path / filename, 'wb') as dst:
         dst.write(data)
 
     # Redirect to display new dataset
-    path = f'@scratch/{filename}'
+    path = f'{name}/{filename}'
     url = make_url(request, "html_home", path=path)
     return htmx_redirect(hx_current_url, url)
 
@@ -1120,13 +1136,21 @@ async def htmx_delete(
     user: db.User = Depends(current_active_user),
 ):
 
+    # Find absolute path to file
     parts = list(path.parts)
-    assert parts[0] == '@scratch'
+    name = parts[0]
+    if name == "@scratch":
+        parts[0] = str(user.id)
+        path = pathlib.Path(*parts)
+        abspath = scratch / path
+    elif name == "@shared":
+        path = pathlib.Path(*parts[1:])
+        abspath = shared / path
+    else:
+        return fastapi.HTTPException(status_code=400)
 
     # Remove
-    parts[0] = str(user.id)
-    path = pathlib.Path(*parts)
-    (scratch / path).unlink()
+    abspath.unlink()
 
     # Redirect to home
     url = make_url(request, "html_home")

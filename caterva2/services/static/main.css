@@ -83,23 +83,23 @@ body {
     vertical-align: inherit;
 }
 
-#id_file_upload label {
+.file_upload label {
 }
 
-#id_file_upload.active label {
+.file_upload.active label {
     color: blue;
 }
 
-#id_file_upload label:hover {
+.file_upload label:hover {
     color: blue;
 }
 
-#id_file_upload input {
+.file_upload input {
     width: 1px;
     height: 1px;
     opacity: 0;
 }
 
-#id_file_upload .htmx-request i {
+.file_upload .htmx-request i {
     display: none;
 }
