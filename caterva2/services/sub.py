@@ -1059,14 +1059,14 @@ async def htmx_command(
     except TypeError as te:
         return htmx_error(request, f'Invalid expression: {te}')
     except KeyError as ke:
-        return htmx_error(request,
-                          f'Expression error: {ke.args[0]} is not in the list of available datasets')
+        error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
+        return htmx_error(request, error)
     except RuntimeError as exc:
         return htmx_error(request, str(exc))
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
-    return htmx_redirect(hx_current_url, url)
+    return htmx_redirect(hx_current_url, url, root='@scratch')
 
 
 def htmx_error(request, msg):
@@ -1074,12 +1074,13 @@ def htmx_error(request, msg):
     return templates.TemplateResponse(request, "error.html", context, status_code=400)
 
 
-def htmx_redirect(current_url, target_url):
+def htmx_redirect(current_url, target_url, root=None):
     response = JSONResponse('OK')
     query = furl.furl(current_url).query
     roots = query.params.getlist('roots')
-    if '@scratch' not in roots:
-        query = query.add({'roots': '@scratch'})
+
+    if root and root not in roots:
+        query = query.add({'roots': root})
 
     response.headers['HX-Redirect'] = f'{target_url}?{query.encode()}'
     return response
@@ -1122,7 +1123,7 @@ async def htmx_upload(
     # Redirect to display new dataset
     path = f'{name}/{filename}'
     url = make_url(request, "html_home", path=path)
-    return htmx_redirect(hx_current_url, url)
+    return htmx_redirect(hx_current_url, url, root=name)
 
 
 @app.delete("/htmx/delete/{path:path}", response_class=HTMLResponse)
@@ -1154,7 +1155,7 @@ async def htmx_delete(
 
     # Redirect to home
     url = make_url(request, "html_home")
-    return htmx_redirect(hx_current_url, url)
+    return htmx_redirect(hx_current_url, url, root=name)
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)
