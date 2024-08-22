@@ -46,6 +46,7 @@ running before proceeding to tests.  It has three modes of operation:
 import collections
 import functools
 import itertools
+import logging
 import os
 import re
 import shutil
@@ -70,6 +71,7 @@ TEST_HDF5_ROOT = 'hdf5root'
 
 
 local_port_iter = itertools.count(8100)
+logger = logging.getLogger('tests')
 
 
 def service_ep_getter(first):
@@ -147,27 +149,41 @@ class ManagedServices(Services):
                 f"check for service \"{name}\" succeeded before start"
                 f" (external service running?): {check.__name__}")
 
-        self._procs[name] = subprocess.Popen(
-            [sys.executable,
-             '-m' + f'caterva2.services.{name[:3]}',
-             '--statedir=%s' % (self.state_dir / name),
-             *(['--http=%s' % check.host] if check else []),
-             *args])
+        popen_args = [
+            sys.executable,
+            f'-mcaterva2.services.{name[:3]}',
+            f'--statedir={self.state_dir / name}',
+            *([f'--http={check.host}'] if check else []),
+            *args
+        ]
+        popen = subprocess.Popen(popen_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        command_line = ' '.join(str(x) for x in popen_args)
+        self._procs[name] = popen
 
         if check is None:
             return
+
         self._endpoints[name] = check.host
 
         start_timeout_secs = 10
         start_sleep_secs = 1
         for _ in range(int(start_timeout_secs / start_sleep_secs)):
+            returncode = popen.poll()
+            if returncode is not None:
+                logger.error(f'STDERR {popen.stderr.read()}')
+                logger.error(f'STDOUT {popen.stdout.read()}')
+                raise RuntimeError(
+                    f"service {name} failed with returncode={returncode}, "
+                    f"command = {command_line}"
+                )
             time.sleep(start_sleep_secs)
             if check():
                 break
         else:
             raise RuntimeError(
-                f"service \"{name}\" failed to become available"
-                f" after {start_timeout_secs:d} seconds")
+                f"service {name} timeout after {start_timeout_secs} seconds, "
+                f"command = {command_line}"
+            )
 
     def _get_data_path(self, root):
         return self.state_dir / f'data.{root.name}'
@@ -265,12 +281,13 @@ def services(configuration, examples_dir, examples_hdf5):
     if examples_hdf5 is not None:
         roots.append(TestRoot(TEST_HDF5_ROOT, examples_hdf5))
 
-    srvs = (ExternalServices(roots=roots,
-                             configuration=configuration)
-            if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
-            else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                                 roots=roots,
-                                 configuration=configuration))
+    srvs = (
+        ExternalServices(roots=roots, configuration=configuration)
+        if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
+        else ManagedServices(TEST_STATE_DIR, reuse_state=False,
+                             roots=roots, configuration=configuration)
+    )
+
     try:
         srvs.start_all()
         yield srvs
