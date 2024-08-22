@@ -13,10 +13,6 @@ Testing needs Caterva2 to be installed with the `tests` extra:
 pip install -e ".[tests]"
 ```
 
-Beware of running the tests if there is a `caterva2.toml` file in the current working
-directory. If there is it will be picked up and most probably the tests will fail without
-a meaningful error.
-
 ### With managed daemons
 
 This will start the daemons, run the tests, and shut the daemons down:

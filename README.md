@@ -97,10 +97,6 @@ env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
 
 Neither `root-example` nor `_caterva2_tests` will be used in this case.
 
-Beware of running the tests if there is a `caterva2.toml` file in the current working
-directory. If there is it will be picked up and most probably the tests will fail without
-a meaningful error.
-
 ## Quick start
 
 (Find more detailed step-by-step [tutorials](Tutorials) in Caterva2 documentation.)

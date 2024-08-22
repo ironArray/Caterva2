@@ -48,6 +48,7 @@ import functools
 import itertools
 import logging
 import os
+import pathlib
 import re
 import shutil
 import signal
@@ -63,6 +64,7 @@ import caterva2 as cat2
 from pathlib import Path
 
 
+BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = '_caterva2'
 TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_DEFAULT_ROOT = 'foo'
@@ -151,9 +153,10 @@ class ManagedServices(Services):
 
         popen_args = [
             sys.executable,
-            f'-mcaterva2.services.{name[:3]}',
-            f'--statedir={self.state_dir / name}',
-            *([f'--http={check.host}'] if check else []),
+            f"-mcaterva2.services.{name[:3]}",
+            f"--conf={BASE_DIR / 'caterva2.toml'}",
+            f"--statedir={self.state_dir / name}",
+            *([f"--http={check.host}"] if check else []),
             *args
         ]
         popen = subprocess.Popen(popen_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
