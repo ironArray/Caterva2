@@ -1,0 +1,22 @@
+# Example configuration for a standalone subscriber
+#
+# It's possible to run only the subscriber. Then the configuration has only a
+# section for the subscriber. And maybe another one for the client.
+
+# The subscriber section must define:
+#
+# - statedir: the directory where the subcriber's data will be stored
+# - http: where the subscriber listens to (a unix socket or a host/port)
+# - url: the base url users will use to reach the subscriber
+#
+[subscriber]
+statedir = "state/subscriber"
+#http = "state/subscriber/uvicorn.socket"
+http = "localhost:8002"
+url = "http://localhost:8002"
+
+# The client section defines the credentials for the client to authenticate
+# against the subscriber.
+[client]
+username = ""
+password = ""
