@@ -1,0 +1,37 @@
+{% with %}
+{% set id=name | replace("@", "_") %}
+
+{% if upload %}
+<div class="d-flex gap-1 justify-content-between">
+{% endif %}
+
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox"
+               name="roots" value="{{ name }}" {{ "checked" if name in checked }}
+               id="id_root_{{ id }}">
+        <label class="form-check-label" for="id_root_{{ id }}"
+            {% if title %}title="{{ title }}"{% endif %}
+        >
+            {{ name }}
+        </label>
+    </div>
+
+{% if upload %}
+    <div id="id_file_upload_{{ id }}" class="file_upload" title="Upload file">
+        <label for="id_file_{{ id }}" role="button"
+               ondrop="dropHandler(event)"
+               ondragover="dragoverHandler(event)"
+               ondragleave="dragleaveHandler(event)"
+        >
+            <i class="fa-solid fa-upload"></i>
+            {% include 'includes/loading.html' %}
+        </label>
+        <input type="file" name="file" id="id_file_{{ id }}"
+               hx-post="/htmx/upload/{{ name }}"
+               hx-encoding="multipart/form-data"
+               hx-indicator="#id_file_upload_{{ id }} label">
+    </div>
+</div>
+{% endif %}
+
+{% endwith %}

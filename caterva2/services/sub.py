@@ -50,6 +50,7 @@ broker = None
 statedir = None
 cache = None
 scratch = None
+shared = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 locks = {}
@@ -280,41 +281,42 @@ async def lifespan(app: FastAPI):
         await db.create_db_and_tables(statedir)
 
     # Initialize roots from the broker
-    try:
-        data = api_utils.get('/api/roots', server=broker)
-    except httpx.ConnectError:
-        logger.warning('Broker not available')
-        client = None
-    else:
-        changed = False
-        # Deleted
-        d = list(database.roots.items())
-        for name, root in d:
-            if name not in data:
-                del database.roots[name]
-                changed = True
+    client = None
+    if broker:
+        try:
+            data = api_utils.get('/api/roots', server=broker)
+        except httpx.ConnectError:
+            logger.warning(f'Broker "{broker}" not available')
+        else:
+            changed = False
+            # Deleted
+            d = list(database.roots.items())
+            for name, root in d:
+                if name not in data:
+                    del database.roots[name]
+                    changed = True
 
-        # New or updated
-        for name, data in data.items():
-            root = models.Root(**data)
-            if name not in database.roots:
-                database.roots[root.name] = root
-                changed = True
-            elif database.roots[root.name].http != root.http:
-                database.roots[root.name].http = root.http
-                changed = True
+            # New or updated
+            for name, data in data.items():
+                root = models.Root(**data)
+                if name not in database.roots:
+                    database.roots[root.name] = root
+                    changed = True
+                elif database.roots[root.name].http != root.http:
+                    database.roots[root.name].http = root.http
+                    changed = True
 
-        if changed:
-            database.save()
+            if changed:
+                database.save()
 
-        # Follow the @new channel to know when a new root is added
-        client = srv_utils.start_client(f'ws://{broker}/pubsub')
-        client.subscribe('@new', new_root)
+            # Follow the @new channel to know when a new root is added
+            client = srv_utils.start_client(f'ws://{broker}/pubsub')
+            client.subscribe('@new', new_root)
 
-        # Resume following
-        for path in cache.iterdir():
-            if path.is_dir():
-                follow(path.name)
+            # Resume following
+            for path in cache.iterdir():
+                if path.is_dir():
+                    follow(path.name)
 
     yield
 
@@ -487,6 +489,12 @@ def abspath_and_dataprep(path: pathlib.Path,
     if user and parts[0] == '@scratch':
         filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(scratch, filepath)
+        async def dataprep():
+            pass
+
+    elif user and parts[0] == '@shared':
+        filepath = shared / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(shared, filepath)
         async def dataprep():
             pass
 
@@ -792,8 +800,8 @@ async def htmx_root_list(
 ):
 
     context = {
-        "roots": sorted(database.roots.values(), key=lambda x: x.name),
         "checked": roots,
+        "roots": sorted(database.roots.values(), key=lambda x: x.name),
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -828,20 +836,24 @@ async def htmx_path_list(
     for root in roots:
         if user and root == '@scratch':
             rootdir = scratch / str(user.id)
+        elif user and root == '@shared':
+            rootdir = shared
         else:
             if not get_root(root).subscribed:
                 follow(root)
             rootdir = cache / root
 
         for path, relpath in utils.walk_files(rootdir):
+            size = path.stat().st_size
             if relpath.suffix == '.b2':
                 relpath = relpath.with_suffix('')
             if search in str(relpath):
                 path = f'{root}/{relpath}'
                 url = make_url(request, "html_home", path=path, query=query)
                 datasets.append({
-                    'path': path,
                     'name': next(names),
+                    'path': path,
+                    'size': size,
                     'url': url,
                 })
 
@@ -905,7 +917,7 @@ async def htmx_path_info(
         "path": path,
         "meta": meta,
         "display": display,
-        "scratch": path.parts[0] == '@scratch',
+        "can_delete": path.parts[0] in {"@scratch", "@shared"},
     }
 
     # XXX
@@ -1049,14 +1061,14 @@ async def htmx_command(
     except TypeError as te:
         return htmx_error(request, f'Invalid expression: {te}')
     except KeyError as ke:
-        return htmx_error(request,
-                          f'Expression error: {ke.args[0]} is not in the list of available datasets')
+        error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
+        return htmx_error(request, error)
     except RuntimeError as exc:
         return htmx_error(request, str(exc))
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
-    return htmx_redirect(hx_current_url, url)
+    return htmx_redirect(hx_current_url, url, root='@scratch')
 
 
 def htmx_error(request, msg):
@@ -1064,19 +1076,21 @@ def htmx_error(request, msg):
     return templates.TemplateResponse(request, "error.html", context, status_code=400)
 
 
-def htmx_redirect(current_url, target_url):
+def htmx_redirect(current_url, target_url, root=None):
     response = JSONResponse('OK')
     query = furl.furl(current_url).query
     roots = query.params.getlist('roots')
-    if '@scratch' not in roots:
-        query = query.add({'roots': '@scratch'})
+
+    if root and root not in roots:
+        query = query.add({'roots': root})
 
     response.headers['HX-Redirect'] = f'{target_url}?{query.encode()}'
     return response
 
-@app.post("/htmx/upload/")
+@app.post("/htmx/upload/{name}")
 async def htmx_upload(
     request: Request,
+    name: str,
     # Body
     file: UploadFile,
     # Headers
@@ -1086,7 +1100,10 @@ async def htmx_upload(
 ):
 
     if not user:
-        raise fastapi.HTTPException(status_code=401)  # unauthorized
+        raise fastapi.HTTPException(status_code=401)  # Unauthorized
+
+    if name not in {'@shared', '@scratch'}:
+        raise fastapi.HTTPException(status_code=404)  # NotFound
 
     # Read file
     filename = pathlib.Path(file.filename)
@@ -1097,15 +1114,18 @@ async def htmx_upload(
         filename = f'{filename}.b2frame'
 
     # Save file
-    path = scratch / str(user.id)
+    if name == '@scratch':
+        path = scratch / str(user.id)
+    elif name == '@shared':
+        path = shared
     path.mkdir(exist_ok=True, parents=True)
     with open(path / filename, 'wb') as dst:
         dst.write(data)
 
     # Redirect to display new dataset
-    path = f'@scratch/{filename}'
+    path = f'{name}/{filename}'
     url = make_url(request, "html_home", path=path)
-    return htmx_redirect(hx_current_url, url)
+    return htmx_redirect(hx_current_url, url, root=name)
 
 
 @app.delete("/htmx/delete/{path:path}", response_class=HTMLResponse)
@@ -1119,17 +1139,25 @@ async def htmx_delete(
     user: db.User = Depends(current_active_user),
 ):
 
+    # Find absolute path to file
     parts = list(path.parts)
-    assert parts[0] == '@scratch'
+    name = parts[0]
+    if name == "@scratch":
+        parts[0] = str(user.id)
+        path = pathlib.Path(*parts)
+        abspath = scratch / path
+    elif name == "@shared":
+        path = pathlib.Path(*parts[1:])
+        abspath = shared / path
+    else:
+        return fastapi.HTTPException(status_code=400)
 
     # Remove
-    parts[0] = str(user.id)
-    path = pathlib.Path(*parts)
-    (scratch / path).unlink()
+    abspath.unlink()
 
     # Redirect to home
     url = make_url(request, "html_home")
-    return htmx_redirect(hx_current_url, url)
+    return htmx_redirect(hx_current_url, url, root=name)
 
 
 @app.get("/markdown/{path:path}", response_class=HTMLResponse)
@@ -1168,7 +1196,7 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
-    parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
+    parser = utils.get_parser(broker=conf.get('broker.http', ''),
                               http=conf.get('.http', 'localhost:8002'),
                               url=conf.get('.url'),
                               loglevel=conf.get('.loglevel', 'warning'),
@@ -1187,6 +1215,11 @@ def main():
     cache.mkdir(exist_ok=True, parents=True)
     # Use `download_cached()`, `StaticFiles` does not support authorization.
     #app.mount("/files", StaticFiles(directory=cache), name="files")
+
+    # Shared dir
+    global shared
+    shared = statedir / 'shared'
+    shared.mkdir(exist_ok=True, parents=True)
 
     # Scratch dir
     global scratch

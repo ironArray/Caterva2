@@ -46,12 +46,12 @@
 <div id="page">
     <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
     <div id="path-list-wrapper">
-        {% include 'loading.html' %}
+        {% include 'includes/loading.html' %}
         <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>
         </div>
     </div>
     <div id="meta-wrapper">
-        {% include 'loading.html' %}
+        {% include 'includes/loading.html' %}
         <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
     </div>
 </div>

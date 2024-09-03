@@ -83,25 +83,23 @@ body {
     vertical-align: inherit;
 }
 
-#id_file_upload label {
-    border: 3px dashed gray;
-    border-radius: 16px;
+.file_upload label {
 }
 
-#id_file_upload.active label {
-    border-color: lightblue;
+.file_upload.active label {
+    color: blue;
 }
 
-#id_file_upload label:hover {
-    border-color: lightblue;
+.file_upload label:hover {
+    color: blue;
 }
 
-#id_file_upload input {
-    width: 1;
-    height: 1;
+.file_upload input {
+    width: 1px;
+    height: 1px;
     opacity: 0;
 }
 
-#id_file_upload .htmx-request i {
+.file_upload .htmx-request i {
     display: none;
 }

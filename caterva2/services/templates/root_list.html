@@ -12,48 +12,22 @@
     Roots:
 
     {% for root in roots %}
-    {% with name=root.name %}
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox"
-               name="roots" value="{{ name }}" {{ "checked" if name in checked }}
-               id="id_root_{{ name }}">
-        <label class="form-check-label" for="id_root_{{ name }}">{{ name }}</label>
-    </div>
-    {% endwith %}
+        {% with name=root.name %}
+            {% include 'includes/root.html' %}
+        {% endwith %}
     {% endfor %}
 
     {% if user %}
-    {% with name="@scratch" %}
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox"
-               name="roots" value="{{ name }}" {{ "checked" if name in checked }}
-               id="id_root_{{ name }}">
-        <label class="form-check-label" for="id_root_{{ name }}"
-               title="This special root contains the results of calculations done by the user">
-            {{ name }}
-        </label>
-    </div>
-    {% endwith %}
+        {% with name="@scratch", upload=True %}
+            {% set title="This special root contains the results of calculations done by the user" %}
+            {% include 'includes/root.html' %}
+        {% endwith %}
+
+        {% with name="@shared", upload=True %}
+            {% include 'includes/root.html' %}
+        {% endwith %}
     {% endif %}
 </form>
-
-
-{% if user %}
-<div id="id_file_upload" title="Upload file to scratch">
-    <label for="id_file" role="button" class="p-4 mt-3"
-           ondrop="dropHandler(event)"
-           ondragover="dragoverHandler(event)"
-           ondragleave="dragleaveHandler(event)"
-    >
-        <i class="fa-solid fa-upload fa-2xl"></i>
-        {% include 'loading.html' %}
-    </label>
-    <input type="file" name="file" id="id_file"
-           hx-post="/htmx/upload/" hx-encoding="multipart/form-data"
-           hx-indicator="#id_file_upload label"
-    >
-</div>
-{% endif %}
 
 <script>
 function dropHandler(ev) {
