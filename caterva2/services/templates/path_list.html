@@ -31,7 +31,7 @@
                 {% endif %}
                 <a href="{{dataset.url}}"
                    class="input-group-text text-decoration-none"
-                   style="width: 75%"
+                   style="width: 70%"
                    hx-get="/htmx/path-info/{{dataset.path}}"
                    hx-target="#meta"
                    hx-indicator="#meta-wrapper .htmx-indicator"
@@ -39,7 +39,7 @@
                    >
                     {{dataset.path}}
                 </a>
-                <span class="input-group-text" style="width: 15%">
+                <span class="input-group-text" style="width: 20%">
                     {{ dataset.size|filesizeformat }}
                 </span>
             </div>

@@ -324,6 +324,16 @@ async def lifespan(app: FastAPI):
     if client is not None:
         await srv_utils.disconnect_client(client)
 
+# Visualize the size of a file on a compact and human-readable format
+def custom_filesizeformat(value):
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if value < 1024.0:
+            if unit == 'B':
+                return f"{value:.0f} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{value:.1f} PB"
+
 
 app = FastAPI(lifespan=lifespan)
 if user_auth_enabled():
@@ -339,6 +349,7 @@ if user_auth_enabled():
     # TODO: Support user verification, allow password reset and user deletion.
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"))
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+templates.env.filters['filesizeformat'] = custom_filesizeformat
 
 
 @app.get('/api/roots')
