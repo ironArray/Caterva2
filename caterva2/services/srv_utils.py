@@ -16,7 +16,6 @@ import typing
 import blosc2
 import fastapi
 import fastapi_websocket_pubsub
-import numpy as np
 import safer
 
 # Project
