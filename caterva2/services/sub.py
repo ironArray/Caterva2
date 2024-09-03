@@ -602,10 +602,11 @@ async def get_chunk(
         if user and path.parts[0] == '@scratch':
             container = open_b2(abspath, path)
             if isinstance(container, blosc2.LazyArray):
-                # TODO: Support this
-                raise NotImplementedError
-            schunk = getattr(container, 'schunk', container)
-            chunk = schunk.get_chunk(nchunk)
+                # We do not support LazyUDF in Caterva2. In case we do, this would have to be changed
+                chunk = container.get_chunk(nchunk)
+            else:
+                schunk = getattr(container, 'schunk', container)
+                chunk = schunk.get_chunk(nchunk)
         else:
             sub_dset = PubDataset(abspath, path)
             chunk = await sub_dset.aget_chunk(nchunk)

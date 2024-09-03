@@ -167,6 +167,32 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
     return data
 
 
+def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Get the unidimensional compressed chunk of a dataset.
+
+    Parameters
+    ----------
+    path : str
+        The path of the dataset.
+    nchunk : int
+        The unidimensional chunk id to get.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    bytes obj
+        The compressed chunk.
+    """
+    urlbase, path = _format_paths(urlbase, path)
+    data = api_utils._xget(f'{urlbase}api/chunk/{path}', {'nchunk': nchunk},
+                           auth_cookie=auth_cookie)
+    return data.content
+
+
 def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Download a dataset to storage.
