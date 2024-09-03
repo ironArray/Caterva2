@@ -50,7 +50,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj, cache=None, scratch=None):
+def read_metadata(obj, cache=None, scratch=None, shared=None):
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -81,7 +81,7 @@ def read_metadata(obj, cache=None, scratch=None):
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     elif isinstance(obj, blosc2.LazyExpr):
-        operands = operands_as_paths(obj.operands, cache, scratch)
+        operands = operands_as_paths(obj.operands, cache, scratch, shared)
         return get_model_from_obj(obj, models.LazyArray, operands=operands)
     else:
         raise TypeError(f'unexpected {type(obj)}')
@@ -96,8 +96,11 @@ def reformat_cparams(cparams):
     return cparams
 
 
-def get_relpath(ndarr, cache, scratch):
+def get_relpath(ndarr, cache, scratch, shared):
     path = pathlib.Path(ndarr.schunk.urlpath)
+    if shared is not None and path.is_relative_to(shared):
+        # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
+        return path
     try:
         # Cache: /.../<root>/<subpath> to <root>/<subpath>
         path = path.relative_to(cache)
@@ -110,9 +113,9 @@ def get_relpath(ndarr, cache, scratch):
 
     return path
 
-def operands_as_paths(operands, cache, scratch):
+def operands_as_paths(operands, cache, scratch, shared):
     return dict(
-        (nm, str(get_relpath(op, cache, scratch)))
+        (nm, str(get_relpath(op, cache, scratch, shared)))
         for (nm, op) in operands.items()
     )
 

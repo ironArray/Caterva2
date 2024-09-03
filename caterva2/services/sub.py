@@ -175,7 +175,7 @@ def open_b2(abspath, path):
             for key, value in operands.items():
                 if 'proxy-source' in value.schunk.meta:
                     # Save operand as Proxy, see blosc2.open doc for more info
-                    relpath = srv_utils.get_relpath(value, cache, scratch)
+                    relpath = srv_utils.get_relpath(value, cache, scratch, shared)
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
         else:
@@ -445,7 +445,7 @@ async def get_info(
         The metadata of the dataset.
     """
     abspath, _ = abspath_and_dataprep(path, user=user)
-    return srv_utils.read_metadata(abspath, cache=cache)
+    return srv_utils.read_metadata(abspath, cache, scratch, shared)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -665,10 +665,12 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     for var in vars:
         path = operands[var]
 
-        # Detect @scratch
+        # Detect @scratch and @shared paths
         path = pathlib.Path(path)
         if path.parts[0] == '@scratch':
             abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+        elif path.parts[0] == '@shared':
+            abspath = shared / pathlib.Path(*path.parts[1:])
         else:
             abspath = cache / path
         var_dict[var] = open_b2(abspath, path)
@@ -895,7 +897,7 @@ async def htmx_path_info(
     except FileNotFoundError:
         return htmx_error(request, 'FileNotFoundError: missing operand(s)')
 
-    meta = srv_utils.read_metadata(abspath, cache=cache, scratch=scratch)
+    meta = srv_utils.read_metadata(abspath, cache, scratch, shared)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
     contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
