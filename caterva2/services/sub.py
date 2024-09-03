@@ -356,6 +356,8 @@ async def get_roots(user: db.User = Depends(current_active_user)) -> dict:
     roots = database.roots.copy()
     scratch_root = models.Root(name='@scratch', http='', subscribed=True)
     roots[scratch_root.name] = scratch_root
+    shared_root = models.Root(name='@shared', http='', subscribed=True)
+    roots[shared_root.name] = shared_root
     return roots
 
 
