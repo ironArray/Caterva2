@@ -828,6 +828,7 @@ async def htmx_path_list(
     search: str = '',
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
+    hx_trigger: srv_utils.HeaderType = None,
     # Depends
     user: db.User = Depends(current_active_user),
 ):
@@ -882,12 +883,13 @@ async def htmx_path_list(
     }
     response = templates.TemplateResponse(request, "path_list.html", context)
 
-    # Push URL
-    args = {'roots': roots}
-    if search:
-        args['search'] = search
-    push_url = hx_current_url.set(args).url
-    response.headers['HX-Push-Url'] = push_url
+    # Push URL only when clicked, not on load/reload
+    if hx_trigger != 'path-list':
+        args = {'roots': roots}
+        if search:
+            args['search'] = search
+        push_url = hx_current_url.set(args).url
+        response.headers['HX-Push-Url'] = push_url
 
     return response
 
@@ -899,6 +901,7 @@ async def htmx_path_info(
     path: pathlib.Path,
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
+    hx_trigger: srv_utils.HeaderType = None,
     # Depends
     user: db.User = Depends(current_active_user),
 ):
@@ -943,13 +946,15 @@ async def htmx_path_info(
 
     response = templates.TemplateResponse(request, "info.html", context=context)
 
-    # Preserve state (query)
-    push_url = make_url(request, 'html_home', path=path)
-    current_query = furl.furl(hx_current_url).query
-    if current_query:
-        push_url = f'{push_url}?{current_query.encode()}'
+    # Push URL only when clicked, not on load/reload
+    if hx_trigger != 'meta':
+        push_url = make_url(request, 'html_home', path=path)
+        # Keep query
+        current_query = furl.furl(hx_current_url).query
+        if current_query:
+            push_url = f'{push_url}?{current_query.encode()}'
 
-    response.headers['HX-Push-Url'] = push_url
+        response.headers['HX-Push-Url'] = push_url
 
     return response
 
