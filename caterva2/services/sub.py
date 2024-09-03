@@ -665,10 +665,12 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     for var in vars:
         path = operands[var]
 
-        # Detect @scratch
+        # Detect @scratch and @shared paths
         path = pathlib.Path(path)
         if path.parts[0] == '@scratch':
             abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+        elif path.parts[0] == '@shared':
+            abspath = shared / pathlib.Path(*path.parts[1:])
         else:
             abspath = cache / path
         var_dict[var] = open_b2(abspath, path)
@@ -895,7 +897,7 @@ async def htmx_path_info(
     except FileNotFoundError:
         return htmx_error(request, 'FileNotFoundError: missing operand(s)')
 
-    meta = srv_utils.read_metadata(abspath, cache=cache, scratch=scratch)
+    meta = srv_utils.read_metadata(abspath, cache=cache, scratch=scratch, shared=shared)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
     contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
