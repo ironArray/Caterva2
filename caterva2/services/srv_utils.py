@@ -98,7 +98,7 @@ def reformat_cparams(cparams):
 
 def get_relpath(ndarr, cache, scratch, shared):
     path = pathlib.Path(ndarr.schunk.urlpath)
-    if shared is not None and str(path).startswith(str(shared)):
+    if shared is not None and path.is_relative_to(shared):
         # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
         return path
     try:
