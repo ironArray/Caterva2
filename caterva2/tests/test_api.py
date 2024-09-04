@@ -17,7 +17,7 @@ import pytest
 import caterva2 as cat2
 import numpy as np
 
-from .services import TEST_CATERVA2_ROOT
+from .services import TEST_CATERVA2_ROOT, TEST_SCRATCH_ROOT, TEST_SHARED_ROOT
 from .. import api_utils
 
 
@@ -57,6 +57,12 @@ def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     roots = cat2.get_roots(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
+    if sub_jwt_cookie:
+        # Special roots (only available when authenticated)
+        assert roots[TEST_SCRATCH_ROOT]['name'] == TEST_SCRATCH_ROOT
+        assert roots[TEST_SCRATCH_ROOT]['http'] == ''
+        assert roots[TEST_SHARED_ROOT]['name'] == TEST_SHARED_ROOT
+        assert roots[TEST_SHARED_ROOT]['http'] == ''
 
 
 def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
