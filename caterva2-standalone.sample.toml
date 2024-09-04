@@ -8,12 +8,14 @@
 # - statedir: the directory where the subcriber's data will be stored
 # - http: where the subscriber listens to (a unix socket or a host/port)
 # - url: the base url users will use to reach the subscriber
+# - quota: if defined it will limit the disk usage
 #
 [subscriber]
 statedir = "state/subscriber"
 #http = "state/subscriber/uvicorn.socket"
 http = "localhost:8002"
 url = "http://localhost:8002"
+quota = "10GB"
 
 # The client section defines the credentials for the client to authenticate
 # against the subscriber.
