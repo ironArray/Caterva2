@@ -1177,11 +1177,12 @@ async def htmx_upload(
         filename = f'{filename}.b2frame'
 
     # Check quota
-    if quota and get_disk_usage() + len(data) > quota:
-        raise fastapi.HTTPException(
-            status_code=413,  # Content Too Large
-            detail="Upload breaks quota limit",
-        )
+    if quota:
+        upload_size = len(data)
+        total_size = get_disk_usage() + upload_size
+        if total_size > quota:
+            error = 'Upload failed because it would break the quota limit.'
+            return htmx_error(request, error)
 
     # Save file
     if name == '@scratch':
