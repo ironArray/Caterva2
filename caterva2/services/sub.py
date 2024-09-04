@@ -13,6 +13,7 @@ import itertools
 import logging
 import os
 import pathlib
+import re
 import string
 import typing
 from collections.abc import Awaitable, Callable
@@ -45,6 +46,7 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
+quota = None
 
 # State
 statedir = None
@@ -815,11 +817,20 @@ async def html_home(
     if user_auth_enabled() and not opt_user:
         return RedirectResponse("/login", status_code=307)
 
-    context = {}
-    if opt_user:
-        context['username'] = opt_user.email
+    # Disk usage
+    size = sum(file.stat().st_size for file in statedir.rglob('*'))
 
-    context['roots_url'] = make_url(request, 'htmx_root_list', {'roots': roots})
+    context = {
+        'roots_url': make_url(request, 'htmx_root_list', {'roots': roots}),
+        'username': opt_user.email if opt_user else None,
+        # Disk usage
+        'usage_total':  custom_filesizeformat(size),
+    }
+
+    if quota:
+        context['usage_quota'] = custom_filesizeformat(quota)
+        context['usage_percent'] = round((size / quota) * 100)
+
     if roots:
         paths_url = make_url(request, 'htmx_path_list', {'roots': roots, 'search': search})
         context['paths_url'] = paths_url
@@ -1239,6 +1250,17 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
     return None
 
 
+def parse_size(size):
+    if size is None:
+        return None
+
+    units = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40 ,
+             "":  1, "KIB": 10**3, "MIB": 10**6, "GIB": 10**9, "TIB": 10**12}
+    m = re.match(r'^([\d\.]+)\s*([a-zA-Z]{0,3})$', str(size).strip())
+    number, unit = float(m.group(1)), m.group(2).upper()
+    return int(number*units[unit])
+
+
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
@@ -1251,8 +1273,9 @@ def main():
     args = utils.run_parser(parser)
 
     # Global configuration
-    global broker
+    global broker, quota
     broker = args.broker
+    quota = parse_size(conf.get('.quota'))
 
     # Init cache
     global statedir, cache
