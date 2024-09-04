@@ -119,6 +119,13 @@ class PubDataset(blosc2.ProxySource):
             chunk = b''.join(buffer)
             return chunk
 
+def get_disk_usage():
+    exclude = {'db.json', 'db.sqlite'}
+    return sum(
+        path.stat().st_size
+        for path, _ in utils.walk_files(statedir, exclude=exclude)
+    )
+
 def truncate_path(path, size=35):
     """
     Smart truncaion of a long path for display.
@@ -818,8 +825,7 @@ async def html_home(
         return RedirectResponse("/login", status_code=307)
 
     # Disk usage
-    size = sum(file.stat().st_size for file in statedir.rglob('*'))
-
+    size = get_disk_usage()
     context = {
         'roots_url': make_url(request, 'htmx_root_list', {'roots': roots}),
         'username': opt_user.email if opt_user else None,
@@ -1169,6 +1175,13 @@ async def htmx_upload(
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f'{filename}.b2frame'
+
+    # Check quota
+    if quota and get_disk_usage() + len(data) > quota:
+        raise fastapi.HTTPException(
+            status_code=413,  # Content Too Large
+            detail="Upload breaks quota limit",
+        )
 
     # Save file
     if name == '@scratch':
