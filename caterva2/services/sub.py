@@ -1269,7 +1269,7 @@ def parse_size(size):
         return None
 
     units = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40 ,
-             "":  1, "KIB": 10**3, "MIB": 10**6, "GIB": 10**9, "TIB": 10**12}
+             "":  1, "KiB": 10**3, "MiB": 10**6, "GiB": 10**9, "TiB": 10**12}
     m = re.match(r'^([\d\.]+)\s*([a-zA-Z]{0,3})$', str(size).strip())
     number, unit = float(m.group(1)), m.group(2).upper()
     return int(number*units[unit])
