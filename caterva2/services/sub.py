@@ -196,6 +196,8 @@ def init_b2(abspath, path, metadata):
 
 def open_b2(abspath, path):
     """
+    Open a Blosc2 dataset.
+
     Return a Proxy if the dataset is in a publisher(path not in @scratch),
     or the LazyExpr or blosc2 container otherwise.
     """
@@ -431,7 +433,7 @@ async def post_subscribe(
     str
         'Ok' if successful.
     """
-    if name != '@scratch' or not user:
+    if name not in {'@scratch', '@shared'} or not user:
         get_root(name)  # Not Found
         follow(name)
     return 'Ok'
@@ -455,14 +457,17 @@ async def get_list(
     list
         The list of datasets in the root.
     """
-    if user and name == '@scratch':
-        rootdir = scratch / str(user.id)
+    if user and name in {'@scratch', '@shared'}:
+        if name == '@scratch':
+            rootdir = scratch / str(user.id)
+        elif name == '@shared':
+            rootdir = shared
     else:
         root = get_root(name)
         rootdir = cache / root.name
 
     if not rootdir.exists():
-        if name == '@scratch':
+        if name in {'@scratch', '@shared'}:
             return []
         srv_utils.raise_not_found(f'Not subscribed to {name}')
 
