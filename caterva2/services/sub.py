@@ -13,6 +13,7 @@ import itertools
 import logging
 import os
 import pathlib
+import re
 import string
 import typing
 from collections.abc import Awaitable, Callable
@@ -45,6 +46,7 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
+quota = None
 
 # State
 statedir = None
@@ -116,6 +118,13 @@ class PubDataset(blosc2.ProxySource):
                 buffer.append(chunk)
             chunk = b''.join(buffer)
             return chunk
+
+def get_disk_usage():
+    exclude = {'db.json', 'db.sqlite'}
+    return sum(
+        path.stat().st_size
+        for path, _ in utils.walk_files(statedir, exclude=exclude)
+    )
 
 def truncate_path(path, size=35):
     """
@@ -815,11 +824,19 @@ async def html_home(
     if user_auth_enabled() and not opt_user:
         return RedirectResponse("/login", status_code=307)
 
-    context = {}
-    if opt_user:
-        context['username'] = opt_user.email
+    # Disk usage
+    size = get_disk_usage()
+    context = {
+        'roots_url': make_url(request, 'htmx_root_list', {'roots': roots}),
+        'username': opt_user.email if opt_user else None,
+        # Disk usage
+        'usage_total':  custom_filesizeformat(size),
+    }
 
-    context['roots_url'] = make_url(request, 'htmx_root_list', {'roots': roots})
+    if quota:
+        context['usage_quota'] = custom_filesizeformat(quota)
+        context['usage_percent'] = round((size / quota) * 100)
+
     if roots:
         paths_url = make_url(request, 'htmx_path_list', {'roots': roots, 'search': search})
         context['paths_url'] = paths_url
@@ -1159,6 +1176,14 @@ async def htmx_upload(
         data = schunk.to_cframe()
         filename = f'{filename}.b2frame'
 
+    # Check quota
+    if quota:
+        upload_size = len(data)
+        total_size = get_disk_usage() + upload_size
+        if total_size > quota:
+            error = 'Upload failed because it would break the quota limit.'
+            return htmx_error(request, error)
+
     # Save file
     if name == '@scratch':
         path = scratch / str(user.id)
@@ -1239,6 +1264,17 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
     return None
 
 
+def parse_size(size):
+    if size is None:
+        return None
+
+    units = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40 ,
+             "":  1, "KiB": 10**3, "MiB": 10**6, "GiB": 10**9, "TiB": 10**12}
+    m = re.match(r'^([\d\.]+)\s*([a-zA-Z]{0,3})$', str(size).strip())
+    number, unit = float(m.group(1)), m.group(2).upper()
+    return int(number*units[unit])
+
+
 def main():
     conf = utils.get_conf('subscriber', allow_id=True)
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
@@ -1251,8 +1287,9 @@ def main():
     args = utils.run_parser(parser)
 
     # Global configuration
-    global broker
+    global broker, quota
     broker = args.broker
+    quota = parse_size(conf.get('.quota'))
 
     # Init cache
     global statedir, cache
