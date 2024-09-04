@@ -117,6 +117,30 @@ class PubDataset(blosc2.ProxySource):
             chunk = b''.join(buffer)
             return chunk
 
+def truncate_path(path, size=35):
+    """
+    Smart truncaion of a long path for display.
+    """
+    assert type(path) is str
+
+    if len(path) < size:
+        return path
+
+    # If the path is short just truncate at the end
+    parts = pathlib.Path(path).parts
+    if len(parts) < 3:
+        n = len(path) - size
+        return path[:-n] + '...'
+
+    # If the path is long be smarter
+    first, last = parts[0], parts[-1]
+    label = f'{first}/.../{last}'
+    n = len(label) - size
+    if n > 0:
+        last = last[:-n] + '...'
+
+    return f'{first}/.../{last}'
+
 
 def make_url(request, name, query=None, **path_params):
     url = request.app.url_path_for(name, **path_params)
@@ -871,6 +895,7 @@ async def htmx_path_list(
                     'path': path,
                     'size': size,
                     'url': url,
+                    'label': truncate_path(path),
                 })
 
     # Render template

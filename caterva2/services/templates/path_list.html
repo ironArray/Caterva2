@@ -32,12 +32,13 @@
                 <a href="{{dataset.url}}"
                    class="input-group-text text-decoration-none"
                    style="width: 70%"
+                   title="{{dataset.path}}"
                    hx-get="/htmx/path-info/{{dataset.path}}"
                    hx-target="#meta"
                    hx-indicator="#meta-wrapper .htmx-indicator"
                    hx-on:htmx:after-request="activate('#path-list a', this)"
                    >
-                    {{dataset.path}}
+                    {{dataset.label}}
                 </a>
                 <span class="input-group-text" style="width: 20%">
                     {{ dataset.size|filesizeformat }}
