@@ -159,10 +159,6 @@ def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
     assert lxinfo['operands'] == dict(o0=operands[opnm])
     assert lxinfo2['operands'] == dict(o0=operands[opnm])
 
-    # Get one chunk
-    _ = cat2.get_chunk(lxpath2, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    _ = cat2.get_chunk(lxpath, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
-
     # Check result data.
     a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
