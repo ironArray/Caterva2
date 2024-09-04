@@ -95,6 +95,82 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     np.testing.assert_array_equal(a[:], b[:])
 
 
+def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    opnm = 'ds'
+    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    expression = f'{opnm} - 0'
+    operands = {opnm: oppt}
+    lxname = 'my_expr'
+
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
+                   auth_cookie=sub_jwt_cookie)
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
+                           auth_cookie=sub_jwt_cookie)
+    assert lxpath == f'@scratch/{lxname}.b2nd'
+
+    # Get one chunk
+    chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    chunk_expr = cat2.get_chunk(lxpath, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:], b[:])
+    out = np.empty_like(a[:])
+    blosc2.decompress2(chunk_ds, out)
+    out_expr = np.empty_like(a[:])
+    blosc2.decompress2(chunk_expr, out_expr)
+    np.testing.assert_array_equal(out, out_expr)
+
+
+def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    opnm = 'ds'
+    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    expression = f'{opnm} + 1'
+    operands = {opnm: oppt}
+    lxname = 'my_expr'
+
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
+                   auth_cookie=sub_jwt_cookie)
+    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
+                           auth_cookie=sub_jwt_cookie)
+    assert lxpath == f'@scratch/{lxname}.b2nd'
+
+    expression2 = f'{opnm} * 2'
+    operands2 = {opnm: lxpath}
+    lxname = 'expr_from_expr'
+    lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert lxpath2 == f'@scratch/{lxname}.b2nd'
+
+    # Check result metadata.
+    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    lxinfo2 = cat2.get_info(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert lxinfo['shape'] == opinfo['shape'] == lxinfo2['shape']
+    assert lxinfo['dtype'] == opinfo['dtype'] == lxinfo2['dtype']
+    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
+    assert lxinfo2['expression'] == '((o0 + 1) * 2)'
+    assert lxinfo['operands'] == dict(o0=operands[opnm])
+    assert lxinfo2['operands'] == dict(o0=operands[opnm])
+
+    # Get one chunk
+    _ = cat2.get_chunk(lxpath2, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    _ = cat2.get_chunk(lxpath, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    c = cat2.fetch(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:] + 1, b[:])
+    np.testing.assert_array_equal((a[:] + 1) * 2, c[:])
+
+
 def test_root(services, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
                        user_auth=sub_user)
