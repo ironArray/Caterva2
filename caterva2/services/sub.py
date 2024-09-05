@@ -1194,16 +1194,17 @@ async def htmx_upload(
 
     # If a tarball or zipfile, extract the files in path
     first_member = None
-    # TODO: handle .tar.gz, .tgz
-    if filename.suffix in {'.tar'}:
+    suffixes = filename.suffixes
+    if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz']):
         file.file.seek(0)  # Reset file pointer
-        with tarfile.open(fileobj=file.file, mode='r') as tar:
+        mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
+        with tarfile.open(fileobj=file.file, mode=mode) as tar:
             # Filter out hidden files (typically on macOS)
             members = [m for m in tar.getmembers() if not os.path.basename(m.name).startswith('._')]
             tar.extractall(path, members=members)
             # Find the first member that is not a directory, and convert it to a path string
             first_member = next((m.name for m in members if not m.isdir()), None)
-    if filename.suffix in {'.zip'}:
+    if suffixes == ['.zip']:
         with zipfile.ZipFile(file.file, 'r') as zip:
             # Filter out hidden files (typically on macOS)
             members = [m for m in zip.namelist() if not os.path.basename(m).startswith('._')]
@@ -1211,7 +1212,7 @@ async def htmx_upload(
             zip.extractall(path, members=members)
             # Find the first member that is not a directory
             first_member = next((m for m in members if not m.endswith('/')), None)
-    if filename.suffix in {'.tar', '.tar.gz', '.tgz', '.zip'}:
+    if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
         # We are done, redirect to home, and show the new files
         path = f'{name}/{first_member}'
         return htmx_redirect(hx_current_url,
