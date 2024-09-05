@@ -201,8 +201,7 @@ def open_b2(abspath, path):
     Return a Proxy if the dataset is in a publisher (path not in @scratch),
     or the LazyExpr or Blosc2 container otherwise.
     """
-    if pathlib.Path(path).parts[0] == '@scratch':
-        # Return object in scratch
+    if pathlib.Path(path).parts[0] in {'@scratch', '@shared'}:
         container = blosc2.open(abspath)
         if isinstance(container, blosc2.LazyExpr):
             # Open the operands properly
@@ -215,11 +214,6 @@ def open_b2(abspath, path):
             return container
         else:
             return container
-
-    if pathlib.Path(path).parts[0] == '@shared':
-        # Dataset in @shared do not need a proxy (they are local in the subscriber)
-        # TODO: what if the dataset is a LazyExpression?
-        return blosc2.open(abspath)
 
     # Return Proxy
     dataset = PubDataset(abspath, path)
