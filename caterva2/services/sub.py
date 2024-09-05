@@ -198,7 +198,7 @@ def open_b2(abspath, path):
     """
     Open a Blosc2 dataset.
 
-    Return a Proxy if the dataset is in a publisher (path not in @scratch),
+    Return a Proxy if the dataset is in a publisher,
     or the LazyExpr or Blosc2 container otherwise.
     """
     if pathlib.Path(path).parts[0] in {'@scratch', '@shared'}:
