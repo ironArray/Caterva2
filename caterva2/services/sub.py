@@ -14,8 +14,12 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import string
+import tarfile
+import tempfile
 import typing
+import zipfile
 from collections.abc import Awaitable, Callable
 
 # FastAPI
@@ -46,7 +50,7 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
-quota = None
+quota: int = 0
 
 # State
 statedir = None
@@ -1173,28 +1177,42 @@ async def htmx_upload(
     if name not in {'@shared', '@scratch'}:
         raise fastapi.HTTPException(status_code=404)  # NotFound
 
+    path = shared if name == '@shared' else scratch / str(user.id)
+    path.mkdir(exist_ok=True, parents=True)
+
     # Read file
     filename = pathlib.Path(file.filename)
     data = await file.read()
-    if filename.suffix not in {'.b2frame', '.b2nd'}:
-        schunk = blosc2.SChunk(data=data)
-        data = schunk.to_cframe()
-        filename = f'{filename}.b2frame'
 
     # Check quota
     if quota:
         upload_size = len(data)
         total_size = get_disk_usage() + upload_size
         if total_size > quota:
-            error = 'Upload failed because it would break the quota limit.'
+            error = 'Upload failed because quota limit has been exceeded.'
             return htmx_error(request, error)
 
+    # If a tarball or zipfile, extract the files in path
+    if filename.suffix in {'.tar', '.tar.gz', '.tgz'}:
+        with tarfile.open(file.file, 'r') as tar:
+            tar.extractall(path)
+    if filename.suffix in {'.zip'}:
+        with zipfile.ZipFile(file.file, 'r') as zip:
+            zip.extractall(path)
+    if filename.suffix in {'.tar', '.tar.gz', '.tgz', '.zip'}:
+        # We are done, redirect to home, and show the new files
+        path = f'{name}/{filename.stem}'
+        print(f"Redirecting to {path}")
+        return htmx_redirect(hx_current_url,
+                             make_url(request, "html_home", path=path),
+                             root=name)
+
+    if filename.suffix not in {'.b2frame', '.b2nd'}:
+        schunk = blosc2.SChunk(data=data)
+        data = schunk.to_cframe()
+        filename = f'{filename}.b2frame'
+
     # Save file
-    if name == '@scratch':
-        path = scratch / str(user.id)
-    elif name == '@shared':
-        path = shared
-    path.mkdir(exist_ok=True, parents=True)
     with open(path / filename, 'wb') as dst:
         dst.write(data)
 
