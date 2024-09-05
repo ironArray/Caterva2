@@ -196,11 +196,12 @@ def init_b2(abspath, path, metadata):
 
 def open_b2(abspath, path):
     """
-    Return a Proxy if the dataset is in a publisher(path not in @scratch),
-    or the LazyExpr or blosc2 container otherwise.
+    Open a Blosc2 dataset.
+
+    Return a Proxy if the dataset is in a publisher,
+    or the LazyExpr or Blosc2 container otherwise.
     """
-    if pathlib.Path(path).parts[0] == '@scratch':
-        # Return object in scratch
+    if pathlib.Path(path).parts[0] in {'@scratch', '@shared'}:
         container = blosc2.open(abspath)
         if isinstance(container, blosc2.LazyExpr):
             # Open the operands properly
@@ -431,7 +432,7 @@ async def post_subscribe(
     str
         'Ok' if successful.
     """
-    if name != '@scratch' or not user:
+    if name not in {'@scratch', '@shared'} or not user:
         get_root(name)  # Not Found
         follow(name)
     return 'Ok'
@@ -455,14 +456,17 @@ async def get_list(
     list
         The list of datasets in the root.
     """
-    if user and name == '@scratch':
-        rootdir = scratch / str(user.id)
+    if user and name in {'@scratch', '@shared'}:
+        if name == '@scratch':
+            rootdir = scratch / str(user.id)
+        elif name == '@shared':
+            rootdir = shared
     else:
         root = get_root(name)
         rootdir = cache / root.name
 
     if not rootdir.exists():
-        if name == '@scratch':
+        if name in {'@scratch', '@shared'}:
             return []
         srv_utils.raise_not_found(f'Not subscribed to {name}')
 
@@ -656,7 +660,8 @@ async def get_chunk(
         if user and path.parts[0] == '@scratch':
             container = open_b2(abspath, path)
             if isinstance(container, blosc2.LazyArray):
-                # We do not support LazyUDF in Caterva2. In case we do, this would have to be changed
+                # We do not support LazyUDF in Caterva2 yet.
+                # In case we do, this would have to be changed.
                 chunk = container.get_chunk(nchunk)
             else:
                 schunk = getattr(container, 'schunk', container)

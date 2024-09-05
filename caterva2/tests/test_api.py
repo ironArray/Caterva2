@@ -168,23 +168,33 @@ def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
 
 
 def test_root(services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.urlbase == sub_urlbase
+    if sub_user:
+        myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
+        assert myscratch.name == TEST_SCRATCH_ROOT
+        assert myscratch.urlbase == sub_urlbase
+        myshared = cat2.Root(TEST_SHARED_ROOT, sub_urlbase, sub_user)
+        assert myshared.name == TEST_SHARED_ROOT
+        assert myshared.urlbase == sub_urlbase
 
 
 def test_list(services, examples_dir, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     example = examples_dir
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
+    if sub_user:
+        myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
+        # In previous tests we have created some files in the scratch area
+        assert len(myscratch.node_list) >= 0
+        myshared = cat2.Root(TEST_SHARED_ROOT, sub_urlbase, sub_user)
+        assert set(myshared.node_list) == set()
 
 
 def test_file(services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     file = myroot['README.md']
     assert file.name == 'README.md'
     assert file.urlbase == sub_urlbase
@@ -194,8 +204,7 @@ def test_file(services, sub_urlbase, sub_user):
                                     slice(10, 20, 1)])
 def test_index_dataset_frame(slice_, services, examples_dir, sub_urlbase,
                              sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
     assert ds.urlbase == sub_urlbase
@@ -211,8 +220,7 @@ def test_index_dataset_frame(slice_, services, examples_dir, sub_urlbase,
 
 
 def test_dataset_step_diff_1(services, examples_dir, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
     assert ds.urlbase == sub_urlbase
@@ -226,8 +234,7 @@ def test_dataset_step_diff_1(services, examples_dir, sub_urlbase, sub_user):
                                     slice(1, 5, 1)])
 def test_index_dataset_1d(slice_, services, examples_dir, sub_urlbase,
                           sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-1d.b2nd']
     assert ds.name == 'ds-1d.b2nd'
     assert ds.urlbase == sub_urlbase
@@ -243,8 +250,7 @@ def test_index_dataset_1d(slice_, services, examples_dir, sub_urlbase,
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
 def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
                           sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot[name]
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
@@ -255,8 +261,7 @@ def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
 def test_download_b2nd(name, services, examples_dir, sub_urlbase,
                        sub_user, sub_jwt_cookie, tmp_path):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot[name]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -280,7 +285,7 @@ def test_download_b2nd(name, services, examples_dir, sub_urlbase,
 
 def test_download_b2frame(services, examples_dir, sub_urlbase,
                           sub_user, sub_jwt_cookie, tmp_path):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-hello.b2frame']
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -307,8 +312,7 @@ def test_download_b2frame(services, examples_dir, sub_urlbase,
                                     slice(1, 5, 1)])
 def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
                             sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['README.md']
 
     # Data contents
@@ -324,8 +328,7 @@ def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
 
 def test_download_regular_file(services, examples_dir, sub_urlbase,
                                sub_user, sub_jwt_cookie, tmp_path):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['README.md']
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -353,15 +356,13 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
                                   'ds-hello.b2frame',
                                   'README.md'])
 def test_vlmeta(name, services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot[name]
     schunk_meta = ds.meta.get('schunk', ds.meta)
     assert ds.vlmeta is schunk_meta['vlmeta']
 
 
 def test_vlmeta_data(services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, urlbase=sub_urlbase,
-                       user_auth=sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-sc-attr.b2nd']
     assert ds.vlmeta == dict(a=1, b="foo", c=123.456)
