@@ -1193,16 +1193,27 @@ async def htmx_upload(
             return htmx_error(request, error)
 
     # If a tarball or zipfile, extract the files in path
-    if filename.suffix in {'.tar', '.tar.gz', '.tgz'}:
-        with tarfile.open(file.file, 'r') as tar:
-            tar.extractall(path)
+    first_member = None
+    # TODO: handle .tar.gz, .tgz
+    if filename.suffix in {'.tar'}:
+        file.file.seek(0)  # Reset file pointer
+        with tarfile.open(fileobj=file.file, mode='r') as tar:
+            # Filter out hidden files (typically on macOS)
+            members = [m for m in tar.getmembers() if not os.path.basename(m.name).startswith('._')]
+            tar.extractall(path, members=members)
+            # Find the first member that is not a directory, and convert it to a path string
+            first_member = next((m.name for m in members if not m.isdir()), None)
     if filename.suffix in {'.zip'}:
         with zipfile.ZipFile(file.file, 'r') as zip:
-            zip.extractall(path)
+            # Filter out hidden files (typically on macOS)
+            members = [m for m in zip.namelist() if not os.path.basename(m).startswith('._')]
+            # Extract the filtered members
+            zip.extractall(path, members=members)
+            # Find the first member that is not a directory
+            first_member = next((m for m in members if not m.endswith('/')), None)
     if filename.suffix in {'.tar', '.tar.gz', '.tgz', '.zip'}:
         # We are done, redirect to home, and show the new files
-        path = f'{name}/{filename.stem}'
-        print(f"Redirecting to {path}")
+        path = f'{name}/{first_member}'
         return htmx_redirect(hx_current_url,
                              make_url(request, "html_home", path=path),
                              root=name)
