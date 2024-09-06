@@ -91,3 +91,19 @@ sphinx-build doc doc/html
 ```
 
 and the docs will appear in `doc/html`.
+
+## Build frontend assets
+
+Install the requrired software (you will need Node.js):
+
+```shell
+npm install
+```
+
+To build the CSS/JS files from source:
+
+```shell
+npm run build
+```
+
+The source files are located in the `src/` directory.

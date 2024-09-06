@@ -1,0 +1,22 @@
+{
+  "name": "caterva2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "doc",
+    "example": "examples"
+  },
+  "scripts": {
+    "build": "vite build && npm run minify",
+    "minify": "esbuild caterva2/services/static/build/main.js --minify --outfile=caterva2/services/static/build/main.min.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bootstrap": "^5.3.3",
+    "sass": "1.77.6",
+    "vite": "^4.5.3"
+  }
+}
