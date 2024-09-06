@@ -1190,32 +1190,29 @@ async def htmx_upload(
             error = 'Upload failed because quota limit has been exceeded.'
             return htmx_error(request, error)
 
-    # If a tarball or zipfile, extract the files in path
-    first_member = None
-    suffixes = filename.suffixes
-    if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz']):
-        file.file.seek(0)  # Reset file pointer
-        mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
-        with tarfile.open(fileobj=file.file, mode=mode) as tar:
-            # Filter out hidden files (typically on macOS)
-            members = [m for m in tar.getmembers() if not os.path.basename(m.name).startswith('._')]
-            tar.extractall(path, members=members)
-            # Find the first member that is not a directory, and convert it to a path string
-            first_member = next((m.name for m in members if not m.isdir()), None)
-    if suffixes == ['.zip']:
-        with zipfile.ZipFile(file.file, 'r') as zip:
-            # Filter out hidden files (typically on macOS)
-            members = [m for m in zip.namelist() if not os.path.basename(m).startswith('._')]
-            # Extract the filtered members
-            zip.extractall(path, members=members)
-            # Find the first member that is not a directory
-            first_member = next((m for m in members if not m.endswith('/')), None)
-    if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
-        # We are done, redirect to home, and show the new files
-        path = f'{name}/{first_member}'
-        return htmx_redirect(hx_current_url,
-                             make_url(request, "html_home", path=path),
-                             root=name)
+        # If a tarball or zipfile, extract the files in path
+        # We also filter out hidden files and MacOSX metadata
+        suffixes = filename.suffixes
+        if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
+            file.file.seek(0)  # Reset file pointer
+            if suffixes == ['.zip']:
+                with zipfile.ZipFile(file.file, 'r') as archive:
+                    members = [m for m in archive.namelist()
+                               if (not os.path.basename(m).startswith('.') and
+                                   not os.path.basename(m).startswith('__MACOSX'))]
+                    archive.extractall(path, members=members)
+                    first_member = next((m for m in members if not m.endswith('/')), None)
+            else:
+                mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
+                with tarfile.open(fileobj=file.file, mode=mode) as archive:
+                    members = [m for m in archive.getmembers()
+                               if (not os.path.basename(m.name).startswith('.') and
+                                   not os.path.basename(m.name).startswith('__MACOSX'))]
+                    archive.extractall(path, members=members)
+                    first_member = next((m.name for m in members if not m.isdir()), None)
+            # We are done, redirect to home, and show the new files
+            path = f'{name}/{first_member}'
+            return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
     if filename.suffix not in {'.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
