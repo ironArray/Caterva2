@@ -221,6 +221,34 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     return api_utils.download_url(url, path, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
+def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Upload a local dataset to a remote repository.
+
+    **Note:** If dataset in localpath is a regular file, and Blosc2 is installed,
+    it will be compressed prior to be uploaded.  Otherwise, it will be
+    uploaded as-is and compressed with Blosc2 on the server side.
+
+    Parameters
+    ----------
+    localpath : str
+        The path of the local dataset.
+    remotepath : str
+        The remote path to upload the dataset to.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    str
+        The path of the uploaded file.
+    """
+    # urlbase, path = _format_paths(urlbase, remote_dir)
+    return api_utils.upload_file(localpath, remotepath, urlbase, try_pack=api_utils.blosc2_is_here,
+                                 auth_cookie=auth_cookie)
+
 
 def lazyexpr(name, expression, operands,
              urlbase=sub_urlbase_default, auth_cookie=None):

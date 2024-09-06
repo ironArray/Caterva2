@@ -104,7 +104,6 @@ def cmd_url(args, auth_cookie):
     if args.json:
         print(json.dumps(data))
         return
-
     print(data)
 
 
@@ -118,7 +117,6 @@ def cmd_info(args, auth_cookie):
     if args.json:
         print(json.dumps(data))
         return
-
     rich.print(data)
 
 
@@ -146,8 +144,15 @@ def cmd_show(args, auth_cookie):
 @with_auth_cookie
 def cmd_download(args, auth_cookie):
     path = cat2.download(args.dataset, args.urlbase, auth_cookie=auth_cookie)
-
     print(f'Dataset saved to {path}')
+
+
+@handle_errors
+@with_auth_cookie
+def cmd_upload(args, auth_cookie):
+    path = cat2.upload(args.localpath, args.remotepath,
+                       args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset stored in {path}')
 
 
 def main():
@@ -209,6 +214,13 @@ def main():
     subparser.add_argument('dataset', type=str)
     subparser.add_argument('output_dir', nargs='?', default='.', type=pathlib.Path)
     subparser.set_defaults(func=cmd_download)
+
+    # upload
+    help = 'Upload a local dataset to subscriber'
+    subparser = subparsers.add_parser('upload', help=help)
+    subparser.add_argument('localpath', type=pathlib.Path)
+    subparser.add_argument('remotepath', type=pathlib.Path)
+    subparser.set_defaults(func=cmd_upload)
 
     # Go
     args = utils.run_parser(parser)

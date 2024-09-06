@@ -58,7 +58,7 @@ shared = None
 clients = {}       # topic: <PubSubClient>
 database = None    # <Database> instance
 locks = {}
-urlbase = None
+urlbase: str = ""
 
 
 class PubDataset(blosc2.ProxySource):
@@ -775,6 +775,63 @@ async def lazyexpr(
         raise error(str(exc))
 
     return result_path
+
+
+@app.post('/api/upload/{path:path}')
+async def upload_file(
+        path: pathlib.Path,
+        file: UploadFile,
+        user: db.User = Depends(current_active_user),
+):
+    """
+    Upload a file to the shared space.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to store the uploaded file.
+    file : UploadFile
+        The file to upload.
+
+    Returns
+    -------
+    str
+        The path of the uploaded file.
+    """
+
+    print(f"Uploading {file.filename} to {path}")
+    if not user:
+        raise fastapi.HTTPException(
+            status_code=401,  # unauthorized
+            detail="Uploading files requires enabling user authentication",
+        )
+
+    # Only allow uploading to the scratch or the shared space
+    root = path.parts[0]
+    if root not in {'@scratch', '@shared'}:
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail="Only uploading to the scratch or shared space is allowed",
+        )
+
+    # Replace the root with absolute path
+    if root == '@scratch':
+        path2 = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+    else:
+        path2 = shared / pathlib.Path(*path.parts[1:])
+
+    # If path2 is a directory, append the filename
+    if path2.is_dir():
+        path2 = path2 / file.filename
+    path2.parent.mkdir(exist_ok=True, parents=True)
+
+    # Write the file
+    with open(path2, 'wb') as f:
+        f.write(await file.read())
+
+    # Return the urlpath
+    return str(path)
+    # return urlbase / path
 
 
 #
