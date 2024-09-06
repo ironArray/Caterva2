@@ -15,7 +15,9 @@ import os
 import pathlib
 import re
 import string
+import tarfile
 import typing
+import zipfile
 from collections.abc import Awaitable, Callable
 
 # FastAPI
@@ -46,7 +48,7 @@ logger = logging.getLogger('sub')
 
 # Configuration
 broker = None
-quota = None
+quota: int = 0
 
 # State
 statedir = None
@@ -1173,28 +1175,51 @@ async def htmx_upload(
     if name not in {'@shared', '@scratch'}:
         raise fastapi.HTTPException(status_code=404)  # NotFound
 
+    path = shared if name == '@shared' else scratch / str(user.id)
+    path.mkdir(exist_ok=True, parents=True)
+
     # Read file
     filename = pathlib.Path(file.filename)
     data = await file.read()
-    if filename.suffix not in {'.b2frame', '.b2nd'}:
-        schunk = blosc2.SChunk(data=data)
-        data = schunk.to_cframe()
-        filename = f'{filename}.b2frame'
 
     # Check quota
     if quota:
         upload_size = len(data)
         total_size = get_disk_usage() + upload_size
         if total_size > quota:
-            error = 'Upload failed because it would break the quota limit.'
+            error = 'Upload failed because quota limit has been exceeded.'
             return htmx_error(request, error)
 
+        # If a tarball or zipfile, extract the files in path
+        # We also filter out hidden files and MacOSX metadata
+        suffixes = filename.suffixes
+        if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
+            file.file.seek(0)  # Reset file pointer
+            if suffixes == ['.zip']:
+                with zipfile.ZipFile(file.file, 'r') as archive:
+                    members = [m for m in archive.namelist()
+                               if (not os.path.basename(m).startswith('.') and
+                                   not os.path.basename(m).startswith('__MACOSX'))]
+                    archive.extractall(path, members=members)
+                    first_member = next((m for m in members if not m.endswith('/')), None)
+            else:
+                mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
+                with tarfile.open(fileobj=file.file, mode=mode) as archive:
+                    members = [m for m in archive.getmembers()
+                               if (not os.path.basename(m.name).startswith('.') and
+                                   not os.path.basename(m.name).startswith('__MACOSX'))]
+                    archive.extractall(path, members=members)
+                    first_member = next((m.name for m in members if not m.isdir()), None)
+            # We are done, redirect to home, and show the new files
+            path = f'{name}/{first_member}'
+            return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
+
+    if filename.suffix not in {'.b2frame', '.b2nd'}:
+        schunk = blosc2.SChunk(data=data)
+        data = schunk.to_cframe()
+        filename = f'{filename}.b2frame'
+
     # Save file
-    if name == '@scratch':
-        path = scratch / str(user.id)
-    elif name == '@shared':
-        path = shared
-    path.mkdir(exist_ok=True, parents=True)
     with open(path / filename, 'wb') as dst:
         dst.write(data)
 
