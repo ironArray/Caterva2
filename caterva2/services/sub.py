@@ -14,10 +14,8 @@ import logging
 import os
 import pathlib
 import re
-import shutil
 import string
 import tarfile
-import tempfile
 import typing
 import zipfile
 from collections.abc import Awaitable, Callable
