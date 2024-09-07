@@ -231,9 +231,9 @@ def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None)
 
     Parameters
     ----------
-    localpath : str
+    localpath : Path
         The path of the local dataset.
-    remotepath : str
+    remotepath : Path
         The remote path to upload the dataset to.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
@@ -338,6 +338,38 @@ class Root:
         else:
             return File(node, root=self.name, urlbase=self.urlbase,
                         auth_cookie=self.auth_cookie)
+
+    def upload(self, localpath, remotepath=None):
+        """
+        Upload a local dataset to this root.
+
+        Parameters
+        ----------
+        localpath : Path
+            The path of the local dataset.
+        remotepath : Path
+            The remote path to upload the dataset to.  If not provided, the
+            dataset will be uploaded to this root in top level.
+
+        Returns
+        -------
+        File
+            A :class:`File` or :class:`Dataset` instance.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@scratch')
+        >>> root.upload('foo/mydataset.b2nd')
+        File: @scratch/foo/mydataset.md
+        """
+        if remotepath is None:
+            remotepath = self.name / localpath
+        r2 = upload(localpath, remotepath, urlbase=self.urlbase,
+                   auth_cookie=self.auth_cookie)
+        # list the contents of the root
+        self.node_list = api_utils.get(f'{self.urlbase}api/list/{self.name}',
+                                       auth_cookie=self.auth_cookie)
+        return self[str(localpath)]
 
 
 class File:

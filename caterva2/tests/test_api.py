@@ -14,6 +14,7 @@ import httpx
 import blosc2
 import pytest
 
+import caterva2
 import caterva2 as cat2
 import numpy as np
 
@@ -350,6 +351,28 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
     b = blosc2.schunk_from_cframe(data.content)
     # TODO: why do we need .decode() here?
     assert a[:] == b[:].decode()
+
+
+@pytest.mark.parametrize("fname", ['ds-1d.b2nd',
+                                   'ds-hello.b2frame',
+                                   'README.md',
+                                   'dir1/ds-2d.b2nd',
+                                   ])
+def test_upload(fname, services, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+    ds = myroot[fname]
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
+    print(f"path: {path}")
+
+    # Now, upload the file to the scratch area
+    myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
+    scratch_ds = myscratch.upload(path)
+    assert scratch_ds.name == str(path)
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',

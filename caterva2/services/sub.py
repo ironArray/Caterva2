@@ -533,7 +533,7 @@ def abspath_and_dataprep(path: pathlib.Path,
     """
     Get absolute path in local storage and data preparation operation.
 
-    After awaiting for the preparation operation to complete, data in the
+    After awaiting the preparation operation to complete, data in the
     dataset should be ready for reading, either that covered by the slice if
     given, or the whole data otherwise.
     """
@@ -799,12 +799,14 @@ async def upload_file(
         The path of the uploaded file.
     """
 
-    print(f"Uploading {file.filename} to {path}")
     if not user:
         raise fastapi.HTTPException(
             status_code=401,  # unauthorized
             detail="Uploading files requires enabling user authentication",
         )
+
+    # Read the file
+    data = await file.read()
 
     # Only allow uploading to the scratch or the shared space
     root = path.parts[0]
@@ -822,12 +824,19 @@ async def upload_file(
 
     # If path2 is a directory, append the filename
     if path2.is_dir():
-        path2 = path2 / file.filename
+        path2 /= file.filename
     path2.parent.mkdir(exist_ok=True, parents=True)
+
+    # If regular file, compress it
+    if path2.suffix not in {'.b2frame', '.b2nd'}:
+        schunk = blosc2.SChunk(data=data)
+        data = schunk.to_cframe()
+        # Append a new .b2 extension to the file, including the original extension
+        path2 = path2.with_suffix(path2.suffix + '.b2')
 
     # Write the file
     with open(path2, 'wb') as f:
-        f.write(await file.read())
+        f.write(data)
 
     # Return the urlpath
     return str(path)
@@ -1274,7 +1283,7 @@ async def htmx_upload(
     if filename.suffix not in {'.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
-        filename = f'{filename}.b2frame'
+        filename = f'{filename}.b2'
 
     # Save file
     with open(path / filename, 'wb') as dst:
