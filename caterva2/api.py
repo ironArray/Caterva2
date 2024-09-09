@@ -277,9 +277,10 @@ def lazyexpr(name, expression, operands,
         The path of the created dataset.
     """
     urlbase, _ = _format_paths(urlbase)
+    # Convert possible Path objects in operands to strings so that they can be serialized
+    operands = {k: str(v) for k, v in operands.items()}
     expr = dict(name=name, expression=expression, operands=operands)
-    remotepath = api_utils.post(f'{urlbase}api/lazyexpr/', expr,
-                                auth_cookie=auth_cookie)
+    remotepath = api_utils.post(f'{urlbase}api/lazyexpr/', expr, auth_cookie=auth_cookie)
     return pathlib.Path(remotepath)
 
 
