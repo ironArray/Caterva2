@@ -141,19 +141,17 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None)
                 f.write(data)
         if is_b2 and try_unpack:
             localpath = b2_unpack(localpath)
-    return localpath
+    return pathlib.Path(localpath)
 
 
 def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None, server=None):
     client, url = get_client_and_url(server, f'{urlbase}api/upload/{remotepath}')
 
-    # TODO: Implement packing if needed
-
     headers = {'Cookie': auth_cookie} if auth_cookie else None
     with open(localpath, 'rb') as f:
         response = client.post(url, files={'file': f}, headers=headers)
         response.raise_for_status()
-    return response.json()
+    return pathlib.Path(response.json())
 
 
 #

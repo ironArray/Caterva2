@@ -213,7 +213,7 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
 
     Returns
     -------
-    str
+    Path
         The path to the downloaded file.
     """
     urlbase, path = _format_paths(urlbase, path)
@@ -245,10 +245,8 @@ def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None)
     Path
         The path of the uploaded file.
     """
-    # urlbase, path = _format_paths(urlbase, remote_dir)
-    remote_path = api_utils.upload_file(localpath, remotepath, urlbase, try_pack=api_utils.blosc2_is_here,
-                                        auth_cookie=auth_cookie)
-    return pathlib.Path(remote_path)
+    return api_utils.upload_file(localpath, remotepath, urlbase, try_pack=api_utils.blosc2_is_here,
+                                 auth_cookie=auth_cookie)
 
 
 def lazyexpr(name, expression, operands,
@@ -275,13 +273,14 @@ def lazyexpr(name, expression, operands,
 
     Returns
     -------
-    str
+    Path
         The path of the created dataset.
     """
     urlbase, _ = _format_paths(urlbase)
     expr = dict(name=name, expression=expression, operands=operands)
-    return api_utils.post(f'{urlbase}api/lazyexpr/', expr,
-                          auth_cookie=auth_cookie)
+    remotepath = api_utils.post(f'{urlbase}api/lazyexpr/', expr,
+                                auth_cookie=auth_cookie)
+    return pathlib.Path(remotepath)
 
 
 class Root:
@@ -518,7 +517,7 @@ class File:
 
         Returns
         -------
-        pathlib.PosixPath
+        Path
             The path to the downloaded file.
 
         Examples

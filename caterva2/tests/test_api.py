@@ -80,7 +80,7 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == f'@scratch/{lxname}.b2nd'
+    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     # Check result metadata.
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -109,7 +109,7 @@ def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
                    auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == f'@scratch/{lxname}.b2nd'
+    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     # Get one chunk
     chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -141,13 +141,13 @@ def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == f'@scratch/{lxname}.b2nd'
+    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     expression2 = f'{opnm} * 2'
     operands2 = {opnm: lxpath}
     lxname = 'expr_from_expr'
     lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert lxpath2 == f'@scratch/{lxname}.b2nd'
+    assert lxpath2 == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     # Check result metadata.
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
