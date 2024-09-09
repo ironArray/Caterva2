@@ -829,7 +829,7 @@ async def upload_file(
     path2.parent.mkdir(exist_ok=True, parents=True)
 
     # If regular file, compress it
-    if path2.suffix not in {'.b2frame', '.b2nd'}:
+    if path2.suffix not in {'.b2', '.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         # Append a new .b2 extension to the file, including the original extension
@@ -1256,31 +1256,51 @@ async def htmx_upload(
             error = 'Upload failed because quota limit has been exceeded.'
             return htmx_error(request, error)
 
-        # If a tarball or zipfile, extract the files in path
-        # We also filter out hidden files and MacOSX metadata
-        suffixes = filename.suffixes
-        if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
-            file.file.seek(0)  # Reset file pointer
-            if suffixes == ['.zip']:
-                with zipfile.ZipFile(file.file, 'r') as archive:
-                    members = [m for m in archive.namelist()
-                               if (not os.path.basename(m).startswith('.') and
-                                   not os.path.basename(m).startswith('__MACOSX'))]
-                    archive.extractall(path, members=members)
-                    first_member = next((m for m in members if not m.endswith('/')), None)
-            else:
-                mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
-                with tarfile.open(fileobj=file.file, mode=mode) as archive:
-                    members = [m for m in archive.getmembers()
-                               if (not os.path.basename(m.name).startswith('.') and
-                                   not os.path.basename(m.name).startswith('__MACOSX'))]
-                    archive.extractall(path, members=members)
-                    first_member = next((m.name for m in members if not m.isdir()), None)
-            # We are done, redirect to home, and show the new files
-            path = f'{name}/{first_member}'
-            return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
+    # If a tarball or zipfile, extract the files in path
+    # We also filter out hidden files and MacOSX metadata
+    suffixes = filename.suffixes
+    if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
+        file.file.seek(0)  # Reset file pointer
+        if suffixes == ['.zip']:
+            with zipfile.ZipFile(file.file, 'r') as archive:
+                members = [m for m in archive.namelist()
+                           if (not os.path.basename(m).startswith('.') and
+                               not os.path.basename(m).startswith('__MACOSX'))]
+                archive.extractall(path, members=members)
+                # Convert members elements to Path instances
+                members = [pathlib.Path(m) for m in members]
+        else:
+            mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
+            with tarfile.open(fileobj=file.file, mode=mode) as archive:
+                members = [m for m in archive.getmembers()
+                           if (not os.path.basename(m.name).startswith('.') and
+                               not os.path.basename(m.name).startswith('__MACOSX'))]
+                archive.extractall(path, members=members)
+                # Convert members elements to Path instances
+                members = [pathlib.Path(m.name) for m in members]
 
-    if filename.suffix not in {'.b2frame', '.b2nd'}:
+        # Compress files that are not compressed yet
+        new_members = [
+            member for member in members
+            if not (path / member).is_dir() and not member.suffix in {'.b2', '.b2frame', '.b2nd'}
+        ]
+        for member in new_members:
+            member_path = path / member
+            with open(member_path, 'rb') as src:
+                data = src.read()
+                schunk = blosc2.SChunk(data=data)
+                data = schunk.to_cframe()
+                member_path2 = f'{member_path}.b2'
+            with open(member_path2, 'wb') as dst:
+                dst.write(data)
+            member_path.unlink()
+        # We are done, redirect to home, and show the new files, starting with the first one
+        first_member = next((m for m in new_members), None)
+        print(f"first_member: {first_member}")
+        path = f'{name}/{first_member}'
+        return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
+
+    if filename.suffix not in {'.b2', '.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f'{filename}.b2'
@@ -1320,6 +1340,10 @@ async def htmx_delete(
         return fastapi.HTTPException(status_code=400)
 
     # Remove
+    if abspath.suffix not in {'.b2frame', '.b2nd'}:
+        abspath = abspath.with_suffix(abspath.suffix + '.b2')
+        if not abspath.exists():
+            return fastapi.HTTPException(status_code=404)
     abspath.unlink()
 
     # Redirect to home
