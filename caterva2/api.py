@@ -225,9 +225,10 @@ def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None)
     """
     Upload a local dataset to a remote repository.
 
-    **Note:** If dataset in localpath is a regular file, and Blosc2 is installed,
-    it will be compressed prior to be uploaded.  Otherwise, it will be
-    uploaded as-is and compressed with Blosc2 on the server side.
+    **Note:** If `localpath` is a regular file (i.e. without a `.b2nd`,
+    `.b2frame` or `.b2` extension), it will be compressed with Blosc2 on the
+    server side (i.e. it will have the `.b2` extension appended internally,
+    although this won't be visible when using the web, API or CLI interfaces).
 
     Parameters
     ----------
