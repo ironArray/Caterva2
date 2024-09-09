@@ -14,7 +14,6 @@ import httpx
 import blosc2
 import pytest
 
-import caterva2
 import caterva2 as cat2
 import numpy as np
 
@@ -353,26 +352,39 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
     assert a[:] == b[:].decode()
 
 
-@pytest.mark.parametrize("fname", ['ds-1d.b2nd',
-                                   'ds-hello.b2frame',
-                                   'README.md',
-                                   'dir1/ds-2d.b2nd',
-                                   ])
-def test_upload(fname, services, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
+@pytest.mark.parametrize("fnames", [('ds-1d.b2nd', None),
+                                    ('ds-hello.b2frame', None),
+                                    ('README.md', None),
+                                    ('README.md', 'README2.md'),
+                                    ('dir1/ds-2d.b2nd', None),
+                                    ('dir1/ds-2d.b2nd', 'dir2/ds-2d.b2nd'),
+                                    ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
+                                    ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
+                                    ])
+@pytest.mark.parametrize("root", [TEST_SCRATCH_ROOT, TEST_SHARED_ROOT])
+def test_upload(fnames, root, services, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     if not sub_jwt_cookie:
         pytest.skip("authentication support needed")
 
+    localpath, remotepath = fnames
+    remote_root = cat2.Root(root, sub_urlbase, sub_user)
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
-    ds = myroot[fname]
+    ds = myroot[localpath]
     with chdir_ctxt(tmp_path):
         path = ds.download()
         assert path == ds.path
-    print(f"path: {path}")
-
-    # Now, upload the file to the scratch area
-    myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
-    scratch_ds = myscratch.upload(path)
-    assert scratch_ds.name == str(path)
+        # Check whether path exists and is a file
+        assert path.exists() and path.is_file()
+        # Now, upload the file to the remote root
+        remote_ds = remote_root.upload(path, remotepath)
+        # Check whether the file has been uploaded with the correct name
+        if remotepath:
+            if remotepath.endswith('/'):
+                assert remote_ds.name == remotepath + path.name
+            else:
+                assert remote_ds.name == remotepath
+        else:
+            assert remote_ds.name == str(path)
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',

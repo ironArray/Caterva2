@@ -825,6 +825,7 @@ async def upload_file(
     # If path2 is a directory, append the filename
     if path2.is_dir():
         path2 /= file.filename
+        path /= file.filename
     path2.parent.mkdir(exist_ok=True, parents=True)
 
     # If regular file, compress it
@@ -840,7 +841,6 @@ async def upload_file(
 
     # Return the urlpath
     return str(path)
-    # return urlbase / path
 
 
 #

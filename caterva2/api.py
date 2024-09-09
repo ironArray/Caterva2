@@ -242,12 +242,13 @@ def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None)
 
     Returns
     -------
-    str
+    Path
         The path of the uploaded file.
     """
     # urlbase, path = _format_paths(urlbase, remote_dir)
-    return api_utils.upload_file(localpath, remotepath, urlbase, try_pack=api_utils.blosc2_is_here,
-                                 auth_cookie=auth_cookie)
+    remote_path = api_utils.upload_file(localpath, remotepath, urlbase, try_pack=api_utils.blosc2_is_here,
+                                        auth_cookie=auth_cookie)
+    return pathlib.Path(remote_path)
 
 
 def lazyexpr(name, expression, operands,
@@ -363,13 +364,17 @@ class Root:
         File: @scratch/foo/mydataset.md
         """
         if remotepath is None:
-            remotepath = self.name / localpath
-        r2 = upload(localpath, remotepath, urlbase=self.urlbase,
-                   auth_cookie=self.auth_cookie)
-        # list the contents of the root
-        self.node_list = api_utils.get(f'{self.urlbase}api/list/{self.name}',
-                                       auth_cookie=self.auth_cookie)
-        return self[str(localpath)]
+            # localpath cannot be absolute in this case (too much prone to errors)
+            if pathlib.Path(localpath).is_absolute():
+                raise ValueError(
+                    "When `remotepath` is not specified, `localpath` must be a relative path")
+            remotepath = pathlib.Path(self.name) / localpath
+        else:
+            remotepath = pathlib.Path(self.name) / pathlib.Path(remotepath)
+        uploadpath = upload(localpath, remotepath, urlbase=self.urlbase,
+                            auth_cookie=self.auth_cookie)
+        # Remove the first component of the uploadpath (the root name) and return a new File/Dataset
+        return self[str(uploadpath.relative_to(self.name))]
 
 
 class File:
