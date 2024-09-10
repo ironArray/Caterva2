@@ -221,7 +221,7 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     return api_utils.download_url(url, path, try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
-def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None):
+def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Upload a local dataset to a remote repository.
 
@@ -234,7 +234,7 @@ def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None)
     ----------
     localpath : Path
         The path of the local dataset.
-    remotepath : Path
+    dataset : Path
         The remote path to upload the dataset to.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
@@ -246,7 +246,7 @@ def upload(localpath, remotepath, urlbase=sub_urlbase_default, auth_cookie=None)
     Path
         The path of the uploaded file.
     """
-    return api_utils.upload_file(localpath, remotepath, urlbase, try_pack=api_utils.blosc2_is_here,
+    return api_utils.upload_file(localpath, dataset, urlbase, try_pack=api_utils.blosc2_is_here,
                                  auth_cookie=auth_cookie)
 
 
@@ -281,8 +281,8 @@ def lazyexpr(name, expression, operands,
     # Convert possible Path objects in operands to strings so that they can be serialized
     operands = {k: str(v) for k, v in operands.items()}
     expr = dict(name=name, expression=expression, operands=operands)
-    remotepath = api_utils.post(f'{urlbase}api/lazyexpr/', expr, auth_cookie=auth_cookie)
-    return pathlib.Path(remotepath)
+    dataset = api_utils.post(f'{urlbase}api/lazyexpr/', expr, auth_cookie=auth_cookie)
+    return pathlib.Path(dataset)
 
 
 class Root:
@@ -341,7 +341,7 @@ class Root:
             return File(node, root=self.name, urlbase=self.urlbase,
                         auth_cookie=self.auth_cookie)
 
-    def upload(self, localpath, remotepath=None):
+    def upload(self, localpath, dataset=None):
         """
         Upload a local dataset to this root.
 
@@ -349,7 +349,7 @@ class Root:
         ----------
         localpath : Path
             The path of the local dataset.
-        remotepath : Path
+        dataset : Path
             The remote path to upload the dataset to.  If not provided, the
             dataset will be uploaded to this root in top level.
 
@@ -364,15 +364,15 @@ class Root:
         >>> root.upload('foo/mydataset.b2nd')
         File: @scratch/foo/mydataset.md
         """
-        if remotepath is None:
+        if dataset is None:
             # localpath cannot be absolute in this case (too much prone to errors)
             if pathlib.Path(localpath).is_absolute():
                 raise ValueError(
-                    "When `remotepath` is not specified, `localpath` must be a relative path")
-            remotepath = pathlib.Path(self.name) / localpath
+                    "When `dataset` is not specified, `localpath` must be a relative path")
+            dataset = pathlib.Path(self.name) / localpath
         else:
-            remotepath = pathlib.Path(self.name) / pathlib.Path(remotepath)
-        uploadpath = upload(localpath, remotepath, urlbase=self.urlbase,
+            dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
+        uploadpath = upload(localpath, dataset, urlbase=self.urlbase,
                             auth_cookie=self.auth_cookie)
         # Remove the first component of the uploadpath (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
