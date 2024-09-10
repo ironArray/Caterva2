@@ -250,6 +250,34 @@ def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
                                  auth_cookie=auth_cookie)
 
 
+def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Remove a dataset (or subroot path) from a remote repository.
+
+    Note that when a subroot is removed, only its contents are removed.
+    The subroot itself is not removed. This can be handy for future
+    uploads to the same subroot.  This is preliminary and may change in
+    future versions.
+
+    Parameters
+    ----------
+    path : Path
+        The path of the dataset or subroot.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    str
+        The removed path.
+    """
+    urlbase, path = _format_paths(urlbase, path)
+    return api_utils.post(f'{urlbase}api/remove/{path}',
+                          auth_cookie=auth_cookie)
+
+
 def lazyexpr(name, expression, operands,
              urlbase=sub_urlbase_default, auth_cookie=None):
     """
@@ -532,6 +560,24 @@ class File:
         urlpath = self.get_download_url()
         return api_utils.download_url(urlpath, str(self.path),
                                       auth_cookie=self.auth_cookie)
+
+    def remove(self):
+        """
+        Remove a file from a remote repository.
+
+        Returns
+        -------
+        str
+            The path of the removed file.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@scratch')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.remove()
+        '@scratch/ds-1d.b2nd'
+        """
+        return remove(self.path, urlbase=self.urlbase,  auth_cookie=self.auth_cookie)
 
 
 class Dataset(File):

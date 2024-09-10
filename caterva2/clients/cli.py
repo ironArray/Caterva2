@@ -155,6 +155,13 @@ def cmd_upload(args, auth_cookie):
     print(f'Dataset stored in {path}')
 
 
+@handle_errors
+@with_auth_cookie
+def cmd_remove(args, auth_cookie):
+    removed = cat2.remove(args.dataset, args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset (or subroot contents) removed: {removed}')
+
+
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
@@ -221,6 +228,12 @@ def main():
     subparser.add_argument('localpath', type=pathlib.Path)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_upload)
+
+    # remove
+    help = 'Remove a dataset from the subscriber'
+    subparser = subparsers.add_parser('remove', help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.set_defaults(func=cmd_remove)
 
     # Go
     args = utils.run_parser(parser)

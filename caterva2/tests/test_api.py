@@ -362,7 +362,9 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
                                     ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
                                     ])
 @pytest.mark.parametrize("root", [TEST_SCRATCH_ROOT, TEST_SHARED_ROOT])
-def test_upload(fnames, root, services, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
+@pytest.mark.parametrize("remove", [False, True])
+def test_upload(fnames, remove, root, services, examples_dir,
+                sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     if not sub_jwt_cookie:
         pytest.skip("authentication support needed")
 
@@ -385,6 +387,14 @@ def test_upload(fnames, root, services, examples_dir, sub_urlbase, sub_user, sub
                 assert remote_ds.name == remotepath
         else:
             assert remote_ds.name == str(path)
+        # Check removing the file
+        if remove:
+            remote_removed = pathlib.Path(remote_ds.remove())
+            assert remote_removed == remote_ds.path
+            # Check that the file has been removed
+            with pytest.raises(Exception) as e_info:
+                _ = remote_root[remote_removed]
+                assert str(e_info.value) == 'Not Found'
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',

@@ -784,7 +784,7 @@ async def upload_file(
         user: db.User = Depends(current_active_user),
 ):
     """
-    Upload a file to the shared space.
+    Upload a file to a root.
 
     Parameters
     ----------
@@ -808,12 +808,12 @@ async def upload_file(
     # Read the file
     data = await file.read()
 
-    # Only allow uploading to the scratch or the shared space
+    # Only allow uploading to the scratch or the shared spaces
     root = path.parts[0]
     if root not in {'@scratch', '@shared'}:
         raise fastapi.HTTPException(
             status_code=400,  # bad request
-            detail="Only uploading to the scratch or shared space is allowed",
+            detail="Only uploading to @scratch or @shared roots is allowed",
         )
 
     # Replace the root with absolute path
@@ -841,6 +841,74 @@ async def upload_file(
 
     # Return the urlpath
     return str(path)
+
+
+@app.post('/api/remove/{path:path}')
+async def remove(
+        path: pathlib.Path,
+        user: db.User = Depends(current_active_user),
+):
+    """
+    Remove a dataset or a subroot path.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path of dataset / subroot to remove.
+
+    Returns
+    -------
+    list
+        A list with the paths that have been removed.
+    """
+
+    if not user:
+        raise fastapi.HTTPException(
+            status_code=401,  # unauthorized
+            detail="Removing files requires enabling user authentication",
+        )
+
+    # Only allow removing from the scratch or the shared spaces
+    root = path.parts[0]
+    if root not in {'@scratch', '@shared'}:
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail="Only removing from @scratch or @shared roots is allowed",
+        )
+
+    # Replace the root with absolute path
+    if root == '@scratch':
+        path2 = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+    else:
+        path2 = shared / pathlib.Path(*path.parts[1:])
+
+    # If path2 is a directory, remove the contents of the directory
+    if path2.is_dir():
+        for path3 in path2.rglob('*'):
+            path3.unlink()
+        # Remove the directory itself
+        # NOTE: I am undecided about this, as it may be useful to keep the directory
+        # This would allow to reuse the directory for new files. Also, as empty directories
+        # are not displayed or listed, it would not be a problem to keep them.
+        # Let's keep it for now.
+        # path2.rmdir()
+    else:
+        # Try to unlink the file
+        try:
+            path2.unlink()
+        except FileNotFoundError:
+            # Try adding a .b2 extension
+            path2 = path2.with_suffix(path2.suffix + '.b2')
+            try:
+                path2.unlink()
+            except FileNotFoundError:
+                raise fastapi.HTTPException(
+                    status_code=404,  # not found
+                    detail="The specified path does not exist",
+                )
+
+    # Return the path
+    return path
 
 
 #
