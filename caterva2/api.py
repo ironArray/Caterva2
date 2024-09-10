@@ -193,19 +193,21 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
     return data.content
 
 
-def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
+def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Download a dataset to storage.
 
     **Note:** If the dataset is a regular file, it will be downloaded and
     decompressed if Blosc2 is installed.  Otherwise, it will be downloaded
-    as-is from the internal caches (i.e. compressed with Blosc2, and with the
-    `.b2` extension).
+    as-is (i.e. compressed with Blosc2, and with the `.b2` extension).
 
     Parameters
     ----------
-    path : str
+    dataset : Path
         The path of the dataset.
+    localpath : Path
+        The path to download the dataset to.  If not provided,
+        the dataset will be downloaded to the current working directory.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -216,9 +218,17 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     Path
         The path to the downloaded file.
     """
-    urlbase, path = _format_paths(urlbase, path)
-    url = api_utils.get_download_url(path, urlbase)
-    return api_utils.download_url(url, path, try_unpack=api_utils.blosc2_is_here,
+    urlbase, dataset = _format_paths(urlbase, dataset)
+    url = api_utils.get_download_url(dataset, urlbase)
+    localpath = pathlib.Path(localpath) if localpath else None
+    if localpath is None:
+        path = '.' / dataset
+    elif localpath.is_dir():
+        path = localpath / dataset.name
+    else:
+        path = localpath
+    return api_utils.download_url(url, str(path),
+                                  try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
 def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
@@ -541,9 +551,15 @@ class File:
                                     auth_cookie=self.auth_cookie)
         return data
 
-    def download(self):
+    def download(self, localpath=None):
         """
         Download a file to storage.
+
+        Parameters
+        ----------
+        localpath : Path
+            The path to download the file to.  If not provided, the file will
+            be downloaded to the current working directory.
 
         Returns
         -------
@@ -556,10 +572,13 @@ class File:
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
         PosixPath('foo/ds-1d.b2nd')
+        >>> file.download('mypath')  # assuming 'mypath' exists
+        PosixPath('mypath/ds-1d.b2nd')
+        >>> file.download('mypath/myds.b2nd')  # 'mypath' will be created if it doesn't exist
+        PosixPath('mypath/myds.b2nd')
         """
-        urlpath = self.get_download_url()
-        return api_utils.download_url(urlpath, str(self.path),
-                                      auth_cookie=self.auth_cookie)
+        return download(self.path, localpath=localpath,
+                        urlbase=self.urlbase, auth_cookie=self.auth_cookie)
 
     def remove(self):
         """

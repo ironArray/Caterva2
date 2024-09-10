@@ -258,6 +258,24 @@ def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
     np.testing.assert_array_equal(ds.fetch(slice_), a[slice_])
 
 
+@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
+                                    slice(1, 5, 1)])
+def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
+                            sub_user):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+    ds = myroot['README.md']
+
+    # Data contents
+    example = examples_dir / ds.name
+    a = open(example).read().encode()
+    if isinstance(slice_, int):
+        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
+        assert ord(ds.fetch(slice_)) == a[slice_]
+    else:
+        assert ds[slice_] == a[slice_]
+        assert ds.fetch(slice_) == a[slice_]
+
+
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
 def test_download_b2nd(name, services, examples_dir, sub_urlbase,
                        sub_user, sub_jwt_cookie, tmp_path):
@@ -308,22 +326,33 @@ def test_download_b2frame(services, examples_dir, sub_urlbase,
     assert a[:] == b[:]
 
 
-@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
-                                    slice(1, 5, 1)])
-def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
-                            sub_user):
+@pytest.mark.parametrize("fnames", [
+    ('ds-1d.b2nd', 'ds-1d2.b2nd'),
+    ('dir1/ds-2d.b2nd', 'dir2/ds-2d2.b2nd'),
+    ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
+    ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/'),
+])
+def test_download_localpath(fnames, services, examples_dir, sub_urlbase,
+                            sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
-    ds = myroot['README.md']
+    name, localpath = fnames
+    ds = myroot[name]
+    with chdir_ctxt(tmp_path):
+        if localpath.endswith('/'):
+            # Create a directory in localpath
+            localpath2 = pathlib.Path(localpath)
+            localpath2.mkdir(parents=True, exist_ok=True)
+        path = ds.download(localpath)
+        if localpath.endswith('/'):
+            localpath = localpath + name.split('/')[-1]
+        assert str(path) == localpath
 
     # Data contents
-    example = examples_dir / ds.name
-    a = open(example).read().encode()
-    if isinstance(slice_, int):
-        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
-        assert ord(ds.fetch(slice_)) == a[slice_]
-    else:
-        assert ds[slice_] == a[slice_]
-        assert ds.fetch(slice_) == a[slice_]
+    example = examples_dir / name
+    a = blosc2.open(example)
+    with chdir_ctxt(tmp_path):
+        b = blosc2.open(path)
+        np.testing.assert_array_equal(a[:], b[:])
 
 
 def test_download_regular_file(services, examples_dir, sub_urlbase,

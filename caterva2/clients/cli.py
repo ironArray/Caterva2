@@ -143,7 +143,7 @@ def cmd_show(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_download(args, auth_cookie):
-    path = cat2.download(args.dataset, args.urlbase, auth_cookie=auth_cookie)
+    path = cat2.download(args.dataset, args.localpath, args.urlbase, auth_cookie=auth_cookie)
     print(f'Dataset saved to {path}')
 
 
@@ -218,8 +218,8 @@ def main():
     help = 'Download a dataset and save it in the local system'
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
-    subparser.add_argument('dataset', type=str)
-    subparser.add_argument('output_dir', nargs='?', default='.', type=pathlib.Path)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.add_argument('localpath', nargs='?', default=None, type=pathlib.Path)
     subparser.set_defaults(func=cmd_download)
 
     # upload
