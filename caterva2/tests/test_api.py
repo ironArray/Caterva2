@@ -80,7 +80,7 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == f'@scratch/{lxname}.b2nd'
+    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     # Check result metadata.
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -109,7 +109,7 @@ def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
                    auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == f'@scratch/{lxname}.b2nd'
+    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     # Get one chunk
     chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -141,13 +141,13 @@ def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == f'@scratch/{lxname}.b2nd'
+    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     expression2 = f'{opnm} * 2'
     operands2 = {opnm: lxpath}
     lxname = 'expr_from_expr'
     lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert lxpath2 == f'@scratch/{lxname}.b2nd'
+    assert lxpath2 == pathlib.Path(f'@scratch/{lxname}.b2nd')
 
     # Check result metadata.
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -258,6 +258,24 @@ def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
     np.testing.assert_array_equal(ds.fetch(slice_), a[slice_])
 
 
+@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
+                                    slice(1, 5, 1)])
+def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
+                            sub_user):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+    ds = myroot['README.md']
+
+    # Data contents
+    example = examples_dir / ds.name
+    a = open(example).read().encode()
+    if isinstance(slice_, int):
+        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
+        assert ord(ds.fetch(slice_)) == a[slice_]
+    else:
+        assert ds[slice_] == a[slice_]
+        assert ds.fetch(slice_) == a[slice_]
+
+
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
 def test_download_b2nd(name, services, examples_dir, sub_urlbase,
                        sub_user, sub_jwt_cookie, tmp_path):
@@ -308,22 +326,33 @@ def test_download_b2frame(services, examples_dir, sub_urlbase,
     assert a[:] == b[:]
 
 
-@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
-                                    slice(1, 5, 1)])
-def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
-                            sub_user):
+@pytest.mark.parametrize("fnames", [
+    ('ds-1d.b2nd', 'ds-1d2.b2nd'),
+    ('dir1/ds-2d.b2nd', 'dir2/ds-2d2.b2nd'),
+    ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
+    ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/'),
+])
+def test_download_localpath(fnames, services, examples_dir, sub_urlbase,
+                            sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
-    ds = myroot['README.md']
+    name, localpath = fnames
+    ds = myroot[name]
+    with chdir_ctxt(tmp_path):
+        if localpath.endswith('/'):
+            # Create a directory in localpath
+            localpath2 = pathlib.Path(localpath)
+            localpath2.mkdir(parents=True, exist_ok=True)
+        path = ds.download(localpath)
+        if localpath.endswith('/'):
+            localpath = localpath + name.split('/')[-1]
+        assert str(path) == localpath
 
     # Data contents
-    example = examples_dir / ds.name
-    a = open(example).read().encode()
-    if isinstance(slice_, int):
-        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
-        assert ord(ds.fetch(slice_)) == a[slice_]
-    else:
-        assert ds[slice_] == a[slice_]
-        assert ds.fetch(slice_) == a[slice_]
+    example = examples_dir / name
+    a = blosc2.open(example)
+    with chdir_ctxt(tmp_path):
+        b = blosc2.open(path)
+        np.testing.assert_array_equal(a[:], b[:])
 
 
 def test_download_regular_file(services, examples_dir, sub_urlbase,
@@ -350,6 +379,51 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
     b = blosc2.schunk_from_cframe(data.content)
     # TODO: why do we need .decode() here?
     assert a[:] == b[:].decode()
+
+
+@pytest.mark.parametrize("fnames", [('ds-1d.b2nd', None),
+                                    ('ds-hello.b2frame', None),
+                                    ('README.md', None),
+                                    ('README.md', 'README2.md'),
+                                    ('dir1/ds-2d.b2nd', None),
+                                    ('dir1/ds-2d.b2nd', 'dir2/ds-2d.b2nd'),
+                                    ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
+                                    ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
+                                    ])
+@pytest.mark.parametrize("root", [TEST_SCRATCH_ROOT, TEST_SHARED_ROOT])
+@pytest.mark.parametrize("remove", [False, True])
+def test_upload(fnames, remove, root, services, examples_dir,
+                sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    localpath, remotepath = fnames
+    remote_root = cat2.Root(root, sub_urlbase, sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+    ds = myroot[localpath]
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
+        # Check whether path exists and is a file
+        assert path.exists() and path.is_file()
+        # Now, upload the file to the remote root
+        remote_ds = remote_root.upload(path, remotepath)
+        # Check whether the file has been uploaded with the correct name
+        if remotepath:
+            if remotepath.endswith('/'):
+                assert remote_ds.name == remotepath + path.name
+            else:
+                assert remote_ds.name == remotepath
+        else:
+            assert remote_ds.name == str(path)
+        # Check removing the file
+        if remove:
+            remote_removed = pathlib.Path(remote_ds.remove())
+            assert remote_removed == remote_ds.path
+            # Check that the file has been removed
+            with pytest.raises(Exception) as e_info:
+                _ = remote_root[remote_removed]
+                assert str(e_info.value) == 'Not Found'
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',

@@ -14,6 +14,6 @@ __version__ = "2024.07.01"
 
 from .api import (bro_host_default, pub_host_default, sub_host_default,
                   sub_urlbase_default)
-from .api import (get_roots, subscribe, get_chunk, get_list, get_info, fetch, download,
-                  lazyexpr)
+from .api import (get_roots, subscribe, get_chunk, get_list, get_info, fetch,
+                  download, upload, remove, lazyexpr)
 from .api import Root, File, Dataset

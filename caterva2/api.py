@@ -193,19 +193,86 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
     return data.content
 
 
-def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
+def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Download a dataset to storage.
 
     **Note:** If the dataset is a regular file, it will be downloaded and
     decompressed if Blosc2 is installed.  Otherwise, it will be downloaded
-    as-is from the internal caches (i.e. compressed with Blosc2, and with the
-    `.b2` extension).
+    as-is (i.e. compressed with Blosc2, and with the `.b2` extension).
 
     Parameters
     ----------
-    path : str
+    dataset : Path
         The path of the dataset.
+    localpath : Path
+        The path to download the dataset to.  If not provided,
+        the dataset will be downloaded to the current working directory.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    Path
+        The path to the downloaded file.
+    """
+    urlbase, dataset = _format_paths(urlbase, dataset)
+    url = api_utils.get_download_url(dataset, urlbase)
+    localpath = pathlib.Path(localpath) if localpath else None
+    if localpath is None:
+        path = '.' / dataset
+    elif localpath.is_dir():
+        path = localpath / dataset.name
+    else:
+        path = localpath
+    return api_utils.download_url(url, str(path),
+                                  try_unpack=api_utils.blosc2_is_here,
+                                  auth_cookie=auth_cookie)
+
+def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Upload a local dataset to a remote repository.
+
+    **Note:** If `localpath` is a regular file (i.e. without a `.b2nd`,
+    `.b2frame` or `.b2` extension), it will be compressed with Blosc2 on the
+    server side (i.e. it will have the `.b2` extension appended internally,
+    although this won't be visible when using the web, API or CLI interfaces).
+
+    Parameters
+    ----------
+    localpath : Path
+        The path of the local dataset.
+    dataset : Path
+        The remote path to upload the dataset to.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    Path
+        The path of the uploaded file.
+    """
+    return api_utils.upload_file(localpath, dataset, urlbase, try_pack=api_utils.blosc2_is_here,
+                                 auth_cookie=auth_cookie)
+
+
+def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Remove a dataset (or subroot path) from a remote repository.
+
+    Note that when a subroot is removed, only its contents are removed.
+    The subroot itself is not removed. This can be handy for future
+    uploads to the same subroot.  This is preliminary and may change in
+    future versions.
+
+    Parameters
+    ----------
+    path : Path
+        The path of the dataset or subroot.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -214,12 +281,11 @@ def download(path, urlbase=sub_urlbase_default, auth_cookie=None):
     Returns
     -------
     str
-        The path to the downloaded file.
+        The removed path.
     """
     urlbase, path = _format_paths(urlbase, path)
-    url = api_utils.get_download_url(path, urlbase)
-    return api_utils.download_url(url, path, try_unpack=api_utils.blosc2_is_here,
-                                  auth_cookie=auth_cookie)
+    return api_utils.post(f'{urlbase}api/remove/{path}',
+                          auth_cookie=auth_cookie)
 
 
 def lazyexpr(name, expression, operands,
@@ -246,13 +312,15 @@ def lazyexpr(name, expression, operands,
 
     Returns
     -------
-    str
+    Path
         The path of the created dataset.
     """
     urlbase, _ = _format_paths(urlbase)
+    # Convert possible Path objects in operands to strings so that they can be serialized
+    operands = {k: str(v) for k, v in operands.items()}
     expr = dict(name=name, expression=expression, operands=operands)
-    return api_utils.post(f'{urlbase}api/lazyexpr/', expr,
-                          auth_cookie=auth_cookie)
+    dataset = api_utils.post(f'{urlbase}api/lazyexpr/', expr, auth_cookie=auth_cookie)
+    return pathlib.Path(dataset)
 
 
 class Root:
@@ -310,6 +378,42 @@ class Root:
         else:
             return File(node, root=self.name, urlbase=self.urlbase,
                         auth_cookie=self.auth_cookie)
+
+    def upload(self, localpath, dataset=None):
+        """
+        Upload a local dataset to this root.
+
+        Parameters
+        ----------
+        localpath : Path
+            The path of the local dataset.
+        dataset : Path
+            The remote path to upload the dataset to.  If not provided, the
+            dataset will be uploaded to this root in top level.
+
+        Returns
+        -------
+        File
+            A :class:`File` or :class:`Dataset` instance.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@scratch')
+        >>> root.upload('foo/mydataset.b2nd')
+        File: @scratch/foo/mydataset.md
+        """
+        if dataset is None:
+            # localpath cannot be absolute in this case (too much prone to errors)
+            if pathlib.Path(localpath).is_absolute():
+                raise ValueError(
+                    "When `dataset` is not specified, `localpath` must be a relative path")
+            dataset = pathlib.Path(self.name) / localpath
+        else:
+            dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
+        uploadpath = upload(localpath, dataset, urlbase=self.urlbase,
+                            auth_cookie=self.auth_cookie)
+        # Remove the first component of the uploadpath (the root name) and return a new File/Dataset
+        return self[str(uploadpath.relative_to(self.name))]
 
 
 class File:
@@ -447,13 +551,19 @@ class File:
                                     auth_cookie=self.auth_cookie)
         return data
 
-    def download(self):
+    def download(self, localpath=None):
         """
         Download a file to storage.
 
+        Parameters
+        ----------
+        localpath : Path
+            The path to download the file to.  If not provided, the file will
+            be downloaded to the current working directory.
+
         Returns
         -------
-        pathlib.PosixPath
+        Path
             The path to the downloaded file.
 
         Examples
@@ -462,10 +572,31 @@ class File:
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
         PosixPath('foo/ds-1d.b2nd')
+        >>> file.download('mypath')  # assuming 'mypath' exists
+        PosixPath('mypath/ds-1d.b2nd')
+        >>> file.download('mypath/myds.b2nd')  # 'mypath' will be created if it doesn't exist
+        PosixPath('mypath/myds.b2nd')
         """
-        urlpath = self.get_download_url()
-        return api_utils.download_url(urlpath, str(self.path),
-                                      auth_cookie=self.auth_cookie)
+        return download(self.path, localpath=localpath,
+                        urlbase=self.urlbase, auth_cookie=self.auth_cookie)
+
+    def remove(self):
+        """
+        Remove a file from a remote repository.
+
+        Returns
+        -------
+        str
+            The path of the removed file.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@scratch')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.remove()
+        '@scratch/ds-1d.b2nd'
+        """
+        return remove(self.path, urlbase=self.urlbase,  auth_cookie=self.auth_cookie)
 
 
 class Dataset(File):

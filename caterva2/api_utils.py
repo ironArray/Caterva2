@@ -126,6 +126,12 @@ _attachment_b2fname_rx = re.compile(r';\s*filename\*?\s*=\s*"([^"]+\.b2)"')
 def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None):
     client, url = get_client_and_url(server, url)
 
+    localpath = pathlib.Path(localpath)
+    localpath.parent.mkdir(parents=True, exist_ok=True)
+    if localpath.is_dir():
+        # Get the filename from the URL
+        localpath /= url.split('/')[-1]
+
     headers = {'Cookie': auth_cookie} if auth_cookie else None
     with client.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
@@ -133,15 +139,24 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None)
         cdisp = r.headers.get('content-disposition', '')
         is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
         if is_b2:
-            localpath += '.b2'
-        localpath = pathlib.Path(localpath)
-        localpath.parent.mkdir(parents=True, exist_ok=True)
+            # Append '.b2' to the filename
+            localpath = localpath.with_suffix(localpath.suffix + '.b2')
         with open(localpath, "wb") as f:
             for data in r.iter_bytes():
                 f.write(data)
         if is_b2 and try_unpack:
             localpath = b2_unpack(localpath)
     return localpath
+
+
+def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None, server=None):
+    client, url = get_client_and_url(server, f'{urlbase}api/upload/{remotepath}')
+
+    headers = {'Cookie': auth_cookie} if auth_cookie else None
+    with open(localpath, 'rb') as f:
+        response = client.post(url, files={'file': f}, headers=headers)
+        response.raise_for_status()
+    return pathlib.Path(response.json())
 
 
 #
