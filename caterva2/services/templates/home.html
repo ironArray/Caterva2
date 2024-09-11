@@ -21,16 +21,21 @@
 
 <body class="vh-120">
 
-{% if username %}
+{% if user_auth_enabled %}
 <div class="alert alert-primary mb-0 rounded-0 d-flex justify-content-between">
     <div>
+        {% if username %}
         Logged in as {{ username }}.
         <form action="/auth/jwt/logout" method="post" class="d-inline-block" id="logout-form"
               onsubmit="submitForm(this, '/logout'); return false">
             <button type="submit" class="btn btn-link">Logout</button>
         </form>
+        {% else %}
+        <a href="/login">Log in</a>
+        {% endif %}
     </div>
     <div>
+        {% if username %}
         {% if usage_quota %}
             <div class="progress" role="progressbar" style="width: 200px; height: 100%"
                  title="Disk usage: {{ usage_percent }} % ({{ usage_total }} of {{ usage_quota }})"
@@ -44,6 +49,7 @@
         {% else %}
             Disk usage:
             {{ usage_total }}
+        {% endif %}
         {% endif %}
     </div>
 </div>

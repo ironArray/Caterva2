@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import current_active_user
+from caterva2.services.sub import optional_user
 from ...subscriber import db
 from ...sub import open_b2
 
@@ -56,7 +56,7 @@ def display(
     request: Request,
     # Path parameters
     path: pathlib.Path,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
 
     abspath, _ = abspath_and_dataprep(path, user=user)
@@ -88,7 +88,7 @@ async def display_one(
     path: pathlib.Path,
     # Query parameters
     i: int,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
 
     img = await __get_image(path, i, user)
@@ -119,7 +119,7 @@ async def image_file(
     # Query parameters
     i: int,
     width: int | None = None,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
 
     img = await __get_image(path, i, user)
