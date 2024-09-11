@@ -17,7 +17,7 @@ import pytest
 import caterva2 as cat2
 import numpy as np
 
-from .services import TEST_CATERVA2_ROOT, TEST_SCRATCH_ROOT, TEST_SHARED_ROOT
+from .services import TEST_CATERVA2_ROOT
 from .. import api_utils
 
 
@@ -59,10 +59,10 @@ def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
     if sub_jwt_cookie:
         # Special roots (only available when authenticated)
-        assert roots[TEST_SCRATCH_ROOT]['name'] == TEST_SCRATCH_ROOT
-        assert roots[TEST_SCRATCH_ROOT]['http'] == ''
-        assert roots[TEST_SHARED_ROOT]['name'] == TEST_SHARED_ROOT
-        assert roots[TEST_SHARED_ROOT]['http'] == ''
+        assert roots['@scratch']['name'] == '@scratch'
+        assert roots['@scratch']['http'] == ''
+        assert roots['@shared']['name'] == '@shared'
+        assert roots['@shared']['http'] == ''
 
 
 def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
@@ -172,11 +172,11 @@ def test_root(services, sub_urlbase, sub_user):
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.urlbase == sub_urlbase
     if sub_user:
-        myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
-        assert myscratch.name == TEST_SCRATCH_ROOT
+        myscratch = cat2.Root('@scratch', sub_urlbase, sub_user)
+        assert myscratch.name == '@scratch'
         assert myscratch.urlbase == sub_urlbase
-        myshared = cat2.Root(TEST_SHARED_ROOT, sub_urlbase, sub_user)
-        assert myshared.name == TEST_SHARED_ROOT
+        myshared = cat2.Root('@shared', sub_urlbase, sub_user)
+        assert myshared.name == '@shared'
         assert myshared.urlbase == sub_urlbase
 
 
@@ -186,10 +186,10 @@ def test_list(services, examples_dir, sub_urlbase, sub_user):
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
     if sub_user:
-        myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
+        myscratch = cat2.Root('@scratch', sub_urlbase, sub_user)
         # In previous tests we have created some files in the scratch area
         assert len(myscratch.node_list) >= 0
-        myshared = cat2.Root(TEST_SHARED_ROOT, sub_urlbase, sub_user)
+        myshared = cat2.Root('@shared', sub_urlbase, sub_user)
         assert set(myshared.node_list) == set()
 
 
@@ -390,7 +390,7 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
                                     ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
                                     ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
                                     ])
-@pytest.mark.parametrize("root", [TEST_SCRATCH_ROOT, TEST_SHARED_ROOT])
+@pytest.mark.parametrize("root", ['@scratch', '@shared'])
 @pytest.mark.parametrize("remove", [False, True])
 def test_upload(fnames, remove, root, services, examples_dir,
                 sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
