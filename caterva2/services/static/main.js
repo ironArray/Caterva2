@@ -1,6 +1,6 @@
 function activate(selector, trigger) {
     const url = new URL(document.URL);
-    for (el of document.querySelectorAll(selector)) {
+    for (let el of document.querySelectorAll(selector)) {
         if (trigger === undefined) {
             const href = new URL(el.href)
             if (url.pathname.startsWith(href.pathname)) {
