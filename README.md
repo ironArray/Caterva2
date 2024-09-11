@@ -113,7 +113,13 @@ README.md               dir2/                   ds-1d-fields.b2nd       ds-2d-fi
 dir1/                   ds-1d-b.b2nd            ds-1d.b2nd              ds-hello.b2frame
 ```
 
-First, create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).  Then fire up the broker, start publishing a root named `foo` with `root-example` datasets, and create a subscriber:
+Now:
+
+- create a virtual environment and install Caterva2 with the `[services,clients]` extras (see above).
+- copy the configuration file `caterva2.sample.toml` to `caterva2.toml` and edit to your
+  needs
+
+Then fire up the broker, start publishing a root named `foo` with `root-example` datasets, and create a subscriber:
 
 ```sh
 cat2bro &  # broker
@@ -122,6 +128,17 @@ cat2sub &  # subscriber
 ```
 
 (To stop them later on, bring each one to the foreground with `fg` and press Ctrl+C.)
+
+### Subscriber only mode
+
+It's also possible to run only the subscriber. For this copy
+`caterva2-standalone.sample.toml` to `caterva2.toml`.
+
+Then only run the subscriber:
+
+```sh
+cat2sub &  # subscriber
+```
 
 ### HDF5 roots
 
