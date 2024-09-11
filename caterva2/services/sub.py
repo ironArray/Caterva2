@@ -287,7 +287,7 @@ def follow(name: str):
 #
 
 def user_auth_enabled():
-    return bool(os.environ.get('CATERVA2_AUTH_SECRET'))
+    return bool(os.environ.get('CATERVA2_SECRET'))
 
 
 current_active_user = (users.current_active_user if user_auth_enabled()

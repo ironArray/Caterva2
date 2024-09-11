@@ -124,10 +124,10 @@ cat2sub
 
 ### User authentication
 
-If the subscriber is to support user authentication (to restrict access, allow computing expressions or uploading files), it will need a `CATERVA2_AUTH_SECRET` environment variable to be defined with its own secret token.  That token should be persisted somewhere so as to use the same one every time the subscriber runs. You may start the subscriber like this:
+If the subscriber is to support user authentication (to restrict access, allow computing expressions or uploading files), it will need a `CATERVA2_SECRET` environment variable to be defined with its own secret token.  That token should be persisted somewhere so as to use the same one every time the subscriber runs. You may start the subscriber like this:
 
 ```sh
-env CATERVA2_AUTH_SECRET=c2sikrit cat2sub
+env CATERVA2_SECRET=c2sikrit cat2sub
 ```
 
 Then users will need to register via the [Web client](Using-the-Web-client).

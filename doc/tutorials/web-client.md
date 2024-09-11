@@ -75,7 +75,7 @@ You may find a richer variety of example datasets in the demo Caterva2 subscribe
 
 Up until now we've seen the read-only operations that may be performed on a Caterva2 subscriber.  However, it also allows some useful writing operations that we'll see next.  These require user authentication to be enabled at the subscriber.
 
-First, stop the current services and start new ones while setting the `CATERVA2_AUTH_SECRET` environment variable, as detailed in [](Launching-Caterva2-services), then reload <http://localhost:8002/> in your browser (or click on the Caterva2 logo).  You'll be greeted with a login screen; enter `user@example.com` as email address and `foobar` as password, then click on "Login".
+First, stop the current services and start new ones while setting the `CATERVA2_SECRET` environment variable, as detailed in [](Launching-Caterva2-services), then reload <http://localhost:8002/> in your browser (or click on the Caterva2 logo).  You'll be greeted with a login screen; enter `user@example.com` as email address and `foobar` as password, then click on "Login".
 
 ```{figure} images/web-login.png
 ---
