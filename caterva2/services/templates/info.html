@@ -53,7 +53,9 @@
     {% endif %}
 </div>
 
-<script>
+<script type="module">
+    import { bootstrap } from "/static/build/main.min.js";
+
     // If the url has a hash open the appropriate tab
     function openTab(id) {
         if (id) {
