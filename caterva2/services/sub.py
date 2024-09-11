@@ -390,7 +390,7 @@ templates.env.filters['filesizeformat'] = custom_filesizeformat
 
 
 @app.get('/api/roots')
-async def get_roots(user: db.User = Depends(current_active_user)) -> dict:
+async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     """
     Get a dict of roots, with root names as keys and properties as values.
 
@@ -399,12 +399,13 @@ async def get_roots(user: db.User = Depends(current_active_user)) -> dict:
     dict
         The dict of roots.
     """
-    if not user:
-        return database.roots
     roots = database.roots.copy()
-    for name in ['@scratch', '@shared', '@public']:
-        root = models.Root(name=name, http='', subscribed=True)
-        roots[root.name] = root
+    root = models.Root(name='@public', http='', subscribed=True)
+    roots[root.name] = root
+    if user:
+        for name in ['@scratch', '@shared']:
+            root = models.Root(name=name, http='', subscribed=True)
+            roots[root.name] = root
 
     return roots
 
