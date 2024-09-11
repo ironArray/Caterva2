@@ -161,7 +161,7 @@ class ManagedServices(Services):
             *([f"--http={check.host}"] if check else []),
             *args
         ]
-        popen = subprocess.Popen(popen_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        popen = subprocess.Popen(popen_args, stdout=sys.stdout, stderr=sys.stderr)
         command_line = ' '.join(str(x) for x in popen_args)
         self._procs[name] = popen
 
@@ -175,8 +175,6 @@ class ManagedServices(Services):
         for _ in range(int(start_timeout_secs / start_sleep_secs)):
             returncode = popen.poll()
             if returncode is not None:
-                logger.error(f'STDERR {popen.stderr.read()}')
-                logger.error(f'STDOUT {popen.stdout.read()}')
                 raise RuntimeError(
                     f"service {name} failed with returncode={returncode}, "
                     f"command = {command_line}"
