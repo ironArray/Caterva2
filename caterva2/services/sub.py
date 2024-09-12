@@ -53,7 +53,7 @@ quota: int = 0
 # State
 statedir = None
 cache = None
-scratch = None
+personal = None
 shared = None
 public = None
 clients = {}       # topic: <PubSubClient>
@@ -212,7 +212,7 @@ def open_b2(abspath, path):
             for key, value in operands.items():
                 if 'proxy-source' in value.schunk.meta:
                     # Save operand as Proxy, see blosc2.open doc for more info
-                    relpath = srv_utils.get_relpath(value, cache, scratch, shared, public)
+                    relpath = srv_utils.get_relpath(value, cache, personal, shared, public)
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
         else:
@@ -466,7 +466,7 @@ async def get_list(
         rootdir = public
     elif user and name in {'@personal', '@shared'}:
         if name == '@personal':
-            rootdir = scratch / str(user.id)
+            rootdir = personal / str(user.id)
         elif name == '@shared':
             rootdir = shared
     else:
@@ -503,7 +503,7 @@ async def get_info(
         The metadata of the dataset.
     """
     abspath, _ = abspath_and_dataprep(path, user=user)
-    return srv_utils.read_metadata(abspath, cache, scratch, shared, public)
+    return srv_utils.read_metadata(abspath, cache, personal, shared, public)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -548,8 +548,8 @@ def abspath_and_dataprep(path: pathlib.Path,
         if not user:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
-        filepath = scratch / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(scratch, filepath)
+        filepath = personal / str(user.id) / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(personal, filepath)
         async def dataprep():
             pass
 
@@ -697,7 +697,7 @@ async def get_chunk(
 def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
                   user: db.User) -> str:
     """
-    Create a lazy expression dataset in scratch space.
+    Create a lazy expression dataset in personal space.
 
     This may raise exceptions if there are problems parsing the dataset name
     or expression, or if the expression refers to operands which have not been
@@ -740,7 +740,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
         # Detect special roots
         path = pathlib.Path(path)
         if path.parts[0] == '@personal':
-            abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+            abspath = personal / str(user.id) / pathlib.Path(*path.parts[1:])
         elif path.parts[0] == '@shared':
             abspath = shared / pathlib.Path(*path.parts[1:])
         elif path.parts[0] == '@public':
@@ -755,7 +755,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
         cname = type(arr).__name__
         raise TypeError(f"Evaluates to {cname} instead of lazy expression")
 
-    path = scratch / str(user.id)
+    path = personal / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / name}.b2nd', mode="w")
 
@@ -768,7 +768,7 @@ async def lazyexpr(
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
-    Create a lazy expression dataset in scratch space.
+    Create a lazy expression dataset in personal space.
 
     The JSON request body must contain a "name" for the dataset to be created
     (without extension), an "expression" to be evaluated, which must result in
@@ -831,7 +831,7 @@ async def upload_file(
     # Replace the root with absolute path
     root = path.parts[0]
     if root == '@personal':
-        path2 = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+        path2 = personal / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == '@shared':
         path2 = shared / pathlib.Path(*path.parts[1:])
     elif root == '@public':
@@ -892,7 +892,7 @@ async def remove(
     # Replace the root with absolute path
     root = path.parts[0]
     if root == '@personal':
-        path2 = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
+        path2 = personal / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == '@shared':
         path2 = shared / pathlib.Path(*path.parts[1:])
     elif root == '@public':
@@ -1053,7 +1053,7 @@ async def htmx_path_list(
     datasets = []
     for root in roots:
         if user and root == '@personal':
-            rootdir = scratch / str(user.id)
+            rootdir = personal / str(user.id)
         elif user and root == '@shared':
             rootdir = shared
         elif root == '@public':
@@ -1118,7 +1118,7 @@ async def htmx_path_info(
     except FileNotFoundError:
         return htmx_error(request, 'FileNotFoundError: missing operand(s)')
 
-    meta = srv_utils.read_metadata(abspath, cache, scratch, shared, public)
+    meta = srv_utils.read_metadata(abspath, cache, personal, shared, public)
 
     vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
     contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
@@ -1328,7 +1328,7 @@ async def htmx_upload(
         raise fastapi.HTTPException(status_code=401)  # Unauthorized
 
     if name == '@personal':
-        path = scratch / str(user.id)
+        path = personal / str(user.id)
     elif name == '@shared':
         path = shared
     elif name == '@public':
@@ -1426,7 +1426,7 @@ async def htmx_delete(
     if name == "@personal":
         parts[0] = str(user.id)
         path = pathlib.Path(*parts)
-        abspath = scratch / path
+        abspath = personal / path
     elif name == "@shared":
         path = pathlib.Path(*parts[1:])
         abspath = shared / path
@@ -1523,12 +1523,12 @@ def main():
     public = statedir / 'public'
     public.mkdir(exist_ok=True, parents=True)
 
-    # Scratch dir
-    global scratch
-    scratch = statedir / 'scratch'
-    scratch.mkdir(exist_ok=True, parents=True)
-    # Use `download_scratch()`, `StaticFiles` does not support authorization.
-    #app.mount("/scratch", StaticFiles(directory=scratch), name="scratch")
+    # personal dir
+    global personal
+    personal = statedir / 'personal'
+    personal.mkdir(exist_ok=True, parents=True)
+    # Use `download_personal()`, `StaticFiles` does not support authorization.
+    #app.mount("/personal", StaticFiles(directory=personal), name="personal")
 
     # Init database
     global database

@@ -71,7 +71,7 @@ Other datasets with a dedicated display are tomographies, i.e. stacks of images 
 
 You may find a richer variety of example datasets in the demo Caterva2 subscriber at <https://demo.caterva2.net/>.
 
-## User authentication and scratch space
+## User authentication and personal space
 
 Up until now we've seen the read-only operations that may be performed on a Caterva2 subscriber.  However, it also allows some useful writing operations that we'll see next.  These require user authentication to be enabled at the subscriber.
 
@@ -88,7 +88,7 @@ The login screen
 
 The main Web client screen has some changes now: besides the indication of the logged in user, a new root called `@personal` just appeared, along with an upload icon.
 
-This `@personal` is a pseudo-root offered to each user by the subscriber (i.e. it doesn't come from a publisher).  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own scratch space.
+This `@personal` is a pseudo-root offered to each user by the subscriber (i.e. it doesn't come from a publisher).  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own personal space.
 
 Check both `foo` and `@personal`.  The resulting list of datasets is also slightly different, with an extra input box and each listed dataset being accompanied by a short tag.  Let's see the new stuff that you can do with all these!
 
@@ -103,9 +103,9 @@ The main screen showing new user features
 
 ## Uploading datasets
 
-The upload icon below the list of roots allows you to upload new datasets to your scratch space, either by clicking it and choosing a file, or by dragging and dropping the file on it.
+The upload icon below the list of roots allows you to upload new datasets to your personal space, either by clicking it and choosing a file, or by dragging and dropping the file on it.
 
-Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory.  You'll see a new dataset `@personal/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your scratch space (after asking for confirmation).  Try it, but don't remove the dataset yet!
+Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory.  You'll see a new dataset `@personal/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your personal space (after asking for confirmation).  Try it, but don't remove the dataset yet!
 
 ```{figure} images/web-upload.png
 ---
@@ -135,7 +135,7 @@ scale: 50%
 The newly created lazy expression
 ```
 
-The dataset has very reduced metadata that just describes its shape, type, expression and operands.  However, you may still use it as any other dataset, e.g. to view its data (which will be computed on-the-fly), have it participate in other lazy expressions, or download it (with fully computed data) to your device.  As any dataset in your scratch space, it can also be deleted.
+The dataset has very reduced metadata that just describes its shape, type, expression and operands.  However, you may still use it as any other dataset, e.g. to view its data (which will be computed on-the-fly), have it participate in other lazy expressions, or download it (with fully computed data) to your device.  As any dataset in your personal space, it can also be deleted.
 
 Lazy expressions are a very versatile tool to have complex computations performed by a powerful and well-connected machine (the subscriber), and get the result to your device once satisfied with the result.  Many [arithmetic and reduction operations][b2-lazyexpr] are supported, just play with them and find out!
 

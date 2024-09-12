@@ -15,7 +15,7 @@ For the moment it has a very simple invocation syntax:
 cat2import HDF5_FILE CATERVA2_ROOT
 ```
 
-Where the HDF5 file must exist beforehand, and the Caterva2 root directory must not, as it will be created from scratch.  HDF5 groups will be mapped to directories of the same name in the Caterva2 root, and datasets to Blosc2 array files with the same name, plus a `.b2nd` extension.  There is currently no way of controlling the involved compression algorithm or parameters, nor the chunking/blocking of data, so defaults are used (this will change in the future).
+Where the HDF5 file must exist beforehand, and the Caterva2 root directory must not, as it will be created from personal.  HDF5 groups will be mapped to directories of the same name in the Caterva2 root, and datasets to Blosc2 array files with the same name, plus a `.b2nd` extension.  There is currently no way of controlling the involved compression algorithm or parameters, nor the chunking/blocking of data, so defaults are used (this will change in the future).
 
 Invoking `cat2import --help` provides more hints on which HDF5 features are supported, and how they are mapped into the Caterva2 root.
 

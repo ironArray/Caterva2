@@ -49,7 +49,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj, cache=None, scratch=None, shared=None, public=None):
+def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -80,7 +80,7 @@ def read_metadata(obj, cache=None, scratch=None, shared=None, public=None):
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     elif isinstance(obj, blosc2.LazyExpr):
-        operands = operands_as_paths(obj.operands, cache, scratch, shared, public)
+        operands = operands_as_paths(obj.operands, cache, personal, shared, public)
         return get_model_from_obj(obj, models.LazyArray, operands=operands)
     else:
         raise TypeError(f'unexpected {type(obj)}')
@@ -95,7 +95,7 @@ def reformat_cparams(cparams):
     return cparams
 
 
-def get_relpath(ndarr, cache, scratch, shared, public):
+def get_relpath(ndarr, cache, personal, shared, public):
     path = pathlib.Path(ndarr.schunk.urlpath)
     if shared is not None and path.is_relative_to(shared):
         # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
@@ -107,17 +107,17 @@ def get_relpath(ndarr, cache, scratch, shared, public):
         # Cache: /.../<root>/<subpath> to <root>/<subpath>
         path = path.relative_to(cache)
     except ValueError:
-        # Scratch: /.../<uid>/<subpath> to @personal/<subpath>
-        path = path.relative_to(scratch)
+        # personal: /.../<uid>/<subpath> to @personal/<subpath>
+        path = path.relative_to(personal)
         parts = list(path.parts)
         parts[0] = '@personal'
         path = pathlib.Path(*parts)
 
     return path
 
-def operands_as_paths(operands, cache, scratch, shared, public):
+def operands_as_paths(operands, cache, personal, shared, public):
     return dict(
-        (nm, str(get_relpath(op, cache, scratch, shared, public)))
+        (nm, str(get_relpath(op, cache, personal, shared, public)))
         for (nm, op) in operands.items()
     )
 

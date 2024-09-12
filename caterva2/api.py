@@ -291,7 +291,7 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
 def lazyexpr(name, expression, operands,
              urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    Create a lazy expression dataset in scratch space.
+    Create a lazy expression dataset in personal space.
 
     A dataset with the given name is created anew (or overwritten if already
     existing).

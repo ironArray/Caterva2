@@ -76,9 +76,9 @@ def test_root(services, sub_urlbase, sub_user):
     assert mypublic.name == '@public'
     assert mypublic.urlbase == sub_urlbase
     if sub_user:
-        myscratch = cat2.Root('@personal', sub_urlbase, sub_user)
-        assert myscratch.name == '@personal'
-        assert myscratch.urlbase == sub_urlbase
+        mypersonal = cat2.Root('@personal', sub_urlbase, sub_user)
+        assert mypersonal.name == '@personal'
+        assert mypersonal.urlbase == sub_urlbase
         myshared = cat2.Root('@shared', sub_urlbase, sub_user)
         assert myshared.name == '@shared'
         assert myshared.urlbase == sub_urlbase
@@ -90,9 +90,9 @@ def test_list(services, examples_dir, sub_urlbase, sub_user):
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
     if sub_user:
-        myscratch = cat2.Root('@personal', sub_urlbase, sub_user)
-        # In previous tests we have created some files in the scratch area
-        assert len(myscratch.node_list) >= 0
+        mypersonal = cat2.Root('@personal', sub_urlbase, sub_user)
+        # In previous tests we have created some files in the personal area
+        assert len(mypersonal.node_list) >= 0
         myshared = cat2.Root('@shared', sub_urlbase, sub_user)
         assert set(myshared.node_list) == set()
 
