@@ -204,7 +204,7 @@ def open_b2(abspath, path):
     Return a Proxy if the dataset is in a publisher,
     or the LazyExpr or Blosc2 container otherwise.
     """
-    if pathlib.Path(path).parts[0] in {'@scratch', '@shared', '@public'}:
+    if pathlib.Path(path).parts[0] in {'@personal', '@shared', '@public'}:
         container = blosc2.open(abspath)
         if isinstance(container, blosc2.LazyExpr):
             # Open the operands properly
@@ -403,7 +403,7 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     root = models.Root(name='@public', http='', subscribed=True)
     roots[root.name] = root
     if user:
-        for name in ['@scratch', '@shared']:
+        for name in ['@personal', '@shared']:
             root = models.Root(name=name, http='', subscribed=True)
             roots[root.name] = root
 
@@ -438,7 +438,7 @@ async def post_subscribe(
     """
     if name == '@public':
         return 'Ok'
-    if name not in {'@scratch', '@shared'} or not user:
+    if name not in {'@personal', '@shared'} or not user:
         get_root(name)  # Not Found
         follow(name)
     return 'Ok'
@@ -464,8 +464,8 @@ async def get_list(
     """
     if name == '@public':
         rootdir = public
-    elif user and name in {'@scratch', '@shared'}:
-        if name == '@scratch':
+    elif user and name in {'@personal', '@shared'}:
+        if name == '@personal':
             rootdir = scratch / str(user.id)
         elif name == '@shared':
             rootdir = shared
@@ -474,7 +474,7 @@ async def get_list(
         rootdir = cache / root.name
 
     if not rootdir.exists():
-        if name in {'@scratch', '@shared', '@public'}:
+        if name in {'@personal', '@shared', '@public'}:
             return []
         srv_utils.raise_not_found(f'Not subscribed to {name}')
 
@@ -544,7 +544,7 @@ def abspath_and_dataprep(path: pathlib.Path,
     given, or the whole data otherwise.
     """
     parts = path.parts
-    if parts[0] == '@scratch':
+    if parts[0] == '@personal':
         if not user:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
@@ -677,7 +677,7 @@ async def get_chunk(
     abspath, _ = abspath_and_dataprep(path, user=user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
-        if user and path.parts[0] == '@scratch':
+        if user and path.parts[0] == '@personal':
             container = open_b2(abspath, path)
             if isinstance(container, blosc2.LazyArray):
                 # We do not support LazyUDF in Caterva2 yet.
@@ -739,7 +739,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
 
         # Detect special roots
         path = pathlib.Path(path)
-        if path.parts[0] == '@scratch':
+        if path.parts[0] == '@personal':
             abspath = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
         elif path.parts[0] == '@shared':
             abspath = shared / pathlib.Path(*path.parts[1:])
@@ -759,7 +759,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f'{path / name}.b2nd', mode="w")
 
-    return f'@scratch/{name}.b2nd'
+    return f'@personal/{name}.b2nd'
 
 
 @app.post('/api/lazyexpr/')
@@ -830,7 +830,7 @@ async def upload_file(
 
     # Replace the root with absolute path
     root = path.parts[0]
-    if root == '@scratch':
+    if root == '@personal':
         path2 = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == '@shared':
         path2 = shared / pathlib.Path(*path.parts[1:])
@@ -840,7 +840,7 @@ async def upload_file(
         # Only allow uploading to the special roots
         raise fastapi.HTTPException(
             status_code=400,  # bad request
-            detail="Only uploading to @scratch or @shared or @public roots is allowed",
+            detail="Only uploading to @personal or @shared or @public roots is allowed",
         )
 
     # If path2 is a directory, append the filename
@@ -891,7 +891,7 @@ async def remove(
 
     # Replace the root with absolute path
     root = path.parts[0]
-    if root == '@scratch':
+    if root == '@personal':
         path2 = scratch / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == '@shared':
         path2 = shared / pathlib.Path(*path.parts[1:])
@@ -901,7 +901,7 @@ async def remove(
         # Only allow removing from the special roots
         raise fastapi.HTTPException(
             status_code=400,  # bad request
-            detail="Only removing from @scratch or @shared or @public roots is allowed",
+            detail="Only removing from @personal or @shared or @public roots is allowed",
         )
 
     # If path2 is a directory, remove the contents of the directory
@@ -1052,7 +1052,7 @@ async def htmx_path_list(
     query = {'roots': roots, 'search': search}
     datasets = []
     for root in roots:
-        if user and root == '@scratch':
+        if user and root == '@personal':
             rootdir = scratch / str(user.id)
         elif user and root == '@shared':
             rootdir = shared
@@ -1140,7 +1140,7 @@ async def htmx_path_info(
         "path": path,
         "meta": meta,
         "display": display,
-        "can_delete": user and path.parts[0] in {"@scratch", "@shared", "@public"},
+        "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
     }
 
     # XXX
@@ -1293,7 +1293,7 @@ async def htmx_command(
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
-    return htmx_redirect(hx_current_url, url, root='@scratch')
+    return htmx_redirect(hx_current_url, url, root='@personal')
 
 
 def htmx_error(request, msg):
@@ -1327,7 +1327,7 @@ async def htmx_upload(
     if not user:
         raise fastapi.HTTPException(status_code=401)  # Unauthorized
 
-    if name == '@scratch':
+    if name == '@personal':
         path = scratch / str(user.id)
     elif name == '@shared':
         path = shared
@@ -1423,7 +1423,7 @@ async def htmx_delete(
     # Find absolute path to file
     parts = list(path.parts)
     name = parts[0]
-    if name == "@scratch":
+    if name == "@personal":
         parts[0] = str(user.id)
         path = pathlib.Path(*parts)
         abspath = scratch / path

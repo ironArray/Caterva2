@@ -13,13 +13,13 @@
 * Web client: New Data tab to show the dataset's data. It supports NDArrays with structured dtypes as tables.
 * Web client: Support for displaying MarkDown files.
 * Web client: Support for authentication. See https://demo-auth.caterva2.net for an example.
-* Web client: New @scratch area (pseudo-root) when logged in. It allows creating new datasets and uploading files (drag-and-drop supported).
-* Web client: New Prompt box to allow creating lazy datasets in the @scratch area. Existing datasets can be referenced by their tag.
+* Web client: New @personal area (pseudo-root) when logged in. It allows creating new datasets and uploading files (drag-and-drop supported).
+* Web client: New Prompt box to allow creating lazy datasets in the @personal area. Existing datasets can be referenced by their tag.
 * Web client: New Download button to download a dataset as a file.
-* Web client: New Delete button to delete a dataset from @scratch area.
+* Web client: New Delete button to delete a dataset from @personal area.
 * Web client: Support to detect tomographies automatically using heuristics -- 3D integer datasets in greyscale and RGB(A) (using a 4th dim).
 * Client API: Support for subscriber user authentication in client code.
-* Client API: Support for creating lazy expressions in the @scratch area.  The resulting data is not computed on creation, but on demand.
+* Client API: Support for creating lazy expressions in the @personal area.  The resulting data is not computed on creation, but on demand.
 
 
 ## Changes from 0.1 to 0.2

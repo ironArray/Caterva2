@@ -62,8 +62,8 @@ def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     assert roots['@public']['http'] == ''
     if sub_jwt_cookie:
         # Special roots (only available when authenticated)
-        assert roots['@scratch']['name'] == '@scratch'
-        assert roots['@scratch']['http'] == ''
+        assert roots['@personal']['name'] == '@personal'
+        assert roots['@personal']['http'] == ''
         assert roots['@shared']['name'] == '@shared'
         assert roots['@shared']['http'] == ''
 
@@ -76,8 +76,8 @@ def test_root(services, sub_urlbase, sub_user):
     assert mypublic.name == '@public'
     assert mypublic.urlbase == sub_urlbase
     if sub_user:
-        myscratch = cat2.Root('@scratch', sub_urlbase, sub_user)
-        assert myscratch.name == '@scratch'
+        myscratch = cat2.Root('@personal', sub_urlbase, sub_user)
+        assert myscratch.name == '@personal'
         assert myscratch.urlbase == sub_urlbase
         myshared = cat2.Root('@shared', sub_urlbase, sub_user)
         assert myshared.name == '@shared'
@@ -90,7 +90,7 @@ def test_list(services, examples_dir, sub_urlbase, sub_user):
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
     if sub_user:
-        myscratch = cat2.Root('@scratch', sub_urlbase, sub_user)
+        myscratch = cat2.Root('@personal', sub_urlbase, sub_user)
         # In previous tests we have created some files in the scratch area
         assert len(myscratch.node_list) >= 0
         myshared = cat2.Root('@shared', sub_urlbase, sub_user)
@@ -324,7 +324,7 @@ def test_download_public_file(services, examples_dir, sub_urlbase,
                                     ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
                                     ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
                                     ])
-@pytest.mark.parametrize("root", ['@scratch', '@shared', '@public'])
+@pytest.mark.parametrize("root", ['@personal', '@shared', '@public'])
 @pytest.mark.parametrize("remove", [False, True])
 def test_upload(fnames, remove, root, services, examples_dir,
                 sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
@@ -408,7 +408,7 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
+    assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
 
     # Check result metadata.
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -437,7 +437,7 @@ def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
                    auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
+    assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
 
     # Get one chunk
     chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -469,13 +469,13 @@ def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
-    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
+    assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
 
     expression2 = f'{opnm} * 2'
     operands2 = {opnm: lxpath}
     lxname = 'expr_from_expr'
     lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert lxpath2 == pathlib.Path(f'@scratch/{lxname}.b2nd')
+    assert lxpath2 == pathlib.Path(f'@personal/{lxname}.b2nd')
 
     # Check result metadata.
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)

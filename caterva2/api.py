@@ -399,9 +399,9 @@ class Root:
 
         Examples
         --------
-        >>> root = cat2.Root('@scratch')
+        >>> root = cat2.Root('@personal')
         >>> root.upload('foo/mydataset.b2nd')
-        File: @scratch/foo/mydataset.md
+        File: @personal/foo/mydataset.md
         """
         if dataset is None:
             # localpath cannot be absolute in this case (too much prone to errors)
@@ -592,10 +592,10 @@ class File:
 
         Examples
         --------
-        >>> root = cat2.Root('@scratch')
+        >>> root = cat2.Root('@personal')
         >>> file = root['ds-1d.b2nd']
         >>> file.remove()
-        '@scratch/ds-1d.b2nd'
+        '@personal/ds-1d.b2nd'
         """
         return remove(self.path, urlbase=self.urlbase,  auth_cookie=self.auth_cookie)
 

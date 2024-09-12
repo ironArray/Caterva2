@@ -107,10 +107,10 @@ def get_relpath(ndarr, cache, scratch, shared, public):
         # Cache: /.../<root>/<subpath> to <root>/<subpath>
         path = path.relative_to(cache)
     except ValueError:
-        # Scratch: /.../<uid>/<subpath> to @scratch/<subpath>
+        # Scratch: /.../<uid>/<subpath> to @personal/<subpath>
         path = path.relative_to(scratch)
         parts = list(path.parts)
-        parts[0] = '@scratch'
+        parts[0] = '@personal'
         path = pathlib.Path(*parts)
 
     return path

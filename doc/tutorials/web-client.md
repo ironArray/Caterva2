@@ -86,11 +86,11 @@ scale: 50%
 The login screen
 ```
 
-The main Web client screen has some changes now: besides the indication of the logged in user, a new root called `@scratch` just appeared, along with an upload icon.
+The main Web client screen has some changes now: besides the indication of the logged in user, a new root called `@personal` just appeared, along with an upload icon.
 
-This `@scratch` is a pseudo-root offered to each user by the subscriber (i.e. it doesn't come from a publisher).  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own scratch space.
+This `@personal` is a pseudo-root offered to each user by the subscriber (i.e. it doesn't come from a publisher).  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own scratch space.
 
-Check both `foo` and `@scratch`.  The resulting list of datasets is also slightly different, with an extra input box and each listed dataset being accompanied by a short tag.  Let's see the new stuff that you can do with all these!
+Check both `foo` and `@personal`.  The resulting list of datasets is also slightly different, with an extra input box and each listed dataset being accompanied by a short tag.  Let's see the new stuff that you can do with all these!
 
 ```{figure} images/web-user.png
 ---
@@ -105,7 +105,7 @@ The main screen showing new user features
 
 The upload icon below the list of roots allows you to upload new datasets to your scratch space, either by clicking it and choosing a file, or by dragging and dropping the file on it.
 
-Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory.  You'll see a new dataset `@scratch/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your scratch space (after asking for confirmation).  Try it, but don't remove the dataset yet!
+Do upload the `root-example/ds-1d.b2nd` file from the Caterva2 source directory.  You'll see a new dataset `@personal/ds-1d.b2nd` pop up in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your scratch space (after asking for confirmation).  Try it, but don't remove the dataset yet!
 
 ```{figure} images/web-upload.png
 ---
@@ -122,9 +122,9 @@ You may now use the uploaded dataset as a normal one: download it, view its data
 
 What about the input box that appeared below the search box?  It allows you to send commands to the subscriber.  The only kind of commands supported for the moment is the creation of **lazy expressions** involving the datasets accessible via the subscriber.  Such an expression is evaluated dynamically on the subscriber, so creating it is very cheap, and its result always reflects the latest state of the involved datasets.
 
-First, let's select the dataset `foo/ds-1d.b2nd` and view its data: simply the range 0...9.  Now select the dataset `@scratch/ds-1d.b2nd`: an array of the same shape, type and values.  Actually, the file that you uploaded *is* the source of `foo/ds-1d.b2nd` as served by your local publisher, hence the coincidence!
+First, let's select the dataset `foo/ds-1d.b2nd` and view its data: simply the range 0...9.  Now select the dataset `@personal/ds-1d.b2nd`: an array of the same shape, type and values.  Actually, the file that you uploaded *is* the source of `foo/ds-1d.b2nd` as served by your local publisher, hence the coincidence!
 
-This means that we can safely create an expression that adds them together into a new dataset that we'll call `double`.  The command box accepts Python-like expressions, but how do we refer to the added datasets acting as operands to the addition?  That's the use of the tag that appears next to their name in the dataset list.  In our case, `foo/ds-1d.b2nd` is tagged as `a`, and `@scratch/ds-1d.b2nd` as `k`, thus the command to be entered in the command box is `double = a + k`.  Try entering that command (mind that the tags may differ in your case) and click on "GO".  The resulting new dataset `@scratch/double.b2nd` should be shown instantly.
+This means that we can safely create an expression that adds them together into a new dataset that we'll call `double`.  The command box accepts Python-like expressions, but how do we refer to the added datasets acting as operands to the addition?  That's the use of the tag that appears next to their name in the dataset list.  In our case, `foo/ds-1d.b2nd` is tagged as `a`, and `@personal/ds-1d.b2nd` as `k`, thus the command to be entered in the command box is `double = a + k`.  Try entering that command (mind that the tags may differ in your case) and click on "GO".  The resulting new dataset `@personal/double.b2nd` should be shown instantly.
 
 ```{figure} images/web-lazyexpr.png
 ---

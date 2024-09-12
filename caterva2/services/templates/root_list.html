@@ -18,7 +18,7 @@
     {% endfor %}
 
     {% if user %}
-        {% with name="@scratch", upload=True %}
+        {% with name="@personal", upload=True %}
             {% set title="This special root contains the results of calculations done by the user" %}
             {% include 'includes/root.html' %}
         {% endwith %}
