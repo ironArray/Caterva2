@@ -364,7 +364,7 @@ class Root:
 
         Parameters
         ----------
-        node : str
+        node : str or Path
             The path of the file or dataset.
 
         Returns
@@ -372,6 +372,7 @@ class Root:
         File
             A :class:`File` or :class:`Dataset` instance.
         """
+        node = node.as_posix() if isinstance(node, pathlib.Path) else node
         if node.endswith((".b2nd", ".b2frame")):
             return Dataset(node, root=self.name, urlbase=self.urlbase,
                            auth_cookie=self.auth_cookie)

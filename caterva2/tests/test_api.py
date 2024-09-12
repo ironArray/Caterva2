@@ -357,7 +357,7 @@ def test_upload(fnames, remove, root, services, examples_dir,
             # Check that the file has been removed
             with pytest.raises(Exception) as e_info:
                 _ = remote_root[remote_removed]
-                assert str(e_info.value) == 'Not Found'
+            assert 'Not Found' in str(e_info.value)
 
 
 def test_upload_public_unauthorized(services, examples_dir, sub_urlbase,
