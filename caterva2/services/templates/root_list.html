@@ -12,7 +12,7 @@
     Roots:
 
     {% for root in roots %}
-        {% with name=root.name %}
+        {% with name=root.name, upload=(root.name == "@public" and user)  %}
             {% include 'includes/root.html' %}
         {% endwith %}
     {% endfor %}
@@ -27,13 +27,6 @@
             {% include 'includes/root.html' %}
         {% endwith %}
 
-        {% with name="@public", upload=True %}
-            {% include 'includes/root.html' %}
-        {% endwith %}
-    {% else %}
-        {% with name="@public" %}
-            {% include 'includes/root.html' %}
-        {% endwith %}
     {% endif %}
 </form>
 

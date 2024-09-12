@@ -421,7 +421,7 @@ def get_root(name):
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(
     name: str,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
     """
     Subscribe to a root.
@@ -436,7 +436,9 @@ async def post_subscribe(
     str
         'Ok' if successful.
     """
-    if name not in {'@scratch', '@shared', '@public'} or not user:
+    if name == '@public':
+        return 'Ok'
+    if name not in {'@scratch', '@shared'} or not user:
         get_root(name)  # Not Found
         follow(name)
     return 'Ok'
@@ -445,7 +447,7 @@ async def post_subscribe(
 @app.get('/api/list/{name}')
 async def get_list(
     name: str,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
     """
     List the datasets in a root.
@@ -460,13 +462,13 @@ async def get_list(
     list
         The list of datasets in the root.
     """
-    if user and name in {'@scratch', '@shared', '@public'}:
+    if name == '@public':
+        rootdir = public
+    elif user and name in {'@scratch', '@shared'}:
         if name == '@scratch':
             rootdir = scratch / str(user.id)
         elif name == '@shared':
             rootdir = shared
-        elif name == '@public':
-            rootdir = public
     else:
         root = get_root(name)
         rootdir = cache / root.name
@@ -485,7 +487,7 @@ async def get_list(
 @app.get('/api/info/{path:path}')
 async def get_info(
     path: pathlib.Path,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
     """
     Get the metadata of a dataset.
@@ -670,7 +672,7 @@ async def fetch_data(
 async def get_chunk(
     path: pathlib.PosixPath,
     nchunk: int,
-    user: db.User = Depends(current_active_user),
+    user: db.User = Depends(optional_user),
 ):
     abspath, _ = abspath_and_dataprep(path, user=user)
     lock = locks.setdefault(path, asyncio.Lock())

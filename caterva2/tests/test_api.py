@@ -17,8 +17,7 @@ import pytest
 import caterva2 as cat2
 import numpy as np
 
-from .services import TEST_CATERVA2_ROOT
-from .. import api_utils
+from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
 
 
 try:
@@ -44,6 +43,17 @@ def sub_urlbase(services):
     return services.get_urlbase('subscriber')
 
 
+def populate_public(examples_dir):
+    # Manually copy some files to the public area (TEST_STATE_DIR)
+    fnames = ['ds-1d.b2nd', 'dir1/ds-2d.b2nd']
+    for fname in fnames:
+        orig = examples_dir / fname
+        dest = pathlib.Path(TEST_STATE_DIR) / f'subscriber/public/{fname}'
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(orig.read_bytes())
+    return fnames
+
+
 def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     roots = cat2.get_roots(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
@@ -62,6 +72,9 @@ def test_root(services, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.urlbase == sub_urlbase
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    assert mypublic.name == '@public'
+    assert mypublic.urlbase == sub_urlbase
     if sub_user:
         myscratch = cat2.Root('@scratch', sub_urlbase, sub_user)
         assert myscratch.name == '@scratch'
@@ -84,12 +97,25 @@ def test_list(services, examples_dir, sub_urlbase, sub_user):
         assert set(myshared.node_list) == set()
 
 
+def test_list_public(services, examples_dir, sub_urlbase, sub_user):
+    fnames = populate_public(examples_dir)
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    assert set(mypublic.node_list) == set(fnames)
+
+
 def test_file(services, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     file = myroot['README.md']
     assert file.name == 'README.md'
     assert file.urlbase == sub_urlbase
 
+def test_file_public(services, examples_dir, sub_urlbase, sub_user):
+    fnames = populate_public(examples_dir)
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    for fname in fnames:
+        file = mypublic[fname]
+        assert file.name == fname
+        assert file.urlbase == sub_urlbase
 
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(10, 20, 1)])
@@ -272,6 +298,23 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
     assert a[:] == b[:].decode()
 
 
+def test_download_public_file(services, examples_dir, sub_urlbase,
+                              sub_user, sub_jwt_cookie, tmp_path):
+    fnames = populate_public(examples_dir)
+    myroot = cat2.Root('@public', sub_urlbase, sub_user)
+    for fname in fnames:
+        # Download the file
+        ds = myroot[fname]
+        with chdir_ctxt(tmp_path):
+            path = ds.download()
+            assert path == ds.path
+            # Check data contents
+            example = examples_dir / ds.name
+            a = open(example, 'rb').read()
+            b = open(path, 'rb').read()
+            assert a[:] == b[:]
+
+
 @pytest.mark.parametrize("fnames", [('ds-1d.b2nd', None),
                                     ('ds-hello.b2frame', None),
                                     ('README.md', None),
@@ -281,7 +324,7 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
                                     ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
                                     ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
                                     ])
-@pytest.mark.parametrize("root", ['@scratch', '@shared'])
+@pytest.mark.parametrize("root", ['@scratch', '@shared', '@public'])
 @pytest.mark.parametrize("remove", [False, True])
 def test_upload(fnames, remove, root, services, examples_dir,
                 sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
@@ -316,6 +359,21 @@ def test_upload(fnames, remove, root, services, examples_dir,
                 _ = remote_root[remote_removed]
                 assert str(e_info.value) == 'Not Found'
 
+
+def test_upload_public_unauthorized(services, examples_dir, sub_urlbase,
+                                    sub_user, sub_jwt_cookie, tmp_path):
+    if sub_jwt_cookie:
+        pytest.skip("not authentication needed")
+
+    remote_root = cat2.Root("@public", sub_urlbase, sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+    ds = myroot['README.md']
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
+        with pytest.raises(Exception) as e_info:
+            _ = remote_root.upload(path)
+        assert 'Unauthorized' in str(e_info.value)
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',
                                   'ds-hello.b2frame',
