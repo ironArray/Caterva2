@@ -399,13 +399,11 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     dict
         The dict of roots.
     """
-    # For some reason, '@public' could not be found in the database
-    # (even though it is injected manually in main).  I suppose that means
-    # I don't completely understand the different ways to register roots.
-    if '@public' not in database.roots:
-        root = models.Root(name='@public', http='', subscribed=True)
-        database.roots[root.name] = root
+    # Here we just return the roots that are known by the broker
+    # plus the special roots @personal, @shared and @public
     roots = database.roots.copy()
+    root = models.Root(name='@public', http='', subscribed=True)
+    roots[root.name] = root
     if user:
         for name in ['@personal', '@shared']:
             root = models.Root(name=name, http='', subscribed=True)
@@ -1538,9 +1536,6 @@ def main():
     global database
     model = models.Subscriber(roots={}, etags={})
     database = srv_utils.Database(statedir / 'db.json', model)
-    # @public root will always be present
-    public_root = models.Root(name='@public', http='', subscribed=True)
-    database.roots['@public'] = public_root
 
     # Register display plugins
     from .plugins import tomography  # delay module load
