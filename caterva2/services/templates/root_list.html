@@ -12,13 +12,13 @@
     Roots:
 
     {% for root in roots %}
-        {% with name=root.name %}
+        {% with name=root.name  %}
             {% include 'includes/root.html' %}
         {% endwith %}
     {% endfor %}
 
     {% if user %}
-        {% with name="@scratch", upload=True %}
+        {% with name="@personal", upload=True %}
             {% set title="This special root contains the results of calculations done by the user" %}
             {% include 'includes/root.html' %}
         {% endwith %}
@@ -26,7 +26,13 @@
         {% with name="@shared", upload=True %}
             {% include 'includes/root.html' %}
         {% endwith %}
+
     {% endif %}
+
+    {% with name="@public", upload=user  %}
+        {% include 'includes/root.html' %}
+    {% endwith %}
+
 </form>
 
 <script>

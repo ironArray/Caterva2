@@ -88,7 +88,7 @@ The call downloads the dataset as a file and returns its local path `PosixPath('
 
 ### Evaluating expressions
 
-The Caterva2 subscriber also allows you to create so-called "lazy expressions" (lazyexprs) where operands are the array datasets accessible via the subscriber.  These expressions get stored in the user's own scratch space (an always-subscribed pseudo-root named `@scratch`), thus working with them requires user authentication.
+The Caterva2 subscriber also allows you to create so-called "lazy expressions" (lazyexprs) where operands are the array datasets accessible via the subscriber.  These expressions get stored in the user's own personal space (an always-subscribed pseudo-root named `@personal`), thus working with them requires user authentication.
 
 Lazy expressions are very cheap to create as that operation only requires knowing the metadata of the involved operands.  The resulting data is not computed on creation, it only takes place at the subscriber when you request access to the data itself (e.g. via fetch or download operations).
 
@@ -99,10 +99,10 @@ caterva2.lazyexpr('plusone', 'x + 1', {'x': 'foo/dir1/ds-2d.b2nd'},
                   auth_cookie=...)
 ```
 
-The path of the new dataset is returned: `@scratch/plusone.b2nd`.  Now you can access it as a normal dataset, e.g.:
+The path of the new dataset is returned: `@personal/plusone.b2nd`.  Now you can access it as a normal dataset, e.g.:
 
 ```python
-caterva2.fetch('@scratch/plusone.b2nd', slice_='0:2, 4:8',
+caterva2.fetch('@personal/plusone.b2nd', slice_='0:2, 4:8',
                auth_cookie=...)
 ```
 

@@ -70,9 +70,6 @@ TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
 TEST_DEFAULT_ROOT = 'foo'
 TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
 TEST_HDF5_ROOT = 'hdf5root'
-TEST_SCRATCH_ROOT = '@scratch'
-TEST_SHARED_ROOT = '@shared'
-
 
 local_port_iter = itertools.count(8100)
 logger = logging.getLogger('tests')

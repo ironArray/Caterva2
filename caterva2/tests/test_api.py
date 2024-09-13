@@ -17,8 +17,7 @@ import pytest
 import caterva2 as cat2
 import numpy as np
 
-from .services import TEST_CATERVA2_ROOT, TEST_SCRATCH_ROOT, TEST_SHARED_ROOT
-from .. import api_utils
+from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
 
 
 try:
@@ -44,139 +43,56 @@ def sub_urlbase(services):
     return services.get_urlbase('subscriber')
 
 
-def my_path(dspath, slice_):
-    slice_ = api_utils.slice_to_string(slice_)
-    if slice_:
-        suffix = dspath.suffix
-        dspath = dspath.with_suffix('')
-        dspath = pathlib.Path(f'{dspath}[{slice_}]{suffix}')
-    return dspath
+def populate_public(examples_dir):
+    # Manually copy some files to the public area (TEST_STATE_DIR)
+    fnames = ['ds-1d.b2nd', 'dir1/ds-2d.b2nd']
+    for fname in fnames:
+        orig = examples_dir / fname
+        dest = pathlib.Path(TEST_STATE_DIR) / f'subscriber/public/{fname}'
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(orig.read_bytes())
+    return fnames
+
+
+def test_subscribe(services, sub_urlbase, sub_jwt_cookie):
+    assert 'Ok' == cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase)
+    assert 'Ok' == cat2.subscribe('@public', sub_urlbase)
+    for root in ['@personal', '@shared']:
+        if sub_jwt_cookie:
+            assert 'Ok' == cat2.subscribe(root, sub_urlbase, auth_cookie=sub_jwt_cookie)
+        else:
+            with pytest.raises(Exception) as e_info:
+                _ = cat2.subscribe(root, sub_urlbase)
+            assert 'Unauthorized' in str(e_info)
 
 
 def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     roots = cat2.get_roots(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
+    assert roots['@public']['name'] == '@public'
+    assert roots['@public']['http'] == ''
     if sub_jwt_cookie:
         # Special roots (only available when authenticated)
-        assert roots[TEST_SCRATCH_ROOT]['name'] == TEST_SCRATCH_ROOT
-        assert roots[TEST_SCRATCH_ROOT]['http'] == ''
-        assert roots[TEST_SHARED_ROOT]['name'] == TEST_SHARED_ROOT
-        assert roots[TEST_SHARED_ROOT]['http'] == ''
-
-
-def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
-    if not sub_jwt_cookie:
-        pytest.skip("authentication support needed")
-
-    opnm = 'ds'
-    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
-    expression = f'{opnm} + 0'
-    operands = {opnm: oppt}
-    lxname = 'my_expr'
-
-    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
-                   auth_cookie=sub_jwt_cookie)
-    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
-                           auth_cookie=sub_jwt_cookie)
-    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
-
-    # Check result metadata.
-    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert lxinfo['shape'] == opinfo['shape']
-    assert lxinfo['dtype'] == opinfo['dtype']
-    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
-    assert lxinfo['operands'] == dict(o0=operands[opnm])
-
-    # Check result data.
-    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    np.testing.assert_array_equal(a[:], b[:])
-
-
-def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
-    if not sub_jwt_cookie:
-        pytest.skip("authentication support needed")
-
-    opnm = 'ds'
-    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
-    expression = f'{opnm} - 0'
-    operands = {opnm: oppt}
-    lxname = 'my_expr'
-
-    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
-                   auth_cookie=sub_jwt_cookie)
-    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
-                           auth_cookie=sub_jwt_cookie)
-    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
-
-    # Get one chunk
-    chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    chunk_expr = cat2.get_chunk(lxpath, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
-
-    # Check result data.
-    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    np.testing.assert_array_equal(a[:], b[:])
-    out = np.empty_like(a[:])
-    blosc2.decompress2(chunk_ds, out)
-    out_expr = np.empty_like(a[:])
-    blosc2.decompress2(chunk_expr, out_expr)
-    np.testing.assert_array_equal(out, out_expr)
-
-
-def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
-    if not sub_jwt_cookie:
-        pytest.skip("authentication support needed")
-
-    opnm = 'ds'
-    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
-    expression = f'{opnm} + 1'
-    operands = {opnm: oppt}
-    lxname = 'my_expr'
-
-    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
-                   auth_cookie=sub_jwt_cookie)
-    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
-                           auth_cookie=sub_jwt_cookie)
-    assert lxpath == pathlib.Path(f'@scratch/{lxname}.b2nd')
-
-    expression2 = f'{opnm} * 2'
-    operands2 = {opnm: lxpath}
-    lxname = 'expr_from_expr'
-    lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert lxpath2 == pathlib.Path(f'@scratch/{lxname}.b2nd')
-
-    # Check result metadata.
-    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    lxinfo2 = cat2.get_info(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert lxinfo['shape'] == opinfo['shape'] == lxinfo2['shape']
-    assert lxinfo['dtype'] == opinfo['dtype'] == lxinfo2['dtype']
-    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
-    assert lxinfo2['expression'] == '((o0 + 1) * 2)'
-    assert lxinfo['operands'] == dict(o0=operands[opnm])
-    assert lxinfo2['operands'] == dict(o0=operands[opnm])
-
-    # Check result data.
-    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    c = cat2.fetch(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    np.testing.assert_array_equal(a[:] + 1, b[:])
-    np.testing.assert_array_equal((a[:] + 1) * 2, c[:])
+        assert roots['@personal']['name'] == '@personal'
+        assert roots['@personal']['http'] == ''
+        assert roots['@shared']['name'] == '@shared'
+        assert roots['@shared']['http'] == ''
 
 
 def test_root(services, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.urlbase == sub_urlbase
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    assert mypublic.name == '@public'
+    assert mypublic.urlbase == sub_urlbase
     if sub_user:
-        myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
-        assert myscratch.name == TEST_SCRATCH_ROOT
-        assert myscratch.urlbase == sub_urlbase
-        myshared = cat2.Root(TEST_SHARED_ROOT, sub_urlbase, sub_user)
-        assert myshared.name == TEST_SHARED_ROOT
+        mypersonal = cat2.Root('@personal', sub_urlbase, sub_user)
+        assert mypersonal.name == '@personal'
+        assert mypersonal.urlbase == sub_urlbase
+        myshared = cat2.Root('@shared', sub_urlbase, sub_user)
+        assert myshared.name == '@shared'
         assert myshared.urlbase == sub_urlbase
 
 
@@ -186,11 +102,17 @@ def test_list(services, examples_dir, sub_urlbase, sub_user):
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.node_list) == nodes
     if sub_user:
-        myscratch = cat2.Root(TEST_SCRATCH_ROOT, sub_urlbase, sub_user)
-        # In previous tests we have created some files in the scratch area
-        assert len(myscratch.node_list) >= 0
-        myshared = cat2.Root(TEST_SHARED_ROOT, sub_urlbase, sub_user)
+        mypersonal = cat2.Root('@personal', sub_urlbase, sub_user)
+        # In previous tests we have created some files in the personal area
+        assert len(mypersonal.node_list) >= 0
+        myshared = cat2.Root('@shared', sub_urlbase, sub_user)
         assert set(myshared.node_list) == set()
+
+
+def test_list_public(services, examples_dir, sub_urlbase, sub_user):
+    fnames = populate_public(examples_dir)
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    assert set(mypublic.node_list) == set(fnames)
 
 
 def test_file(services, sub_urlbase, sub_user):
@@ -199,6 +121,13 @@ def test_file(services, sub_urlbase, sub_user):
     assert file.name == 'README.md'
     assert file.urlbase == sub_urlbase
 
+def test_file_public(services, examples_dir, sub_urlbase, sub_user):
+    fnames = populate_public(examples_dir)
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    for fname in fnames:
+        file = mypublic[fname]
+        assert file.name == fname
+        assert file.urlbase == sub_urlbase
 
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(10, 20, 1)])
@@ -381,6 +310,23 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
     assert a[:] == b[:].decode()
 
 
+def test_download_public_file(services, examples_dir, sub_urlbase,
+                              sub_user, sub_jwt_cookie, tmp_path):
+    fnames = populate_public(examples_dir)
+    myroot = cat2.Root('@public', sub_urlbase, sub_user)
+    for fname in fnames:
+        # Download the file
+        ds = myroot[fname]
+        with chdir_ctxt(tmp_path):
+            path = ds.download()
+            assert path == ds.path
+            # Check data contents
+            example = examples_dir / ds.name
+            a = open(example, 'rb').read()
+            b = open(path, 'rb').read()
+            assert a[:] == b[:]
+
+
 @pytest.mark.parametrize("fnames", [('ds-1d.b2nd', None),
                                     ('ds-hello.b2frame', None),
                                     ('README.md', None),
@@ -390,7 +336,7 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
                                     ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
                                     ('dir1/ds-3d.b2nd', 'dir2/dir3/dir4/'),
                                     ])
-@pytest.mark.parametrize("root", [TEST_SCRATCH_ROOT, TEST_SHARED_ROOT])
+@pytest.mark.parametrize("root", ['@personal', '@shared', '@public'])
 @pytest.mark.parametrize("remove", [False, True])
 def test_upload(fnames, remove, root, services, examples_dir,
                 sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
@@ -423,8 +369,23 @@ def test_upload(fnames, remove, root, services, examples_dir,
             # Check that the file has been removed
             with pytest.raises(Exception) as e_info:
                 _ = remote_root[remote_removed]
-                assert str(e_info.value) == 'Not Found'
+            assert 'Not Found' in str(e_info.value)
 
+
+def test_upload_public_unauthorized(services, examples_dir, sub_urlbase,
+                                    sub_user, sub_jwt_cookie, tmp_path):
+    if sub_jwt_cookie:
+        pytest.skip("not authentication needed")
+
+    remote_root = cat2.Root("@public", sub_urlbase, sub_user)
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+    ds = myroot['README.md']
+    with chdir_ctxt(tmp_path):
+        path = ds.download()
+        assert path == ds.path
+        with pytest.raises(Exception) as e_info:
+            _ = remote_root.upload(path)
+        assert 'Unauthorized' in str(e_info)
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',
                                   'ds-hello.b2frame',
@@ -440,3 +401,107 @@ def test_vlmeta_data(services, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-sc-attr.b2nd']
     assert ds.vlmeta == dict(a=1, b="foo", c=123.456)
+
+
+### Lazy expressions
+
+def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    opnm = 'ds'
+    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    expression = f'{opnm} + 0'
+    operands = {opnm: oppt}
+    lxname = 'my_expr'
+
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
+                   auth_cookie=sub_jwt_cookie)
+    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
+                           auth_cookie=sub_jwt_cookie)
+    assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
+
+    # Check result metadata.
+    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert lxinfo['shape'] == opinfo['shape']
+    assert lxinfo['dtype'] == opinfo['dtype']
+    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
+    assert lxinfo['operands'] == dict(o0=operands[opnm])
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:], b[:])
+
+
+def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    opnm = 'ds'
+    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    expression = f'{opnm} - 0'
+    operands = {opnm: oppt}
+    lxname = 'my_expr'
+
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
+                   auth_cookie=sub_jwt_cookie)
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
+                           auth_cookie=sub_jwt_cookie)
+    assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
+
+    # Get one chunk
+    chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    chunk_expr = cat2.get_chunk(lxpath, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:], b[:])
+    out = np.empty_like(a[:])
+    blosc2.decompress2(chunk_ds, out)
+    out_expr = np.empty_like(a[:])
+    blosc2.decompress2(chunk_expr, out_expr)
+    np.testing.assert_array_equal(out, out_expr)
+
+
+def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
+    if not sub_jwt_cookie:
+        pytest.skip("authentication support needed")
+
+    opnm = 'ds'
+    oppt = f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
+    expression = f'{opnm} + 1'
+    operands = {opnm: oppt}
+    lxname = 'my_expr'
+
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
+                   auth_cookie=sub_jwt_cookie)
+    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
+                           auth_cookie=sub_jwt_cookie)
+    assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
+
+    expression2 = f'{opnm} * 2'
+    operands2 = {opnm: lxpath}
+    lxname = 'expr_from_expr'
+    lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert lxpath2 == pathlib.Path(f'@personal/{lxname}.b2nd')
+
+    # Check result metadata.
+    lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    lxinfo2 = cat2.get_info(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert lxinfo['shape'] == opinfo['shape'] == lxinfo2['shape']
+    assert lxinfo['dtype'] == opinfo['dtype'] == lxinfo2['dtype']
+    assert lxinfo['expression'] == f'({expression})'.replace(opnm, 'o0')
+    assert lxinfo2['expression'] == '((o0 + 1) * 2)'
+    assert lxinfo['operands'] == dict(o0=operands[opnm])
+    assert lxinfo2['operands'] == dict(o0=operands[opnm])
+
+    # Check result data.
+    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    c = cat2.fetch(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    np.testing.assert_array_equal(a[:] + 1, b[:])
+    np.testing.assert_array_equal((a[:] + 1) * 2, c[:])

@@ -291,7 +291,7 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
 def lazyexpr(name, expression, operands,
              urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    Create a lazy expression dataset in scratch space.
+    Create a lazy expression dataset in personal space.
 
     A dataset with the given name is created anew (or overwritten if already
     existing).
@@ -364,7 +364,7 @@ class Root:
 
         Parameters
         ----------
-        node : str
+        node : str or Path
             The path of the file or dataset.
 
         Returns
@@ -372,6 +372,7 @@ class Root:
         File
             A :class:`File` or :class:`Dataset` instance.
         """
+        node = node.as_posix() if isinstance(node, pathlib.Path) else node
         if node.endswith((".b2nd", ".b2frame")):
             return Dataset(node, root=self.name, urlbase=self.urlbase,
                            auth_cookie=self.auth_cookie)
@@ -398,9 +399,9 @@ class Root:
 
         Examples
         --------
-        >>> root = cat2.Root('@scratch')
+        >>> root = cat2.Root('@personal')
         >>> root.upload('foo/mydataset.b2nd')
-        File: @scratch/foo/mydataset.md
+        File: @personal/foo/mydataset.md
         """
         if dataset is None:
             # localpath cannot be absolute in this case (too much prone to errors)
@@ -591,10 +592,10 @@ class File:
 
         Examples
         --------
-        >>> root = cat2.Root('@scratch')
+        >>> root = cat2.Root('@personal')
         >>> file = root['ds-1d.b2nd']
         >>> file.remove()
-        '@scratch/ds-1d.b2nd'
+        '@personal/ds-1d.b2nd'
         """
         return remove(self.path, urlbase=self.urlbase,  auth_cookie=self.auth_cookie)
 

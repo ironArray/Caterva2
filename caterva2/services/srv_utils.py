@@ -49,7 +49,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj, cache=None, scratch=None, shared=None):
+def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -80,7 +80,7 @@ def read_metadata(obj, cache=None, scratch=None, shared=None):
         model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
         return model
     elif isinstance(obj, blosc2.LazyExpr):
-        operands = operands_as_paths(obj.operands, cache, scratch, shared)
+        operands = operands_as_paths(obj.operands, cache, personal, shared, public)
         return get_model_from_obj(obj, models.LazyArray, operands=operands)
     else:
         raise TypeError(f'unexpected {type(obj)}')
@@ -95,26 +95,29 @@ def reformat_cparams(cparams):
     return cparams
 
 
-def get_relpath(ndarr, cache, scratch, shared):
+def get_relpath(ndarr, cache, personal, shared, public):
     path = pathlib.Path(ndarr.schunk.urlpath)
     if shared is not None and path.is_relative_to(shared):
         # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
+        return path
+    elif public is not None and path.is_relative_to(public):
+        # Shared: /.../<public>/<subpath> to <path> (i.e. no change)
         return path
     try:
         # Cache: /.../<root>/<subpath> to <root>/<subpath>
         path = path.relative_to(cache)
     except ValueError:
-        # Scratch: /.../<uid>/<subpath> to @scratch/<subpath>
-        path = path.relative_to(scratch)
+        # personal: /.../<uid>/<subpath> to @personal/<subpath>
+        path = path.relative_to(personal)
         parts = list(path.parts)
-        parts[0] = '@scratch'
+        parts[0] = '@personal'
         path = pathlib.Path(*parts)
 
     return path
 
-def operands_as_paths(operands, cache, scratch, shared):
+def operands_as_paths(operands, cache, personal, shared, public):
     return dict(
-        (nm, str(get_relpath(op, cache, scratch, shared)))
+        (nm, str(get_relpath(op, cache, personal, shared, public)))
         for (nm, op) in operands.items()
     )
 
@@ -145,6 +148,8 @@ HeaderType = typing.Annotated[str | None, fastapi.Header()]
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
 
+def raise_unauthorized(detail='Unauthorized'):
+    raise fastapi.HTTPException(status_code=401, detail=detail)
 
 def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)

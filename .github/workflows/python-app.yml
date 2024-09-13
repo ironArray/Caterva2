@@ -36,7 +36,7 @@ jobs:
       run: |
         pytest
       env:
-        CATERVA2_AUTH_SECRET: c2sikrit
+        CATERVA2_SECRET: c2sikrit
     - name: Test building docs
       run: |
         pip install -r doc/requirements.txt

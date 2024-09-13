@@ -242,7 +242,7 @@ All the services mentioned above (and clients, to some limited extent) may get t
 
 ### Experimental user authentication
 
-The Caterva2 subscriber includes some initial and incomplete support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_AUTH_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web client will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
+The Caterva2 subscriber includes some initial and incomplete support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web client will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
 
 To tell the command line client to authenticate against a subscriber, add the `--username` and `--password` options:
 
