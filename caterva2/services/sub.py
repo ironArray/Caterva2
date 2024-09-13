@@ -423,7 +423,6 @@ def get_root(name):
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(
     name: str,
-    user: db.User = Depends(optional_user),
 ):
     """
     Subscribe to a root.
@@ -438,10 +437,8 @@ async def post_subscribe(
     str
         'Ok' if successful.
     """
-    if name == '@public':
-        return 'Ok'
-    if name not in {'@personal', '@shared'} or not user:
-        get_root(name)  # Not Found
+    if name not in {'@personal', '@shared', '@public'}:
+        get_root(name)
         follow(name)
     return 'Ok'
 
