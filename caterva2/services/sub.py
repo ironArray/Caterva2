@@ -463,19 +463,17 @@ async def get_list(
     """
     if name == '@public':
         rootdir = public
-    elif user and name in {'@personal', '@shared'}:
-        if name == '@personal':
-            rootdir = personal / str(user.id)
-        elif name == '@shared':
-            rootdir = shared
+    elif name == '@personal':
+        if not user:
+            srv_utils.raise_not_found('@personal needs authentication')
+        rootdir = personal / str(user.id)
+    elif name == '@shared':
+        if not user:
+            srv_utils.raise_not_found('@shared needs authentication')
+        rootdir = shared
     else:
         root = get_root(name)
         rootdir = cache / root.name
-
-    if not rootdir.exists():
-        if name in {'@personal', '@shared', '@public'}:
-            return []
-        srv_utils.raise_not_found(f'Not subscribed to {name}')
 
     return [
         relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
