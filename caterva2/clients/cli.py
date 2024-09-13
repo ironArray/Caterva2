@@ -142,6 +142,13 @@ def cmd_show(args, auth_cookie):
 
 @handle_errors
 @with_auth_cookie
+def cmd_move(args, auth_cookie):
+    moved = cat2.move(args.dataset, args.newroot, args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset {args.dataset} -> {moved}')
+
+
+@handle_errors
+@with_auth_cookie
 def cmd_download(args, auth_cookie):
     path = cat2.download(args.dataset, args.localpath, args.urlbase, auth_cookie=auth_cookie)
     print(f'Dataset saved to {path}')
@@ -213,6 +220,13 @@ def main():
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_show)
+
+    # move
+    help = 'Move a dataset to a different root'
+    subparser = subparsers.add_parser('mv', aliases=['move'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.add_argument('newroot')
+    subparser.set_defaults(func=cmd_move)
 
     # download
     help = 'Download a dataset and save it in the local system'

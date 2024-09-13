@@ -22,12 +22,18 @@ import safer
 from caterva2 import models
 
 
-def cache_lookup(cachedir, path):
+def cache_lookup(cachedir, path, may_not_exist=False):
+    if cachedir == path:
+        # Special case for the cache root
+        return path
     path = pathlib.Path(path)
-    if path.suffix not in {'.b2frame', '.b2nd'}:
+    if (cachedir / path).is_dir():
+        # Special case for directories
+        return cachedir / path
+    if path.suffix not in {'.b2frame', '.b2nd'} and not may_not_exist:
         path = f'{path}.b2'
 
-    return get_abspath(cachedir, path)
+    return get_abspath(cachedir, path, may_not_exist)
 
 
 def get_model_from_obj(obj, model_class, **kwargs):
@@ -155,7 +161,7 @@ def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
 
 
-def get_abspath(root, path):
+def get_abspath(root, path, may_not_exist=False):
     abspath = root / path
 
     # Security check
@@ -163,7 +169,7 @@ def get_abspath(root, path):
         raise_bad_request(f'Invalid path {path}')
 
     # Existence check
-    if not abspath.is_file():
+    if not abspath.is_file() and not may_not_exist:
         raise_not_found()
 
     return abspath

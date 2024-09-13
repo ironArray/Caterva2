@@ -535,7 +535,8 @@ async def partial_download(abspath, path, slice_=None):
 
 def abspath_and_dataprep(path: pathlib.Path,
                          slice_: (tuple | None) = None,
-                         user: (db.User | None) = None) -> tuple[
+                         user: (db.User | None) = None,
+                         may_not_exist=False) -> tuple[
                              pathlib.Path,
                              Callable[[], Awaitable],
                          ]:
@@ -552,7 +553,7 @@ def abspath_and_dataprep(path: pathlib.Path,
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
         filepath = personal / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(personal, filepath)
+        abspath = srv_utils.cache_lookup(personal, filepath, may_not_exist)
         async def dataprep():
             pass
 
@@ -561,24 +562,23 @@ def abspath_and_dataprep(path: pathlib.Path,
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
         filepath = shared / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(shared, filepath)
+        abspath = srv_utils.cache_lookup(shared, filepath, may_not_exist)
         async def dataprep():
             pass
 
     elif parts[0] == '@public':
         filepath = public / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(public, filepath)
+        abspath = srv_utils.cache_lookup(public, filepath, may_not_exist)
         async def dataprep():
             pass
 
     else:
         filepath = cache / path
-        abspath = srv_utils.cache_lookup(cache, filepath)
+        abspath = srv_utils.cache_lookup(cache, filepath, may_not_exist)
         async def dataprep():
             return await partial_download(abspath, path, slice_)
 
     return (abspath, dataprep)
-
 
 @app.get('/api/fetch/{path:path}')
 async def fetch_data(
@@ -795,6 +795,44 @@ async def lazyexpr(
         raise error(str(exc))
 
     return result_path
+
+
+@app.post('/api/move/')
+async def move(
+    payload: models.MovePayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Move a dataset.
+
+    Returns
+    -------
+    str
+        The new path of the dataset.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Moving files requires authentication")
+
+    namepath = pathlib.Path(payload.src)
+    destpath = pathlib.Path(payload.dst)
+    abspath, _ = abspath_and_dataprep(namepath, user=user)
+    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+
+    # If destination has not an extension, assume it is a directory
+    # If user wants something without an extension, she can add a '.b2' extension :-)
+    if dest_abspath.is_dir() or not dest_abspath.suffix:
+        dest_abspath /= abspath.name
+        destpath /= namepath.name
+
+    # Not sure if we should allow overwriting, but let's allow it for now
+    # if dest_abspath.exists():
+    #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
+
+    # Make sure the destination directory exists
+    dest_abspath.parent.mkdir(exist_ok=True, parents=True)
+    abspath.rename(dest_abspath)
+
+    return str(destpath)
 
 
 @app.post('/api/upload/{path:path}')

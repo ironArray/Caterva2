@@ -58,6 +58,11 @@ class NewLazyExpr(pydantic.BaseModel):
     operands: typing.Dict[str, str]
 
 
+class MovePayload(pydantic.BaseModel):
+    src: str
+    dst: str
+
+
 class File(pydantic.BaseModel):
     mtime: float
     size: int

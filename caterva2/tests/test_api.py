@@ -43,7 +43,8 @@ def sub_urlbase(services):
     return services.get_urlbase('subscriber')
 
 
-def populate_public(examples_dir):
+@pytest.fixture
+def fill_public(examples_dir, sub_urlbase, sub_user):
     # Manually copy some files to the public area (TEST_STATE_DIR)
     fnames = ['ds-1d.b2nd', 'dir1/ds-2d.b2nd']
     for fname in fnames:
@@ -51,10 +52,12 @@ def populate_public(examples_dir):
         dest = pathlib.Path(TEST_STATE_DIR) / f'subscriber/public/{fname}'
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(orig.read_bytes())
-    return fnames
+    # We need a user here in case we want to remove files from @public
+    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+    return fnames, mypublic
 
 
-def test_subscribe(services, sub_urlbase, sub_jwt_cookie):
+def test_subscribe(sub_urlbase, sub_jwt_cookie):
     assert 'Ok' == cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase)
     assert 'Ok' == cat2.subscribe('@public', sub_urlbase)
     for root in ['@personal', '@shared']:
@@ -66,7 +69,7 @@ def test_subscribe(services, sub_urlbase, sub_jwt_cookie):
             assert 'Unauthorized' in str(e_info)
 
 
-def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
+def test_roots(pub_host, sub_urlbase, sub_jwt_cookie):
     roots = cat2.get_roots(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
@@ -80,7 +83,7 @@ def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
         assert roots['@shared']['http'] == ''
 
 
-def test_root(services, sub_urlbase, sub_user):
+def test_root(sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.urlbase == sub_urlbase
@@ -96,7 +99,7 @@ def test_root(services, sub_urlbase, sub_user):
         assert myshared.urlbase == sub_urlbase
 
 
-def test_list(services, examples_dir, sub_urlbase, sub_user):
+def test_list(examples_dir, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     example = examples_dir
     nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
@@ -109,30 +112,52 @@ def test_list(services, examples_dir, sub_urlbase, sub_user):
         assert set(myshared.node_list) == set()
 
 
-def test_list_public(services, examples_dir, sub_urlbase, sub_user):
-    fnames = populate_public(examples_dir)
-    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+def test_list_public(fill_public):
+    fnames, mypublic = fill_public
     assert set(mypublic.node_list) == set(fnames)
 
 
-def test_file(services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_file(sub_urlbase):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     file = myroot['README.md']
     assert file.name == 'README.md'
     assert file.urlbase == sub_urlbase
 
-def test_file_public(services, examples_dir, sub_urlbase, sub_user):
-    fnames = populate_public(examples_dir)
-    mypublic = cat2.Root('@public', sub_urlbase, sub_user)
+def test_file_public(sub_urlbase, fill_public):
+    fnames, mypublic = fill_public
     for fname in fnames:
         file = mypublic[fname]
         assert file.name == fname
         assert file.urlbase == sub_urlbase
 
+
+@pytest.mark.parametrize("dirpath", [None, 'dir1', 'dir2', 'dir2/dir3/dir4'])
+@pytest.mark.parametrize("final_dir", [True, False])
+def test_move(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
+    if not sub_user:
+        return pytest.skip("authentication support needed")
+
+    fnames, mypublic = fill_public
+    myshared = cat2.Root('@shared', sub_urlbase, sub_user)
+    for fname in fnames:
+        file = mypublic[fname]
+        if final_dir:
+            new_fname = f'{dirpath}' if dirpath else ''
+        else:
+            new_fname = f'{dirpath}/{fname}' if dirpath else fname
+        newpath = file.move(f"{myshared.name}/{new_fname}")
+        if final_dir:
+            basename = fname.split('/')[-1]
+            new_path = f"{new_fname}/{basename}" if dirpath else basename
+            assert str(newpath) == f"{myshared.name}/{new_path}"
+            assert myshared[new_path].path == newpath
+        else:
+            assert str(newpath) == f"{myshared.name}/{new_fname}"
+            assert myshared[new_fname].path == newpath
+
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(10, 20, 1)])
-def test_index_dataset_frame(slice_, services, examples_dir, sub_urlbase,
-                             sub_user):
+def test_index_dataset_frame(slice_, examples_dir, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
@@ -148,7 +173,7 @@ def test_index_dataset_frame(slice_, services, examples_dir, sub_urlbase,
         assert ds.fetch(slice_) == a[slice_]
 
 
-def test_dataset_step_diff_1(services, examples_dir, sub_urlbase, sub_user):
+def test_dataset_step_diff_1(sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-hello.b2frame']
     assert ds.name == 'ds-hello.b2frame'
@@ -159,11 +184,12 @@ def test_dataset_step_diff_1(services, examples_dir, sub_urlbase, sub_user):
         assert str(e_info.value) == 'Only step=1 is supported'
 
 
-@pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
-                                    slice(1, 5, 1)])
-def test_index_dataset_1d(slice_, services, examples_dir, sub_urlbase,
-                          sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+@pytest.mark.parametrize(
+    "slice_",
+    [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
+)
+def test_index_dataset_1d(slice_, examples_dir, sub_urlbase):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot['ds-1d.b2nd']
     assert ds.name == 'ds-1d.b2nd'
     assert ds.urlbase == sub_urlbase
@@ -177,9 +203,8 @@ def test_index_dataset_1d(slice_, services, examples_dir, sub_urlbase,
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(1, 5, 1), (slice(None, 10), slice(None, 20))])
 @pytest.mark.parametrize("name", ['dir1/ds-2d.b2nd', 'dir2/ds-4d.b2nd'])
-def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
-                          sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_index_dataset_nd(slice_, name, examples_dir, sub_urlbase):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot[name]
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
@@ -189,9 +214,8 @@ def test_index_dataset_nd(slice_, name, services, examples_dir, sub_urlbase,
 
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(1, 5, 1)])
-def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
-                            sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_index_regular_file(slice_, examples_dir, sub_urlbase):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot['README.md']
 
     # Data contents
@@ -206,9 +230,8 @@ def test_index_regular_file(slice_, services, examples_dir, sub_urlbase,
 
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd', 'dir1/ds-2d.b2nd'])
-def test_download_b2nd(name, services, examples_dir, sub_urlbase,
-                       sub_user, sub_jwt_cookie, tmp_path):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_download_b2nd(name, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot[name]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -230,8 +253,7 @@ def test_download_b2nd(name, services, examples_dir, sub_urlbase,
     np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_b2frame(services, examples_dir, sub_urlbase,
-                          sub_user, sub_jwt_cookie, tmp_path):
+def test_download_b2frame(examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['ds-hello.b2frame']
     with chdir_ctxt(tmp_path):
@@ -261,9 +283,8 @@ def test_download_b2frame(services, examples_dir, sub_urlbase,
     ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/ds-2d2.b2nd'),
     ('dir1/ds-2d.b2nd', 'dir2/dir3/dir4/'),
 ])
-def test_download_localpath(fnames, services, examples_dir, sub_urlbase,
-                            sub_user, sub_jwt_cookie, tmp_path):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_download_localpath(fnames, examples_dir, sub_urlbase, tmp_path):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     name, localpath = fnames
     ds = myroot[name]
     with chdir_ctxt(tmp_path):
@@ -284,8 +305,7 @@ def test_download_localpath(fnames, services, examples_dir, sub_urlbase,
         np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_regular_file(services, examples_dir, sub_urlbase,
-                               sub_user, sub_jwt_cookie, tmp_path):
+def test_download_regular_file(examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot['README.md']
     with chdir_ctxt(tmp_path):
@@ -310,13 +330,11 @@ def test_download_regular_file(services, examples_dir, sub_urlbase,
     assert a[:] == b[:].decode()
 
 
-def test_download_public_file(services, examples_dir, sub_urlbase,
-                              sub_user, sub_jwt_cookie, tmp_path):
-    fnames = populate_public(examples_dir)
-    myroot = cat2.Root('@public', sub_urlbase, sub_user)
+def test_download_public_file(examples_dir, fill_public, tmp_path):
+    fnames, mypublic = fill_public
     for fname in fnames:
         # Download the file
-        ds = myroot[fname]
+        ds = mypublic[fname]
         with chdir_ctxt(tmp_path):
             path = ds.download()
             assert path == ds.path
@@ -338,9 +356,8 @@ def test_download_public_file(services, examples_dir, sub_urlbase,
                                     ])
 @pytest.mark.parametrize("root", ['@personal', '@shared', '@public'])
 @pytest.mark.parametrize("remove", [False, True])
-def test_upload(fnames, remove, root, services, examples_dir,
-                sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
-    if not sub_jwt_cookie:
+def test_upload(fnames, remove, root, examples_dir, sub_urlbase, sub_user, tmp_path):
+    if not sub_user:
         pytest.skip("authentication support needed")
 
     localpath, remotepath = fnames
@@ -372,9 +389,8 @@ def test_upload(fnames, remove, root, services, examples_dir,
             assert 'Not Found' in str(e_info.value)
 
 
-def test_upload_public_unauthorized(services, examples_dir, sub_urlbase,
-                                    sub_user, sub_jwt_cookie, tmp_path):
-    if sub_jwt_cookie:
+def test_upload_public_unauthorized(examples_dir, sub_urlbase, sub_user, tmp_path):
+    if sub_user:
         pytest.skip("not authentication needed")
 
     remote_root = cat2.Root("@public", sub_urlbase, sub_user)
@@ -390,22 +406,22 @@ def test_upload_public_unauthorized(services, examples_dir, sub_urlbase,
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',
                                   'ds-hello.b2frame',
                                   'README.md'])
-def test_vlmeta(name, services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_vlmeta(name, sub_urlbase):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot[name]
     schunk_meta = ds.meta.get('schunk', ds.meta)
     assert ds.vlmeta is schunk_meta['vlmeta']
 
 
-def test_vlmeta_data(services, sub_urlbase, sub_user):
-    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
+def test_vlmeta_data(sub_urlbase):
+    myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot['ds-sc-attr.b2nd']
     assert ds.vlmeta == dict(a=1, b="foo", c=123.456)
 
 
 ### Lazy expressions
 
-def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
+def test_lazyexpr(sub_urlbase, sub_jwt_cookie):
     if not sub_jwt_cookie:
         pytest.skip("authentication support needed")
 
@@ -415,8 +431,7 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     operands = {opnm: oppt}
     lxname = 'my_expr'
 
-    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
-                   auth_cookie=sub_jwt_cookie)
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase, auth_cookie=sub_jwt_cookie)
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
@@ -435,7 +450,7 @@ def test_lazyexpr(services, sub_urlbase, sub_jwt_cookie):
     np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
+def test_lazyexpr_getchunk(sub_urlbase, sub_jwt_cookie):
     if not sub_jwt_cookie:
         pytest.skip("authentication support needed")
 
@@ -445,8 +460,7 @@ def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
     operands = {opnm: oppt}
     lxname = 'my_expr'
 
-    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase,
-                   auth_cookie=sub_jwt_cookie)
+    cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase, auth_cookie=sub_jwt_cookie)
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase,
                            auth_cookie=sub_jwt_cookie)
     assert lxpath == pathlib.Path(f'@personal/{lxname}.b2nd')
@@ -466,7 +480,7 @@ def test_lazyexpr_getchunk(services, sub_urlbase, sub_jwt_cookie):
     np.testing.assert_array_equal(out, out_expr)
 
 
-def test_expr_from_expr(services, sub_urlbase, sub_jwt_cookie):
+def test_expr_from_expr(sub_urlbase, sub_jwt_cookie):
     if not sub_jwt_cookie:
         pytest.skip("authentication support needed")
 

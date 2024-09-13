@@ -288,6 +288,33 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
                           auth_cookie=auth_cookie)
 
 
+def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Move a dataset to a new location.
+
+    Parameters
+    ----------
+    src : Path
+            The source path of the dataset.
+    dst : Path
+            The destination path of the dataset.
+    urlbase : str
+            The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+            An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    str
+        The new path of the dataset.
+    """
+    urlbase, _ = _format_paths(urlbase)
+    result =  api_utils.post(f'{urlbase}api/move/',
+                             {'src': str(src), 'dst': str(dst)},
+                             auth_cookie=auth_cookie)
+    return pathlib.Path(result)
+
+
 def lazyexpr(name, expression, operands,
              urlbase=sub_urlbase_default, auth_cookie=None):
     """
@@ -580,6 +607,29 @@ class File:
         """
         return download(self.path, localpath=localpath,
                         urlbase=self.urlbase, auth_cookie=self.auth_cookie)
+
+    def move(self, dst):
+        """
+        Move a file to a new location.
+
+        Parameters
+        ----------
+        dst : Path
+            The destination path of the file.
+
+        Returns
+        -------
+        Path
+            The new path of the file.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@personal')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.move('@public/mypath/myds.b2nd')
+        PosixPath('@public/mypath/myds.b2nd')
+        """
+        return move(self.path, dst, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
 
     def remove(self):
         """

@@ -42,18 +42,18 @@ def cli(cargs, binary=False, sub_user=None) -> str or dict:
     return out if binary else json.loads(out)
 
 
-def test_roots(services, pub_host, sub_user):
+def test_roots(pub_host, sub_user):
     roots = cli(['roots'], sub_user=sub_user)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]['http'] == pub_host
 
 
-def test_url(services, sub_urlbase, sub_user):
+def test_url(sub_urlbase, sub_user):
     out = cli(['url', f'{TEST_CATERVA2_ROOT}/ds-1d.b2nd'], sub_user=sub_user)
     assert out == f'{sub_urlbase}api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd'
 
 
-def test_subscribe(services, sub_user):
+def test_subscribe(sub_user):
     # Subscribe once
     out = cli(['subscribe', TEST_CATERVA2_ROOT], sub_user=sub_user)
     assert out == 'Ok'
