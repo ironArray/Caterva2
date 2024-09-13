@@ -54,6 +54,18 @@ def populate_public(examples_dir):
     return fnames
 
 
+def test_subscribe(services, sub_urlbase, sub_jwt_cookie):
+    assert 'Ok' == cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase)
+    assert 'Ok' == cat2.subscribe('@public', sub_urlbase)
+    for root in ['@personal', '@shared']:
+        if sub_jwt_cookie:
+            assert 'Ok' == cat2.subscribe(root, sub_urlbase, auth_cookie=sub_jwt_cookie)
+        else:
+            with pytest.raises(Exception) as e_info:
+                _ = cat2.subscribe(root, sub_urlbase)
+            assert 'Unauthorized' in str(e_info)
+
+
 def test_roots(services, pub_host, sub_urlbase, sub_jwt_cookie):
     roots = cat2.get_roots(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert roots[TEST_CATERVA2_ROOT]['name'] == TEST_CATERVA2_ROOT
@@ -373,7 +385,7 @@ def test_upload_public_unauthorized(services, examples_dir, sub_urlbase,
         assert path == ds.path
         with pytest.raises(Exception) as e_info:
             _ = remote_root.upload(path)
-        assert 'Unauthorized' in str(e_info.value)
+        assert 'Unauthorized' in str(e_info)
 
 @pytest.mark.parametrize("name", ['ds-1d.b2nd',
                                   'ds-hello.b2frame',

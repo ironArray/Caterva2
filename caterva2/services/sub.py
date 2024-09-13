@@ -423,6 +423,7 @@ def get_root(name):
 @app.post('/api/subscribe/{name}')
 async def post_subscribe(
     name: str,
+    user: db.User = Depends(optional_user),
 ):
     """
     Subscribe to a root.
@@ -437,7 +438,12 @@ async def post_subscribe(
     str
         'Ok' if successful.
     """
-    if name not in {'@personal', '@shared', '@public'}:
+    if name == '@public':
+        pass
+    elif name in {'@personal', '@shared'}:
+        if not user:
+            raise srv_utils.raise_unauthorized(f"Subscribing to {name} requires authentication")
+    else:
         get_root(name)
         follow(name)
     return 'Ok'
@@ -717,10 +723,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
     """
 
     if not user:
-        raise fastapi.HTTPException(
-            status_code=401,  # unauthorized
-            detail="Creating lazy expressions requires enabling user authentication",
-        )
+        raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
     # Parse expression
     name = name.strip()
@@ -817,10 +820,7 @@ async def upload_file(
     """
 
     if not user:
-        raise fastapi.HTTPException(
-            status_code=401,  # unauthorized
-            detail="Uploading files requires enabling user authentication",
-        )
+        raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
     # Read the file
     data = await file.read()
@@ -881,10 +881,7 @@ async def remove(
     """
 
     if not user:
-        raise fastapi.HTTPException(
-            status_code=401,  # unauthorized
-            detail="Removing files requires enabling user authentication",
-        )
+        raise srv_utils.raise_unauthorized("Removing files requires authentication")
 
     # Replace the root with absolute path
     root = path.parts[0]
@@ -1322,7 +1319,7 @@ async def htmx_upload(
 ):
 
     if not user:
-        raise fastapi.HTTPException(status_code=401)  # Unauthorized
+        raise srv_utils.raise_unauthorized("Uploading files requires authentication")
 
     if name == '@personal':
         path = personal / str(user.id)

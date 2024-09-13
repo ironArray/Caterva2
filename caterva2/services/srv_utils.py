@@ -148,6 +148,8 @@ HeaderType = typing.Annotated[str | None, fastapi.Header()]
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
 
+def raise_unauthorized(detail='Unauthorized'):
+    raise fastapi.HTTPException(status_code=401, detail=detail)
 
 def raise_not_found(detail='Not Found'):
     raise fastapi.HTTPException(status_code=404, detail=detail)
