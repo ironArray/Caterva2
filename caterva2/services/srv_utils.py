@@ -60,7 +60,7 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
     if isinstance(obj, pathlib.Path):
         path = obj
         if not path.is_file():
-            raise FileNotFoundError('File does not exist or is a directory')
+            raise FileNotFoundError(f'File "{path}" does not exist or is a directory')
 
         suffix = path.suffix
         if suffix in {'.b2frame', '.b2nd', '.b2'}:

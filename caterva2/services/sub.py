@@ -1309,23 +1309,38 @@ async def htmx_command(
 ):
 
     operands = dict(zip(names, paths))
-    try:
-        result_name, expr = command.split('=')
-        result_path = make_lazyexpr(result_name, expr, operands, user)
-    except (SyntaxError, ValueError):
-        return htmx_error(request,
-                          'Invalid syntax: expected <varname> = <expression>')
-    except TypeError as te:
-        return htmx_error(request, f'Invalid expression: {te}')
-    except KeyError as ke:
-        error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
-        return htmx_error(request, error)
-    except RuntimeError as exc:
-        return htmx_error(request, str(exc))
+    argv = command.split()
+
+    if argv[0] in {'mv', 'move'}:
+        if len(argv) != 3:
+            return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MovePayload(src=src, dst=dst)
+        try:
+            result_path = await move(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error moving file: {exc}')
+
+    elif argv[1] == '=':
+        try:
+            result_name, expr = command.split('=')
+            result_path = make_lazyexpr(result_name, expr, operands, user)
+        except (SyntaxError, ValueError):
+            return htmx_error(request,
+                              'Invalid syntax: expected <varname> = <expression>')
+        except TypeError as te:
+            return htmx_error(request, f'Invalid expression: {te}')
+        except KeyError as ke:
+            error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
+            return htmx_error(request, error)
+        except RuntimeError as exc:
+            return htmx_error(request, str(exc))
+    else:
+        return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
-    return htmx_redirect(hx_current_url, url, root='@personal')
+    return htmx_redirect(hx_current_url, url)
 
 
 def htmx_error(request, msg):
