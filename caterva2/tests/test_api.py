@@ -155,6 +155,22 @@ def test_move(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
             assert str(newpath) == f"{myshared.name}/{new_fname}"
             assert myshared[new_fname].path == newpath
 
+
+# New test for the move method where the destination is not a special root
+@pytest.mark.parametrize("dest", ['..', '.', 'foo', 'foo/bar'])
+def test_move_not_allowed(dest, sub_urlbase, sub_user, fill_public):
+    if not sub_user:
+        return pytest.skip("authentication support needed")
+
+    fnames, mypublic = fill_public
+    for fname in fnames:
+        # Move the file to a non-special root and check for an exception
+        file = mypublic[fname]
+        with pytest.raises(Exception) as e_info:
+            _ = file.move(dest)
+        print(e_info)
+        assert 'Bad Request' in str(e_info)
+
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(10, 20, 1)])
 def test_index_dataset_frame(slice_, examples_dir, sub_urlbase, sub_user):

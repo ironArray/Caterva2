@@ -813,6 +813,13 @@ async def move(
     if not user:
         raise srv_utils.raise_unauthorized("Moving files requires authentication")
 
+    # Both src and dst should start with a special root
+    if not payload.src.startswith(('@personal', '@shared', '@public')):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only moving from @personal or @shared or @public roots is allowed")
+    if not payload.dst.startswith(('@personal', '@shared', '@public')):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only moving to @personal or @shared or @public roots is allowed")
     namepath = pathlib.Path(payload.src)
     destpath = pathlib.Path(payload.dst)
     abspath, _ = abspath_and_dataprep(namepath, user=user)
