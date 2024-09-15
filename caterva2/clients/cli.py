@@ -195,10 +195,23 @@ def main():
 
     # list
     help = 'List all the available datasets in a root. Needs to be subscribed to the root.'
-    subparser = subparsers.add_parser('list', help=help)
+    subparser = subparsers.add_parser('ls', aliases=['list'], help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('root')
     subparser.set_defaults(func=cmd_list)
+
+    # move
+    help = 'Move a dataset to a different root'
+    subparser = subparsers.add_parser('mv', aliases=['move'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.add_argument('newroot')
+    subparser.set_defaults(func=cmd_move)
+
+    # remove
+    help = 'Remove a dataset from the subscriber'
+    subparser = subparsers.add_parser('rm', aliases=['remove'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.set_defaults(func=cmd_remove)
 
     # url
     help = 'URL from where a dataset can be downloaded.'
@@ -221,13 +234,6 @@ def main():
     subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_show)
 
-    # move
-    help = 'Move a dataset to a different root'
-    subparser = subparsers.add_parser('mv', aliases=['move'], help=help)
-    subparser.add_argument('dataset', type=pathlib.Path)
-    subparser.add_argument('newroot')
-    subparser.set_defaults(func=cmd_move)
-
     # download
     help = 'Download a dataset and save it in the local system'
     subparser = subparsers.add_parser('download', help=help)
@@ -242,12 +248,6 @@ def main():
     subparser.add_argument('localpath', type=pathlib.Path)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_upload)
-
-    # remove
-    help = 'Remove a dataset from the subscriber'
-    subparser = subparsers.add_parser('remove', help=help)
-    subparser.add_argument('dataset', type=pathlib.Path)
-    subparser.set_defaults(func=cmd_remove)
 
     # Go
     args = utils.run_parser(parser)
