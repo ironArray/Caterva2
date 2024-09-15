@@ -58,7 +58,7 @@ class NewLazyExpr(pydantic.BaseModel):
     operands: typing.Dict[str, str]
 
 
-class MovePayload(pydantic.BaseModel):
+class MoveCopyPayload(pydantic.BaseModel):
     src: str
     dst: str
 

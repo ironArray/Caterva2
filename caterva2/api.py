@@ -295,13 +295,13 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     Parameters
     ----------
     src : Path
-            The source path of the dataset.
+        The source path of the dataset.
     dst : Path
-            The destination path of the dataset.
+        The destination path of the dataset.
     urlbase : str
-            The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
-            An optional HTTP cookie for authorizing access.
+        An optional HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -310,6 +310,33 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     urlbase, _ = _format_paths(urlbase)
     result =  api_utils.post(f'{urlbase}api/move/',
+                             {'src': str(src), 'dst': str(dst)},
+                             auth_cookie=auth_cookie)
+    return pathlib.Path(result)
+
+
+def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Copy a dataset to a new location.
+
+    Parameters
+    ----------
+    src : Path
+        The source path of the dataset.
+    dst : Path
+        The destination path of the dataset.
+    urlbase : str
+        The base of URLs (slash-terminated) of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    str
+        The new path of the dataset.
+    """
+    urlbase, _ = _format_paths(urlbase)
+    result =  api_utils.post(f'{urlbase}api/copy/',
                              {'src': str(src), 'dst': str(dst)},
                              auth_cookie=auth_cookie)
     return pathlib.Path(result)
@@ -406,6 +433,32 @@ class Root:
         else:
             return File(node, root=self.name, urlbase=self.urlbase,
                         auth_cookie=self.auth_cookie)
+
+    def __contains__(self, node):
+        """
+        Check if a node exists in the root.
+
+        Parameters
+        ----------
+        node : str or Path
+            The path of the file or dataset.
+
+        Returns
+        -------
+        bool
+            Whether the node exists in the root.
+        """
+        node = node.as_posix() if isinstance(node, pathlib.Path) else node
+        return node in self.node_list
+
+    def __iter__(self):
+        return iter(self.node_list)
+
+    def __len__(self):
+        return len(self.node_list)
+
+    def __str__(self):
+        return self.name
 
     def upload(self, localpath, dataset=None):
         """
@@ -630,6 +683,29 @@ class File:
         PosixPath('@public/mypath/myds.b2nd')
         """
         return move(self.path, dst, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
+
+    def copy(self, dst):
+        """
+        Copy a file to a new location.
+
+        Parameters
+        ----------
+        dst : Path
+            The destination path of the file.
+
+        Returns
+        -------
+        Path
+            The new path of the file.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@personal')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.copy('@public/mypath/myds.b2nd')
+        PosixPath('@public/mypath/myds.b2nd')
+        """
+        return copy(self.path, dst, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
 
     def remove(self):
         """

@@ -156,7 +156,6 @@ def test_move(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
             assert myshared[new_fname].path == newpath
 
 
-# New test for the move method where the destination is not a special root
 @pytest.mark.parametrize("dest", ['..', '.', 'foo', 'foo/bar'])
 def test_move_not_allowed(dest, sub_urlbase, sub_user, fill_public):
     if not sub_user:
@@ -170,6 +169,32 @@ def test_move_not_allowed(dest, sub_urlbase, sub_user, fill_public):
             _ = file.move(dest)
         print(e_info)
         assert 'Bad Request' in str(e_info)
+
+
+@pytest.mark.parametrize("dirpath", [None, 'dir1', 'dir2', 'dir2/dir3/dir4'])
+@pytest.mark.parametrize("final_dir", [True, False])
+def test_copy(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
+    if not sub_user:
+        return pytest.skip("authentication support needed")
+
+    fnames, mypublic = fill_public
+    myshared = cat2.Root('@shared', sub_urlbase, sub_user)
+    for fname in fnames:
+        file = mypublic[fname]
+        if final_dir:
+            new_fname = f'{dirpath}' if dirpath else ''
+        else:
+            new_fname = f'{dirpath}/{fname}' if dirpath else fname
+        newpath = file.copy(f"{myshared.name}/{new_fname}")
+        if final_dir:
+            basename = fname.split('/')[-1]
+            new_path = f"{new_fname}/{basename}" if dirpath else basename
+            assert str(newpath) == f"{myshared.name}/{new_path}"
+            assert myshared[new_path].path == newpath
+        else:
+            assert str(newpath) == f"{myshared.name}/{new_fname}"
+            assert myshared[new_fname].path == newpath
+
 
 @pytest.mark.parametrize("slice_", [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None),
                                     slice(10, 20, 1)])

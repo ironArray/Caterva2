@@ -14,6 +14,7 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import string
 import tarfile
 import typing
@@ -799,7 +800,7 @@ async def lazyexpr(
 
 @app.post('/api/move/')
 async def move(
-    payload: models.MovePayload,
+    payload: models.MoveCopyPayload,
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -838,6 +839,58 @@ async def move(
     # Make sure the destination directory exists
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
     abspath.rename(dest_abspath)
+
+    return str(destpath)
+
+
+@app.post('/api/copy/')
+async def copy(
+    payload: models.MoveCopyPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Copy a dataset.
+
+    Returns
+    -------
+    str
+        The path of the copied dataset.
+    """
+    if not user:
+            raise srv_utils.raise_unauthorized("Copying files requires authentication")
+
+    src, dst = payload.src, payload.dst
+    # src should start with a special root or known root
+    if (not src.startswith(('@personal', '@shared', '@public'))
+            and src not in database.roots):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only copying from existing roots is allowed")
+    # dst should start with a special root
+    if not dst.startswith(('@personal', '@shared', '@public')):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only copying to @personal or @shared or @public roots is allowed")
+
+    namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
+    abspath, _ = abspath_and_dataprep(namepath, user=user)
+    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+
+    # If destination has not an extension, assume it is a directory
+    # If user wants something without an extension, she should add a '.b2' extension
+    if dest_abspath.is_dir() or not dest_abspath.suffix:
+            dest_abspath /= abspath.name
+            destpath /= namepath.name
+
+    # Not sure if we should allow overwriting, but let's allow it for now
+    # if dest_abspath.exists():
+    #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
+
+    # Make sure the destination directory exists
+    dest_abspath.parent.mkdir(exist_ok=True, parents=True)
+    # Copy (recursively if necessary)
+    if abspath.is_dir():
+        shutil.copytree(abspath, dest_abspath)
+    else:
+        shutil.copy(abspath, dest_abspath)
 
     return str(destpath)
 
@@ -945,14 +998,7 @@ async def remove(
 
     # If path2 is a directory, remove the contents of the directory
     if path2.is_dir():
-        for path3 in path2.rglob('*'):
-            path3.unlink()
-        # Remove the directory itself
-        # NOTE: I am undecided about this, as it may be useful to keep the directory
-        # This would allow to reuse the directory for new files. Also, as empty directories
-        # are not displayed or listed, it would not be a problem to keep them.
-        # Let's keep it for now.
-        # path2.rmdir()
+        shutil.rmtree(path2)
     else:
         # Try to unlink the file
         try:
@@ -1335,11 +1381,21 @@ async def htmx_command(
             return htmx_error(request, str(exc))
 
     # then commands
+    elif argv[0] in {'cp', 'copy'}:
+        if len(argv) != 3:
+            return htmx_error(request, 'Invalid syntax: expected cp/copy <src> <dst>')
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MoveCopyPayload(src=src, dst=dst)
+        try:
+            result_path = await copy(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error copying file: {exc}')
+
     elif argv[0] in {'mv', 'move'}:
         if len(argv) != 3:
             return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
         src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
-        payload = models.MovePayload(src=src, dst=dst)
+        payload = models.MoveCopyPayload(src=src, dst=dst)
         try:
             result_path = await move(payload, user)
         except Exception as exc:

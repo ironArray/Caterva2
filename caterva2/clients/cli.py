@@ -143,8 +143,15 @@ def cmd_show(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_move(args, auth_cookie):
-    moved = cat2.move(args.dataset, args.newroot, args.urlbase, auth_cookie=auth_cookie)
-    print(f'Dataset {args.dataset} -> {moved}')
+    moved = cat2.move(args.dataset, args.dest, args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset {args.dataset} moved to {moved}')
+
+
+@handle_errors
+@with_auth_cookie
+def cmd_copy(args, auth_cookie):
+    copied = cat2.copy(args.dataset, args.dest, args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset {args.dataset} copied to {copied}')
 
 
 @handle_errors
@@ -200,11 +207,18 @@ def main():
     subparser.add_argument('root')
     subparser.set_defaults(func=cmd_list)
 
+    # copy
+    help = 'Copy a dataset to a different root.'
+    subparser = subparsers.add_parser('cp', aliases=['copy'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.add_argument('dest')
+    subparser.set_defaults(func=cmd_copy)
+
     # move
     help = 'Move a dataset to a different root.'
     subparser = subparsers.add_parser('mv', aliases=['move'], help=help)
     subparser.add_argument('dataset', type=pathlib.Path)
-    subparser.add_argument('newroot')
+    subparser.add_argument('dest')
     subparser.set_defaults(func=cmd_move)
 
     # remove
