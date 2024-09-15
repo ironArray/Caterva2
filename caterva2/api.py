@@ -406,8 +406,10 @@ class Root:
             roots = get_roots(urlbase)
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
-        self.node_list = api_utils.get(f'{urlbase}api/list/{name}',
-                                       auth_cookie=self.auth_cookie)
+    @property
+    def node_list(self):
+        return api_utils.get(f'{self.urlbase}api/list/{self.name}',
+                             auth_cookie=self.auth_cookie)
 
     def __repr__(self):
         return f'<Root: {self.name}>'

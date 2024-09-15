@@ -146,6 +146,7 @@ def test_move(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
         else:
             new_fname = f'{dirpath}/{fname}' if dirpath else fname
         newpath = file.move(f"{myshared.name}/{new_fname}")
+        assert fname not in mypublic
         if final_dir:
             basename = fname.split('/')[-1]
             new_path = f"{new_fname}/{basename}" if dirpath else basename
@@ -169,6 +170,7 @@ def test_move_not_allowed(dest, sub_urlbase, sub_user, fill_public):
             _ = file.move(dest)
         print(e_info)
         assert 'Bad Request' in str(e_info)
+        assert fname in mypublic
 
 
 @pytest.mark.parametrize("dirpath", [None, 'dir1', 'dir2', 'dir2/dir3/dir4'])
@@ -186,6 +188,7 @@ def test_copy(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
         else:
             new_fname = f'{dirpath}/{fname}' if dirpath else fname
         newpath = file.copy(f"{myshared.name}/{new_fname}")
+        assert fname in mypublic
         if final_dir:
             basename = fname.split('/')[-1]
             new_path = f"{new_fname}/{basename}" if dirpath else basename
