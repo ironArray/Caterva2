@@ -201,14 +201,14 @@ def main():
     subparser.set_defaults(func=cmd_list)
 
     # move
-    help = 'Move a dataset to a different root'
+    help = 'Move a dataset to a different root.'
     subparser = subparsers.add_parser('mv', aliases=['move'], help=help)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.add_argument('newroot')
     subparser.set_defaults(func=cmd_move)
 
     # remove
-    help = 'Remove a dataset from the subscriber'
+    help = 'Remove a dataset from the subscriber.'
     subparser = subparsers.add_parser('rm', aliases=['remove'], help=help)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_remove)
@@ -228,14 +228,14 @@ def main():
     subparser.set_defaults(func=cmd_info)
 
     # show
-    help = 'Display a dataset'
+    help = 'Display a dataset.'
     subparser = subparsers.add_parser('show', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_show)
 
     # download
-    help = 'Download a dataset and save it in the local system'
+    help = 'Download a dataset and save it in the local system.'
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=pathlib.Path)
@@ -243,7 +243,7 @@ def main():
     subparser.set_defaults(func=cmd_download)
 
     # upload
-    help = 'Upload a local dataset to subscriber'
+    help = 'Upload a local dataset to subscriber.'
     subparser = subparsers.add_parser('upload', help=help)
     subparser.add_argument('localpath', type=pathlib.Path)
     subparser.add_argument('dataset', type=pathlib.Path)

@@ -1318,17 +1318,8 @@ async def htmx_command(
     operands = dict(zip(names, paths))
     argv = command.split()
 
-    if argv[0] in {'mv', 'move'}:
-        if len(argv) != 3:
-            return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
-        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
-        payload = models.MovePayload(src=src, dst=dst)
-        try:
-            result_path = await move(payload, user)
-        except Exception as exc:
-            return htmx_error(request, f'Error moving file: {exc}')
-
-    elif argv[1] == '=':
+    # First check for expressions
+    if argv[1] == '=':
         try:
             result_name, expr = command.split('=')
             result_path = make_lazyexpr(result_name, expr, operands, user)
@@ -1342,6 +1333,28 @@ async def htmx_command(
             return htmx_error(request, error)
         except RuntimeError as exc:
             return htmx_error(request, str(exc))
+
+    # then commands
+    elif argv[0] in {'mv', 'move'}:
+        if len(argv) != 3:
+            return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MovePayload(src=src, dst=dst)
+        try:
+            result_path = await move(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error moving file: {exc}')
+
+    elif argv[0] in {'rm', 'remove'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected rm/remove <path>')
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            result_path = await remove(path, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error removing file: {exc}')
+
     else:
         return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')
 
