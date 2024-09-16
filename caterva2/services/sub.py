@@ -1395,6 +1395,22 @@ async def htmx_command(
         except Exception as exc:
             return htmx_error(request, f'Error copying file: {exc}')
 
+    elif argv[0] in {'ls', 'list'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected ls/list <path>')
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            paths = await get_list(path, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error listing path: {exc}')
+        # Get the first path to display
+        first_path = next(iter(paths), None)
+        if path.name == first_path:
+            result_path = path
+        else:
+            result_path = f'{path}/{first_path}' if first_path else path
+
     elif argv[0] in {'mv', 'move'}:
         if len(argv) != 3:
             return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
@@ -1411,6 +1427,7 @@ async def htmx_command(
         path = operands.get(argv[1], argv[1])
         path = pathlib.Path(path)
         try:
+            # Nothing to show after removing, but anyway
             result_path = await remove(path, user)
         except Exception as exc:
             return htmx_error(request, f'Error removing file: {exc}')
@@ -1517,7 +1534,6 @@ async def htmx_upload(
             member_path.unlink()
         # We are done, redirect to home, and show the new files, starting with the first one
         first_member = next((m for m in new_members), None)
-        print(f"first_member: {first_member}")
         path = f'{name}/{first_member}'
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
