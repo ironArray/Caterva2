@@ -65,7 +65,7 @@ def b2mkempty_b2chunkit_from_dataset(node: h5py.Dataset) -> (
 
     The first returned value can be called to create an empty Blosc2 array
     with prepared construction arguments and attributes extracted from the
-    HDF5 dataset `node`.  By default it is created without storage, but that
+    HDF5 dataset `node`.  By default, it is created without storage, but that
     may be changed by passing additional keyword arguments like ``urlpath``.
 
     The second returned value is an iterator that yields compressed Blosc2

@@ -40,9 +40,7 @@ def _format_paths(urlbase, path=None):
     if path is not None:
         p = path.as_posix() if isinstance(path, pathlib.Path) else path
         if p.startswith("/"):
-            raise ValueError("The path should not start with a slash")
-        if p.endswith("/"):
-            raise ValueError("The path should not end with a slash")
+            raise ValueError("path cannot start with a slash")
     return urlbase, path
 
 
@@ -92,14 +90,14 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
                           auth_cookie=auth_cookie)
 
 
-def get_list(root, urlbase=sub_urlbase_default, auth_cookie=None):
+def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    List the nodes in a root.
+    List the datasets in a path.
 
     Parameters
     ----------
-    root : str
-        The name of the root to list.
+    path : str
+        The path to a root, subroot or dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -108,10 +106,10 @@ def get_list(root, urlbase=sub_urlbase_default, auth_cookie=None):
     Returns
     -------
     list
-        The list of nodes in the root, as name strings relative to it.
+        The list of datasets, as name strings relative to it.
     """
-    urlbase, root = _format_paths(urlbase, root)
-    return api_utils.get(f'{urlbase}api/list/{root}',
+    urlbase, path = _format_paths(urlbase, path)
+    return api_utils.get(f'{urlbase}api/list/{path}',
                          auth_cookie=auth_cookie)
 
 
@@ -407,20 +405,20 @@ class Root:
             raise ValueError(f'Could not subscribe to root {name}'
                              f' (only {roots.keys()} available)')
     @property
-    def node_list(self):
+    def file_list(self):
         return api_utils.get(f'{self.urlbase}api/list/{self.name}',
                              auth_cookie=self.auth_cookie)
 
     def __repr__(self):
         return f'<Root: {self.name}>'
 
-    def __getitem__(self, node):
+    def __getitem__(self, path):
         """
         Get a file or dataset from the root.
 
         Parameters
         ----------
-        node : str or Path
+        path : str or Path
             The path of the file or dataset.
 
         Returns
@@ -428,36 +426,36 @@ class Root:
         File
             A :class:`File` or :class:`Dataset` instance.
         """
-        node = node.as_posix() if isinstance(node, pathlib.Path) else node
-        if node.endswith((".b2nd", ".b2frame")):
-            return Dataset(node, root=self.name, urlbase=self.urlbase,
+        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        if path.endswith((".b2nd", ".b2frame")):
+            return Dataset(path, root=self.name, urlbase=self.urlbase,
                            auth_cookie=self.auth_cookie)
         else:
-            return File(node, root=self.name, urlbase=self.urlbase,
+            return File(path, root=self.name, urlbase=self.urlbase,
                         auth_cookie=self.auth_cookie)
 
-    def __contains__(self, node):
+    def __contains__(self, path):
         """
-        Check if a node exists in the root.
+        Check if a path exists in the root.
 
         Parameters
         ----------
-        node : str or Path
+        path : str or Path
             The path of the file or dataset.
 
         Returns
         -------
         bool
-            Whether the node exists in the root.
+            Whether the path exists in the root.
         """
-        node = node.as_posix() if isinstance(node, pathlib.Path) else node
-        return node in self.node_list
+        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        return path in self.file_list
 
     def __iter__(self):
-        return iter(self.node_list)
+        return iter(self.file_list)
 
     def __len__(self):
-        return len(self.node_list)
+        return len(self.file_list)
 
     def __str__(self):
         return self.name

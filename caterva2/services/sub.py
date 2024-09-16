@@ -450,43 +450,47 @@ async def post_subscribe(
     return 'Ok'
 
 
-@app.get('/api/list/{name}')
+@app.get('/api/list/{path:path}')
 async def get_list(
-    name: str,
+    path: pathlib.Path,
     user: db.User = Depends(optional_user),
 ):
     """
-    List the datasets in a root.
+    List the datasets in a root or subroot.
 
     Parameters
     ----------
-    name : str
-        The name of the root.
+    path : Path
+        The path to a root or subroot.
 
     Returns
     -------
     list
-        The list of datasets in the root.
+        The list of datasets, as name strings relative to path.
     """
-    if name == '@public':
+    # Get the root
+    root = path.parts[0]
+    if root == '@public':
         rootdir = public
-    elif name == '@personal':
+    elif root == '@personal':
         if not user:
             srv_utils.raise_not_found('@personal needs authentication')
         rootdir = personal / str(user.id)
-    elif name == '@shared':
+    elif root == '@shared':
         if not user:
             srv_utils.raise_not_found('@shared needs authentication')
         rootdir = shared
     else:
-        root = get_root(name)
+        root = get_root(root)
         rootdir = cache / root.name
 
-    return [
-        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
-        for path, relpath in utils.walk_files(rootdir)
-    ]
-
+    # List the datasets in root or subroot
+    subroot = rootdir / pathlib.Path(*path.parts[1:])
+    if subroot.is_file():
+        name = pathlib.Path(subroot.name)
+        return [str(name.with_suffix('') if name.suffix == '.b2' else name)]
+    return [str(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
+            for _, relpath in utils.walk_files(subroot)]
 
 @app.get('/api/info/{path:path}')
 async def get_info(

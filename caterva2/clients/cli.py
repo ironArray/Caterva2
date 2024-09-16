@@ -94,7 +94,7 @@ def cmd_list(args, auth_cookie):
         return
 
     for item in data:
-        print(f'{args.root}/{item}')
+        print(f'{item}')
 
 
 @handle_errors

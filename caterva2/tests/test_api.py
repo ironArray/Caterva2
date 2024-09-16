@@ -46,12 +46,17 @@ def sub_urlbase(services):
 @pytest.fixture
 def fill_public(examples_dir, sub_urlbase, sub_user):
     # Manually copy some files to the public area (TEST_STATE_DIR)
-    fnames = ['ds-1d.b2nd', 'dir1/ds-2d.b2nd']
+    fnames = ['README.md', 'ds-1d.b2nd', 'dir1/ds-2d.b2nd']
     for fname in fnames:
         orig = examples_dir / fname
+        data = orig.read_bytes()
+        if not fname.endswith(('b2nd', 'b2frame')):
+            fname += '.b2'
+            schunk = blosc2.SChunk(data=data)
+            data = schunk.to_cframe()
         dest = pathlib.Path(TEST_STATE_DIR) / f'subscriber/public/{fname}'
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(orig.read_bytes())
+        dest.write_bytes(data)
     # We need a user here in case we want to remove files from @public
     mypublic = cat2.Root('@public', sub_urlbase, sub_user)
     return fnames, mypublic
@@ -102,19 +107,39 @@ def test_root(sub_urlbase, sub_user):
 def test_list(examples_dir, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     example = examples_dir
-    nodes = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
-    assert set(myroot.node_list) == nodes
+    files = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
+    assert set(myroot.file_list) == files
     if sub_user:
         mypersonal = cat2.Root('@personal', sub_urlbase, sub_user)
         # In previous tests we have created some files in the personal area
-        assert len(mypersonal.node_list) >= 0
+        assert len(mypersonal.file_list) >= 0
         myshared = cat2.Root('@shared', sub_urlbase, sub_user)
-        assert set(myshared.node_list) == set()
+        assert set(myshared.file_list) == set()
 
 
-def test_list_public(fill_public):
+def test_list_public(fill_public, sub_urlbase):
     fnames, mypublic = fill_public
-    assert set(mypublic.node_list) == set(fnames)
+    assert set(mypublic.file_list) == set(fnames)
+    # Test toplevel list
+    flist = cat2.get_list('@public', sub_urlbase)
+    assert len(flist) == 3
+    for fname in flist:
+        assert fname in fnames
+    # Test subroot list
+    flist = cat2.get_list('@public/dir1', sub_urlbase)
+    assert len(flist) == 1
+    for fname in flist:
+        assert fname == 'ds-2d.b2nd'
+    # Test subroot list with trailing slash
+    flist = cat2.get_list('@public/dir1/', sub_urlbase)
+    assert len(flist) == 1
+    for fname in flist:
+        assert fname == 'ds-2d.b2nd'
+    # Test single dataset list
+    flist = cat2.get_list('@public/dir1/ds-2d.b2nd', sub_urlbase)
+    assert len(flist) == 1
+    for fname in flist:
+        assert fname == 'ds-2d.b2nd'
 
 
 def test_file(sub_urlbase):
