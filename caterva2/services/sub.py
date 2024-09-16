@@ -1394,6 +1394,7 @@ async def htmx_command(
             result_path = await copy(payload, user)
         except Exception as exc:
             return htmx_error(request, f'Error copying file: {exc}')
+        result_path = await display_first(result_path, user)
 
     elif argv[0] in {'i', 'info'}:
         if len(argv) != 2:
@@ -1433,6 +1434,7 @@ async def htmx_command(
             result_path = await move(payload, user)
         except Exception as exc:
             return htmx_error(request, f'Error moving file: {exc}')
+        result_path = await display_first(result_path, user)
 
     elif argv[0] in {'rm', 'remove'}:
         if len(argv) != 2:
@@ -1451,6 +1453,16 @@ async def htmx_command(
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
     return htmx_redirect(hx_current_url, url)
+
+
+async def display_first(result_path, user):
+    paths = await get_list(pathlib.Path(result_path), user)
+    if len(paths) > 1:
+        # Display the first path found
+        result_path = f'{result_path}/{paths[0]}'
+    elif len(paths) == 1 and not result_path.endswith(paths[0]):
+        result_path = f'{result_path}/{paths[0]}'
+    return result_path
 
 
 def htmx_error(request, msg):
