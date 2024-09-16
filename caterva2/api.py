@@ -97,7 +97,7 @@ def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
     Parameters
     ----------
     path : str
-        The path to a root, subroot or dataset.
+        The path to a root, directory or dataset.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -260,17 +260,17 @@ def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
 
 def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    Remove a dataset (or subroot path) from a remote repository.
+    Remove a dataset or directory path from a remote repository.
 
-    Note that when a subroot is removed, only its contents are removed.
-    The subroot itself is not removed. This can be handy for future
-    uploads to the same subroot.  This is preliminary and may change in
+    Note that when a directory is removed, only its contents are removed.
+    The directory itself is not removed. This can be handy for future
+    uploads to the same directory.  This is preliminary and may change in
     future versions.
 
     Parameters
     ----------
     path : Path
-        The path of the dataset or subroot.
+        The path of the dataset or directory.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -280,6 +280,13 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     str
         The removed path.
+
+    Examples
+    --------
+    >>> remove('@public/ds-1d.b2nd')
+    '@public/ds-1d.b2nd'
+    >>> 'ds-1d.b2nd' in get_list('@public')
+    False
     """
     urlbase, path = _format_paths(urlbase, path)
     return api_utils.post(f'{urlbase}api/remove/{path}',
@@ -288,14 +295,14 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
 
 def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    Move a dataset to a new location.
+    Move a dataset or directory to a new location.
 
     Parameters
     ----------
     src : Path
-        The source path of the dataset.
+        The source path of the dataset or directory.
     dst : Path
-        The destination path of the dataset.
+        The destination path of the dataset or directory.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -305,6 +312,15 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     str
         The new path of the dataset.
+
+    Examples
+    --------
+    >>> move('@public/ds-1d.b2nd', '@public/mypath/myds.b2nd')
+    '@public/mypath/myds.b2nd'
+    >>> 'ds-1d.b2nd' in get_list('@public')
+    False
+    >>> move('@public/dir1', '@public/mypath')
+    '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
     result =  api_utils.post(f'{urlbase}api/move/',
@@ -315,14 +331,14 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
 
 def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     """
-    Copy a dataset to a new location.
+    Copy a dataset or directory to a new location.
 
     Parameters
     ----------
     src : Path
-        The source path of the dataset.
+        The source path of the dataset or directory.
     dst : Path
-        The destination path of the dataset.
+        The destination path of the dataset or directory.
     urlbase : str
         The base of URLs (slash-terminated) of the subscriber to query.
     auth_cookie : str
@@ -332,6 +348,13 @@ def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     str
         The new path of the dataset.
+
+    Examples
+    --------
+    >>> copy('@public/ds-1d.b2nd', '@public/mypath/myds.b2nd')
+    '@public/mypath/myds.b2nd'
+    >>> copy('@public/dir1', '@public/mypath/')
+    '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
     result =  api_utils.post(f'{urlbase}api/copy/',
@@ -425,6 +448,14 @@ class Root:
         -------
         File
             A :class:`File` or :class:`Dataset` instance.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@public')
+        >>> file = root['ds-1d.b2nd']
+        >>> file
+        File: @public/ds-1d.b2nd
+
         """
         path = path.as_posix() if isinstance(path, pathlib.Path) else path
         if path.endswith((".b2nd", ".b2frame")):
@@ -447,11 +478,34 @@ class Root:
         -------
         bool
             Whether the path exists in the root.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@public')
+        >>> '@public/ds-1d.b2nd' in root
+        True
         """
         path = path.as_posix() if isinstance(path, pathlib.Path) else path
         return path in self.file_list
 
     def __iter__(self):
+        """
+        Iterate over the files and datasets in the root.
+
+        Returns
+        -------
+        iter
+            An iterator over the files and datasets in the root.
+
+        Examples
+        --------
+        >>> root = cat2.Root('@public')
+        >>> for file in root:
+        ...     print(file)
+        @public/ds-1d.b2nd
+        @public/ds-2d.b2nd
+
+        """
         return iter(self.file_list)
 
     def __len__(self):
@@ -479,9 +533,9 @@ class Root:
 
         Examples
         --------
-        >>> root = cat2.Root('@personal')
+        >>> root = cat2.Root('@public')
         >>> root.upload('foo/mydataset.b2nd')
-        File: @personal/foo/mydataset.md
+        File: @public/foo/mydataset.md
         """
         if dataset is None:
             # localpath cannot be absolute in this case (too much prone to errors)
@@ -625,6 +679,15 @@ class File:
         -------
         numpy.ndarray
             The slice of the dataset.
+
+        Examples
+        --------
+        >>> root = cat2.Root('foo')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.fetch(1)
+        array(1)
+        >>> ds.fetch(slice(0, 10))
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
         slice_ = api_utils.slice_to_string(slice_)
         data = api_utils.fetch_data(self.path, self.urlbase,
@@ -677,7 +740,7 @@ class File:
 
         Examples
         --------
-        >>> root = cat2.Root('@personal')
+        >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file.move('@public/mypath/myds.b2nd')
         PosixPath('@public/mypath/myds.b2nd')
@@ -700,7 +763,7 @@ class File:
 
         Examples
         --------
-        >>> root = cat2.Root('@personal')
+        >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file.copy('@public/mypath/myds.b2nd')
         PosixPath('@public/mypath/myds.b2nd')
@@ -718,10 +781,10 @@ class File:
 
         Examples
         --------
-        >>> root = cat2.Root('@personal')
+        >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file.remove()
-        '@personal/ds-1d.b2nd'
+        '@public/ds-1d.b2nd'
         """
         return remove(self.path, urlbase=self.urlbase,  auth_cookie=self.auth_cookie)
 
@@ -752,6 +815,10 @@ class Dataset(File):
     'ds-1d.b2nd'
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    >>> ds = root['ds-2d.b2nd']
+    >>> ds[:2, :2]
+    array([[0, 1],
+           [2, 3]])
     """
     def __init__(self, name, root, urlbase, auth_cookie=None):
         super().__init__(name, root, urlbase, auth_cookie)

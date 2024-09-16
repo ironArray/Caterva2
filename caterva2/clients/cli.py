@@ -173,7 +173,7 @@ def cmd_upload(args, auth_cookie):
 @with_auth_cookie
 def cmd_remove(args, auth_cookie):
     removed = cat2.remove(args.dataset, args.urlbase, auth_cookie=auth_cookie)
-    print(f'Dataset (or subroot contents) removed: {removed}')
+    print(f'Dataset (or directory contents) removed: {removed}')
 
 
 def main():

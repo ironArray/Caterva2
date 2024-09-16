@@ -15,13 +15,13 @@ Getting roots, subscribing and listing datasets
    :toctree: autofiles/top_level/
    :nosignatures:
 
-   get_roots
-   subscribe
-   get_list
-   get_info
+    get_roots
+    subscribe
+    get_list
+    get_info
 
 
-Fetch / download datasets
+Fetch / download / upload datasets
 -------------------------
 
 .. autosummary::
@@ -30,6 +30,20 @@ Fetch / download datasets
 
     fetch
     download
+    upload
+
+
+Utility functions
+-----------------
+
+.. autosummary::
+   :toctree: autofiles/top_level/
+   :nosignatures:
+
+    get_auth_cookie
+    copy
+    move
+    remove
 
 
 Evaluating expressions

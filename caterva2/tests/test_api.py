@@ -125,12 +125,12 @@ def test_list_public(fill_public, sub_urlbase):
     assert len(flist) == 3
     for fname in flist:
         assert fname in fnames
-    # Test subroot list
+    # Test directory list
     flist = cat2.get_list('@public/dir1', sub_urlbase)
     assert len(flist) == 1
     for fname in flist:
         assert fname == 'ds-2d.b2nd'
-    # Test subroot list with trailing slash
+    # Test directory list with trailing slash
     flist = cat2.get_list('@public/dir1/', sub_urlbase)
     assert len(flist) == 1
     for fname in flist:

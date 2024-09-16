@@ -456,12 +456,12 @@ async def get_list(
     user: db.User = Depends(optional_user),
 ):
     """
-    List the datasets in a root or subroot.
+    List the datasets in a root or directory.
 
     Parameters
     ----------
     path : Path
-        The path to a root or subroot.
+        The path to a root or directory.
 
     Returns
     -------
@@ -484,13 +484,13 @@ async def get_list(
         root = get_root(root)
         rootdir = cache / root.name
 
-    # List the datasets in root or subroot
-    subroot = rootdir / pathlib.Path(*path.parts[1:])
-    if subroot.is_file():
-        name = pathlib.Path(subroot.name)
+    # List the datasets in root or directory
+    directory = rootdir / pathlib.Path(*path.parts[1:])
+    if directory.is_file():
+        name = pathlib.Path(directory.name)
         return [str(name.with_suffix('') if name.suffix == '.b2' else name)]
     return [str(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
-            for _, relpath in utils.walk_files(subroot)]
+            for _, relpath in utils.walk_files(directory)]
 
 @app.get('/api/info/{path:path}')
 async def get_info(
@@ -888,9 +888,7 @@ async def copy(
     # if dest_abspath.exists():
     #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
 
-    # Make sure the destination directory exists
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    # Copy (recursively if necessary)
     if abspath.is_dir():
         shutil.copytree(abspath, dest_abspath)
     else:
@@ -936,13 +934,11 @@ async def upload_file(
     elif root == '@public':
         path2 = public / pathlib.Path(*path.parts[1:])
     else:
-        # Only allow uploading to the special roots
         raise fastapi.HTTPException(
             status_code=400,  # bad request
             detail="Only uploading to @personal or @shared or @public roots is allowed",
         )
 
-    # If path2 is a directory, append the filename
     if path2.is_dir():
         path2 /= file.filename
         path /= file.filename
@@ -952,7 +948,6 @@ async def upload_file(
     if path2.suffix not in {'.b2', '.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
-        # Append a new .b2 extension to the file, including the original extension
         path2 = path2.with_suffix(path2.suffix + '.b2')
 
     # Write the file
@@ -969,12 +964,12 @@ async def remove(
         user: db.User = Depends(current_active_user),
 ):
     """
-    Remove a dataset or a subroot path.
+    Remove a dataset or a directory path.
 
     Parameters
     ----------
     path : pathlib.Path
-        The path of dataset / subroot to remove.
+        The path of dataset / directory to remove.
 
     Returns
     -------
