@@ -202,28 +202,28 @@ def main():
 
     # list
     help = 'List all the available datasets in a root. Needs to be subscribed to the root.'
-    subparser = subparsers.add_parser('ls', aliases=['list'], help=help)
+    subparser = subparsers.add_parser('list', aliases=['ls'], help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('root')
     subparser.set_defaults(func=cmd_list)
 
     # copy
     help = 'Copy a dataset to a different root.'
-    subparser = subparsers.add_parser('cp', aliases=['copy'], help=help)
+    subparser = subparsers.add_parser('copy', aliases=['cp'], help=help)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.add_argument('dest')
     subparser.set_defaults(func=cmd_copy)
 
     # move
     help = 'Move a dataset to a different root.'
-    subparser = subparsers.add_parser('mv', aliases=['move'], help=help)
+    subparser = subparsers.add_parser('move', aliases=['mv'], help=help)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.add_argument('dest')
     subparser.set_defaults(func=cmd_move)
 
     # remove
     help = 'Remove a dataset from the subscriber.'
-    subparser = subparsers.add_parser('rm', aliases=['remove'], help=help)
+    subparser = subparsers.add_parser('remove', aliases=['rm'], help=help)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_remove)
 
