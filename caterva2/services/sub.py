@@ -1395,6 +1395,19 @@ async def htmx_command(
         except Exception as exc:
             return htmx_error(request, f'Error copying file: {exc}')
 
+    elif argv[0] in {'i', 'info'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected i/info <path>')
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            paths = await get_list(path, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error listing path: {exc}')
+        if len(paths) != 1:
+            return htmx_error(request, f'dataset "{path}" not found')
+        result_path = path
+
     elif argv[0] in {'ls', 'list'}:
         if len(argv) != 2:
             return htmx_error(request, 'Invalid syntax: expected ls/list <path>')
