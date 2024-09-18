@@ -2,21 +2,21 @@
 <html>
 <head>
     <title>{% block title %}{% endblock %}</title>
-    <link rel="icon" type="image/png" href="/static/logo-caterva2-16x16.png">
+    <link rel="icon" type="image/png" href="{{ static('logo-caterva2-16x16.png') }}">
 
     {# Custom bootstrap #}
-    <link href="/static/build/style.css" rel="stylesheet">
-    <script src="/static/build/main.min.js"></script>
+    <link href="{{ static('build/style.css') }}" rel="stylesheet">
+    <script src="{{ static('build/main.min.js') }}"></script>
 
     {# Project's assets #}
-    <script src="/static/main.js"></script>
-    <link href="/static/main.css" rel="stylesheet">
+    <script src="{{ static('main.js') }}"></script>
+    <link href="{{ static('main.css') }}" rel="stylesheet">
 </head>
 
 <body class="vh-100 d-flex align-items-center">
     <main class="card m-auto" style="width: 450px" id="page-login">
         <div class="card-body">
-            <img src="/static/logo-caterva2-horizontal-small.png" alt="Caterva2 logo" id="logo" class="mb-4">
+            <img src="{{ static('logo-caterva2-horizontal-small.png') }}" alt="Caterva2 logo" id="logo" class="mb-4">
             {% block main %}
             {% endblock %}
         </div>
