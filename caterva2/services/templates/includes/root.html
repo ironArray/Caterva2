@@ -27,7 +27,7 @@
             {% include 'includes/loading.html' %}
         </label>
         <input type="file" name="file" id="id_file_{{ id }}"
-               hx-post="/htmx/upload/{{ name }}"
+               hx-post="{{ url('htmx/upload/') }}{{ name }}"
                hx-encoding="multipart/form-data"
                hx-indicator="#id_file_upload_{{ id }} label">
     </div>
