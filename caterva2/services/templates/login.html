@@ -8,7 +8,9 @@
 
 <div id="result" class="alert alert-danger" style="display: none"></div>
 
-<form action="{{ url('auth/jwt/login') }}" method="post" onsubmit="submitForm(this, '/'); return false">
+<form action="{{ url('auth/jwt/login') }}" method="post"
+      onsubmit="submitForm(this, '{{ url("") }}'); return false"
+>
     <div class="form-floating mb-2">
         <input type="email" name="username" class="form-control" placeholder="" required>
         <label class="form-label">Email address</label>

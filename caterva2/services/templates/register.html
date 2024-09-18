@@ -4,11 +4,13 @@
 
 {% block main %}
 
-<h5 class="card-title float-end">Register</h4>
+<h5 class="card-title float-end">Register</h5>
 
 <div id="result" class="alert alert-danger" style="display: none"></div>
 
-<form action="{{ url('auth/register') }}" method="post" onsubmit="submitFormAsJSON(this, '/login'); return false">
+<form action="{{ url('auth/register') }}" method="post"
+      onsubmit="submitFormAsJSON(this, '{{ url("login") }}'); return false"
+>
     <div class="form-floating mb-2">
         <input type="email" name="email" class="form-control" placeholder="" required>
         <label class="form-label">Email address</label>

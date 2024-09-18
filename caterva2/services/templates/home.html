@@ -27,7 +27,7 @@
         {% if username %}
         Logged in as {{ username }}.
         <form action="{{ url('auth/jwt/logout') }}" method="post" class="d-inline-block" id="logout-form"
-              onsubmit="submitForm(this, '/logout'); return false">
+              onsubmit="submitForm(this, '{{ url("logout") }}'); return false">
             <button type="submit" class="btn btn-link">Logout</button>
         </form>
         {% else %}

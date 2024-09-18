@@ -1041,7 +1041,7 @@ if user_auth_enabled():
             user: db.User = Depends(optional_user)
     ):
         if user:
-            return RedirectResponse("/", status_code=307)
+            return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "login.html")
 
@@ -1051,7 +1051,7 @@ if user_auth_enabled():
             user: db.User = Depends(optional_user)
     ):
         if user:
-            return RedirectResponse("/", status_code=307)
+            return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "logout.html")
 
@@ -1061,7 +1061,7 @@ if user_auth_enabled():
             user: db.User = Depends(optional_user)
     ):
         if user:
-            return RedirectResponse("/", status_code=307)
+            return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "register.html")
 
