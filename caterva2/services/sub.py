@@ -14,6 +14,7 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import string
 import tarfile
 import typing
@@ -449,43 +450,47 @@ async def post_subscribe(
     return 'Ok'
 
 
-@app.get('/api/list/{name}')
+@app.get('/api/list/{path:path}')
 async def get_list(
-    name: str,
+    path: pathlib.Path,
     user: db.User = Depends(optional_user),
 ):
     """
-    List the datasets in a root.
+    List the datasets in a root or directory.
 
     Parameters
     ----------
-    name : str
-        The name of the root.
+    path : Path
+        The path to a root or directory.
 
     Returns
     -------
     list
-        The list of datasets in the root.
+        The list of datasets, as name strings relative to path.
     """
-    if name == '@public':
+    # Get the root
+    root = path.parts[0]
+    if root == '@public':
         rootdir = public
-    elif name == '@personal':
+    elif root == '@personal':
         if not user:
             srv_utils.raise_not_found('@personal needs authentication')
         rootdir = personal / str(user.id)
-    elif name == '@shared':
+    elif root == '@shared':
         if not user:
             srv_utils.raise_not_found('@shared needs authentication')
         rootdir = shared
     else:
-        root = get_root(name)
+        root = get_root(root)
         rootdir = cache / root.name
 
-    return [
-        relpath.with_suffix('') if relpath.suffix == '.b2' else relpath
-        for path, relpath in utils.walk_files(rootdir)
-    ]
-
+    # List the datasets in root or directory
+    directory = rootdir / pathlib.Path(*path.parts[1:])
+    if directory.is_file():
+        name = pathlib.Path(directory.name)
+        return [str(name.with_suffix('') if name.suffix == '.b2' else name)]
+    return [str(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
+            for _, relpath in utils.walk_files(directory)]
 
 @app.get('/api/info/{path:path}')
 async def get_info(
@@ -535,7 +540,8 @@ async def partial_download(abspath, path, slice_=None):
 
 def abspath_and_dataprep(path: pathlib.Path,
                          slice_: (tuple | None) = None,
-                         user: (db.User | None) = None) -> tuple[
+                         user: (db.User | None) = None,
+                         may_not_exist=False) -> tuple[
                              pathlib.Path,
                              Callable[[], Awaitable],
                          ]:
@@ -552,7 +558,7 @@ def abspath_and_dataprep(path: pathlib.Path,
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
         filepath = personal / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(personal, filepath)
+        abspath = srv_utils.cache_lookup(personal, filepath, may_not_exist)
         async def dataprep():
             pass
 
@@ -561,24 +567,23 @@ def abspath_and_dataprep(path: pathlib.Path,
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
         filepath = shared / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(shared, filepath)
+        abspath = srv_utils.cache_lookup(shared, filepath, may_not_exist)
         async def dataprep():
             pass
 
     elif parts[0] == '@public':
         filepath = public / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(public, filepath)
+        abspath = srv_utils.cache_lookup(public, filepath, may_not_exist)
         async def dataprep():
             pass
 
     else:
         filepath = cache / path
-        abspath = srv_utils.cache_lookup(cache, filepath)
+        abspath = srv_utils.cache_lookup(cache, filepath, may_not_exist)
         async def dataprep():
             return await partial_download(abspath, path, slice_)
 
     return (abspath, dataprep)
-
 
 @app.get('/api/fetch/{path:path}')
 async def fetch_data(
@@ -797,6 +802,101 @@ async def lazyexpr(
     return result_path
 
 
+@app.post('/api/move/')
+async def move(
+    payload: models.MoveCopyPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Move a dataset.
+
+    Returns
+    -------
+    str
+        The new path of the dataset.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Moving files requires authentication")
+
+    # Both src and dst should start with a special root
+    if not payload.src.startswith(('@personal', '@shared', '@public')):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only moving from @personal or @shared or @public roots is allowed")
+    if not payload.dst.startswith(('@personal', '@shared', '@public')):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only moving to @personal or @shared or @public roots is allowed")
+    namepath = pathlib.Path(payload.src)
+    destpath = pathlib.Path(payload.dst)
+    abspath, _ = abspath_and_dataprep(namepath, user=user)
+    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+
+    # If destination has not an extension, assume it is a directory
+    # If user wants something without an extension, she can add a '.b2' extension :-)
+    if dest_abspath.is_dir() or not dest_abspath.suffix:
+        dest_abspath /= abspath.name
+        destpath /= namepath.name
+
+    # Not sure if we should allow overwriting, but let's allow it for now
+    # if dest_abspath.exists():
+    #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
+
+    # Make sure the destination directory exists
+    dest_abspath.parent.mkdir(exist_ok=True, parents=True)
+    abspath.rename(dest_abspath)
+
+    return str(destpath)
+
+
+@app.post('/api/copy/')
+async def copy(
+    payload: models.MoveCopyPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Copy a dataset.
+
+    Returns
+    -------
+    str
+        The path of the copied dataset.
+    """
+    if not user:
+            raise srv_utils.raise_unauthorized("Copying files requires authentication")
+
+    src, dst = payload.src, payload.dst
+    # src should start with a special root or known root
+    if (not src.startswith(('@personal', '@shared', '@public'))
+            and src not in database.roots):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only copying from existing roots is allowed")
+    # dst should start with a special root
+    if not dst.startswith(('@personal', '@shared', '@public')):
+        raise fastapi.HTTPException(status_code=400, detail=
+        "Only copying to @personal or @shared or @public roots is allowed")
+
+    namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
+    abspath, _ = abspath_and_dataprep(namepath, user=user)
+    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+
+    # If destination has not an extension, assume it is a directory
+    # If user wants something without an extension, she should add a '.b2' extension
+    if dest_abspath.is_dir() or not dest_abspath.suffix:
+            dest_abspath /= abspath.name
+            destpath /= namepath.name
+
+    # Not sure if we should allow overwriting, but let's allow it for now
+    # if dest_abspath.exists():
+    #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
+
+    dest_abspath.parent.mkdir(exist_ok=True, parents=True)
+    if abspath.is_dir():
+        shutil.copytree(abspath, dest_abspath)
+    else:
+        shutil.copy(abspath, dest_abspath)
+
+    return str(destpath)
+
+
 @app.post('/api/upload/{path:path}')
 async def upload_file(
         path: pathlib.Path,
@@ -834,13 +934,11 @@ async def upload_file(
     elif root == '@public':
         path2 = public / pathlib.Path(*path.parts[1:])
     else:
-        # Only allow uploading to the special roots
         raise fastapi.HTTPException(
             status_code=400,  # bad request
             detail="Only uploading to @personal or @shared or @public roots is allowed",
         )
 
-    # If path2 is a directory, append the filename
     if path2.is_dir():
         path2 /= file.filename
         path /= file.filename
@@ -850,7 +948,6 @@ async def upload_file(
     if path2.suffix not in {'.b2', '.b2frame', '.b2nd'}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
-        # Append a new .b2 extension to the file, including the original extension
         path2 = path2.with_suffix(path2.suffix + '.b2')
 
     # Write the file
@@ -867,12 +964,12 @@ async def remove(
         user: db.User = Depends(current_active_user),
 ):
     """
-    Remove a dataset or a subroot path.
+    Remove a dataset or a directory path.
 
     Parameters
     ----------
     path : pathlib.Path
-        The path of dataset / subroot to remove.
+        The path of dataset / directory to remove.
 
     Returns
     -------
@@ -900,14 +997,7 @@ async def remove(
 
     # If path2 is a directory, remove the contents of the directory
     if path2.is_dir():
-        for path3 in path2.rglob('*'):
-            path3.unlink()
-        # Remove the directory itself
-        # NOTE: I am undecided about this, as it may be useful to keep the directory
-        # This would allow to reuse the directory for new files. Also, as empty directories
-        # are not displayed or listed, it would not be a problem to keep them.
-        # Let's keep it for now.
-        # path2.rmdir()
+        shutil.rmtree(path2)
     else:
         # Try to unlink the file
         try:
@@ -1271,23 +1361,103 @@ async def htmx_command(
 ):
 
     operands = dict(zip(names, paths))
-    try:
-        result_name, expr = command.split('=')
-        result_path = make_lazyexpr(result_name, expr, operands, user)
-    except (SyntaxError, ValueError):
-        return htmx_error(request,
-                          'Invalid syntax: expected <varname> = <expression>')
-    except TypeError as te:
-        return htmx_error(request, f'Invalid expression: {te}')
-    except KeyError as ke:
-        error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
-        return htmx_error(request, error)
-    except RuntimeError as exc:
-        return htmx_error(request, str(exc))
+    argv = command.split()
+
+    # First check for expressions
+    if argv[1] == '=':
+        try:
+            result_name, expr = command.split('=')
+            result_path = make_lazyexpr(result_name, expr, operands, user)
+        except (SyntaxError, ValueError):
+            return htmx_error(request,
+                              'Invalid syntax: expected <varname> = <expression>')
+        except TypeError as te:
+            return htmx_error(request, f'Invalid expression: {te}')
+        except KeyError as ke:
+            error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
+            return htmx_error(request, error)
+        except RuntimeError as exc:
+            return htmx_error(request, str(exc))
+
+    # then commands
+    elif argv[0] in {'cp', 'copy'}:
+        if len(argv) != 3:
+            return htmx_error(request, 'Invalid syntax: expected cp/copy <src> <dst>')
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MoveCopyPayload(src=src, dst=dst)
+        try:
+            result_path = await copy(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error copying file: {exc}')
+        result_path = await display_first(result_path, user)
+
+    elif argv[0] in {'i', 'info'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected i/info <path>')
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            paths = await get_list(path, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error listing path: {exc}')
+        if len(paths) != 1:
+            return htmx_error(request, f'dataset "{path}" not found')
+        result_path = path
+
+    elif argv[0] in {'ls', 'list'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected ls/list <path>')
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            paths = await get_list(path, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error listing path: {exc}')
+        # Get the first path to display
+        first_path = next(iter(paths), None)
+        if path.name == first_path:
+            result_path = path
+        else:
+            result_path = f'{path}/{first_path}' if first_path else path
+
+    elif argv[0] in {'mv', 'move'}:
+        if len(argv) != 3:
+            return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MoveCopyPayload(src=src, dst=dst)
+        try:
+            result_path = await move(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error moving file: {exc}')
+        result_path = await display_first(result_path, user)
+
+    elif argv[0] in {'rm', 'remove'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected rm/remove <path>')
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            # Nothing to show after removing, but anyway
+            result_path = await remove(path, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error removing file: {exc}')
+
+    else:
+        return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')
 
     # Redirect to display new dataset
     url = make_url(request, "html_home", path=result_path)
-    return htmx_redirect(hx_current_url, url, root='@personal')
+    return htmx_redirect(hx_current_url, url)
+
+
+async def display_first(result_path, user):
+    paths = await get_list(pathlib.Path(result_path), user)
+    if len(paths) > 1:
+        # Display the first path found
+        result_path = f'{result_path}/{paths[0]}'
+    elif len(paths) == 1 and not result_path.endswith(paths[0]):
+        result_path = f'{result_path}/{paths[0]}'
+    return result_path
 
 
 def htmx_error(request, msg):
@@ -1384,7 +1554,6 @@ async def htmx_upload(
             member_path.unlink()
         # We are done, redirect to home, and show the new files, starting with the first one
         first_member = next((m for m in new_members), None)
-        print(f"first_member: {first_member}")
         path = f'{name}/{first_member}'
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 

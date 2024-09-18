@@ -94,7 +94,7 @@ def cmd_list(args, auth_cookie):
         return
 
     for item in data:
-        print(f'{args.root}/{item}')
+        print(f'{item}')
 
 
 @handle_errors
@@ -142,6 +142,20 @@ def cmd_show(args, auth_cookie):
 
 @handle_errors
 @with_auth_cookie
+def cmd_move(args, auth_cookie):
+    moved = cat2.move(args.dataset, args.dest, args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset {args.dataset} moved to {moved}')
+
+
+@handle_errors
+@with_auth_cookie
+def cmd_copy(args, auth_cookie):
+    copied = cat2.copy(args.dataset, args.dest, args.urlbase, auth_cookie=auth_cookie)
+    print(f'Dataset {args.dataset} copied to {copied}')
+
+
+@handle_errors
+@with_auth_cookie
 def cmd_download(args, auth_cookie):
     path = cat2.download(args.dataset, args.localpath, args.urlbase, auth_cookie=auth_cookie)
     print(f'Dataset saved to {path}')
@@ -159,7 +173,7 @@ def cmd_upload(args, auth_cookie):
 @with_auth_cookie
 def cmd_remove(args, auth_cookie):
     removed = cat2.remove(args.dataset, args.urlbase, auth_cookie=auth_cookie)
-    print(f'Dataset (or subroot contents) removed: {removed}')
+    print(f'Dataset (or directory contents) removed: {removed}')
 
 
 def main():
@@ -188,10 +202,30 @@ def main():
 
     # list
     help = 'List all the available datasets in a root. Needs to be subscribed to the root.'
-    subparser = subparsers.add_parser('list', help=help)
+    subparser = subparsers.add_parser('list', aliases=['ls'], help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('root')
     subparser.set_defaults(func=cmd_list)
+
+    # copy
+    help = 'Copy a dataset to a different root.'
+    subparser = subparsers.add_parser('copy', aliases=['cp'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.add_argument('dest')
+    subparser.set_defaults(func=cmd_copy)
+
+    # move
+    help = 'Move a dataset to a different root.'
+    subparser = subparsers.add_parser('move', aliases=['mv'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.add_argument('dest')
+    subparser.set_defaults(func=cmd_move)
+
+    # remove
+    help = 'Remove a dataset from the subscriber.'
+    subparser = subparsers.add_parser('remove', aliases=['rm'], help=help)
+    subparser.add_argument('dataset', type=pathlib.Path)
+    subparser.set_defaults(func=cmd_remove)
 
     # url
     help = 'URL from where a dataset can be downloaded.'
@@ -208,14 +242,14 @@ def main():
     subparser.set_defaults(func=cmd_info)
 
     # show
-    help = 'Display a dataset'
+    help = 'Display a dataset.'
     subparser = subparsers.add_parser('show', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=dataset_with_slice)
     subparser.set_defaults(func=cmd_show)
 
     # download
-    help = 'Download a dataset and save it in the local system'
+    help = 'Download a dataset and save it in the local system.'
     subparser = subparsers.add_parser('download', help=help)
     subparser.add_argument('--json', action='store_true')
     subparser.add_argument('dataset', type=pathlib.Path)
@@ -223,17 +257,11 @@ def main():
     subparser.set_defaults(func=cmd_download)
 
     # upload
-    help = 'Upload a local dataset to subscriber'
+    help = 'Upload a local dataset to subscriber.'
     subparser = subparsers.add_parser('upload', help=help)
     subparser.add_argument('localpath', type=pathlib.Path)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_upload)
-
-    # remove
-    help = 'Remove a dataset from the subscriber'
-    subparser = subparsers.add_parser('remove', help=help)
-    subparser.add_argument('dataset', type=pathlib.Path)
-    subparser.set_defaults(func=cmd_remove)
 
     # Go
     args = utils.run_parser(parser)

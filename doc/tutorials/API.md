@@ -124,7 +124,7 @@ foo = caterva2.Root(
     user_auth={'username': 'user@example.com', 'password': 'foobar'})
 ```
 
-This also takes care of subscribing to `foo` if it hasn't been done yet.  To get the list of datasets in the root, just access `foo.node_list`:
+This also takes care of subscribing to `foo` if it hasn't been done yet.  To get the list of datasets in the root, just access `foo.file_list`:
 
 ```python
 ['ds-1d.b2nd', 'ds-hello.b2frame', 'ds-1d-b.b2nd', 'README.md',

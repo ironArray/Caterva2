@@ -38,7 +38,7 @@ response = cat2.subscribe(ROOT_NAME, URLBASE, auth_cookie=auth_cookie)
 # Get a handle to the root
 example = cat2.Root(ROOT_NAME, urlbase=URLBASE, user_auth=user_auth)
 # List the datasets in that root
-print(example.node_list)
+print(example.file_list)
 # Get a specific dataset
 array = example['dir1/ds-2d.b2nd']
 print(array.name, array.path)

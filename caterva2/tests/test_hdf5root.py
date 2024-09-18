@@ -31,12 +31,12 @@ def api_root(sub_urlbase, sub_user):
 
 
 def test_not_unsupported(api_root):
-    for node in api_root.node_list:
+    for node in api_root.file_list:
         assert not node.startswith('unsupported/')
 
 
 def test_ds_name_ext(api_root):
-    for node in api_root.node_list:
+    for node in api_root.file_list:
         node.endswith('.b2nd')  # no other conversions supported yet
 
 
