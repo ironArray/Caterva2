@@ -30,6 +30,7 @@ import fastapi
 
 # Requirements
 import blosc2
+import dotenv
 import furl
 import httpx
 import markdown
@@ -43,6 +44,9 @@ from caterva2.services.subscriber import db, schemas, users
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
+
+# Set CATERVA2_SECRET=XXX in .env file in working directory
+dotenv.load_dotenv()
 
 # Logging
 logger = logging.getLogger('sub')

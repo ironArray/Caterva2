@@ -59,6 +59,7 @@ subscriber = [
     "furl",
     "jinja2",
     "markdown",
+    "python-dotenv",
     "python-multipart",
 ]
 services = [
