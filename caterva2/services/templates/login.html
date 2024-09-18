@@ -8,7 +8,7 @@
 
 <div id="result" class="alert alert-danger" style="display: none"></div>
 
-<form action="/auth/jwt/login" method="post" onsubmit="submitForm(this, '/'); return false">
+<form action="{{ url('auth/jwt/login') }}" method="post" onsubmit="submitForm(this, '/'); return false">
     <div class="form-floating mb-2">
         <input type="email" name="username" class="form-control" placeholder="" required>
         <label class="form-label">Email address</label>
@@ -21,7 +21,7 @@
 </form>
 
 <p class="mt-2">
-<a href="/register">Register as a new user</a>
+<a href="{{ url('register') }}">Register as a new user</a>
 </p>
 
 {% endblock %}

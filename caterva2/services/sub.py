@@ -394,13 +394,13 @@ if user_auth_enabled():
     # TODO: Support user verification, allow password reset and user deletion.
 
 
-def static(path: str) -> str:
-    return f"{urlbase}static/{path}"
+def url(path: str) -> str:
+    return f"{urlbase}{path}"
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters['filesizeformat'] = custom_filesizeformat
-templates.env.globals['static'] = static
+templates.env.globals['url'] = url
 
 
 @app.get('/api/roots')

@@ -8,7 +8,7 @@
 
 <div id="result" class="alert alert-danger" style="display: none"></div>
 
-<form action="/auth/register" method="post" onsubmit="submitFormAsJSON(this, '/login'); return false">
+<form action="{{ url('auth/register') }}" method="post" onsubmit="submitFormAsJSON(this, '/login'); return false">
     <div class="form-floating mb-2">
         <input type="email" name="email" class="form-control" placeholder="" required>
         <label class="form-label">Email address</label>
@@ -21,7 +21,7 @@
 </form>
 
 <p class="mt-2">
-<a href="/login">Sign in if you already have an account</a>
+<a href="{{ url('login') }}">Sign in if you already have an account</a>
 </p>
 
 {% endblock %}

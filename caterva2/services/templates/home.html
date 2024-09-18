@@ -2,21 +2,21 @@
 <html>
 <head>
     <title>{% block title %}{% endblock %}</title>
-    <link rel="icon" type="image/png" href="{{ static('logo-caterva2-16x16.png') }}">
+    <link rel="icon" type="image/png" href="{{ url('static/logo-caterva2-16x16.png') }}">
 
     {# Vendor asets #}
-    <link href="{{ static('vendor/fontawesome-6.5.1.min.css') }}" rel="stylesheet">
+    <link href="{{ url('static/vendor/fontawesome-6.5.1.min.css') }}" rel="stylesheet">
 
     {# 2.0.2 breaks data viewer https://github.com/ironArray/Caterva2/issues/74 #}
-    <script src="{{ static('vendor/htmx-2.0.1.min.js') }}"></script>
-    <script src="{{ static('vendor/htmx-idiomorph-ext-0.3.0.min.js') }}"></script>
+    <script src="{{ url('static/vendor/htmx-2.0.1.min.js') }}"></script>
+    <script src="{{ url('static/vendor/htmx-idiomorph-ext-0.3.0.min.js') }}"></script>
 
     {# Custom bootstrap #}
-    <link href="{{ static('build/style.css') }}" rel="stylesheet">
+    <link href="{{ url('static/build/style.css') }}" rel="stylesheet">
 
     {# Project's assets #}
-    <script src="{{ static('main.js') }}"></script>
-    <link href="{{ static('main.css') }}" rel="stylesheet">
+    <script src="{{ url('static/main.js') }}"></script>
+    <link href="{{ url('static/main.css') }}" rel="stylesheet">
 </head>
 
 <body class="vh-120">
@@ -26,12 +26,12 @@
     <div>
         {% if username %}
         Logged in as {{ username }}.
-        <form action="/auth/jwt/logout" method="post" class="d-inline-block" id="logout-form"
+        <form action="{{ url('auth/jwt/logout') }}" method="post" class="d-inline-block" id="logout-form"
               onsubmit="submitForm(this, '/logout'); return false">
             <button type="submit" class="btn btn-link">Logout</button>
         </form>
         {% else %}
-        <a href="/login">Log in</a>
+        <a href="{{ url('login') }}">Log in</a>
         {% endif %}
     </div>
     <div>
