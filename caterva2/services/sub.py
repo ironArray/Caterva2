@@ -162,9 +162,12 @@ def truncate_path(path, size=35):
 def make_url(request, name, query=None, **path_params):
     url = request.app.url_path_for(name, **path_params)
     url = str(url)  # <starlette.datastructures.URLPath>
-
     if query:
         url = furl.furl(url).set(query).url
+
+    # urlbase ends with slash (in my opinion it shouldn't, but if we remove the trailing
+    # slash then tests fail)
+    url = urlbase + url[1:]
 
     return url
 
