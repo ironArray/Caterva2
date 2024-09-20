@@ -167,7 +167,7 @@ def make_url(request, name, query=None, **path_params):
 
     # urlbase ends with slash (in my opinion it shouldn't, but if we remove the trailing
     # slash then tests fail)
-    url = urlbase + url[1:]
+    url = urlbase + url
 
     return url
 
@@ -395,7 +395,7 @@ if user_auth_enabled():
 
 
 def url(path: str) -> str:
-    return f"{urlbase}{path}"
+    return f"{urlbase}/{path}"
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
@@ -1720,7 +1720,9 @@ def main():
     # Run
     global urlbase
     urlbase = args.url
-    utils.uvicorn_run(app, args)
+    root_path = str(furl.furl(urlbase).path)
+    utils.uvicorn_run(app, args, root_path=root_path)
+
 
 
 if __name__ == '__main__':

@@ -55,8 +55,6 @@ def walk_files(root, exclude=None):
 def urlbase_type(string):
     if not (string.startswith('http://') or string.startswith('https://')):
         raise ValueError("invalid HTTP(S) URL base", string)
-    if not string.endswith('/'):
-        string += '/'
     return string
 
 
@@ -111,7 +109,7 @@ def run_parser(parser):
     # HTTP service
     if hasattr(args, 'http'):
         if not args.url:
-            args.url = f'http://{args.http[0]}:{args.http[1]}/'
+            args.url = f'http://{args.http}'
 
     return args
 
@@ -120,12 +118,12 @@ def run_parser(parser):
 # Web server related
 #
 
-def uvicorn_run(app, args):
+def uvicorn_run(app, args, root_path=''):
     http = args.http
     if http.uds:
-        uvicorn.run(app, uds=http.uds)
+        uvicorn.run(app, uds=http.uds, root_path=root_path)
     else:
-        uvicorn.run(app, host=http.host, port=http.port)
+        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
 
 
 #

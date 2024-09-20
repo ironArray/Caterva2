@@ -576,7 +576,7 @@ class File:
     >>> file.name
     'README.md'
     >>> file.urlbase
-    'http://localhost:8002/'
+    'http://localhost:8002'
     >>> file.path
     PosixPath('foo/README.md')
     >>> file.meta['cparams']
