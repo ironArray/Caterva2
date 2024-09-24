@@ -62,6 +62,22 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
         A mapping of available root names to their ``name``, ``http``
         endpoint and whether they are ``subscribed`` or not.
 
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> cat2.get_roots("https://demo.caterva2.net/")
+    {
+    'h5lung_j2k':
+        {'name': 'h5lung_j2k', 'http': 'localhost:8012', 'subscribed': True},
+    'example':
+        {'name': 'example', 'http': 'localhost:8010', 'subscribed': True},
+    'h5example':
+        {'name': 'h5example', 'http': 'localhost:8013', 'subscribed': None},
+    'h5numbers_j2k':
+        {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': None},
+    'b2tests':
+        {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
+    }
     """
     urlbase, _ = _format_paths(urlbase)
     return api_utils.get(f'{urlbase}/api/roots', auth_cookie=auth_cookie)
@@ -84,6 +100,16 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     str
         The response from the server.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> root_name = 'h5numbers_j2k'
+    >>> cat2.subscribe(root_name, urlbase)
+    Ok
+    >>> cat2.get_roots(urlbase)[root_name]
+    {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': True}
     """
     urlbase, root = _format_paths(urlbase, root)
     return api_utils.post(f'{urlbase}/api/subscribe/{root}',
@@ -107,6 +133,14 @@ def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     list
         The list of datasets, as name strings relative to it.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> cat2.get_list('example', 'https://demo.caterva2.net/')
+    ['ds-2d-fields.b2nd', 'lung-jpeg2000_10x.b2nd', 'ds-1d-fields.b2nd', 'ds-1d.b2nd',
+    'ds-hello.b2frame', 'ds-sc-attr.b2nd', 'README.md', 'ds-1d-b.b2nd', 'tomo-guess-test.b2nd',
+    'dir2/ds-4d.b2nd', 'dir1/ds-3d.b2nd', 'dir1/ds-2d.b2nd']
     """
     urlbase, path = _format_paths(urlbase, path)
     return api_utils.get(f'{urlbase}/api/list/{path}',
@@ -131,6 +165,20 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     dict
         The information about the dataset, as a mapping of property names to
         their respective values.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> path = 'example/ds-2d-fields.b2nd'
+    >>> cat2.get_info(path, 'https://demo.caterva2.net/')
+    {'shape': [100, 200], 'chunks': [100, 200], 'blocks': [25, 200],
+    'dtype': "[('a', '<f4'), ('b', '<f8')]",
+    'schunk': {'cbytes': 37192, 'chunkshape': 20000, 'chunksize': 240000,
+    'contiguous': True, 'cparams': {'codec': 5, 'filters': [0, 0, 0, 0, 0, 1],
+    'filters_meta': [0, 0, 0, 0, 0, 0], 'typesize': 12, 'blocksize': 60000,
+    'filters, meta': [[1, 0]]}, 'cratio': 6.453000645300064, 'nbytes': 240000,
+    'urlpath': '/home/caterva/caterva2-deploy/state/subscriber/cache/example/ds-2d-fields.b2nd',
+    'vlmeta': {}, 'nchunks': 1}}
     """
     urlbase, path = _format_paths(urlbase, path)
     return api_utils.get(f'{urlbase}/api/info/{path}',
@@ -157,6 +205,14 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
     -------
     numpy.ndarray
         The slice of the dataset.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> cat2.fetch('example/ds-2d-fields.b2nd', urlbase, "0:2, 0:2")
+    [[(0.0000000e+00, 1.       ) (5.0002502e-05, 1.00005  )]
+     [(1.0000500e-02, 1.0100005) (1.0050503e-02, 1.0100505)]]
     """
     urlbase, path = _format_paths(urlbase, path)
     data = api_utils.fetch_data(path, urlbase,
@@ -184,6 +240,19 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
     -------
     bytes obj
         The compressed chunk.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> info_schunk = cat2.get_info('example/ds-2d-fields.b2nd', urlbase)['schunk']
+    >>> info_schunk['nchunks']
+    1
+    >>> info_schunk['cratio']
+    6.453000645300064
+    >>> chunk = cat2.get_chunk('example/ds-2d-fields.b2nd', 0,  urlbase)
+    >>> info_schunk['chunksize'] / len(chunk)
+    6.453000645300064
     """
     urlbase, path = _format_paths(urlbase, path)
     data = api_utils._xget(f'{urlbase}/api/chunk/{path}', {'nchunk': nchunk},
