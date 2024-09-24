@@ -29,7 +29,7 @@ jobs:
         # Use the version of python-blosc2 in main for now
         #pip install git+https://github.com/Blosc/python-blosc2.git
         # Workaround until we fix the issue with proxies
-        pip install git+https://github.com/Blosc/python-blosc2.git@5a5a67229c91b30dcc753ca24030c3f5ef2bb5d9
+        pip install git+https://github.com/Blosc/python-blosc2.git@52c651a9fdedd4bcb20fd17c4c03bf94092a230e
     - name: Test with pytest
       run: |
         python -m pytest
