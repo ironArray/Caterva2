@@ -54,6 +54,7 @@ base-services = [
 subscriber = [
     "aiosqlite",
     "caterva2[base-services]",
+    "fastapi-mail",
     "fastapi-users[sqlalchemy]",
     "uvicorn[standard]",
     "furl",

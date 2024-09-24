@@ -41,6 +41,7 @@ import numpy as np
 from caterva2 import utils, api_utils, models
 from caterva2.services import srv_utils
 from caterva2.services.subscriber import db, schemas, users
+from caterva2.services import settings
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -167,7 +168,7 @@ def make_url(request, name, query=None, **path_params):
 
     # urlbase ends with slash (in my opinion it shouldn't, but if we remove the trailing
     # slash then tests fail)
-    url = urlbase + url
+    url = settings.urlbase + url
 
     return url
 
@@ -387,11 +388,14 @@ if user_auth_enabled():
         prefix="/auth/jwt", tags=["auth"]
     )
     app.include_router(
-        users.fastapi_users.get_register_router(
-            schemas.UserRead, schemas.UserCreate),
+        users.fastapi_users.get_register_router(schemas.UserRead, schemas.UserCreate),
         prefix="/auth", tags=["auth"],
     )
-    # TODO: Support user verification, allow password reset and user deletion.
+    app.include_router(
+        users.fastapi_users.get_reset_password_router(),
+        prefix="/auth", tags=["auth"],
+    )
+    # TODO: Support user verification and user deletion.
 
 
 def url(path: str) -> str:
@@ -1065,7 +1069,29 @@ if user_auth_enabled():
 
         return templates.TemplateResponse(request, "register.html")
 
-    # TODO: Support user verification, allow password reset and user deletion.
+    @app.get("/forgot-password", response_class=HTMLResponse)
+    async def html_forgot_password(
+            request: Request,
+            user: db.User = Depends(optional_user)
+    ):
+        if user:
+            return RedirectResponse(urlbase, status_code=307)
+
+        return templates.TemplateResponse(request, "forgot-password.html")
+
+    @app.get("/reset-password/{token}", response_class=HTMLResponse, name="html-reset-password")
+    async def html_reset_password(
+            request: Request,
+            token: str,
+            user: db.User = Depends(optional_user)
+    ):
+        if user:
+            return RedirectResponse(urlbase, status_code=307)
+
+        context = {'token': token}
+        return templates.TemplateResponse(request, "reset-password.html", context)
+
+    # TODO: Support user verification and user deletion.
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1669,20 +1695,22 @@ def parse_size(size):
 
 
 def main():
+    # Read configuration file
     conf = utils.get_conf('subscriber', allow_id=True)
+    global quota, urlbase
+    quota = parse_size(conf.get('.quota'))
+    urlbase = conf.get('.urlbase')
+
+    # Parse command line arguments
     _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
     parser = utils.get_parser(broker=conf.get('broker.http', ''),
                               http=conf.get('.http', 'localhost:8002'),
-                              url=conf.get('.url'),
                               loglevel=conf.get('.loglevel', 'warning'),
                               statedir=conf.get('.statedir', _stdir),
                               id=conf.id)
     args = utils.run_parser(parser)
-
-    # Global configuration
-    global broker, quota
+    global broker
     broker = args.broker
-    quota = parse_size(conf.get('.quota'))
 
     # Init cache
     global statedir, cache
@@ -1718,8 +1746,6 @@ def main():
     tomography.init(abspath_and_dataprep)
 
     # Run
-    global urlbase
-    urlbase = args.url
     root_path = str(furl.furl(urlbase).path)
     utils.uvicorn_run(app, args, root_path=root_path)
 

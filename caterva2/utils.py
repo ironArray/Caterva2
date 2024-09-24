@@ -99,7 +99,6 @@ def get_parser(loglevel='warning', statedir=None, id=None,
     if http is not None:
         parser.add_argument('--http', default=http, type=Socket,
                             help='Listen to given hostname:port or unix socket')
-        parser.add_argument('--url', default=url, type=urlbase_type)
     if statedir is not None:
         parser.add_argument('--statedir', default=statedir, type=pathlib.Path)
     parser.add_argument('--loglevel', default=loglevel)
@@ -112,11 +111,6 @@ def run_parser(parser):
     # Logging
     loglevel = args.loglevel.upper()
     logging.basicConfig(level=loglevel)
-
-    # HTTP service
-    if hasattr(args, 'http'):
-        if not args.url:
-            args.url = f'http://{args.http}'
 
     return args
 

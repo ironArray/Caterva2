@@ -22,6 +22,7 @@ import uuid
 from typing import Optional
 
 from fastapi import Depends, Request
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import (
     AuthenticationBackend,
@@ -31,6 +32,34 @@ from fastapi_users.authentication import (
 from fastapi_users.db import SQLAlchemyUserDatabase
 
 from .db import User, get_user_db
+
+
+conf = ConnectionConfig(
+    MAIL_USERNAME='',
+    MAIL_PASSWORD='',
+    MAIL_FROM = "noreply@cat2.cloud",
+    MAIL_PORT = 25,
+    MAIL_SERVER = "localhost",
+    MAIL_STARTTLS = False,
+    MAIL_SSL_TLS = False,
+    USE_CREDENTIALS = False,
+    VALIDATE_CERTS = False,
+    #SUPRESS_SEND=True,
+    MAIL_DEBUG=True,
+)
+
+async def send_email(recipients, body):
+    message = MessageSchema(
+        subject="Fastapi-Mail module",
+        recipients=recipients,
+        body=body,
+        subtype=MessageType.html)
+
+    fm = FastMail(conf)
+#   print('<<<<<<<<<<')
+#   print(message.body)
+#   print('>>>>>>>>>>')
+    await fm.send_message(message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -43,7 +72,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         return os.environ.get('CATERVA2_SECRET')
 
     # TODO: Replace with actual functionality;
-    # support user verification, allow password reset and user deletion.
+    # support user verification and user deletion.
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         print(f"User {user.id} has registered.")
@@ -51,7 +80,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None
     ):
-        print(f"User {user.id} has forgot their password. Reset token: {token}")
+        from caterva2.services.sub import make_url, templates
+
+        template = templates.get_template('emails/forgot-password.html')
+        url = make_url(request, 'html-reset-password', token=token)
+        body = template.render({'reset_url': url})
+        await send_email([user.email], body)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None
