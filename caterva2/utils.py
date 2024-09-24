@@ -8,10 +8,14 @@
 ###############################################################################
 
 import argparse
+import asyncio
+import collections
 import contextlib
 import logging
 import os
 import pathlib
+import random
+import string
 
 # Requirements
 import uvicorn
@@ -20,6 +24,9 @@ try:
     import tomllib as toml
 except ImportError:
     import tomli as toml
+
+from caterva2.services.subscriber import (
+    db as sub_db, schemas as sub_schemas, users as sub_users)
 
 
 #
@@ -204,3 +211,31 @@ def get_conf(prefix=None, allow_id=False):
             return Conf(conf, prefix=prefix, id=id_)
     except FileNotFoundError:
         return Conf({}, prefix=prefix, id=id_)
+
+
+#
+# Subscriber related
+#
+
+# <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
+UserAuth = collections.namedtuple('UserAuth', ['username', 'password'])
+
+async def acreate_user(username, password, state_dir=None):
+    user = UserAuth(username=username, password=password)
+
+    sub_state = state_dir
+    sub_state.mkdir(parents=True, exist_ok=True)
+    await sub_db.create_db_and_tables(sub_state)
+    cx = contextlib.asynccontextmanager
+    async with cx(sub_db.get_async_session)() as session:
+        async with cx(sub_db.get_user_db)(session) as udb:
+            async with cx(sub_users.get_user_manager)(udb) as umgr:
+                schema = sub_schemas.UserCreate(email=user.username, password=user.password)
+                await umgr.create(schema)
+
+    return user
+
+def create_user(username, password=None, state_dir=None):
+    if password is None:
+        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
+    return asyncio.run(acreate_user(username, password, state_dir=state_dir))
