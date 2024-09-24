@@ -1201,6 +1201,8 @@ async def htmx_path_list(
                     'label': truncate_path(path),
                 })
 
+    datasets = sorted(datasets, key=lambda x: x['name'])
+
     # Render template
     cmd_url = make_url(request, 'htmx_command')
     search_url = make_url(request, 'htmx_path_list', {'roots': roots})
