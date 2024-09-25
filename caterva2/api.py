@@ -284,6 +284,14 @@ def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=N
     -------
     Path
         The path to the downloaded file.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> path = 'example/ds-2d-fields.b2nd'
+    >>> cat2.download(pathlib.Path(path), urlbase=urlbase)
+    example/ds-2d-fields.b2nd
     """
     urlbase, dataset = _format_paths(urlbase, dataset)
     url = api_utils.get_download_url(dataset, urlbase)
