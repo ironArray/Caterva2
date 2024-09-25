@@ -68,7 +68,7 @@ locks = {}
 urlbase: str = ""
 
 
-class PubDataset(blosc2.ProxySource):
+class PubSourceDataset:
     """
     Class for getting chunks from a dataset on a publisher service.
     """
@@ -78,24 +78,24 @@ class PubDataset(blosc2.ProxySource):
             suffix = abspath.suffix
             if suffix == '.b2nd':
                 metadata = models.Metadata(**metadata)
-                self.shape = metadata.shape
-                self.chunks = metadata.chunks
-                self.blocks = metadata.blocks
+                self._shape = metadata.shape
+                self._chunks = metadata.chunks
+                self._blocks = metadata.blocks
                 dtype = metadata.dtype
                 if metadata.dtype.startswith('['):
                     # TODO: eval is dangerous, but we mostly trust the metadata
                     # This is a list, so we need to convert it to a string
                     dtype = eval(dtype)
-                self.dtype = np.dtype(dtype)
+                self._dtype = np.dtype(dtype)
             else:
                 if suffix == '.b2frame':
                     metadata = models.SChunk(**metadata)
                 else:
                     abspath = pathlib.Path(f'{abspath}.b2')
                     metadata = models.SChunk(**metadata)
-                self.typesize = metadata.cparams.typesize
-                self.chunksize = metadata.chunksize
-                self.nbytes = metadata.nbytes
+                self._typesize = metadata.cparams.typesize
+                self._chunksize = metadata.chunksize
+                self._nbytes = metadata.nbytes
             self.abspath = abspath
             if self.abspath is not None:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
@@ -110,7 +110,7 @@ class PubDataset(blosc2.ProxySource):
         args = dict(url=url, params={'nchunk': nchunk}, timeout=5)
         return client, args
 
-    def get_chunk(self, nchunk):
+    def _get_chunk(self, nchunk):
         client, req_args = self._get_request_args(nchunk, return_async_client=False)
 
         response = client.get(**req_args)
@@ -118,7 +118,7 @@ class PubDataset(blosc2.ProxySource):
         chunk = response.content
         return chunk
 
-    async def aget_chunk(self, nchunk):
+    async def _aget_chunk(self, nchunk):
         client, req_args = self._get_request_args(nchunk, return_async_client=True)
 
         async with client.stream('GET', **req_args) as resp:
@@ -128,12 +128,66 @@ class PubDataset(blosc2.ProxySource):
             chunk = b''.join(buffer)
             return chunk
 
+
+# Class representing a NDArray in a publisher
+class PubNDDataset(blosc2.ProxyNDSource, PubSourceDataset):
+    @property
+    def shape(self):
+        return self._shape
+    @property
+    def chunks(self):
+        return self._chunks
+    @property
+    def blocks(self):
+        return self._blocks
+    @property
+    def dtype(self):
+        return self._dtype
+    def get_chunk(self, nchunk: int) -> bytes:
+        return self._get_chunk(nchunk)
+    async def aget_chunk(self, nchunk: int) -> bytes:
+        return await self._aget_chunk(nchunk)
+
+
+# Class representing a SChunk in a publisher
+class PubSCDataset(blosc2.ProxySource, PubSourceDataset):
+    @property
+    def typesize(self):
+        return self._typesize
+    @property
+    def chunksize(self):
+        return self._chunksize
+    @property
+    def nbytes(self):
+        return self._nbytes
+    def get_chunk(self, nchunk: int) -> bytes:
+        return self._get_chunk(nchunk)
+    async def aget_chunk(self, nchunk: int) -> bytes:
+        return await self._aget_chunk(nchunk)
+
+
+# Factory function for creating a proxy for a dataset in publisher
+def PubDataset(abspath, path, metadata=None):
+    dataset = PubSourceDataset(abspath, path, metadata)
+    # By using __new__() and updating the internal dict of the instance,
+    # we can return the right class avoiding calling PubSourceDataset.__init__ again
+    if hasattr(dataset, '_shape'):
+        # return PubNDDataset(abspath, path, metadata)
+        instance = PubNDDataset.__new__(PubNDDataset)
+    else:
+        # return PubSCDataset(abspath, path, metadata)
+        instance = PubSCDataset.__new__(PubSCDataset)
+    instance.__dict__.update(dataset.__dict__)
+    return instance
+
+
 def get_disk_usage():
     exclude = {'db.json', 'db.sqlite'}
     return sum(
         path.stat().st_size
         for path, _ in utils.walk_files(statedir, exclude=exclude)
     )
+
 
 def truncate_path(path, size=35):
     """
