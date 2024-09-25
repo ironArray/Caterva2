@@ -58,7 +58,7 @@ root = "root-examples"
 
 [subscriber.1]
 http = "localhost:8002"
-url = "https://cat2.example.com/"  # e.g. served by reverse proxy
+urlbase = "https://cat2.example.com"  # e.g. served by reverse proxy
 statedir = "_caterva2/sub"
 loglevel = "warning"
 ```

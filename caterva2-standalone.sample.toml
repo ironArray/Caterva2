@@ -14,7 +14,7 @@
 statedir = "state/subscriber"
 #http = "state/subscriber/uvicorn.socket"
 http = "localhost:8002"
-url = "http://localhost:8002"
+urlbase = "http://localhost:8002"
 quota = "10GB"
 
 # The client section defines the credentials for the client to authenticate
