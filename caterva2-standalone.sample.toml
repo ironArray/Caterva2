@@ -11,8 +11,8 @@
 # - quota: if defined it will limit the disk usage
 #
 [subscriber]
-statedir = "state/subscriber"
-#http = "state/subscriber/uvicorn.socket"
+statedir = "_caterva2/subscriber"
+#http = "_caterva2/subscriber/uvicorn.socket"
 http = "localhost:8002"
 urlbase = "http://localhost:8002"
 quota = "10GB"
