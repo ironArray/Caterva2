@@ -137,7 +137,7 @@ Of course, use of HTTPS is very encouraged in this scenario, e.g. by placing the
 ```toml
 [subscriber]
 http = "localhost:8002"  # reverse proxy target
-url = "https://sub.edu.example.org:3126/"  # reverse proxy address
+urlbase = "https://sub.edu.example.org:3126"  # reverse proxy address
 ```
 
 ## Client setup
@@ -147,7 +147,7 @@ Clients at the example workstation need to know the address of the subscriber th
 The command-line client `cat2cli` provides the `--subscriber` option for that.  Running this at the workstation:
 
 ```sh
-cat2cli --subscriber http://sub.edu.example.org:3126/ roots
+cat2cli --subscriber http://sub.edu.example.org:3126 roots
 ```
 
 Will retrieve the list of known roots from the subscriber that we set up above.  Should authentication be needed, `--username` and `--password` options may also be used.
@@ -156,7 +156,7 @@ Since `cat2cli` also supports `caterva2.toml`, this configuration in the current
 
 ```toml
 [subscriber]
-url = "http://sub.edu.example.org:3126/"  # "https://..." if needed
+urlbase = "http://sub.edu.example.org:3126"  # "https://..." if needed
 
 #[client]  # uncomment section if needed
 #username = "user@example.com"
