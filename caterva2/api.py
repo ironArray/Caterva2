@@ -26,16 +26,16 @@ pub_host_default = 'localhost:8001'
 sub_host_default = 'localhost:8002'
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
-sub_urlbase_default = f'http://{sub_host_default}/'
-"""The default base of URLs provided by the subscriber (slash-terminated)."""
+sub_urlbase_default = f'http://{sub_host_default}'
+"""The default base of URLs provided by the subscriber."""
 
 
 def _format_paths(urlbase, path=None):
     if urlbase is not None:
         if isinstance(urlbase, pathlib.Path):
             urlbase = urlbase.as_posix()
-        if not urlbase.endswith("/"):
-            urlbase += "/"
+        if urlbase.endswith("/"):
+            urlbase = urlbase[:-1]
             urlbase = pathlib.Path(urlbase)
     if path is not None:
         p = path.as_posix() if isinstance(path, pathlib.Path) else path
@@ -52,7 +52,7 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
     ----------
 
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -64,7 +64,7 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
 
     """
     urlbase, _ = _format_paths(urlbase)
-    return api_utils.get(f'{urlbase}api/roots', auth_cookie=auth_cookie)
+    return api_utils.get(f'{urlbase}/api/roots', auth_cookie=auth_cookie)
 
 
 def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
@@ -76,7 +76,7 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
     root : str
         The name of the root to subscribe to.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -86,7 +86,7 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
         The response from the server.
     """
     urlbase, root = _format_paths(urlbase, root)
-    return api_utils.post(f'{urlbase}api/subscribe/{root}',
+    return api_utils.post(f'{urlbase}/api/subscribe/{root}',
                           auth_cookie=auth_cookie)
 
 
@@ -99,7 +99,7 @@ def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
     path : str
         The path to a root, directory or dataset.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -109,7 +109,7 @@ def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
         The list of datasets, as name strings relative to it.
     """
     urlbase, path = _format_paths(urlbase, path)
-    return api_utils.get(f'{urlbase}api/list/{path}',
+    return api_utils.get(f'{urlbase}/api/list/{path}',
                          auth_cookie=auth_cookie)
 
 
@@ -122,7 +122,7 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     path : str
         The path of the dataset.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -133,7 +133,7 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
         their respective values.
     """
     urlbase, path = _format_paths(urlbase, path)
-    return api_utils.get(f'{urlbase}api/info/{path}',
+    return api_utils.get(f'{urlbase}/api/info/{path}',
                          auth_cookie=auth_cookie)
 
 
@@ -147,7 +147,7 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
     path : str
         The path of the dataset.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     slice_ : str
         The slice to fetch (the whole dataset if missing).
     auth_cookie : str
@@ -176,7 +176,7 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
     nchunk : int
         The unidimensional chunk id to get.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -186,7 +186,7 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
         The compressed chunk.
     """
     urlbase, path = _format_paths(urlbase, path)
-    data = api_utils._xget(f'{urlbase}api/chunk/{path}', {'nchunk': nchunk},
+    data = api_utils._xget(f'{urlbase}/api/chunk/{path}', {'nchunk': nchunk},
                            auth_cookie=auth_cookie)
     return data.content
 
@@ -207,7 +207,7 @@ def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=N
         The path to download the dataset to.  If not provided,
         the dataset will be downloaded to the current working directory.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -245,7 +245,7 @@ def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     dataset : Path
         The remote path to upload the dataset to.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -272,7 +272,7 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
     path : Path
         The path of the dataset or directory.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -289,7 +289,7 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
     False
     """
     urlbase, path = _format_paths(urlbase, path)
-    return api_utils.post(f'{urlbase}api/remove/{path}',
+    return api_utils.post(f'{urlbase}/api/remove/{path}',
                           auth_cookie=auth_cookie)
 
 
@@ -304,7 +304,7 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     dst : Path
         The destination path of the dataset or directory.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -323,7 +323,7 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
-    result =  api_utils.post(f'{urlbase}api/move/',
+    result =  api_utils.post(f'{urlbase}/api/move/',
                              {'src': str(src), 'dst': str(dst)},
                              auth_cookie=auth_cookie)
     return pathlib.Path(result)
@@ -340,7 +340,7 @@ def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     dst : Path
         The destination path of the dataset or directory.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -357,7 +357,7 @@ def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
-    result =  api_utils.post(f'{urlbase}api/copy/',
+    result =  api_utils.post(f'{urlbase}/api/copy/',
                              {'src': str(src), 'dst': str(dst)},
                              auth_cookie=auth_cookie)
     return pathlib.Path(result)
@@ -381,7 +381,7 @@ def lazyexpr(name, expression, operands,
         A mapping of the variables used in the expression to the dataset paths
         that they refer to.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -394,7 +394,7 @@ def lazyexpr(name, expression, operands,
     # Convert possible Path objects in operands to strings so that they can be serialized
     operands = {k: str(v) for k, v in operands.items()}
     expr = dict(name=name, expression=expression, operands=operands)
-    dataset = api_utils.post(f'{urlbase}api/lazyexpr/', expr, auth_cookie=auth_cookie)
+    dataset = api_utils.post(f'{urlbase}/api/lazyexpr/', expr, auth_cookie=auth_cookie)
     return pathlib.Path(dataset)
 
 
@@ -407,7 +407,7 @@ class Root:
     root : str
         The name of the root to subscribe to.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     user_auth : dict
         An optional mapping of fields and values to be used as data to be
         posted for authenticating the user and get an authorization token for
@@ -421,7 +421,7 @@ class Root:
             api_utils.get_auth_cookie(urlbase, user_auth)
             if user_auth else None)
 
-        ret = api_utils.post(f'{urlbase}api/subscribe/{name}',
+        ret = api_utils.post(f'{urlbase}/api/subscribe/{name}',
                              auth_cookie=self.auth_cookie)
         if ret != 'Ok':
             roots = get_roots(urlbase)
@@ -429,7 +429,7 @@ class Root:
                              f' (only {roots.keys()} available)')
     @property
     def file_list(self):
-        return api_utils.get(f'{self.urlbase}api/list/{self.name}',
+        return api_utils.get(f'{self.urlbase}/api/list/{self.name}',
                              auth_cookie=self.auth_cookie)
 
     def __repr__(self):
@@ -565,7 +565,7 @@ class File:
     root : str
         The name of the root.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -594,7 +594,7 @@ class File:
         self.urlbase = urlbase
         self.path = pathlib.Path(f'{self.root}/{self.name}')
         self.auth_cookie = auth_cookie
-        self.meta = api_utils.get(f'{urlbase}api/info/{self.path}',
+        self.meta = api_utils.get(f'{urlbase}/api/info/{self.path}',
                                   auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
@@ -803,7 +803,7 @@ class Dataset(File):
     root : str
         The name of the root.
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 

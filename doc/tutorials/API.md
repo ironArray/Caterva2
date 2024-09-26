@@ -4,7 +4,7 @@ To follow these instructions, make sure that you have started test Caterva2 serv
 
 ## The top level client API
 
-Let's try Caterva2's top level client API (fully described in [](ref-API-top-level)) against the default subscriber at `http://localhost:8002/` (you may specify a different one via the `urlbase` argument) .  Run your Python interpreter and enter:
+Let's try Caterva2's top level client API (fully described in [](ref-API-top-level)) against the default subscriber at `http://localhost:8002` (you may specify a different one via the `urlbase` argument) .  Run your Python interpreter and enter:
 
 ```python
 import caterva2
@@ -16,7 +16,7 @@ roots = caterva2.get_roots()
 
 ```python
 cookie = caterva2.api_utils.get_auth_cookie(
-    'http://localhost:8002/',
+    'http://localhost:8002',
     {'username': 'user@example.com', 'password': 'foobar'})
 roots = caterva2.get_roots(auth_cookie=cookie)
 ```

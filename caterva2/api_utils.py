@@ -66,7 +66,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
     Parameters
     ----------
     urlbase : str
-        The base of URLs (slash-terminated) of the subscriber to query.
+        The base of URLs of the subscriber to query.
     user_auth : dict
         A mapping of fields and values used as data to be posted for
         authenticating the user.
@@ -77,7 +77,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
         An authentication token that may be used as a cookie in further
         requests to the subscriber.
     """
-    url = f'{urlbase}auth/jwt/login'
+    url = f'{urlbase}/auth/jwt/login'
     client, url = get_client_and_url(server, url)
 
     if hasattr(user_auth, '_asdict'):  # named tuple (from tests)
@@ -89,7 +89,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
 
 
 def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
-    response = _xget(f'{urlbase}api/fetch/{path}', params=params,
+    response = _xget(f'{urlbase}/api/fetch/{path}', params=params,
                      auth_cookie=auth_cookie, server=server)
     data = response.content
     # Try different deserialization methods
@@ -103,7 +103,7 @@ def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
 
 
 def get_download_url(path, urlbase):
-    return f'{urlbase}api/fetch/{path}'
+    return f'{urlbase}/api/fetch/{path}'
 
 
 def b2_unpack(filepath):
@@ -150,7 +150,7 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None)
 
 
 def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None, server=None):
-    client, url = get_client_and_url(server, f'{urlbase}api/upload/{remotepath}')
+    client, url = get_client_and_url(server, f'{urlbase}/api/upload/{remotepath}')
 
     headers = {'Cookie': auth_cookie} if auth_cookie else None
     with open(localpath, 'rb') as f:

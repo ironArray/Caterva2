@@ -338,7 +338,7 @@ def test_download_b2frame(examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, t
 
     # Using 2-step download
     urlpath = ds.get_download_url()
-    assert urlpath == f"{sub_urlbase}api/fetch/{ds.path}"
+    assert urlpath == f"{sub_urlbase}/api/fetch/{ds.path}"
     data = httpx.get(urlpath,
                      headers={'Cookie': sub_jwt_cookie} if sub_user else None)
     assert data.status_code == 200
@@ -390,7 +390,7 @@ def test_download_regular_file(examples_dir, sub_urlbase, sub_user, sub_jwt_cook
 
     # Using 2-step download
     urlpath = ds.get_download_url()
-    assert urlpath == f"{sub_urlbase}api/fetch/{ds.path}"
+    assert urlpath == f"{sub_urlbase}/api/fetch/{ds.path}"
     data = httpx.get(urlpath,
                      headers={'Cookie': sub_jwt_cookie} if sub_user else None)
     assert data.status_code == 200
