@@ -1219,9 +1219,6 @@ if user_auth_enabled():
         list of dict
             A list of all users (as dictionaries).
         """
-        if not user.is_superuser:
-            srv_utils.raise_unauthorized('Only superusers can list users')
-
         return await utils.alist_users()
 
 
