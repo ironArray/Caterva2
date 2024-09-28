@@ -1176,7 +1176,35 @@ if user_auth_enabled():
             return False, f'Error in adding {newuser}: {error_message}'
         return True, f'User {newuser} added (with password {password})'
 
-    # TODO: Support user verification and user deletion.
+    @app.get('/api/deluser/{deluser}')
+    async def del_user(
+                deluser: str,
+                user: db.User = Depends(current_active_user),
+                ):
+        """
+        Delete a user.
+
+        Parameters
+        ----------
+        deluser : str
+            The username of the user to delete.
+
+        Returns
+        -------
+        tuple : bool, str
+            A tuple with a boolean indicating success/error and a message.
+        """
+        if not user.is_superuser:
+            srv_utils.raise_unauthorized('Only superusers can delete users')
+
+        try:
+            await utils.adel_user(deluser)
+        except Exception as exc:
+            error_message = str(exc) if str(exc) else exc.__class__.__name__
+            return False, f'Error in deleting {deluser}: {error_message}'
+        return True, f'User {deluser} deleted'
+
+    # TODO: Support user verification
 
 
 @app.get("/", response_class=HTMLResponse)

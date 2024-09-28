@@ -421,6 +421,30 @@ def adduser(newuser, urlbase=sub_urlbase_default, auth_cookie=None):
     return api_utils.get(f'{urlbase}/api/adduser/{newuser}', auth_cookie=auth_cookie)
 
 
+def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Delete a user from the subscriber.
+
+    Parameters
+    ----------
+    user : str
+        The username of the user to delete.
+    urlbase : str
+        The base of URLs of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    tuple : (bool, str)
+        A tuple with a boolean indicating whether the user was deleted or not
+        and an explanatory message.
+
+    """
+    urlbase, _ = _format_paths(urlbase)
+    return api_utils.get(f'{urlbase}/api/deluser/{user}', auth_cookie=auth_cookie)
+
+
 class Root:
     """
     A root is a remote repository that can be subscribed to.

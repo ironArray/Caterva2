@@ -238,3 +238,16 @@ async def acreate_user(username, password, is_superuser, state_dir=None):
 def create_user(username, password, is_superuser, state_dir=None):
     return asyncio.run(acreate_user(username, password, is_superuser,
                                     state_dir=state_dir))
+
+
+async def adel_user(username: str):
+    async with contextlib.asynccontextmanager(sub_db.get_async_session)() as session:
+        async with contextlib.asynccontextmanager(sub_db.get_user_db)(session) as udb:
+            async with contextlib.asynccontextmanager(sub_users.get_user_manager)(udb) as umgr:
+                user = await umgr.get_by_email(username)
+                if user:
+                    await umgr.delete(user)
+
+
+def del_user(username):
+    return asyncio.run(adel_user(username))

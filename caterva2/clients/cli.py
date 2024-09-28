@@ -185,6 +185,14 @@ def cmd_adduser(args, auth_cookie):
     sys.exit(0 if success else 1)
 
 
+@handle_errors
+@with_auth_cookie
+def cmd_deluser(args, auth_cookie):
+    success, message = cat2.deluser(args.user, args.urlbase, auth_cookie=auth_cookie)
+    print(message)
+    sys.exit(0 if success else 1)
+
+
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
@@ -278,6 +286,11 @@ def main():
     subparser.add_argument('newuser', type=str)
     subparser.set_defaults(func=cmd_adduser)
 
+    # deluser
+    help = 'Delete a user.'
+    subparser = subparsers.add_parser('deluser', help=help)
+    subparser.add_argument('user', type=str)
+    subparser.set_defaults(func=cmd_deluser)
 
     # Go
     args = utils.run_parser(parser)
