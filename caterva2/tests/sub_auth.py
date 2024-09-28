@@ -23,7 +23,8 @@ def make_sub_user(services):
         return None
 
     state_dir = services.state_dir / 'subscriber'
-    return add_user('user@example.com', password='foobar', state_dir=state_dir)
+    return add_user('user@example.com', password='foobar', is_superuser=False,
+                    state_dir=state_dir)
 
 
 @pytest.fixture(scope='session')
