@@ -412,8 +412,10 @@ def adduser(newuser, urlbase=sub_urlbase_default, auth_cookie=None):
 
     Returns
     -------
-    str
-        The response from the server.
+    tuple : (bool, str)
+        A tuple with a boolean indicating whether the user was added or not
+        and an explanatory message.
+
     """
     urlbase, _ = _format_paths(urlbase)
     return api_utils.get(f'{urlbase}/api/adduser/{newuser}', auth_cookie=auth_cookie)

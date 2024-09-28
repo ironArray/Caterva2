@@ -1161,8 +1161,8 @@ if user_auth_enabled():
 
         Returns
         -------
-        str
-            A message indicating whether the user was created or already exists
+        tuple : bool, str
+            A tuple with a boolean indicating success/error and a message.
         """
         if not user.is_superuser:
             srv_utils.raise_unauthorized('Only superusers can add users')
@@ -1173,8 +1173,8 @@ if user_auth_enabled():
                                                 state_dir=statedir)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            return f'Error: {error_message}'
-        return f'User {newuser_.username} created'
+            return False, f'Error in adding {newuser}: {error_message}'
+        return True, f'User {newuser} added (with password {password})'
 
     # TODO: Support user verification and user deletion.
 
