@@ -175,6 +175,12 @@ def cmd_remove(args, auth_cookie):
     removed = cat2.remove(args.dataset, args.urlbase, auth_cookie=auth_cookie)
     print(f'Dataset (or directory contents) removed: {removed}')
 
+@handle_errors
+@with_auth_cookie
+def cmd_adduser(args, auth_cookie):
+    message = cat2.adduser(args.newuser, args.urlbase, auth_cookie=auth_cookie)
+    print(message)
+
 
 def main():
     conf = utils.get_conf()
@@ -262,6 +268,13 @@ def main():
     subparser.add_argument('localpath', type=pathlib.Path)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_upload)
+
+    # adduser
+    help = 'Add a new user.'
+    subparser = subparsers.add_parser('adduser', help=help)
+    subparser.add_argument('newuser', type=str)
+    subparser.set_defaults(func=cmd_adduser)
+
 
     # Go
     args = utils.run_parser(parser)

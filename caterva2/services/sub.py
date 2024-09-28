@@ -13,6 +13,7 @@ import itertools
 import logging
 import os
 import pathlib
+import random
 import re
 import shutil
 import string
@@ -1144,6 +1145,36 @@ if user_auth_enabled():
 
         context = {'token': token}
         return templates.TemplateResponse(request, "reset-password.html", context)
+
+    @app.get('/api/adduser/{newuser}')
+    async def add_user(
+                newuser: str,
+                user: db.User = Depends(current_active_user),
+                ):
+        """
+        Add a user.
+
+        Parameters
+        ----------
+        newuser : str
+            The username of the user to add.
+
+        Returns
+        -------
+        str
+            A message indicating whether the user was created or already exists
+        """
+        if not user.is_superuser:
+            srv_utils.raise_unauthorized('Only superusers can add users')
+
+        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
+        try:
+            newuser_ = await utils.acreate_user(newuser, password, is_superuser=False,
+                                                state_dir=statedir)
+        except Exception as exc:
+            error_message = str(exc) if str(exc) else exc.__class__.__name__
+            return f'Error: {error_message}'
+        return f'User {newuser_.username} created'
 
     # TODO: Support user verification and user deletion.
 

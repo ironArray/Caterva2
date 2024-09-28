@@ -397,6 +397,27 @@ def lazyexpr(name, expression, operands,
     dataset = api_utils.post(f'{urlbase}/api/lazyexpr/', expr, auth_cookie=auth_cookie)
     return pathlib.Path(dataset)
 
+def adduser(newuser, urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    Add a user to the subscriber.
+
+    Parameters
+    ----------
+    newuser : str
+        The username of the user to add.
+    urlbase : str
+        The base of URLs of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    str
+        The response from the server.
+    """
+    urlbase, _ = _format_paths(urlbase)
+    return api_utils.get(f'{urlbase}/api/adduser/{newuser}', auth_cookie=auth_cookie)
+
 
 class Root:
     """
