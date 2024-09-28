@@ -1204,6 +1204,24 @@ if user_auth_enabled():
             return False, f'Error in deleting {deluser}: {error_message}'
         return True, f'User {deluser} deleted'
 
+    @app.get('/api/listusers')
+    async def list_users(
+            user: db.User = Depends(current_active_user),
+            ):
+        """
+        List all users.
+
+        Returns
+        -------
+        list of dict
+            A list of all users (as dictionaries).
+        """
+        if not user.is_superuser:
+            srv_utils.raise_unauthorized('Only superusers can list users')
+
+        return await utils.alist_users()
+
+
     # TODO: Support user verification
 
 

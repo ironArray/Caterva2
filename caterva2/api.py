@@ -445,6 +445,26 @@ def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):
     return api_utils.get(f'{urlbase}/api/deluser/{user}', auth_cookie=auth_cookie)
 
 
+def listusers(urlbase=sub_urlbase_default, auth_cookie=None):
+    """
+    List the users in the subscriber.
+
+    Parameters
+    ----------
+    urlbase : str
+        The base of URLs of the subscriber to query.
+    auth_cookie : str
+        An optional HTTP cookie for authorizing access.
+
+    Returns
+    -------
+    list of dict
+        The list of users in the subscriber.
+    """
+    urlbase, _ = _format_paths(urlbase)
+    return api_utils.get(f'{urlbase}/api/listusers', auth_cookie=auth_cookie)
+
+
 class Root:
     """
     A root is a remote repository that can be subscribed to.

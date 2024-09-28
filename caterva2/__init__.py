@@ -16,6 +16,6 @@ from .api import (bro_host_default, pub_host_default, sub_host_default,
                   sub_urlbase_default)
 from .api import (get_roots, subscribe, get_chunk, get_list, get_info, fetch,
                   move, copy, download, upload, remove, lazyexpr,
-                  adduser, deluser)
+                  adduser, deluser, listusers)
 from .api import Root, File, Dataset
 from .api_utils import get_auth_cookie

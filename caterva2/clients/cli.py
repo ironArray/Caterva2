@@ -193,6 +193,17 @@ def cmd_deluser(args, auth_cookie):
     sys.exit(0 if success else 1)
 
 
+@handle_errors
+@with_auth_cookie
+def cmd_listusers(args, auth_cookie):
+    data = cat2.listusers(args.urlbase, auth_cookie=auth_cookie)
+    if args.json:
+        print(json.dumps(data))
+        return
+
+    for user in data:
+        print(user)
+
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
@@ -291,6 +302,12 @@ def main():
     subparser = subparsers.add_parser('deluser', help=help)
     subparser.add_argument('user', type=str)
     subparser.set_defaults(func=cmd_deluser)
+
+    # listusers
+    help = 'List all users.'
+    subparser = subparsers.add_parser('listusers', aliases=['lsu'], help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.set_defaults(func=cmd_listusers)
 
     # Go
     args = utils.run_parser(parser)

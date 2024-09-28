@@ -251,3 +251,18 @@ async def adel_user(username: str):
 
 def del_user(username):
     return asyncio.run(adel_user(username))
+
+
+from sqlalchemy.future import select
+
+async def alist_users():
+    async with contextlib.asynccontextmanager(sub_db.get_async_session)() as session:
+        async with contextlib.asynccontextmanager(sub_db.get_user_db)(session) as udb:
+            query = select(udb.user_table)
+            result = await session.execute(query)
+            # Return a list of dictionaries
+            return result.scalars().all()
+
+
+def list_users():
+    return asyncio.run(alist_users())
