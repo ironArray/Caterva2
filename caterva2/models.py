@@ -63,6 +63,12 @@ class MoveCopyPayload(pydantic.BaseModel):
     dst: str
 
 
+class AddUserPayload(pydantic.BaseModel):
+    username: str
+    password: str
+    superuser: bool
+
+
 class File(pydantic.BaseModel):
     mtime: float
     size: int

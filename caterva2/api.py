@@ -397,7 +397,8 @@ def lazyexpr(name, expression, operands,
     dataset = api_utils.post(f'{urlbase}/api/lazyexpr/', expr, auth_cookie=auth_cookie)
     return pathlib.Path(dataset)
 
-def adduser(newuser, urlbase=sub_urlbase_default, auth_cookie=None):
+
+def adduser(newuser, password=None, superuser=False, urlbase=sub_urlbase_default, auth_cookie=None):
     """
     Add a user to the subscriber.
 
@@ -405,6 +406,10 @@ def adduser(newuser, urlbase=sub_urlbase_default, auth_cookie=None):
     ----------
     newuser : str
         The username of the user to add.
+    password : str
+        The password of the user to add.
+    superuser : bool
+        Whether the user is a superuser or not.
     urlbase : str
         The base of URLs of the subscriber to query.
     auth_cookie : str
@@ -418,7 +423,9 @@ def adduser(newuser, urlbase=sub_urlbase_default, auth_cookie=None):
 
     """
     urlbase, _ = _format_paths(urlbase)
-    return api_utils.get(f'{urlbase}/api/adduser/{newuser}', auth_cookie=auth_cookie)
+    return api_utils.post(f'{urlbase}/api/adduser/',
+                          {'username': newuser, 'password': password, 'superuser': superuser},
+                          auth_cookie=auth_cookie)
 
 
 def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):

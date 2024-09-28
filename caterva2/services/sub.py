@@ -933,7 +933,7 @@ async def copy(
         The path of the copied dataset.
     """
     if not user:
-            raise srv_utils.raise_unauthorized("Copying files requires authentication")
+        raise srv_utils.raise_unauthorized("Copying files requires authentication")
 
     src, dst = payload.src, payload.dst
     # src should start with a special root or known root
@@ -1146,18 +1146,18 @@ if user_auth_enabled():
         context = {'token': token}
         return templates.TemplateResponse(request, "reset-password.html", context)
 
-    @app.get('/api/adduser/{newuser}')
+    @app.post('/api/adduser/')
     async def add_user(
-                newuser: str,
-                user: db.User = Depends(current_active_user),
-                ):
+            payload: models.AddUserPayload,
+            user: db.User = Depends(current_active_user),
+    ):
         """
         Add a user.
 
         Parameters
         ----------
-        newuser : str
-            The username of the user to add.
+        payload : AddUserPayload
+            The payload containing the username, password and whether the user is a superuser.
 
         Returns
         -------
@@ -1167,14 +1167,17 @@ if user_auth_enabled():
         if not user.is_superuser:
             srv_utils.raise_unauthorized('Only superusers can add users')
 
-        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
         try:
-            newuser_ = await utils.acreate_user(newuser, password, is_superuser=False,
-                                                state_dir=statedir)
+            await utils.aadd_user(
+                payload.username,
+                payload.password,
+                payload.superuser,
+                state_dir=statedir,
+            )
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            return False, f'Error in adding {newuser}: {error_message}'
-        return True, f'User {newuser} added (with password {password})'
+            return False, f'Error in adding {payload.username}: {error_message}'
+        return True, f'User {payload} added'
 
     @app.get('/api/deluser/{deluser}')
     async def del_user(

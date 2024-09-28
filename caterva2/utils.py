@@ -214,9 +214,7 @@ def get_conf(prefix=None, allow_id=False):
 # <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
 UserAuth = collections.namedtuple('UserAuth', ['username', 'password'])
 
-async def acreate_user(username, password, is_superuser, state_dir=None):
-    if password is None:
-        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
+async def aadd_user(username, password, is_superuser, state_dir=None):
     user = UserAuth(username=username, password=password)
 
     sub_state = state_dir
@@ -235,9 +233,11 @@ async def acreate_user(username, password, is_superuser, state_dir=None):
     return user
 
 
-def create_user(username, password, is_superuser, state_dir=None):
-    return asyncio.run(acreate_user(username, password, is_superuser,
-                                    state_dir=state_dir))
+def add_user(username, password, is_superuser, state_dir=None):
+    if password is None:
+        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
+    return asyncio.run(aadd_user(username, password, is_superuser,
+                                 state_dir=state_dir))
 
 
 async def adel_user(username: str):
