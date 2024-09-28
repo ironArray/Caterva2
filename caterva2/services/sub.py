@@ -990,7 +990,6 @@ async def upload_file(
     str
         The path of the uploaded file.
     """
-
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
@@ -1164,6 +1163,8 @@ if user_auth_enabled():
         tuple : bool, str
             A tuple with a boolean indicating success/error and a message.
         """
+        if not user:
+            raise srv_utils.raise_unauthorized("Adding a user requires authentication")
         if not user.is_superuser:
             srv_utils.raise_unauthorized('Only superusers can add users')
 
@@ -1197,6 +1198,8 @@ if user_auth_enabled():
         tuple : bool, str
             A tuple with a boolean indicating success/error and a message.
         """
+        if not user:
+            raise srv_utils.raise_unauthorized("Deleting a user requires authentication")
         if not user.is_superuser:
             srv_utils.raise_unauthorized('Only superusers can delete users')
 
@@ -1219,6 +1222,8 @@ if user_auth_enabled():
         list of dict
             A list of all users (as dictionaries).
         """
+        if not user:
+            raise srv_utils.raise_unauthorized("Listing users requires authentication")
         return await utils.alist_users()
 
 

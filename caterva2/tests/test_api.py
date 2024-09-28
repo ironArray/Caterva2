@@ -588,3 +588,22 @@ def test_expr_from_expr(sub_urlbase, sub_jwt_cookie):
     c = cat2.fetch(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
     np.testing.assert_array_equal(a[:] + 1, b[:])
     np.testing.assert_array_equal((a[:] + 1) * 2, c[:])
+
+
+# User management
+def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
+    if not sub_user:
+        pytest.skip("authentication support needed")
+
+    username = 'test@user.com'
+    password = 'testpassword'
+    is_superuser = False
+    created, message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+    assert created is True
+    # Check that the user has been added
+    urlbase = sub_urlbase
+    print("urlbase: ", sub_urlbase, "sub_user: ", sub_user)
+    resp = httpx.post(f'{urlbase}/auth/jwt/login',
+                      data=dict(username=username, password=password))
+    resp.raise_for_status()
+    assert resp.status_code == 204  # No content (kind of success)
