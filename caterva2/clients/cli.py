@@ -183,10 +183,9 @@ def cmd_remove(args, auth_cookie):
 @with_auth_cookie
 def cmd_adduser(args, auth_cookie):
     newpass = args.newpass or ''.join(random.choice(string.ascii_letters) for _ in range(8))
-    success, message = cat2.adduser(args.newuser, newpass, args.superuser,
-                                    args.urlbase, auth_cookie=auth_cookie)
+    message = cat2.adduser(args.newuser, newpass, args.superuser,
+                           args.urlbase, auth_cookie=auth_cookie)
     print(message)
-    sys.exit(0 if success else 1)
 
 
 @handle_errors
@@ -194,7 +193,6 @@ def cmd_adduser(args, auth_cookie):
 def cmd_deluser(args, auth_cookie):
     success, message = cat2.deluser(args.user, args.urlbase, auth_cookie=auth_cookie)
     print(message)
-    sys.exit(0 if success else 1)
 
 
 @handle_errors

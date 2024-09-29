@@ -1160,8 +1160,8 @@ if user_auth_enabled():
 
         Returns
         -------
-        tuple : bool, str
-            A tuple with a boolean indicating success/error and a message.
+        str
+            A message indicating success.
         """
         if not user:
             raise srv_utils.raise_unauthorized("Adding a user requires authentication")
@@ -1177,8 +1177,8 @@ if user_auth_enabled():
             )
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            return False, f'Error in adding {payload.username}: {error_message}'
-        return True, f'User {payload} added'
+            raise srv_utils.raise_bad_request(f'Error in adding {payload.username}: {error_message}')
+        return f'User {payload} added'
 
     @app.get('/api/deluser/{deluser}')
     async def del_user(
@@ -1195,8 +1195,8 @@ if user_auth_enabled():
 
         Returns
         -------
-        tuple : bool, str
-            A tuple with a boolean indicating success/error and a message.
+        str
+            A message indicating success.
         """
         if not user:
             raise srv_utils.raise_unauthorized("Deleting a user requires authentication")
@@ -1207,8 +1207,8 @@ if user_auth_enabled():
             await utils.adel_user(deluser)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            return False, f'Error in deleting {deluser}: {error_message}'
-        return True, f'User {deluser} deleted'
+            raise srv_utils.raise_bad_request(f'Error in deleting {deluser}: {error_message}')
+        return f'User {deluser} deleted'
 
     @app.get('/api/listusers')
     async def list_users(

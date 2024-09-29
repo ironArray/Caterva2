@@ -591,6 +591,7 @@ def test_expr_from_expr(sub_urlbase, sub_jwt_cookie):
 
 
 # User management
+
 def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     if not sub_user:
         pytest.skip("authentication support needed")
@@ -598,12 +599,33 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     username = 'test@user.com'
     password = 'testpassword'
     is_superuser = False
-    created, message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
-    assert created is True
+    message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     # Check that the user has been added
-    urlbase = sub_urlbase
-    print("urlbase: ", sub_urlbase, "sub_user: ", sub_user)
-    resp = httpx.post(f'{urlbase}/auth/jwt/login',
+    resp = httpx.post(f'{sub_urlbase}/auth/jwt/login',
                       data=dict(username=username, password=password))
     resp.raise_for_status()
     assert resp.status_code == 204  # No content (kind of success)
+
+
+def test_adduser_malformed(sub_user, sub_jwt_cookie):
+    if not sub_user:
+        pytest.skip("authentication support needed")
+
+    username = 'test_noat_user'
+    password = 'testpassword'
+    is_superuser = False
+    with pytest.raises(Exception) as e_info:
+        _ = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+    print(e_info)
+    assert 'Bad Request' in str(e_info)
+
+
+def test_adduser_unauthorized(sub_user):
+    if sub_user:
+        pytest.skip("not authentication needed")
+
+    username = 'test@user.com'
+    password = 'testpassword'
+    is_superuser = False
+    with pytest.raises(Exception) as e_info:
+        _ = cat2.adduser(username, password, is_superuser)

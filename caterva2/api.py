@@ -417,10 +417,8 @@ def adduser(newuser, password=None, superuser=False, urlbase=sub_urlbase_default
 
     Returns
     -------
-    tuple : (bool, str)
-        A tuple with a boolean indicating whether the user was added or not
-        and an explanatory message.
-
+    str
+        An explanatory message.
     """
     urlbase, _ = _format_paths(urlbase)
     return api_utils.post(f'{urlbase}/api/adduser/',
@@ -443,10 +441,8 @@ def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):
 
     Returns
     -------
-    tuple : (bool, str)
-        A tuple with a boolean indicating whether the user was deleted or not
-        and an explanatory message.
-
+    str
+        An explanatory message.
     """
     urlbase, _ = _format_paths(urlbase)
     return api_utils.get(f'{urlbase}/api/deluser/{user}', auth_cookie=auth_cookie)
