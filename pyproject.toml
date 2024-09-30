@@ -113,3 +113,34 @@ cat2tbrowser = "caterva2.clients.tbrowser:main"
 cat2import = "caterva2.tools.hdf5_to_cat2:main"
 cat2export = "caterva2.tools.cat2_to_hdf5:main"
 cat2adduser = "caterva2.tools.adduser:main"
+
+[tool.ruff]
+line-length = 109
+max-complexity = 10
+max-annotations-complexity = 10
+
+
+[tool.ruff.lint]
+extend-select = [
+    "B",
+    "I",
+    "NPY",
+    "PT",
+    "RET",
+    "SIM",
+    "TCH",
+    "UP",
+]
+ignore = [
+    "B028",
+    "PT006",
+    "PT004",  # deprecated
+    "PT011",
+    "RET505",
+    "RET508",
+    "SIM108",
+    "UP038",  # https://github.com/astral-sh/ruff/issues/7871
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**" = ["F841"]
