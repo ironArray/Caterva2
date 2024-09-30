@@ -12,6 +12,7 @@ This module provides a Python API to Caterva2.
 
 import functools
 import pathlib
+from contextlib import contextmanager
 
 from caterva2 import api_utils, utils
 
@@ -29,14 +30,21 @@ sub_host_default = 'localhost:8002'
 sub_urlbase_default = f'http://{sub_host_default}'
 """The default base of URLs provided by the subscriber."""
 
+_subscriber_data = {
+    "urlbase": sub_urlbase_default,
+    "auth_cookie": "",
+}
+"""Caterva2 subscriber data saved by context manager."""
+
 
 def _format_paths(urlbase, path=None):
-    if urlbase is not None:
-        if isinstance(urlbase, pathlib.Path):
-            urlbase = urlbase.as_posix()
-        if urlbase.endswith("/"):
-            urlbase = urlbase[:-1]
-            urlbase = pathlib.Path(urlbase)
+    if urlbase is None:
+        urlbase = _subscriber_data['urlbase']
+    if isinstance(urlbase, pathlib.Path):
+        urlbase = urlbase.as_posix()
+    if urlbase.endswith("/"):
+        urlbase = urlbase[:-1]
+        urlbase = pathlib.Path(urlbase)
     if path is not None:
         p = path.as_posix() if isinstance(path, pathlib.Path) else path
         if p.startswith("/"):
@@ -44,7 +52,7 @@ def _format_paths(urlbase, path=None):
     return urlbase, path
 
 
-def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
+def get_roots(urlbase=None, auth_cookie=None):
     """
     Get the list of available roots.
 
@@ -52,7 +60,8 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
     ----------
 
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. The default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -80,10 +89,11 @@ def get_roots(urlbase=sub_urlbase_default, auth_cookie=None):
     }
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.get(f'{urlbase}/api/roots', auth_cookie=auth_cookie)
 
 
-def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
+def subscribe(root, urlbase=None, auth_cookie=None):
     """
     Subscribe to a root.
 
@@ -92,7 +102,8 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
     root : str
         The name of the root to subscribe to.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -112,11 +123,12 @@ def subscribe(root, urlbase=sub_urlbase_default, auth_cookie=None):
     {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': True}
     """
     urlbase, root = _format_paths(urlbase, root)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.post(f'{urlbase}/api/subscribe/{root}',
                           auth_cookie=auth_cookie)
 
 
-def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
+def get_list(path, urlbase=None, auth_cookie=None):
     """
     List the datasets in a path.
 
@@ -125,7 +137,8 @@ def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
     path : str
         The path to a root, directory or dataset.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -143,11 +156,12 @@ def get_list(path, urlbase=sub_urlbase_default, auth_cookie=None):
     'dir2/ds-4d.b2nd', 'dir1/ds-3d.b2nd', 'dir1/ds-2d.b2nd']
     """
     urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.get(f'{urlbase}/api/list/{path}',
                          auth_cookie=auth_cookie)
 
 
-def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
+def get_info(path, urlbase=None, auth_cookie=None):
     """
     Get information about a dataset.
 
@@ -156,7 +170,8 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     path : str
         The path of the dataset.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -181,11 +196,12 @@ def get_info(path, urlbase=sub_urlbase_default, auth_cookie=None):
     'vlmeta': {}, 'nchunks': 1}}
     """
     urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.get(f'{urlbase}/api/info/{path}',
                          auth_cookie=auth_cookie)
 
 
-def fetch(path, urlbase=sub_urlbase_default, slice_=None,
+def fetch(path, urlbase=None, slice_=None,
           auth_cookie=None):
     """
     Fetch (a slice of) the data in a dataset.
@@ -195,7 +211,8 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
     path : str
         The path of the dataset.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     slice_ : str
         The slice to fetch (the whole dataset if missing).
     auth_cookie : str
@@ -215,13 +232,14 @@ def fetch(path, urlbase=sub_urlbase_default, slice_=None,
      [(1.0000500e-02, 1.0100005) (1.0050503e-02, 1.0100505)]]
     """
     urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     data = api_utils.fetch_data(path, urlbase,
                                 {'slice_': slice_},
                                 auth_cookie=auth_cookie)
     return data
 
 
-def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
+def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
     """
     Get the unidimensional compressed chunk of a dataset.
 
@@ -232,7 +250,8 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
     nchunk : int
         The unidimensional chunk id to get.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -255,12 +274,13 @@ def get_chunk(path, nchunk, urlbase=sub_urlbase_default, auth_cookie=None):
     6.453000645300064
     """
     urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     data = api_utils._xget(f'{urlbase}/api/chunk/{path}', {'nchunk': nchunk},
                            auth_cookie=auth_cookie)
     return data.content
 
 
-def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=None):
+def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     """
     Download a dataset to storage.
 
@@ -276,7 +296,8 @@ def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=N
         The path to download the dataset to.  If not provided,
         the dataset will be downloaded to the current working directory.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -302,11 +323,12 @@ def download(dataset, localpath=None, urlbase=sub_urlbase_default, auth_cookie=N
         path = localpath / dataset.name
     else:
         path = localpath
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.download_url(url, str(path),
                                   try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
 
-def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
+def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     """
     Upload a local dataset to a remote repository.
 
@@ -322,7 +344,8 @@ def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     dataset : Path
         The remote path to upload the dataset to.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -331,11 +354,13 @@ def upload(localpath, dataset, urlbase=sub_urlbase_default, auth_cookie=None):
     Path
         The path of the uploaded file.
     """
+    urlbase, dataset = _format_paths(urlbase, dataset)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.upload_file(localpath, dataset, urlbase, try_pack=api_utils.blosc2_is_here,
                                  auth_cookie=auth_cookie)
 
 
-def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
+def remove(path, urlbase=None, auth_cookie=None):
     """
     Remove a dataset or directory path from a remote repository.
 
@@ -349,7 +374,8 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
     path : Path
         The path of the dataset or directory.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -366,11 +392,12 @@ def remove(path, urlbase=sub_urlbase_default, auth_cookie=None):
     False
     """
     urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.post(f'{urlbase}/api/remove/{path}',
                           auth_cookie=auth_cookie)
 
 
-def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
+def move(src, dst, urlbase=None, auth_cookie=None):
     """
     Move a dataset or directory to a new location.
 
@@ -381,7 +408,8 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     dst : Path
         The destination path of the dataset or directory.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -400,13 +428,14 @@ def move(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     result =  api_utils.post(f'{urlbase}/api/move/',
                              {'src': str(src), 'dst': str(dst)},
                              auth_cookie=auth_cookie)
     return pathlib.Path(result)
 
 
-def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
+def copy(src, dst, urlbase=None, auth_cookie=None):
     """
     Copy a dataset or directory to a new location.
 
@@ -417,7 +446,8 @@ def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     dst : Path
         The destination path of the dataset or directory.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -434,6 +464,7 @@ def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
     '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     result =  api_utils.post(f'{urlbase}/api/copy/',
                              {'src': str(src), 'dst': str(dst)},
                              auth_cookie=auth_cookie)
@@ -441,7 +472,7 @@ def copy(src, dst, urlbase=sub_urlbase_default, auth_cookie=None):
 
 
 def lazyexpr(name, expression, operands,
-             urlbase=sub_urlbase_default, auth_cookie=None):
+             urlbase=None, auth_cookie=None):
     """
     Create a lazy expression dataset in personal space.
 
@@ -458,7 +489,8 @@ def lazyexpr(name, expression, operands,
         A mapping of the variables used in the expression to the dataset paths
         that they refer to.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -468,6 +500,7 @@ def lazyexpr(name, expression, operands,
         The path of the created dataset.
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     # Convert possible Path objects in operands to strings so that they can be serialized
     operands = {k: str(v) for k, v in operands.items()}
     expr = dict(name=name, expression=expression, operands=operands)
@@ -554,20 +587,21 @@ class Root:
     root : str
         The name of the root to subscribe to.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     user_auth : dict
         An optional mapping of fields and values to be used as data to be
         posted for authenticating the user and get an authorization token for
         further requests.
     """
-    def __init__(self, name, urlbase=sub_urlbase_default, user_auth=None):
+    def __init__(self, name, urlbase=None, user_auth=None):
         urlbase, name = _format_paths(urlbase, name)
         self.name = name
         self.urlbase = utils.urlbase_type(urlbase)
-        self.auth_cookie = (
-            api_utils.get_auth_cookie(urlbase, user_auth)
-            if user_auth else None)
-
+        if user_auth:
+            self.auth_cookie = api_utils.get_auth_cookie(urlbase, user_auth)
+        else:
+            self.auth_cookie = _subscriber_data["auth_cookie"]
         ret = api_utils.post(f'{urlbase}/api/subscribe/{name}',
                              auth_cookie=self.auth_cookie)
         if ret != 'Ok':
@@ -712,7 +746,8 @@ class File:
     root : str
         The name of the root.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -740,7 +775,7 @@ class File:
         self.name = name
         self.urlbase = urlbase
         self.path = pathlib.Path(f'{self.root}/{self.name}')
-        self.auth_cookie = auth_cookie
+        self.auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
         self.meta = api_utils.get(f'{urlbase}/api/info/{self.path}',
                                   auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
@@ -950,7 +985,8 @@ class Dataset(File):
     root : str
         The name of the root.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.default_urlbase`.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -973,3 +1009,71 @@ class Dataset(File):
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
         return f'<Dataset: {self.path}>'
+
+
+@contextmanager
+def c2context(
+    *,
+    urlbase: (str | None) = None,
+    username: (str | None) = None,
+    password: (str | None) = None,
+    auth_cookie: (str | None) = None,
+) -> None:
+    """
+    Context manager that sets parameters in Caterva2 subscriber requests.
+
+    A parameter not specified or set to ``None`` inherits the value set by the
+    previous context manager,
+    defaulting the subscriber url to :py:obj:`caterva2.default_urlbase`
+    and the authentication cookie to `None`.
+    Parameters set to the empty string
+    are not to be used in requests (with no default either).
+
+    If the subscriber requires authorization for requests, you may either
+    provide `auth_cookie` (which you should have obtained previously from the
+    subscriber), or both `username` and `password` to get that cookie by first
+    logging in to the subscriber.  The cookie will be reused until explicitly
+    reset or requested again in a latter context manager invocation.
+
+    Please note that this manager is reentrant but not concurrency-safe.
+
+    Parameters
+    ----------
+    urlbase : str | None
+        A URL base that will be used as default for all operations inside the
+        context manager.
+    username : str | None
+        A name to be used in credentials to login to the subscriber and get an
+        authorization token from it.
+    password : str | None
+        A secret to be used in credentials to login to the subscriber and get
+        an authorization cookie from it.
+    auth_cookie : str | None
+        A token that will be used as default for all operations inside the
+        context manager.
+
+    Yields
+    ------
+    out: None
+
+    """
+    global _subscriber_data
+
+    # Perform login to get an authorization token.
+    if username or password:
+        if auth_cookie:
+            raise ValueError("Either provide a username/password or an authorizaton token")
+        auth_cookie = api_utils.get_auth_cookie(urlbase,
+                                               {'username': username, 'password': password})
+
+    try:
+        old_sub_data = _subscriber_data
+        new_sub_data = old_sub_data.copy()  # inherit old values
+        if urlbase is not None:
+            new_sub_data["urlbase"] = urlbase
+        if auth_cookie is not None:
+            new_sub_data["auth_cookie"] = auth_cookie
+        _subscriber_data = new_sub_data
+        yield
+    finally:
+        _subscriber_data = old_sub_data
