@@ -1145,6 +1145,7 @@ if user_auth_enabled():
         context = {'token': token}
         return templates.TemplateResponse(request, "reset-password.html", context)
 
+
     @app.post('/api/adduser/')
     async def add_user(
             payload: models.AddUserPayload,
@@ -1180,11 +1181,12 @@ if user_auth_enabled():
             raise srv_utils.raise_bad_request(f'Error in adding {payload.username}: {error_message}')
         return f'User added: {payload}'
 
+
     @app.get('/api/deluser/{deluser}')
     async def del_user(
-                deluser: str,
-                user: db.User = Depends(current_active_user),
-                ):
+            deluser: str,
+            user: db.User = Depends(current_active_user),
+    ):
         """
         Delete a user.
 
@@ -1210,10 +1212,11 @@ if user_auth_enabled():
             raise srv_utils.raise_bad_request(f'Error in deleting {deluser}: {error_message}')
         return f'User deleted: {deluser}'
 
+
     @app.get('/api/listusers')
     async def list_users(
             user: db.User = Depends(current_active_user),
-            ):
+    ):
         """
         List all users.
 
@@ -1541,7 +1544,7 @@ async def htmx_command(
     argv = command.split()
 
     # First check for expressions
-    if argv[1] == '=':
+    if len(argv) > 1 and argv[1] == '=':
         try:
             result_name, expr = command.split('=')
             result_path = make_lazyexpr(result_name, expr, operands, user)
@@ -1556,7 +1559,18 @@ async def htmx_command(
         except RuntimeError as exc:
             return htmx_error(request, str(exc))
 
-    # then commands
+    # Commands
+
+    elif argv[0] in {'adduser'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected adduser <username>')
+        try:
+            userpl = models.AddUserPayload(username=argv[1], password=None, superuser=False)
+            message = await add_user(userpl, user)
+        except Exception as exc:
+            return htmx_error(request, f'Error adding user: {exc}')
+        return htmx_message(request, message)
+
     elif argv[0] in {'cp', 'copy'}:
         if len(argv) != 3:
             return htmx_error(request, 'Invalid syntax: expected cp/copy <src> <dst>')
@@ -1567,6 +1581,15 @@ async def htmx_command(
         except Exception as exc:
             return htmx_error(request, f'Error copying file: {exc}')
         result_path = await display_first(result_path, user)
+
+    elif argv[0] in {'deluser'}:
+        if len(argv) != 2:
+            return htmx_error(request, 'Invalid syntax: expected deluser <username>')
+        try:
+            message = await del_user(argv[1], user)
+        except Exception as exc:
+            return htmx_error(request, f'Error deleting user: {exc}')
+        return htmx_message(request, message)
 
     elif argv[0] in {'i', 'info'}:
         if len(argv) != 2:
@@ -1596,6 +1619,19 @@ async def htmx_command(
             result_path = path
         else:
             result_path = f'{path}/{first_path}' if first_path else path
+
+    # Where to display this in web interface?
+    elif argv[0] in {'lsu', 'listusers'}:
+        if len(argv) != 1:
+            return htmx_error(request, 'Invalid syntax: expected lsu/listusers')
+        try:
+            lusers = await list_users()
+        except Exception as exc:
+            return htmx_error(request, f'Error listing users: {exc}')
+        # Get the list of users
+        users = [user.email for user in lusers]
+        print(users)
+        return htmx_message(request, f'Users: {users}')
 
     elif argv[0] in {'mv', 'move'}:
         if len(argv) != 3:
@@ -1635,6 +1671,11 @@ async def display_first(result_path, user):
     elif len(paths) == 1 and not result_path.endswith(paths[0]):
         result_path = f'{result_path}/{paths[0]}'
     return result_path
+
+
+def htmx_message(request, msg):
+    context = {'message': msg}
+    return templates.TemplateResponse(request, "message.html", context, status_code=400)
 
 
 def htmx_error(request, msg):

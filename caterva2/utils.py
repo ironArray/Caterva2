@@ -215,6 +215,8 @@ def get_conf(prefix=None, allow_id=False):
 UserAuth = collections.namedtuple('UserAuth', ['username', 'password'])
 
 async def aadd_user(username, password, is_superuser, state_dir=None):
+    if password is None:
+        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
     user = UserAuth(username=username, password=password)
 
     sub_state = state_dir
@@ -234,8 +236,6 @@ async def aadd_user(username, password, is_superuser, state_dir=None):
 
 
 def add_user(username, password, is_superuser, state_dir=None):
-    if password is None:
-        password = ''.join([random.choice(string.ascii_letters) for i in range(8)])
     return asyncio.run(aadd_user(username, password, is_superuser,
                                  state_dir=state_dir))
 

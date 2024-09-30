@@ -65,7 +65,7 @@ class MoveCopyPayload(pydantic.BaseModel):
 
 class AddUserPayload(pydantic.BaseModel):
     username: str
-    password: str
+    password: typing.Optional[str]
     superuser: bool
 
 

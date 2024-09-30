@@ -298,7 +298,7 @@ def main():
     subparser = subparsers.add_parser('adduser', help=help)
     subparser.add_argument('newuser', type=str)
     subparser.add_argument('newpass', nargs='?')
-    subparser.add_argument('--superuser', action='store_true', default=False)
+    subparser.add_argument('--superuser', '-S', action='store_true', default=False)
     subparser.set_defaults(func=cmd_adduser)
 
     # deluser
