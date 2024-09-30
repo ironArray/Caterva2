@@ -1178,7 +1178,7 @@ if user_auth_enabled():
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
             raise srv_utils.raise_bad_request(f'Error in adding {payload.username}: {error_message}')
-        return f'User {payload} added'
+        return f'User added: {payload}'
 
     @app.get('/api/deluser/{deluser}')
     async def del_user(
@@ -1208,7 +1208,7 @@ if user_auth_enabled():
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
             raise srv_utils.raise_bad_request(f'Error in deleting {deluser}: {error_message}')
-        return f'User {deluser} deleted'
+        return f'User deleted: {deluser}'
 
     @app.get('/api/listusers')
     async def list_users(

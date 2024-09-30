@@ -600,6 +600,7 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     password = 'testpassword'
     is_superuser = False
     message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+    assert "User added" in message
     # Check that the user has been added
     resp = httpx.post(f'{sub_urlbase}/auth/jwt/login',
                       data=dict(username=username, password=password))
@@ -629,3 +630,60 @@ def test_adduser_unauthorized(sub_user):
     is_superuser = False
     with pytest.raises(Exception) as e_info:
         _ = cat2.adduser(username, password, is_superuser)
+    assert 'Not Found' in str(e_info)
+
+
+def test_deluser(sub_urlbase, sub_user, sub_jwt_cookie):
+    if not sub_user:
+        pytest.skip("authentication support needed")
+
+    username = 'test2@user.com'
+    password = 'testpassword'
+    is_superuser = False
+    message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+    assert "User added" in message
+    # Now, delete the user
+    message = cat2.deluser(username, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert "User deleted" in message
+    # Check that the user has been deleted
+    with pytest.raises(Exception) as e_info:
+        _ = cat2.deluser(username, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert 'Bad Request' in str(e_info)
+
+
+def test_deluser_unauthorized(sub_urlbase, sub_user):
+    if sub_user:
+        pytest.skip("not authentication needed")
+
+    username = 'test@user.com'
+    with pytest.raises(Exception) as e_info:
+        _ = cat2.deluser(username, sub_urlbase)
+    assert 'Not Found' in str(e_info)
+
+
+def test_listusers(sub_urlbase, sub_user, sub_jwt_cookie):
+    if not sub_user:
+        pytest.skip("authentication support needed")
+
+    username = 'test2@user.com'
+    password = 'testpassword'
+    is_superuser = False
+    message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+    assert "User added" in message
+    # List users
+    data = cat2.listusers(sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert username in [user['email'] for user in data]
+    # Delete the user
+    message = cat2.deluser(username, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert "User deleted" in message
+    # List users again
+    data = cat2.listusers(sub_urlbase, auth_cookie=sub_jwt_cookie)
+    assert username not in [user['email'] for user in data]
+
+def test_listusers_unauthorized(sub_urlbase, sub_user):
+    if sub_user:
+        pytest.skip("not authentication needed")
+
+    with pytest.raises(Exception) as e_info:
+        _ = cat2.listusers(sub_urlbase)
+    assert 'Not Found' in str(e_info)
