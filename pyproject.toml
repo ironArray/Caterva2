@@ -116,8 +116,6 @@ cat2adduser = "caterva2.tools.adduser:main"
 
 [tool.ruff]
 line-length = 109
-max-complexity = 10
-max-annotations-complexity = 10
 
 
 [tool.ruff.lint]

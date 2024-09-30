@@ -107,9 +107,7 @@ def test_root(sub_urlbase, sub_user):
 def test_list(examples_dir, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     example = examples_dir
-    files = set(
-        str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file()
-    )
+    files = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
     assert set(myroot.file_list) == files
     if sub_user:
         mypersonal = cat2.Root("@personal", sub_urlbase, sub_user)
@@ -316,9 +314,7 @@ def test_index_regular_file(slice_, examples_dir, sub_urlbase):
 
 
 @pytest.mark.parametrize("name", ["ds-1d.b2nd", "dir1/ds-2d.b2nd"])
-def test_download_b2nd(
-    name, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path
-):
+def test_download_b2nd(name, examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot[name]
     with chdir_ctxt(tmp_path):
@@ -340,9 +336,7 @@ def test_download_b2nd(
     np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_b2frame(
-    examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path
-):
+def test_download_b2frame(examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot["ds-hello.b2frame"]
     with chdir_ctxt(tmp_path):
@@ -396,9 +390,7 @@ def test_download_localpath(fnames, examples_dir, sub_urlbase, tmp_path):
         np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_regular_file(
-    examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path
-):
+def test_download_regular_file(examples_dir, sub_urlbase, sub_user, sub_jwt_cookie, tmp_path):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     ds = myroot["README.md"]
     with chdir_ctxt(tmp_path):
@@ -529,9 +521,7 @@ def test_lazyexpr(sub_urlbase, sub_jwt_cookie):
 
     cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase, auth_cookie=sub_jwt_cookie)
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    lxpath = cat2.lazyexpr(
-        lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie
-    )
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
 
     # Check result metadata.
@@ -558,9 +548,7 @@ def test_lazyexpr_getchunk(sub_urlbase, sub_jwt_cookie):
     lxname = "my_expr"
 
     cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    lxpath = cat2.lazyexpr(
-        lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie
-    )
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
 
     # Get one chunk
@@ -590,17 +578,13 @@ def test_expr_from_expr(sub_urlbase, sub_jwt_cookie):
 
     cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase, auth_cookie=sub_jwt_cookie)
     opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    lxpath = cat2.lazyexpr(
-        lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie
-    )
+    lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
 
     expression2 = f"{opnm} * 2"
     operands2 = {opnm: lxpath}
     lxname = "expr_from_expr"
-    lxpath2 = cat2.lazyexpr(
-        lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie
-    )
+    lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxpath2 == pathlib.Path(f"@personal/{lxname}.b2nd")
 
     # Check result metadata.
@@ -634,11 +618,12 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
     assert "User added" in message
     # Check that the user has been added
-    resp = httpx.post(
-        f"{sub_urlbase}/auth/jwt/login", data=dict(username=username, password=password)
-    )
+    resp = httpx.post(f"{sub_urlbase}/auth/jwt/login", data=dict(username=username, password=password))
     resp.raise_for_status()
     assert resp.status_code == 204  # No content (kind of success)
+    # Delete the user for future tests
+    message = cat2.deluser(sub_jwt_cookie, username)
+    assert "User deleted" in message
 
 
 def test_adduser_malformed(sub_user, sub_jwt_cookie):
@@ -652,6 +637,38 @@ def test_adduser_malformed(sub_user, sub_jwt_cookie):
         _ = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
     print(e_info)
     assert "Bad Request" in str(e_info)
+
+
+def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
+    if not sub_user:
+        pytest.skip("authentication support needed")
+
+    # TODO: make this to work; currently this returns None
+    # maxusers = configuration.get("subscriber.maxusers")
+    # For now, keep in sync with subscriber.maxusers in caterva2/tests/caterva2.toml
+    maxusers = 5
+    # Add maxusers users; we already have one user, so the next loop should fail
+    # when reaching the creation of last user
+    for n in range(maxusers):
+        # This should work fine for n < maxusers
+        username = f"test{n}@user.com"
+        password = "testpassword"
+        is_superuser = False
+        try:
+            message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
+            assert "User added" in message
+        except Exception as e_info:
+            assert n == maxusers - 1  # we already have one user
+            assert "Bad Request" in str(e_info)
+            # Remove the created users
+            for m in range(n):
+                username = f"test{m}@user.com"
+                message = cat2.deluser(sub_jwt_cookie, username)
+                assert "User deleted" in message
+            # Count the current number of users
+            data = cat2.listusers(sub_jwt_cookie)
+            assert len(data) == 1
+            break
 
 
 def test_adduser_unauthorized(sub_user, sub_jwt_cookie):
@@ -670,7 +687,7 @@ def test_deluser(sub_user, sub_jwt_cookie):
     if not sub_user:
         pytest.skip("authentication support needed")
 
-    username = "test2@user.com"
+    username = "test@user.com"
     password = "testpassword"
     is_superuser = False
     message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
@@ -698,7 +715,7 @@ def test_listusers(sub_user, sub_jwt_cookie):
     if not sub_user:
         pytest.skip("authentication support needed")
 
-    username = "test2@user.com"
+    username = "test@user.com"
     password = "testpassword"
     is_superuser = False
     message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)

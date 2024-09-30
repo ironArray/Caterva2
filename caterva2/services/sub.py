@@ -51,11 +51,12 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 dotenv.load_dotenv()
 
 # Logging
-logger = logging.getLogger('sub')
+logger = logging.getLogger("sub")
 
 # Configuration
 broker = None
 quota: int = 0
+maxusers: int = 0
 
 # State
 statedir = None
@@ -63,8 +64,8 @@ cache = None
 personal = None
 shared = None
 public = None
-clients = {}       # topic: <PubSubClient>
-database = None    # <Database> instance
+clients = {}  # topic: <PubSubClient>
+database = None  # <Database> instance
 locks = {}
 urlbase: str = ""
 
@@ -73,26 +74,27 @@ class PubSourceDataset:
     """
     Class for getting chunks from a dataset on a publisher service.
     """
+
     def __init__(self, abspath, path, metadata=None):
         self.path = pathlib.Path(path)
         if metadata is not None:
             suffix = abspath.suffix
-            if suffix == '.b2nd':
+            if suffix == ".b2nd":
                 metadata = models.Metadata(**metadata)
                 self._shape = metadata.shape
                 self._chunks = metadata.chunks
                 self._blocks = metadata.blocks
                 dtype = metadata.dtype
-                if metadata.dtype.startswith('['):
+                if metadata.dtype.startswith("["):
                     # TODO: eval is dangerous, but we mostly trust the metadata
                     # This is a list, so we need to convert it to a string
                     dtype = eval(dtype)
                 self._dtype = np.dtype(dtype)
             else:
-                if suffix == '.b2frame':
+                if suffix == ".b2frame":
                     metadata = models.SChunk(**metadata)
                 else:
-                    abspath = pathlib.Path(f'{abspath}.b2')
+                    abspath = pathlib.Path(f"{abspath}.b2")
                     metadata = models.SChunk(**metadata)
                 self._typesize = metadata.cparams.typesize
                 self._chunksize = metadata.chunksize
@@ -106,9 +108,9 @@ class PubSourceDataset:
         root = database.roots[root]
         name = pathlib.Path(*name)
 
-        url = f'/api/download/{name}'
+        url = f"/api/download/{name}"
         client, url = api_utils.get_client_and_url(root.http, url, return_async_client=return_async_client)
-        args = dict(url=url, params={'nchunk': nchunk}, timeout=5)
+        args = dict(url=url, params={"nchunk": nchunk}, timeout=5)
         return client, args
 
     def _get_chunk(self, nchunk):
@@ -122,11 +124,11 @@ class PubSourceDataset:
     async def _aget_chunk(self, nchunk):
         client, req_args = self._get_request_args(nchunk, return_async_client=True)
 
-        async with client.stream('GET', **req_args) as resp:
+        async with client.stream("GET", **req_args) as resp:
             buffer = []
             async for chunk in resp.aiter_bytes():
                 buffer.append(chunk)
-            chunk = b''.join(buffer)
+            chunk = b"".join(buffer)
             return chunk
 
 
@@ -135,17 +137,22 @@ class PubNDDataset(blosc2.ProxyNDSource, PubSourceDataset):
     @property
     def shape(self):
         return self._shape
+
     @property
     def chunks(self):
         return self._chunks
+
     @property
     def blocks(self):
         return self._blocks
+
     @property
     def dtype(self):
         return self._dtype
+
     def get_chunk(self, nchunk: int) -> bytes:
         return self._get_chunk(nchunk)
+
     async def aget_chunk(self, nchunk: int) -> bytes:
         return await self._aget_chunk(nchunk)
 
@@ -155,14 +162,18 @@ class PubSCDataset(blosc2.ProxySource, PubSourceDataset):
     @property
     def typesize(self):
         return self._typesize
+
     @property
     def chunksize(self):
         return self._chunksize
+
     @property
     def nbytes(self):
         return self._nbytes
+
     def get_chunk(self, nchunk: int) -> bytes:
         return self._get_chunk(nchunk)
+
     async def aget_chunk(self, nchunk: int) -> bytes:
         return await self._aget_chunk(nchunk)
 
@@ -172,7 +183,7 @@ def PubDataset(abspath, path, metadata=None):
     dataset = PubSourceDataset(abspath, path, metadata)
     # By using __new__() and updating the internal dict of the instance,
     # we can return the right class avoiding calling PubSourceDataset.__init__ again
-    if hasattr(dataset, '_shape'):
+    if hasattr(dataset, "_shape"):
         # return PubNDDataset(abspath, path, metadata)
         instance = PubNDDataset.__new__(PubNDDataset)
     else:
@@ -183,11 +194,8 @@ def PubDataset(abspath, path, metadata=None):
 
 
 def get_disk_usage():
-    exclude = {'db.json', 'db.sqlite'}
-    return sum(
-        path.stat().st_size
-        for path, _ in utils.walk_files(statedir, exclude=exclude)
-    )
+    exclude = {"db.json", "db.sqlite"}
+    return sum(path.stat().st_size for path, _ in utils.walk_files(statedir, exclude=exclude))
 
 
 def truncate_path(path, size=35):
@@ -203,16 +211,16 @@ def truncate_path(path, size=35):
     parts = pathlib.Path(path).parts
     if len(parts) < 3:
         n = len(path) - size
-        return path[:-n] + '...'
+        return path[:-n] + "..."
 
     # If the path is long be smarter
     first, last = parts[0], parts[-1]
-    label = f'{first}/.../{last}'
+    label = f"{first}/.../{last}"
     n = len(label) - size
     if n > 0:
-        last = last[:-n] + '...'
+        last = last[:-n] + "..."
 
-    return f'{first}/.../{last}'
+    return f"{first}/.../{last}"
 
 
 def make_url(request, name, query=None, **path_params):
@@ -229,7 +237,7 @@ def make_url(request, name, query=None, **path_params):
 
 
 async def new_root(data, topic):
-    logger.info(f'NEW root {topic} {data=}')
+    logger.info(f"NEW root {topic} {data=}")
     root = models.Root(**data)
     database.roots[root.name] = root
     database.save()
@@ -237,26 +245,26 @@ async def new_root(data, topic):
 
 async def updated_dataset(data, topic):
     name = topic
-    relpath = data['path']
+    relpath = data["path"]
 
     rootdir = cache / name
     abspath = rootdir / relpath
-    metadata = data.get('metadata')
+    metadata = data.get("metadata")
     if metadata is None:
-        if abspath.suffix not in {'.b2nd', '.b2frame'}:
-            abspath = pathlib.Path(f'{abspath}.b2')
+        if abspath.suffix not in {".b2nd", ".b2frame"}:
+            abspath = pathlib.Path(f"{abspath}.b2")
         if abspath.is_file():
             abspath.unlink()
     else:
-        key = f'{name}/{relpath}'
+        key = f"{name}/{relpath}"
         init_b2(abspath, key, metadata)
 
 
 def init_b2(abspath, path, metadata):
     dataset = PubDataset(abspath, path, metadata)
-    schunk_meta = metadata.get('schunk', metadata)
+    schunk_meta = metadata.get("schunk", metadata)
     vlmeta = {}
-    for k, v in schunk_meta['vlmeta'].items():
+    for k, v in schunk_meta["vlmeta"].items():
         vlmeta[k] = v
     blosc2.Proxy(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
 
@@ -268,13 +276,13 @@ def open_b2(abspath, path):
     Return a Proxy if the dataset is in a publisher,
     or the LazyExpr or Blosc2 container otherwise.
     """
-    if pathlib.Path(path).parts[0] in {'@personal', '@shared', '@public'}:
+    if pathlib.Path(path).parts[0] in {"@personal", "@shared", "@public"}:
         container = blosc2.open(abspath)
         if isinstance(container, blosc2.LazyExpr):
             # Open the operands properly
             operands = container.operands
             for key, value in operands.items():
-                if 'proxy-source' in value.schunk.meta:
+                if "proxy-source" in value.schunk.meta:
                     # Save operand as Proxy, see blosc2.open doc for more info
                     relpath = srv_utils.get_relpath(value, cache, personal, shared, public)
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
@@ -293,10 +301,11 @@ def open_b2(abspath, path):
 # Internal API
 #
 
+
 def follow(name: str):
     root = database.roots.get(name)
     if root is None:
-        errors = {name: 'This dataset does not exist in the network'}
+        errors = {name: "This dataset does not exist in the network"}
         return errors
 
     if not root.subscribed:
@@ -310,21 +319,25 @@ def follow(name: str):
 
     # Get list of datasets
     try:
-        data = api_utils.get('/api/list', server=root.http)
+        data = api_utils.get("/api/list", server=root.http)
     except httpx.ConnectError:
         return
 
     # Initialize the datasets in the cache
     for relpath in data:
         # If-None-Match header
-        key = f'{name}/{relpath}'
+        key = f"{name}/{relpath}"
         val = database.etags.get(key)
-        headers = None if val is None else {'If-None-Match': val}
+        headers = None if val is None else {"If-None-Match": val}
 
         # Call API
-        response = api_utils.get(f'/api/info/{relpath}', headers=headers,
-                                 server=root.http, raise_for_status=False,
-                                 return_response=True)
+        response = api_utils.get(
+            f"/api/info/{relpath}",
+            headers=headers,
+            server=root.http,
+            raise_for_status=False,
+            return_response=True,
+        )
         if response.status_code == 304:
             continue
 
@@ -336,12 +349,12 @@ def follow(name: str):
         init_b2(abspath, key, metadata)
 
         # Save etag
-        database.etags[key] = response.headers['etag']
+        database.etags[key] = response.headers["etag"]
         database.save()
 
     # Subscribe to changes in the dataset
     if name not in clients:
-        client = srv_utils.start_client(f'ws://{broker}/pubsub')
+        client = srv_utils.start_client(f"ws://{broker}/pubsub")
         client.subscribe(name, updated_dataset)
         clients[name] = client
 
@@ -350,24 +363,25 @@ def follow(name: str):
 # HTTP API
 #
 
+
 def user_auth_enabled():
-    return bool(os.environ.get('CATERVA2_SECRET'))
+    return bool(os.environ.get("CATERVA2_SECRET"))
 
 
-current_active_user = (users.current_active_user if user_auth_enabled()
-                       else (lambda: None))
+current_active_user = users.current_active_user if user_auth_enabled() else (lambda: None)
 """Depend on this if the route needs an authenticated user (if enabled)."""
 
-optional_user = (users.fastapi_users.current_user(
-                     optional=True,
-                     verified=False)  # TODO: set when verification works
-                 if user_auth_enabled()
-                 else (lambda: None))
+optional_user = (
+    users.fastapi_users.current_user(optional=True, verified=False)  # TODO: set when verification works
+    if user_auth_enabled()
+    else (lambda: None)
+)
 """Depend on this if the route may do something with no authentication."""
 
 
 def _setup_plugin_globals():
     from . import plugins
+
     # These need to be available for plugins at import time.
     plugins.current_active_user = current_active_user
 
@@ -385,7 +399,7 @@ async def lifespan(app: FastAPI):
     client = None
     if broker:
         try:
-            data = api_utils.get('/api/roots', server=broker)
+            data = api_utils.get("/api/roots", server=broker)
         except httpx.ConnectError:
             logger.warning(f'Broker "{broker}" not available')
         else:
@@ -411,8 +425,8 @@ async def lifespan(app: FastAPI):
                 database.save()
 
             # Follow the @new channel to know when a new root is added
-            client = srv_utils.start_client(f'ws://{broker}/pubsub')
-            client.subscribe('@new', new_root)
+            client = srv_utils.start_client(f"ws://{broker}/pubsub")
+            client.subscribe("@new", new_root)
 
             # Resume following
             for path in cache.iterdir():
@@ -425,11 +439,12 @@ async def lifespan(app: FastAPI):
     if client is not None:
         await srv_utils.disconnect_client(client)
 
+
 # Visualize the size of a file on a compact and human-readable format
 def custom_filesizeformat(value):
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
         if value < 1024.0:
-            if unit == 'B':
+            if unit == "B":
                 return f"{value:.0f} {unit}"
             return f"{value:.1f} {unit}"
         value /= 1024.0
@@ -439,16 +454,17 @@ def custom_filesizeformat(value):
 app = FastAPI(lifespan=lifespan)
 if user_auth_enabled():
     app.include_router(
-        users.fastapi_users.get_auth_router(users.auth_backend),
-        prefix="/auth/jwt", tags=["auth"]
+        users.fastapi_users.get_auth_router(users.auth_backend), prefix="/auth/jwt", tags=["auth"]
     )
     app.include_router(
         users.fastapi_users.get_register_router(schemas.UserRead, schemas.UserCreate),
-        prefix="/auth", tags=["auth"],
+        prefix="/auth",
+        tags=["auth"],
     )
     app.include_router(
         users.fastapi_users.get_reset_password_router(),
-        prefix="/auth", tags=["auth"],
+        prefix="/auth",
+        tags=["auth"],
     )
     # TODO: Support user verification and user deletion.
 
@@ -456,13 +472,14 @@ if user_auth_enabled():
 def url(path: str) -> str:
     return f"{urlbase}/{path}"
 
+
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-templates.env.filters['filesizeformat'] = custom_filesizeformat
-templates.env.globals['url'] = url
+templates.env.filters["filesizeformat"] = custom_filesizeformat
+templates.env.globals["url"] = url
 
 
-@app.get('/api/roots')
+@app.get("/api/roots")
 async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     """
     Get a dict of roots, with root names as keys and properties as values.
@@ -475,11 +492,11 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     # Here we just return the roots that are known by the broker
     # plus the special roots @personal, @shared and @public
     roots = database.roots.copy()
-    root = models.Root(name='@public', http='', subscribed=True)
+    root = models.Root(name="@public", http="", subscribed=True)
     roots[root.name] = root
     if user:
-        for name in ['@personal', '@shared']:
-            root = models.Root(name=name, http='', subscribed=True)
+        for name in ["@personal", "@shared"]:
+            root = models.Root(name=name, http="", subscribed=True)
             roots[root.name] = root
 
     return roots
@@ -488,12 +505,12 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
 def get_root(name):
     root = database.roots.get(name)
     if root is None:
-        srv_utils.raise_not_found(f'{name} not known by the broker')
+        srv_utils.raise_not_found(f"{name} not known by the broker")
 
     return root
 
 
-@app.post('/api/subscribe/{name}')
+@app.post("/api/subscribe/{name}")
 async def post_subscribe(
     name: str,
     user: db.User = Depends(optional_user),
@@ -511,18 +528,18 @@ async def post_subscribe(
     str
         'Ok' if successful.
     """
-    if name == '@public':
+    if name == "@public":
         pass
-    elif name in {'@personal', '@shared'}:
+    elif name in {"@personal", "@shared"}:
         if not user:
             raise srv_utils.raise_unauthorized(f"Subscribing to {name} requires authentication")
     else:
         get_root(name)
         follow(name)
-    return 'Ok'
+    return "Ok"
 
 
-@app.get('/api/list/{path:path}')
+@app.get("/api/list/{path:path}")
 async def get_list(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
@@ -542,15 +559,15 @@ async def get_list(
     """
     # Get the root
     root = path.parts[0]
-    if root == '@public':
+    if root == "@public":
         rootdir = public
-    elif root == '@personal':
+    elif root == "@personal":
         if not user:
-            srv_utils.raise_not_found('@personal needs authentication')
+            srv_utils.raise_not_found("@personal needs authentication")
         rootdir = personal / str(user.id)
-    elif root == '@shared':
+    elif root == "@shared":
         if not user:
-            srv_utils.raise_not_found('@shared needs authentication')
+            srv_utils.raise_not_found("@shared needs authentication")
         rootdir = shared
     else:
         root = get_root(root)
@@ -560,11 +577,14 @@ async def get_list(
     directory = rootdir / pathlib.Path(*path.parts[1:])
     if directory.is_file():
         name = pathlib.Path(directory.name)
-        return [str(name.with_suffix('') if name.suffix == '.b2' else name)]
-    return [str(relpath.with_suffix('') if relpath.suffix == '.b2' else relpath)
-            for _, relpath in utils.walk_files(directory)]
+        return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
+    return [
+        str(relpath.with_suffix("") if relpath.suffix == ".b2" else relpath)
+        for _, relpath in utils.walk_files(directory)
+    ]
 
-@app.get('/api/info/{path:path}')
+
+@app.get("/api/info/{path:path}")
 async def get_info(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
@@ -610,13 +630,12 @@ async def partial_download(abspath, path, slice_=None):
         await proxy.afetch(slice_)
 
 
-def abspath_and_dataprep(path: pathlib.Path,
-                         slice_: (tuple | None) = None,
-                         user: (db.User | None) = None,
-                         may_not_exist=False) -> tuple[
-                             pathlib.Path,
-                             Callable[[], Awaitable],
-                         ]:
+def abspath_and_dataprep(
+    path: pathlib.Path, slice_: (tuple | None) = None, user: (db.User | None) = None, may_not_exist=False
+) -> tuple[
+    pathlib.Path,
+    Callable[[], Awaitable],
+]:
     """
     Get absolute path in local storage and data preparation operation.
 
@@ -625,39 +644,44 @@ def abspath_and_dataprep(path: pathlib.Path,
     given, or the whole data otherwise.
     """
     parts = path.parts
-    if parts[0] == '@personal':
+    if parts[0] == "@personal":
         if not user:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
         filepath = personal / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(personal, filepath, may_not_exist)
+
         async def dataprep():
             pass
 
-    elif parts[0] == '@shared':
+    elif parts[0] == "@shared":
         if not user:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
         filepath = shared / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(shared, filepath, may_not_exist)
+
         async def dataprep():
             pass
 
-    elif parts[0] == '@public':
+    elif parts[0] == "@public":
         filepath = public / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(public, filepath, may_not_exist)
+
         async def dataprep():
             pass
 
     else:
         filepath = cache / path
         abspath = srv_utils.cache_lookup(cache, filepath, may_not_exist)
+
         async def dataprep():
             return await partial_download(abspath, path, slice_)
 
     return (abspath, dataprep)
 
-@app.get('/api/fetch/{path:path}')
+
+@app.get("/api/fetch/{path:path}")
 async def fetch_data(
     path: pathlib.Path,
     slice_: str = None,
@@ -694,7 +718,7 @@ async def fetch_data(
 
     if isinstance(container, blosc2.NDArray | blosc2.LazyExpr):
         array = container
-        schunk = getattr(array, 'schunk', None)
+        schunk = getattr(array, "schunk", None)
         typesize = array.dtype.itemsize
         shape = array.shape
     else:
@@ -706,17 +730,18 @@ async def fetch_data(
 
     whole = slice_ is None or slice_ == ()
     if not whole and isinstance(slice_, tuple):
-        whole = all(isinstance(sl, slice)
-                    and (sl.start or 0) == 0
-                    and (sl.stop is None or sl.stop >= sh)
-                    and sl.step in (None, 1)
-                    for sl, sh in zip(slice_, shape))
+        whole = all(
+            isinstance(sl, slice)
+            and (sl.start or 0) == 0
+            and (sl.stop is None or sl.stop >= sh)
+            and sl.step in (None, 1)
+            for sl, sh in zip(slice_, shape)
+        )
 
     if whole and schunk is not None:  # whole and not lazy expr
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
-        return FileResponse(abspath, filename=abspath.name,
-                            media_type='application/octet-stream')
+        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if slice_:
         if array is not None:
@@ -740,15 +765,14 @@ async def fetch_data(
         data = data.to_cframe()
     elif isinstance(data, bytes):
         # A bytes object can still be compressed as a SChunk
-        schunk = blosc2.SChunk(data=data, cparams={'typesize': typesize})
+        schunk = blosc2.SChunk(data=data, cparams={"typesize": typesize})
         data = schunk.to_cframe()
     downloader = srv_utils.iterchunk(data)
 
-    return responses.StreamingResponse(downloader,
-                                       media_type='application/octet-stream')
+    return responses.StreamingResponse(downloader, media_type="application/octet-stream")
 
 
-@app.get('/api/chunk/{path:path}')
+@app.get("/api/chunk/{path:path}")
 async def get_chunk(
     path: pathlib.PosixPath,
     nchunk: int,
@@ -757,14 +781,14 @@ async def get_chunk(
     abspath, _ = abspath_and_dataprep(path, user=user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
-        if user and path.parts[0] == '@personal':
+        if user and path.parts[0] == "@personal":
             container = open_b2(abspath, path)
             if isinstance(container, blosc2.LazyArray):
                 # We do not support LazyUDF in Caterva2 yet.
                 # In case we do, this would have to be changed.
                 chunk = container.get_chunk(nchunk)
             else:
-                schunk = getattr(container, 'schunk', container)
+                schunk = getattr(container, "schunk", container)
                 chunk = schunk.get_chunk(nchunk)
         else:
             sub_dset = PubDataset(abspath, path)
@@ -774,8 +798,7 @@ async def get_chunk(
     return responses.StreamingResponse(downloader)
 
 
-def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
-                  user: db.User) -> str:
+def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User) -> str:
     """
     Create a lazy expression dataset in personal space.
 
@@ -816,11 +839,11 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
 
         # Detect special roots
         path = pathlib.Path(path)
-        if path.parts[0] == '@personal':
+        if path.parts[0] == "@personal":
             abspath = personal / str(user.id) / pathlib.Path(*path.parts[1:])
-        elif path.parts[0] == '@shared':
+        elif path.parts[0] == "@shared":
             abspath = shared / pathlib.Path(*path.parts[1:])
-        elif path.parts[0] == '@public':
+        elif path.parts[0] == "@public":
             abspath = public / pathlib.Path(*path.parts[1:])
         else:
             abspath = cache / path
@@ -834,12 +857,12 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str],
 
     path = personal / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
-    arr.save(urlpath=f'{path / name}.b2nd', mode="w")
+    arr.save(urlpath=f"{path / name}.b2nd", mode="w")
 
-    return f'@personal/{name}.b2nd'
+    return f"@personal/{name}.b2nd"
 
 
-@app.post('/api/lazyexpr/')
+@app.post("/api/lazyexpr/")
 async def lazyexpr(
     expr: models.NewLazyExpr,
     user: db.User = Depends(current_active_user),
@@ -862,19 +885,18 @@ async def lazyexpr(
         return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
 
     try:
-        result_path = make_lazyexpr(expr.name, expr.expression, expr.operands,
-                                    user)
+        result_path = make_lazyexpr(expr.name, expr.expression, expr.operands, user)
     except (SyntaxError, ValueError, TypeError) as exc:
-        raise error(f'Invalid name or expression: {exc}')
+        raise error(f"Invalid name or expression: {exc}")
     except KeyError as ke:
-        raise error(f'Expression error: {ke.args[0]} is not in the list of available datasets')
+        raise error(f"Expression error: {ke.args[0]} is not in the list of available datasets")
     except RuntimeError as exc:
         raise error(str(exc))
 
     return result_path
 
 
-@app.post('/api/move/')
+@app.post("/api/move/")
 async def move(
     payload: models.MoveCopyPayload,
     user: db.User = Depends(current_active_user),
@@ -891,12 +913,14 @@ async def move(
         raise srv_utils.raise_unauthorized("Moving files requires authentication")
 
     # Both src and dst should start with a special root
-    if not payload.src.startswith(('@personal', '@shared', '@public')):
-        raise fastapi.HTTPException(status_code=400, detail=
-        "Only moving from @personal or @shared or @public roots is allowed")
-    if not payload.dst.startswith(('@personal', '@shared', '@public')):
-        raise fastapi.HTTPException(status_code=400, detail=
-        "Only moving to @personal or @shared or @public roots is allowed")
+    if not payload.src.startswith(("@personal", "@shared", "@public")):
+        raise fastapi.HTTPException(
+            status_code=400, detail="Only moving from @personal or @shared or @public roots is allowed"
+        )
+    if not payload.dst.startswith(("@personal", "@shared", "@public")):
+        raise fastapi.HTTPException(
+            status_code=400, detail="Only moving to @personal or @shared or @public roots is allowed"
+        )
     namepath = pathlib.Path(payload.src)
     destpath = pathlib.Path(payload.dst)
     abspath, _ = abspath_and_dataprep(namepath, user=user)
@@ -919,7 +943,7 @@ async def move(
     return str(destpath)
 
 
-@app.post('/api/copy/')
+@app.post("/api/copy/")
 async def copy(
     payload: models.MoveCopyPayload,
     user: db.User = Depends(current_active_user),
@@ -937,14 +961,13 @@ async def copy(
 
     src, dst = payload.src, payload.dst
     # src should start with a special root or known root
-    if (not src.startswith(('@personal', '@shared', '@public'))
-            and src not in database.roots):
-        raise fastapi.HTTPException(status_code=400, detail=
-        "Only copying from existing roots is allowed")
+    if not src.startswith(("@personal", "@shared", "@public")) and src not in database.roots:
+        raise fastapi.HTTPException(status_code=400, detail="Only copying from existing roots is allowed")
     # dst should start with a special root
-    if not dst.startswith(('@personal', '@shared', '@public')):
-        raise fastapi.HTTPException(status_code=400, detail=
-        "Only copying to @personal or @shared or @public roots is allowed")
+    if not dst.startswith(("@personal", "@shared", "@public")):
+        raise fastapi.HTTPException(
+            status_code=400, detail="Only copying to @personal or @shared or @public roots is allowed"
+        )
 
     namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
     abspath, _ = abspath_and_dataprep(namepath, user=user)
@@ -953,8 +976,8 @@ async def copy(
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she should add a '.b2' extension
     if dest_abspath.is_dir() or not dest_abspath.suffix:
-            dest_abspath /= abspath.name
-            destpath /= namepath.name
+        dest_abspath /= abspath.name
+        destpath /= namepath.name
 
     # Not sure if we should allow overwriting, but let's allow it for now
     # if dest_abspath.exists():
@@ -969,11 +992,11 @@ async def copy(
     return str(destpath)
 
 
-@app.post('/api/upload/{path:path}')
+@app.post("/api/upload/{path:path}")
 async def upload_file(
-        path: pathlib.Path,
-        file: UploadFile,
-        user: db.User = Depends(current_active_user),
+    path: pathlib.Path,
+    file: UploadFile,
+    user: db.User = Depends(current_active_user),
 ):
     """
     Upload a file to a root.
@@ -998,11 +1021,11 @@ async def upload_file(
 
     # Replace the root with absolute path
     root = path.parts[0]
-    if root == '@personal':
+    if root == "@personal":
         path2 = personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == '@shared':
+    elif root == "@shared":
         path2 = shared / pathlib.Path(*path.parts[1:])
-    elif root == '@public':
+    elif root == "@public":
         path2 = public / pathlib.Path(*path.parts[1:])
     else:
         raise fastapi.HTTPException(
@@ -1016,23 +1039,23 @@ async def upload_file(
     path2.parent.mkdir(exist_ok=True, parents=True)
 
     # If regular file, compress it
-    if path2.suffix not in {'.b2', '.b2frame', '.b2nd'}:
+    if path2.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
-        path2 = path2.with_suffix(path2.suffix + '.b2')
+        path2 = path2.with_suffix(path2.suffix + ".b2")
 
     # Write the file
-    with open(path2, 'wb') as f:
+    with open(path2, "wb") as f:
         f.write(data)
 
     # Return the urlpath
     return str(path)
 
 
-@app.post('/api/remove/{path:path}')
+@app.post("/api/remove/{path:path}")
 async def remove(
-        path: pathlib.Path,
-        user: db.User = Depends(current_active_user),
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
 ):
     """
     Remove a dataset or a directory path.
@@ -1053,11 +1076,11 @@ async def remove(
 
     # Replace the root with absolute path
     root = path.parts[0]
-    if root == '@personal':
+    if root == "@personal":
         path2 = personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == '@shared':
+    elif root == "@shared":
         path2 = shared / pathlib.Path(*path.parts[1:])
-    elif root == '@public':
+    elif root == "@public":
         path2 = public / pathlib.Path(*path.parts[1:])
     else:
         # Only allow removing from the special roots
@@ -1075,7 +1098,7 @@ async def remove(
             path2.unlink()
         except FileNotFoundError:
             # Try adding a .b2 extension
-            path2 = path2.with_suffix(path2.suffix + '.b2')
+            path2 = path2.with_suffix(path2.suffix + ".b2")
             try:
                 path2.unlink()
             except FileNotFoundError:
@@ -1093,63 +1116,47 @@ async def remove(
 #
 
 if user_auth_enabled():
+
     @app.get("/login", response_class=HTMLResponse)
-    async def html_login(
-            request: Request,
-            user: db.User = Depends(optional_user)
-    ):
+    async def html_login(request: Request, user: db.User = Depends(optional_user)):
         if user:
             return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "login.html")
 
     @app.get("/logout", response_class=HTMLResponse)
-    async def html_logout(
-            request: Request,
-            user: db.User = Depends(optional_user)
-    ):
+    async def html_logout(request: Request, user: db.User = Depends(optional_user)):
         if user:
             return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "logout.html")
 
     @app.get("/register", response_class=HTMLResponse)
-    async def html_register(
-            request: Request,
-            user: db.User = Depends(optional_user)
-    ):
+    async def html_register(request: Request, user: db.User = Depends(optional_user)):
         if user:
             return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "register.html")
 
     @app.get("/forgot-password", response_class=HTMLResponse)
-    async def html_forgot_password(
-            request: Request,
-            user: db.User = Depends(optional_user)
-    ):
+    async def html_forgot_password(request: Request, user: db.User = Depends(optional_user)):
         if user:
             return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "forgot-password.html")
 
     @app.get("/reset-password/{token}", response_class=HTMLResponse, name="html-reset-password")
-    async def html_reset_password(
-            request: Request,
-            token: str,
-            user: db.User = Depends(optional_user)
-    ):
+    async def html_reset_password(request: Request, token: str, user: db.User = Depends(optional_user)):
         if user:
             return RedirectResponse(urlbase, status_code=307)
 
-        context = {'token': token}
+        context = {"token": token}
         return templates.TemplateResponse(request, "reset-password.html", context)
 
-
-    @app.post('/api/adduser/')
+    @app.post("/api/adduser/")
     async def add_user(
-            payload: models.AddUserPayload,
-            user: db.User = Depends(current_active_user),
+        payload: models.AddUserPayload,
+        user: db.User = Depends(current_active_user),
     ):
         """
         Add a user.
@@ -1167,7 +1174,12 @@ if user_auth_enabled():
         if not user:
             raise srv_utils.raise_unauthorized("Adding a user requires authentication")
         if not user.is_superuser:
-            srv_utils.raise_unauthorized('Only superusers can add users')
+            srv_utils.raise_unauthorized("Only superusers can add users")
+
+        # Get the number of current users
+        users = await utils.alist_users()
+        if len(users) >= maxusers:
+            raise srv_utils.raise_bad_request(f"Only a maximum of {maxusers} users are allowed")
 
         try:
             await utils.aadd_user(
@@ -1178,14 +1190,13 @@ if user_auth_enabled():
             )
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            raise srv_utils.raise_bad_request(f'Error in adding {payload.username}: {error_message}')
-        return f'User added: {payload}'
+            raise srv_utils.raise_bad_request(f"Error in adding {payload.username}: {error_message}")
+        return f"User added: {payload}"
 
-
-    @app.get('/api/deluser/{deluser}')
+    @app.get("/api/deluser/{deluser}")
     async def del_user(
-            deluser: str,
-            user: db.User = Depends(current_active_user),
+        deluser: str,
+        user: db.User = Depends(current_active_user),
     ):
         """
         Delete a user.
@@ -1203,19 +1214,18 @@ if user_auth_enabled():
         if not user:
             raise srv_utils.raise_unauthorized("Deleting a user requires authentication")
         if not user.is_superuser:
-            srv_utils.raise_unauthorized('Only superusers can delete users')
+            srv_utils.raise_unauthorized("Only superusers can delete users")
 
         try:
             await utils.adel_user(deluser)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            raise srv_utils.raise_bad_request(f'Error in deleting {deluser}: {error_message}')
-        return f'User deleted: {deluser}'
+            raise srv_utils.raise_bad_request(f"Error in deleting {deluser}: {error_message}")
+        return f"User deleted: {deluser}"
 
-
-    @app.get('/api/listusers')
+    @app.get("/api/listusers")
     async def list_users(
-            user: db.User = Depends(current_active_user),
+        user: db.User = Depends(current_active_user),
     ):
         """
         List all users.
@@ -1229,7 +1239,6 @@ if user_auth_enabled():
             raise srv_utils.raise_unauthorized("Listing users requires authentication")
         return await utils.alist_users()
 
-
     # TODO: Support user verification
 
 
@@ -1237,34 +1246,33 @@ if user_auth_enabled():
 @app.get("/roots/{path:path}")
 async def html_home(
     request: Request,
-    path: str = '',
+    path: str = "",
     # Query parameters
     roots: list[str] = fastapi.Query([]),
-    search: str = '',
+    search: str = "",
     # Dependencies
     user: db.User = Depends(optional_user),
 ):
-
     # Disk usage
     size = get_disk_usage()
     context = {
-        'user_auth_enabled': user_auth_enabled(),
-        'roots_url': make_url(request, 'htmx_root_list', {'roots': roots}),
-        'username': user.email if user else None,
+        "user_auth_enabled": user_auth_enabled(),
+        "roots_url": make_url(request, "htmx_root_list", {"roots": roots}),
+        "username": user.email if user else None,
         # Disk usage
-        'usage_total':  custom_filesizeformat(size),
+        "usage_total": custom_filesizeformat(size),
     }
 
     if quota:
-        context['usage_quota'] = custom_filesizeformat(quota)
-        context['usage_percent'] = round((size / quota) * 100)
+        context["usage_quota"] = custom_filesizeformat(quota)
+        context["usage_percent"] = round((size / quota) * 100)
 
     if roots:
-        paths_url = make_url(request, 'htmx_path_list', {'roots': roots, 'search': search})
-        context['paths_url'] = paths_url
+        paths_url = make_url(request, "htmx_path_list", {"roots": roots, "search": search})
+        context["paths_url"] = paths_url
 
     if path:
-        context["meta_url"] = make_url(request, 'htmx_path_info', path=path)
+        context["meta_url"] = make_url(request, "htmx_path_info", path=path)
 
     return templates.TemplateResponse(request, "home.html", context)
 
@@ -1277,7 +1285,6 @@ async def htmx_root_list(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-
     context = {
         "checked": roots,
         "roots": sorted(database.roots.values(), key=lambda x: x.name),
@@ -1291,34 +1298,33 @@ async def htmx_path_list(
     request: Request,
     # Query parameters
     roots: list[str] = fastapi.Query([]),
-    search: str = '',
+    search: str = "",
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     hx_trigger: srv_utils.HeaderType = None,
     # Depends
     user: db.User = Depends(optional_user),
 ):
-
     hx_current_url = furl.furl(hx_current_url)
 
     # Prepare datasets context
     def get_names():
         n = 1
         while True:
-            for name in itertools.product(* [string.ascii_lowercase] * n):
-                yield ''.join(name)
+            for name in itertools.product(*[string.ascii_lowercase] * n):
+                yield "".join(name)
             n += 1
 
     names = get_names()
 
-    query = {'roots': roots, 'search': search}
+    query = {"roots": roots, "search": search}
     datasets = []
     for root in roots:
-        if user and root == '@personal':
+        if user and root == "@personal":
             rootdir = personal / str(user.id)
-        elif user and root == '@shared':
+        elif user and root == "@shared":
             rootdir = shared
-        elif root == '@public':
+        elif root == "@public":
             rootdir = public
         else:
             if not get_root(root).subscribed:
@@ -1327,24 +1333,26 @@ async def htmx_path_list(
 
         for path, relpath in utils.walk_files(rootdir):
             size = path.stat().st_size
-            if relpath.suffix == '.b2':
-                relpath = relpath.with_suffix('')
+            if relpath.suffix == ".b2":
+                relpath = relpath.with_suffix("")
             if search in str(relpath):
-                path = f'{root}/{relpath}'
+                path = f"{root}/{relpath}"
                 url = make_url(request, "html_home", path=path, query=query)
-                datasets.append({
-                    'name': next(names),
-                    'path': path,
-                    'size': size,
-                    'url': url,
-                    'label': truncate_path(path),
-                })
+                datasets.append(
+                    {
+                        "name": next(names),
+                        "path": path,
+                        "size": size,
+                        "url": url,
+                        "label": truncate_path(path),
+                    }
+                )
 
-    datasets = sorted(datasets, key=lambda x: x['name'])
+    datasets = sorted(datasets, key=lambda x: x["name"])
 
     # Render template
-    cmd_url = make_url(request, 'htmx_command')
-    search_url = make_url(request, 'htmx_path_list', {'roots': roots})
+    cmd_url = make_url(request, "htmx_command")
+    search_url = make_url(request, "htmx_path_list", {"roots": roots})
     context = {
         "datasets": datasets,
         "search_text": search,
@@ -1355,12 +1363,12 @@ async def htmx_path_list(
     response = templates.TemplateResponse(request, "path_list.html", context)
 
     # Push URL only when clicked, not on load/reload
-    if hx_trigger != 'path-list':
-        args = {'roots': roots}
+    if hx_trigger != "path-list":
+        args = {"roots": roots}
         if search:
-            args['search'] = search
+            args["search"] = search
         push_url = hx_current_url.set(args).url
-        response.headers['HX-Push-Url'] = push_url
+        response.headers["HX-Push-Url"] = push_url
 
     return response
 
@@ -1376,16 +1384,15 @@ async def htmx_path_info(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-
     try:
         abspath, _ = abspath_and_dataprep(path, user=user)
     except FileNotFoundError:
-        return htmx_error(request, 'FileNotFoundError: missing operand(s)')
+        return htmx_error(request, "FileNotFoundError: missing operand(s)")
 
     meta = srv_utils.read_metadata(abspath, cache, personal, shared, public)
 
-    vlmeta = getattr(getattr(meta, 'schunk', meta), 'vlmeta', {})
-    contenttype = vlmeta.get('contenttype') or guess_dset_ctype(path, meta)
+    vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
+    contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
@@ -1408,24 +1415,26 @@ async def htmx_path_info(
     }
 
     # XXX
-    if hasattr(meta, 'shape'):
+    if hasattr(meta, "shape"):
         view_url = make_url(request, "htmx_path_view", path=path)
-        context.update({
-            "view_url": view_url,
-            "shape": meta.shape,
-        })
+        context.update(
+            {
+                "view_url": view_url,
+                "shape": meta.shape,
+            }
+        )
 
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     # Push URL only when clicked, not on load/reload
-    if hx_trigger != 'meta':
-        push_url = make_url(request, 'html_home', path=path)
+    if hx_trigger != "meta":
+        push_url = make_url(request, "html_home", path=path)
         # Keep query
         current_query = furl.furl(hx_current_url).query
         if current_query:
-            push_url = f'{push_url}?{current_query.encode()}'
+            push_url = f"{push_url}?{current_query.encode()}"
 
-        response.headers['HX-Push-Url'] = push_url
+        response.headers["HX-Push-Url"] = push_url
 
     return response
 
@@ -1448,7 +1457,7 @@ async def htmx_path_view(
     # Local variables
     shape = arr.shape
     ndims = len(shape)
-    has_ndfields = hasattr(arr, 'fields') and arr.fields != {}
+    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
 
     # Set of dimensions that define the window
     # TODO Allow the user to choose the window dimensions
@@ -1470,15 +1479,17 @@ async def htmx_path_view(
     for i, (start, size, size_max) in enumerate(zip(index, sizes, shape)):
         mod = size_max % size
         start_max = size_max - (mod or size)
-        inputs.append({
-            'start': start,
-            'start_max': start_max,
-            'size': size,
-            'size_max': size_max,
-            'with_size': i in view_dims,
-        })
-        if inputs[-1]['with_size']:
-            tags.append([k for k in range(start, min(start+size, size_max))])
+        inputs.append(
+            {
+                "start": start,
+                "start_max": start_max,
+                "size": size,
+                "size_max": size_max,
+                "with_size": i in view_dims,
+            }
+        )
+        if inputs[-1]["with_size"]:
+            tags.append([k for k in range(start, min(start + size, size_max))])
 
     if has_ndfields:
         cols = list(arr.fields.keys())
@@ -1490,11 +1501,11 @@ async def htmx_path_view(
         if ndims >= 2:
             arr = arr[index[:-1]]
             i, isize = index[-1], sizes[-1]
-            arr = arr[i:i + isize]
+            arr = arr[i : i + isize]
             arr = arr.tolist()
         elif ndims == 1:
             i, isize = index[0], sizes[0]
-            arr = arr[i:i + isize]
+            arr = arr[i : i + isize]
             arr = arr.tolist()
         else:
             arr = [arr[()].tolist()]
@@ -1506,11 +1517,11 @@ async def htmx_path_view(
             arr = arr[index[:-2]]
             i, isize = index[-2], sizes[-2]
             j, jsize = index[-1], sizes[-1]
-            arr = arr[i:i+isize, j:j+jsize]
+            arr = arr[i : i + isize, j : j + jsize]
             rows = [tags[-1]] + list(arr)
         elif ndims == 1:
             i, isize = index[0], sizes[0]
-            arr = [arr[i:i+isize]]
+            arr = [arr[i : i + isize]]
             rows = [tags[-1]] + list(arr)
         else:
             arr = [[arr[()]]]
@@ -1527,6 +1538,7 @@ async def htmx_path_view(
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 
+
 @app.post("/htmx/command/", response_class=HTMLResponse)
 async def htmx_command(
     request: Request,
@@ -1539,121 +1551,119 @@ async def htmx_command(
     # Depends
     user: db.User = Depends(current_active_user),
 ):
-
     operands = dict(zip(names, paths))
     argv = command.split()
 
     # First check for expressions
-    if len(argv) > 1 and argv[1] == '=':
+    if len(argv) > 1 and argv[1] == "=":
         try:
-            result_name, expr = command.split('=')
+            result_name, expr = command.split("=")
             result_path = make_lazyexpr(result_name, expr, operands, user)
         except (SyntaxError, ValueError):
-            return htmx_error(request,
-                              'Invalid syntax: expected <varname> = <expression>')
+            return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
         except TypeError as te:
-            return htmx_error(request, f'Invalid expression: {te}')
+            return htmx_error(request, f"Invalid expression: {te}")
         except KeyError as ke:
-            error = f'Expression error: {ke.args[0]} is not in the list of available datasets'
+            error = f"Expression error: {ke.args[0]} is not in the list of available datasets"
             return htmx_error(request, error)
         except RuntimeError as exc:
             return htmx_error(request, str(exc))
 
     # Commands
 
-    elif argv[0] in {'adduser'}:
+    elif argv[0] in {"adduser"}:
         if len(argv) != 2:
-            return htmx_error(request, 'Invalid syntax: expected adduser <username>')
+            return htmx_error(request, "Invalid syntax: expected adduser <username>")
         try:
             userpl = models.AddUserPayload(username=argv[1], password=None, superuser=False)
             message = await add_user(userpl, user)
         except Exception as exc:
-            return htmx_error(request, f'Error adding user: {exc}')
+            return htmx_error(request, f"Error adding user: {exc}")
         return htmx_message(request, message)
 
-    elif argv[0] in {'cp', 'copy'}:
+    elif argv[0] in {"cp", "copy"}:
         if len(argv) != 3:
-            return htmx_error(request, 'Invalid syntax: expected cp/copy <src> <dst>')
+            return htmx_error(request, "Invalid syntax: expected cp/copy <src> <dst>")
         src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
         payload = models.MoveCopyPayload(src=src, dst=dst)
         try:
             result_path = await copy(payload, user)
         except Exception as exc:
-            return htmx_error(request, f'Error copying file: {exc}')
+            return htmx_error(request, f"Error copying file: {exc}")
         result_path = await display_first(result_path, user)
 
-    elif argv[0] in {'deluser'}:
+    elif argv[0] in {"deluser"}:
         if len(argv) != 2:
-            return htmx_error(request, 'Invalid syntax: expected deluser <username>')
+            return htmx_error(request, "Invalid syntax: expected deluser <username>")
         try:
             message = await del_user(argv[1], user)
         except Exception as exc:
-            return htmx_error(request, f'Error deleting user: {exc}')
+            return htmx_error(request, f"Error deleting user: {exc}")
         return htmx_message(request, message)
 
-    elif argv[0] in {'i', 'info'}:
+    elif argv[0] in {"i", "info"}:
         if len(argv) != 2:
-            return htmx_error(request, 'Invalid syntax: expected i/info <path>')
+            return htmx_error(request, "Invalid syntax: expected i/info <path>")
         path = operands.get(argv[1], argv[1])
         path = pathlib.Path(path)
         try:
             paths = await get_list(path, user)
         except Exception as exc:
-            return htmx_error(request, f'Error listing path: {exc}')
+            return htmx_error(request, f"Error listing path: {exc}")
         if len(paths) != 1:
             return htmx_error(request, f'dataset "{path}" not found')
         result_path = path
 
-    elif argv[0] in {'ls', 'list'}:
+    elif argv[0] in {"ls", "list"}:
         if len(argv) != 2:
-            return htmx_error(request, 'Invalid syntax: expected ls/list <path>')
+            return htmx_error(request, "Invalid syntax: expected ls/list <path>")
         path = operands.get(argv[1], argv[1])
         path = pathlib.Path(path)
         try:
             paths = await get_list(path, user)
         except Exception as exc:
-            return htmx_error(request, f'Error listing path: {exc}')
+            return htmx_error(request, f"Error listing path: {exc}")
         # Get the first path to display
         first_path = next(iter(paths), None)
         if path.name == first_path:
             result_path = path
         else:
-            result_path = f'{path}/{first_path}' if first_path else path
+            result_path = f"{path}/{first_path}" if first_path else path
 
     # Where to display this in web interface?
-    elif argv[0] in {'lsu', 'listusers'}:
+    elif argv[0] in {"lsu", "listusers"}:
         if len(argv) != 1:
-            return htmx_error(request, 'Invalid syntax: expected lsu/listusers')
+            return htmx_error(request, "Invalid syntax: expected lsu/listusers")
         try:
             lusers = await list_users()
         except Exception as exc:
-            return htmx_error(request, f'Error listing users: {exc}')
+            return htmx_error(request, f"Error listing users: {exc}")
         # Get the list of users
         users = [user.email for user in lusers]
         print(users)
-        return htmx_message(request, f'Users: {users}')
+        return htmx_message(request, f"Users: {users}")
 
-    elif argv[0] in {'mv', 'move'}:
+    elif argv[0] in {"mv", "move"}:
         if len(argv) != 3:
-            return htmx_error(request, 'Invalid syntax: expected mv/move <src> <dst>')
+            return htmx_error(request, "Invalid syntax: expected mv/move <src> <dst>")
         src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
         payload = models.MoveCopyPayload(src=src, dst=dst)
         try:
             result_path = await move(payload, user)
         except Exception as exc:
-            return htmx_error(request, f'Error moving file: {exc}')
+            return htmx_error(request, f"Error moving file: {exc}")
         result_path = await display_first(result_path, user)
 
-    elif argv[0] in {'rm', 'remove'}:
+    elif argv[0] in {"rm", "remove"}:
         if len(argv) != 2:
-            return htmx_error(request, 'Invalid syntax: expected rm/remove <path>')
+            return htmx_error(request, "Invalid syntax: expected rm/remove <path>")
         path = operands.get(argv[1], argv[1])
         path = pathlib.Path(path)
         try:
             # Nothing to show after removing, but anyway
             result_path = await remove(path, user)
         except Exception as exc:
-            return htmx_error(request, f'Error removing file: {exc}')
+            return htmx_error(request, f"Error removing file: {exc}")
 
     else:
         return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')
@@ -1667,32 +1677,33 @@ async def display_first(result_path, user):
     paths = await get_list(pathlib.Path(result_path), user)
     if len(paths) > 1:
         # Display the first path found
-        result_path = f'{result_path}/{paths[0]}'
+        result_path = f"{result_path}/{paths[0]}"
     elif len(paths) == 1 and not result_path.endswith(paths[0]):
-        result_path = f'{result_path}/{paths[0]}'
+        result_path = f"{result_path}/{paths[0]}"
     return result_path
 
 
 def htmx_message(request, msg):
-    context = {'message': msg}
+    context = {"message": msg}
     return templates.TemplateResponse(request, "message.html", context, status_code=400)
 
 
 def htmx_error(request, msg):
-    context = {'error': msg}
+    context = {"error": msg}
     return templates.TemplateResponse(request, "error.html", context, status_code=400)
 
 
 def htmx_redirect(current_url, target_url, root=None):
-    response = JSONResponse('OK')
+    response = JSONResponse("OK")
     query = furl.furl(current_url).query
-    roots = query.params.getlist('roots')
+    roots = query.params.getlist("roots")
 
     if root and root not in roots:
-        query = query.add({'roots': root})
+        query = query.add({"roots": root})
 
-    response.headers['HX-Redirect'] = f'{target_url}?{query.encode()}'
+    response.headers["HX-Redirect"] = f"{target_url}?{query.encode()}"
     return response
+
 
 @app.post("/htmx/upload/{name}")
 async def htmx_upload(
@@ -1705,15 +1716,14 @@ async def htmx_upload(
     # Depends
     user: db.User = Depends(current_active_user),
 ):
-
     if not user:
         raise srv_utils.raise_unauthorized("Uploading files requires authentication")
 
-    if name == '@personal':
+    if name == "@personal":
         path = personal / str(user.id)
-    elif name == '@shared':
+    elif name == "@shared":
         path = shared
-    elif name == '@public':
+    elif name == "@public":
         path = public
     else:
         raise fastapi.HTTPException(status_code=404)  # NotFound
@@ -1729,63 +1739,74 @@ async def htmx_upload(
         upload_size = len(data)
         total_size = get_disk_usage() + upload_size
         if total_size > quota:
-            error = 'Upload failed because quota limit has been exceeded.'
+            error = "Upload failed because quota limit has been exceeded."
             return htmx_error(request, error)
 
     # If a tarball or zipfile, extract the files in path
     # We also filter out hidden files and MacOSX metadata
     suffixes = filename.suffixes
-    if suffixes in (['.tar', '.gz'], ['.tar'], ['.tgz'], ['.zip']):
+    if suffixes in ([".tar", ".gz"], [".tar"], [".tgz"], [".zip"]):
         file.file.seek(0)  # Reset file pointer
-        if suffixes == ['.zip']:
-            with zipfile.ZipFile(file.file, 'r') as archive:
-                members = [m for m in archive.namelist()
-                           if (not os.path.basename(m).startswith('.') and
-                               not os.path.basename(m).startswith('__MACOSX'))]
+        if suffixes == [".zip"]:
+            with zipfile.ZipFile(file.file, "r") as archive:
+                members = [
+                    m
+                    for m in archive.namelist()
+                    if (
+                        not os.path.basename(m).startswith(".")
+                        and not os.path.basename(m).startswith("__MACOSX")
+                    )
+                ]
                 archive.extractall(path, members=members)
                 # Convert members elements to Path instances
                 members = [pathlib.Path(m) for m in members]
         else:
-            mode = 'r:gz' if suffixes[-1] in {'.tgz', '.gz'} else 'r'
+            mode = "r:gz" if suffixes[-1] in {".tgz", ".gz"} else "r"
             with tarfile.open(fileobj=file.file, mode=mode) as archive:
-                members = [m for m in archive.getmembers()
-                           if (not os.path.basename(m.name).startswith('.') and
-                               not os.path.basename(m.name).startswith('__MACOSX'))]
+                members = [
+                    m
+                    for m in archive.getmembers()
+                    if (
+                        not os.path.basename(m.name).startswith(".")
+                        and not os.path.basename(m.name).startswith("__MACOSX")
+                    )
+                ]
                 archive.extractall(path, members=members)
                 # Convert members elements to Path instances
                 members = [pathlib.Path(m.name) for m in members]
 
         # Compress files that are not compressed yet
         new_members = [
-            member for member in members
-            if not (path / member).is_dir() and not member.suffix in {'.b2', '.b2frame', '.b2nd'}
+            member
+            for member in members
+            if not (path / member).is_dir() and not member.suffix in {".b2", ".b2frame", ".b2nd"}
         ]
         for member in new_members:
             member_path = path / member
-            with open(member_path, 'rb') as src:
+            with open(member_path, "rb") as src:
                 data = src.read()
                 schunk = blosc2.SChunk(data=data)
                 data = schunk.to_cframe()
-                member_path2 = f'{member_path}.b2'
-            with open(member_path2, 'wb') as dst:
+                member_path2 = f"{member_path}.b2"
+            with open(member_path2, "wb") as dst:
                 dst.write(data)
             member_path.unlink()
         # We are done, redirect to home, and show the new files, starting with the first one
         first_member = next((m for m in new_members), None)
-        path = f'{name}/{first_member}'
+        path = f"{name}/{first_member}"
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
-    if filename.suffix not in {'.b2', '.b2frame', '.b2nd'}:
+    if filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
-        filename = f'{filename}.b2'
+        filename = f"{filename}.b2"
 
     # Save file
-    with open(path / filename, 'wb') as dst:
+    with open(path / filename, "wb") as dst:
         dst.write(data)
 
     # Redirect to display new dataset
-    path = f'{name}/{filename}'
+    path = f"{name}/{filename}"
     url = make_url(request, "html_home", path=path)
     return htmx_redirect(hx_current_url, url, root=name)
 
@@ -1800,7 +1821,6 @@ async def htmx_delete(
     # Depends
     user: db.User = Depends(current_active_user),
 ):
-
     # Find absolute path to file
     parts = list(path.parts)
     name = parts[0]
@@ -1818,8 +1838,8 @@ async def htmx_delete(
         return fastapi.HTTPException(status_code=400)
 
     # Remove
-    if abspath.suffix not in {'.b2frame', '.b2nd'}:
-        abspath = abspath.with_suffix(abspath.suffix + '.b2')
+    if abspath.suffix not in {".b2frame", ".b2nd"}:
+        abspath = abspath.with_suffix(abspath.suffix + ".b2")
         if not abspath.exists():
             return fastapi.HTTPException(status_code=404)
     abspath.unlink()
@@ -1838,12 +1858,11 @@ async def html_markdown(
     # Response
     response_class=HTMLResponse,
 ):
-
     abspath, _ = abspath_and_dataprep(path, user=user)
     arr = open_b2(abspath, path)
     content = arr[:]
     # Markdown
-    return markdown.markdown(content.decode('utf-8'))
+    return markdown.markdown(content.decode("utf-8"))
 
 
 #
@@ -1855,9 +1874,8 @@ plugins = {}
 
 def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
     """Try to guess dataset's content type (given path and metadata)."""
-    for (ctype, plugin) in plugins.items():
-        if (hasattr(plugin, 'guess')
-                and plugin.guess(path, meta)):
+    for ctype, plugin in plugins.items():
+        if hasattr(plugin, "guess") and plugin.guess(path, meta):
             return ctype
     return None
 
@@ -1866,27 +1884,40 @@ def parse_size(size):
     if size is None:
         return None
 
-    units = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40 ,
-             "":  1, "KiB": 10**3, "MiB": 10**6, "GiB": 10**9, "TiB": 10**12}
-    m = re.match(r'^([\d\.]+)\s*([a-zA-Z]{0,3})$', str(size).strip())
+    units = {
+        "B": 1,
+        "KB": 2**10,
+        "MB": 2**20,
+        "GB": 2**30,
+        "TB": 2**40,
+        "": 1,
+        "KiB": 10**3,
+        "MiB": 10**6,
+        "GiB": 10**9,
+        "TiB": 10**12,
+    }
+    m = re.match(r"^([\d\.]+)\s*([a-zA-Z]{0,3})$", str(size).strip())
     number, unit = float(m.group(1)), m.group(2).upper()
-    return int(number*units[unit])
+    return int(number * units[unit])
 
 
 def main():
     # Read configuration file
-    conf = utils.get_conf('subscriber', allow_id=True)
-    global quota, urlbase
-    quota = parse_size(conf.get('.quota'))
-    urlbase = conf.get('.urlbase')
+    conf = utils.get_conf("subscriber", allow_id=True)
+    global quota, urlbase, maxusers
+    quota = parse_size(conf.get(".quota"))
+    urlbase = conf.get(".urlbase")
+    maxusers = conf.get(".maxusers")
 
     # Parse command line arguments
-    _stdir = '_caterva2/sub' + (f'.{conf.id}' if conf.id else '')
-    parser = utils.get_parser(broker=conf.get('broker.http', ''),
-                              http=conf.get('.http', 'localhost:8002'),
-                              loglevel=conf.get('.loglevel', 'warning'),
-                              statedir=conf.get('.statedir', _stdir),
-                              id=conf.id)
+    _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
+    parser = utils.get_parser(
+        broker=conf.get("broker.http", ""),
+        http=conf.get(".http", "localhost:8002"),
+        loglevel=conf.get(".loglevel", "warning"),
+        statedir=conf.get(".statedir", _stdir),
+        id=conf.id,
+    )
     args = utils.run_parser(parser)
     global broker
     broker = args.broker
@@ -1894,32 +1925,33 @@ def main():
     # Init cache
     global statedir, cache
     statedir = args.statedir.resolve()
-    cache = statedir / 'cache'
+    cache = statedir / "cache"
     cache.mkdir(exist_ok=True, parents=True)
     # Use `download_cached()`, `StaticFiles` does not support authorization.
-    #app.mount("/files", StaticFiles(directory=cache), name="files")
+    # app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Shared/Public dirs
     global shared, public
-    shared = statedir / 'shared'
+    shared = statedir / "shared"
     shared.mkdir(exist_ok=True, parents=True)
-    public = statedir / 'public'
+    public = statedir / "public"
     public.mkdir(exist_ok=True, parents=True)
 
     # personal dir
     global personal
-    personal = statedir / 'personal'
+    personal = statedir / "personal"
     personal.mkdir(exist_ok=True, parents=True)
     # Use `download_personal()`, `StaticFiles` does not support authorization.
-    #app.mount("/personal", StaticFiles(directory=personal), name="personal")
+    # app.mount("/personal", StaticFiles(directory=personal), name="personal")
 
     # Init database
     global database
     model = models.Subscriber(roots={}, etags={})
-    database = srv_utils.Database(statedir / 'db.json', model)
+    database = srv_utils.Database(statedir / "db.json", model)
 
     # Register display plugins
     from .plugins import tomography  # delay module load
+
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(abspath_and_dataprep)
@@ -1929,6 +1961,5 @@ def main():
     utils.uvicorn_run(app, args, root_path=root_path)
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

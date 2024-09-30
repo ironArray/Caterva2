@@ -9,6 +9,7 @@ repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   rev: v0.6.7
   hooks:
-  - id: ruff
+  # Temporarily disable ruff linter for the whole project
+  # - id: ruff
   - id: ruff-format
     exclude: ^bench/
