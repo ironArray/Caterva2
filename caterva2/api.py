@@ -599,6 +599,13 @@ class Root:
         An optional mapping of fields and values to be used as data to be
         posted for authenticating the user and get an authorization token for
         further requests.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+    >>> root.file_list[-3:]
+    ['dir2/ds-4d.b2nd', 'dir1/ds-3d.b2nd', 'dir1/ds-2d.b2nd']
     """
     def __init__(self, name, urlbase=None, user_auth=None):
         urlbase, name = _format_paths(urlbase, name)
@@ -616,6 +623,9 @@ class Root:
                              f' (only {roots.keys()} available)')
     @property
     def file_list(self):
+        """
+        A list with the files in this root.
+        """
         return api_utils.get(f'{self.urlbase}/api/list/{self.name}',
                              auth_cookie=self.auth_cookie)
 
@@ -639,11 +649,9 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('@public')
-        >>> file = root['ds-1d.b2nd']
-        >>> file
-        File: @public/ds-1d.b2nd
-
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> root['ds-1d.b2nd']
+        <Dataset: example/ds-1d.b2nd>
         """
         path = path.as_posix() if isinstance(path, pathlib.Path) else path
         if path.endswith((".b2nd", ".b2frame")):
@@ -670,8 +678,8 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('@public')
-        >>> '@public/ds-1d.b2nd' in root
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> 'ds-1d.b2nd' in root
         True
         """
         path = path.as_posix() if isinstance(path, pathlib.Path) else path
@@ -689,16 +697,35 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('@public')
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> for file in root:
         ...     print(file)
-        @public/ds-1d.b2nd
-        @public/ds-2d.b2nd
-
+        ds-2d-fields.b2nd
+        lung-jpeg2000_10x.b2nd
+        ds-1d-fields.b2nd
+        ds-1d.b2nd
+        ds-hello.b2frame
+        ds-sc-attr.b2nd
+        README.md
+        ds-1d-b.b2nd
+        tomo-guess-test.b2nd
+        dir2/ds-4d.b2nd
+        dir1/ds-3d.b2nd
+        dir1/ds-2d.b2nd
         """
         return iter(self.file_list)
 
     def __len__(self):
+        """
+        Return the number of files in the root.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> len(root)
+        12
+        """
         return len(self.file_list)
 
     def __str__(self):
@@ -764,20 +791,18 @@ class File:
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> root = cat2.Root('foo')
+    >>> root = cat2.Root('example', 'https://demo.caterva2.net')
     >>> file = root['README.md']
+    >>> file
+    <File: example/README.md>
     >>> file.name
     'README.md'
     >>> file.urlbase
-    'http://localhost:8002'
+    'https://demo.caterva2.net'
     >>> file.path
-    PosixPath('foo/README.md')
-    >>> file.meta['cparams']
-    {'codec': 5, 'typesize': 1, 'blocksize': 32768}
-    >>> file[:25]
-    b'This is a simple example,'
-    >>> file[0]
-    b'T'
+    PosixPath('example/README.md')
+    >>> file.meta['cbytes']
+    119
     """
     def __init__(self, name, root, urlbase, auth_cookie=None):
         urlbase, name = _format_paths(urlbase, name)
@@ -804,7 +829,7 @@ class File:
         file.
 
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('foo')
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
         {'a': 1, 'b': 'foo', 'c': 123.456}
@@ -824,10 +849,10 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('foo')
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
-        'http://localhost:8002/api/fetch/foo/ds-1d.b2nd'
+        'https://demo.caterva2.net/api/fetch/example/ds-1d.b2nd'
         """
         return api_utils.get_download_url(self.path, self.urlbase)
 
@@ -848,7 +873,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('foo')
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> ds = root['ds-1d.b2nd']
         >>> ds[1]
         array(1)
@@ -879,7 +904,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('foo')
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> ds = root['ds-1d.b2nd']
         >>> ds.fetch(1)
         array(1)
@@ -910,10 +935,10 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('foo')
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
-        PosixPath('foo/ds-1d.b2nd')
+        PosixPath('example/ds-1d.b2nd')
         >>> file.download('mypath')  # assuming 'mypath' exists
         PosixPath('mypath/ds-1d.b2nd')
         >>> file.download('mypath/myds.b2nd')  # 'mypath' will be created if it doesn't exist
@@ -1012,16 +1037,12 @@ class Dataset(File):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> root = cat2.Root('foo')
+    >>> root = cat2.Root('example', 'https://demo.caterva2.net')
     >>> ds = root['ds-1d.b2nd']
     >>> ds.name
     'ds-1d.b2nd'
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
-    >>> ds = root['ds-2d.b2nd']
-    >>> ds[:2, :2]
-    array([[0, 1],
-           [2, 3]])
     """
     def __init__(self, name, root, urlbase, auth_cookie=None):
         super().__init__(name, root, urlbase, auth_cookie)
@@ -1076,6 +1097,13 @@ def c2context(
     ------
     out: None
 
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> with cat2.c2context(urlbase='https://demo.caterva2.net'):
+    ...     print(cat2.get_roots()['h5lung_j2k'])
+    ...
+    {'name': 'h5lung_j2k', 'http': 'localhost:8012', 'subscribed': None}
     """
     global _subscriber_data
 
