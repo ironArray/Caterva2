@@ -1193,9 +1193,9 @@ if user_auth_enabled():
             raise srv_utils.raise_bad_request(f"Error in adding {payload.username}: {error_message}")
         return f"User added: {payload}"
 
-    @app.get("/api/deluser/{deluser}")
+    @app.get("/api/deluser/{username}")
     async def del_user(
-        deluser: str,
+        username: str,
         user: db.User = Depends(current_active_user),
     ):
         """
@@ -1203,7 +1203,7 @@ if user_auth_enabled():
 
         Parameters
         ----------
-        deluser : str
+        username : str
             The username of the user to delete.
 
         Returns
@@ -1217,18 +1217,29 @@ if user_auth_enabled():
             srv_utils.raise_unauthorized("Only superusers can delete users")
 
         try:
-            await utils.adel_user(deluser)
+            users = await utils.alist_users(username)
+            await utils.adel_user(username)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            raise srv_utils.raise_bad_request(f"Error in deleting {deluser}: {error_message}")
-        return f"User deleted: {deluser}"
+            raise srv_utils.raise_bad_request(f"Error in deleting {username}: {error_message}")
+        # Remove the personal directory of the user
+        userid = str(users[0].id)
+        print(f"User {username} with id {userid} has been deleted")
+        shutil.rmtree(personal / userid, ignore_errors=True)
+        return f"User deleted: {username}"
 
-    @app.get("/api/listusers")
+    @app.get("/api/listusers/")
     async def list_users(
+        username: str = None,
         user: db.User = Depends(current_active_user),
     ):
         """
-        List all users.
+        List all users or a specific user.
+
+        Parameters
+        ----------
+        username : str or None
+            The username of the user to list (optional).
 
         Returns
         -------
@@ -1237,7 +1248,7 @@ if user_auth_enabled():
         """
         if not user:
             raise srv_utils.raise_unauthorized("Listing users requires authentication")
-        return await utils.alist_users()
+        return await utils.alist_users(username)
 
     # TODO: Support user verification
 

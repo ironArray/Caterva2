@@ -196,14 +196,14 @@ def cmd_adduser(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_deluser(args, auth_cookie):
-    success, message = cat2.deluser(auth_cookie, args.user, args.urlbase)
+    message = cat2.deluser(auth_cookie, args.user, args.urlbase)
     print(message)
 
 
 @handle_errors
 @with_auth_cookie
 def cmd_listusers(args, auth_cookie):
-    data = cat2.listusers(auth_cookie, args.urlbase)
+    data = cat2.listusers(auth_cookie, args.user, args.urlbase)
     if args.json:
         print(json.dumps(data))
         return
@@ -306,9 +306,9 @@ def main():
     # adduser
     help = "Add a new user."
     subparser = subparsers.add_parser("adduser", help=help)
+    subparser.add_argument("--superuser", "-S", action="store_true", default=False)
     subparser.add_argument("newuser", type=str)
     subparser.add_argument("newpass", nargs="?")
-    subparser.add_argument("--superuser", "-S", action="store_true", default=False)
     subparser.set_defaults(func=cmd_adduser)
 
     # deluser
@@ -321,6 +321,7 @@ def main():
     help = "List all users."
     subparser = subparsers.add_parser("listusers", aliases=["lsu"], help=help)
     subparser.add_argument("--json", action="store_true")
+    subparser.add_argument("user", nargs="?")
     subparser.set_defaults(func=cmd_listusers)
 
     # Go

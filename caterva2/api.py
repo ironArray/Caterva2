@@ -435,7 +435,7 @@ def adduser(
     )
 
 
-def deluser(auth_cookie, user, urlbase=sub_urlbase_default):
+def deluser(auth_cookie, username, urlbase=sub_urlbase_default):
     """
     Delete a user from the subscriber.
 
@@ -443,7 +443,7 @@ def deluser(auth_cookie, user, urlbase=sub_urlbase_default):
     ----------
     auth_cookie : str
         A HTTP cookie for authorizing access.
-    user : str
+    username : str
         The username of the user to delete.
     urlbase : str
         The base of URLs of the subscriber to query.
@@ -454,10 +454,10 @@ def deluser(auth_cookie, user, urlbase=sub_urlbase_default):
         An explanatory message.
     """
     urlbase, _ = _format_paths(urlbase)
-    return api_utils.get(f"{urlbase}/api/deluser/{user}", auth_cookie=auth_cookie)
+    return api_utils.get(f"{urlbase}/api/deluser/{username}", auth_cookie=auth_cookie)
 
 
-def listusers(auth_cookie, urlbase=sub_urlbase_default):
+def listusers(auth_cookie, username=None, urlbase=sub_urlbase_default):
     """
     List the users in the subscriber.
 
@@ -465,6 +465,8 @@ def listusers(auth_cookie, urlbase=sub_urlbase_default):
     ----------
     auth_cookie : str
         A HTTP cookie for authorizing access.
+    username : str
+        The username of the user to list (optional).
     urlbase : str
         The base of URLs of the subscriber to query.
 
@@ -474,7 +476,8 @@ def listusers(auth_cookie, urlbase=sub_urlbase_default):
         The list of users in the subscriber.
     """
     urlbase, _ = _format_paths(urlbase)
-    return api_utils.get(f"{urlbase}/api/listusers", auth_cookie=auth_cookie)
+    url = f"{urlbase}/api/listusers/" + (f"?username={username}" if username else "")
+    return api_utils.get(url, auth_cookie=auth_cookie)
 
 
 class Root:
