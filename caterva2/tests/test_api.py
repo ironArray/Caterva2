@@ -601,11 +601,9 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     is_superuser = False
     message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     assert "User added" in message
-    # Check that the user has been added
-    resp = httpx.post(f'{sub_urlbase}/auth/jwt/login',
-                      data=dict(username=username, password=password))
-    resp.raise_for_status()
-    assert resp.status_code == 204  # No content (kind of success)
+    with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
+        l = cat2.listusers()
+        assert username in [user['email'] for user in l]
 
 
 def test_adduser_malformed(sub_user, sub_jwt_cookie):
@@ -650,6 +648,10 @@ def test_deluser(sub_urlbase, sub_user, sub_jwt_cookie):
         _ = cat2.deluser(username, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert 'Bad Request' in str(e_info)
 
+    with pytest.raises(Exception) as e_info:
+        with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
+            _ = 0
+
 
 def test_deluser_unauthorized(sub_urlbase, sub_user):
     if sub_user:
@@ -668,14 +670,16 @@ def test_listusers(sub_urlbase, sub_user, sub_jwt_cookie):
     username = 'test2@user.com'
     password = 'testpassword'
     is_superuser = False
-    message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
-    assert "User added" in message
+    with cat2.c2context(urlbase=sub_urlbase):
+        message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+        assert "User added" in message
     # List users
     data = cat2.listusers(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert username in [user['email'] for user in data]
     # Delete the user
-    message = cat2.deluser(username, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    assert "User deleted" in message
+    with cat2.c2context(urlbase=sub_urlbase, auth_cookie=sub_jwt_cookie):
+        message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
+        assert "User deleted" in message
     # List users again
     data = cat2.listusers(sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert username not in [user['email'] for user in data]

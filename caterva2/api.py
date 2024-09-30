@@ -61,7 +61,7 @@ def get_roots(urlbase=None, auth_cookie=None):
 
     urlbase : str
         The base of URLs of the subscriber to query. The default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -103,7 +103,7 @@ def subscribe(root, urlbase=None, auth_cookie=None):
         The name of the root to subscribe to.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -138,7 +138,7 @@ def get_list(path, urlbase=None, auth_cookie=None):
         The path to a root, directory or dataset.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -171,7 +171,7 @@ def get_info(path, urlbase=None, auth_cookie=None):
         The path of the dataset.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -212,7 +212,7 @@ def fetch(path, urlbase=None, slice_=None,
         The path of the dataset.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     slice_ : str
         The slice to fetch (the whole dataset if missing).
     auth_cookie : str
@@ -251,7 +251,7 @@ def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
         The unidimensional chunk id to get.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -297,7 +297,7 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
         the dataset will be downloaded to the current working directory.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -345,7 +345,7 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
         The remote path to upload the dataset to.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -375,7 +375,7 @@ def remove(path, urlbase=None, auth_cookie=None):
         The path of the dataset or directory.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -409,7 +409,7 @@ def move(src, dst, urlbase=None, auth_cookie=None):
         The destination path of the dataset or directory.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -447,7 +447,7 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
         The destination path of the dataset or directory.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -490,7 +490,7 @@ def lazyexpr(name, expression, operands,
         that they refer to.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -508,7 +508,7 @@ def lazyexpr(name, expression, operands,
     return pathlib.Path(dataset)
 
 
-def adduser(newuser, password=None, superuser=False, urlbase=sub_urlbase_default, auth_cookie=None):
+def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=None):
     """
     Add a user to the subscriber.
 
@@ -521,7 +521,8 @@ def adduser(newuser, password=None, superuser=False, urlbase=sub_urlbase_default
     superuser : bool
         Whether the user is a superuser or not.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -531,12 +532,13 @@ def adduser(newuser, password=None, superuser=False, urlbase=sub_urlbase_default
         An explanatory message.
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.post(f'{urlbase}/api/adduser/',
                           {'username': newuser, 'password': password, 'superuser': superuser},
                           auth_cookie=auth_cookie)
 
 
-def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):
+def deluser(user, urlbase=None, auth_cookie=None):
     """
     Delete a user from the subscriber.
 
@@ -545,7 +547,8 @@ def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):
     user : str
         The username of the user to delete.
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -555,17 +558,19 @@ def deluser(user, urlbase=sub_urlbase_default, auth_cookie=None):
         An explanatory message.
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.get(f'{urlbase}/api/deluser/{user}', auth_cookie=auth_cookie)
 
 
-def listusers(urlbase=sub_urlbase_default, auth_cookie=None):
+def listusers(urlbase=None, auth_cookie=None):
     """
     List the users in the subscriber.
 
     Parameters
     ----------
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the subscriber to query. Default is
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         An optional HTTP cookie for authorizing access.
 
@@ -575,6 +580,7 @@ def listusers(urlbase=sub_urlbase_default, auth_cookie=None):
         The list of users in the subscriber.
     """
     urlbase, _ = _format_paths(urlbase)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.get(f'{urlbase}/api/listusers', auth_cookie=auth_cookie)
 
 
@@ -588,7 +594,7 @@ class Root:
         The name of the root to subscribe to.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     user_auth : dict
         An optional mapping of fields and values to be used as data to be
         posted for authenticating the user and get an authorization token for
@@ -747,7 +753,7 @@ class File:
         The name of the root.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -986,7 +992,7 @@ class Dataset(File):
         The name of the root.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
-        :py:obj:`caterva2.default_urlbase`.
+        :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
 
@@ -1024,7 +1030,7 @@ def c2context(
 
     A parameter not specified or set to ``None`` inherits the value set by the
     previous context manager,
-    defaulting the subscriber url to :py:obj:`caterva2.default_urlbase`
+    defaulting the subscriber url to :py:obj:`caterva2.sub_urlbase_default`
     and the authentication cookie to `None`.
     Parameters set to the empty string
     are not to be used in requests (with no default either).
