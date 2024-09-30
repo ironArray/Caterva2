@@ -11,7 +11,7 @@ import os
 import httpx
 import pytest
 
-from caterva2.utils import create_user
+from caterva2.utils import add_user
 
 
 def sub_auth_enabled():
@@ -23,7 +23,8 @@ def make_sub_user(services):
         return None
 
     state_dir = services.state_dir / 'subscriber'
-    return create_user('user@example.com', password='foobar', state_dir=state_dir)
+    return add_user('user@example.com', password='foobar', is_superuser=True,
+                    state_dir=state_dir)
 
 
 @pytest.fixture(scope='session')

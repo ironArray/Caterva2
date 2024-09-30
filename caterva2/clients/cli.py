@@ -10,7 +10,10 @@
 import functools
 import json
 import pathlib
+import random
 import re
+import string
+import sys
 
 # Requirements
 import httpx
@@ -176,6 +179,33 @@ def cmd_remove(args, auth_cookie):
     print(f'Dataset (or directory contents) removed: {removed}')
 
 
+@handle_errors
+@with_auth_cookie
+def cmd_adduser(args, auth_cookie):
+    newpass = args.newpass or ''.join(random.choice(string.ascii_letters) for _ in range(8))
+    message = cat2.adduser(args.newuser, newpass, args.superuser,
+                           args.urlbase, auth_cookie=auth_cookie)
+    print(message)
+
+
+@handle_errors
+@with_auth_cookie
+def cmd_deluser(args, auth_cookie):
+    success, message = cat2.deluser(args.user, args.urlbase, auth_cookie=auth_cookie)
+    print(message)
+
+
+@handle_errors
+@with_auth_cookie
+def cmd_listusers(args, auth_cookie):
+    data = cat2.listusers(args.urlbase, auth_cookie=auth_cookie)
+    if args.json:
+        print(json.dumps(data))
+        return
+
+    for user in data:
+        print(user)
+
 def main():
     conf = utils.get_conf()
     parser = utils.get_parser()
@@ -262,6 +292,26 @@ def main():
     subparser.add_argument('localpath', type=pathlib.Path)
     subparser.add_argument('dataset', type=pathlib.Path)
     subparser.set_defaults(func=cmd_upload)
+
+    # adduser
+    help = 'Add a new user.'
+    subparser = subparsers.add_parser('adduser', help=help)
+    subparser.add_argument('newuser', type=str)
+    subparser.add_argument('newpass', nargs='?')
+    subparser.add_argument('--superuser', '-S', action='store_true', default=False)
+    subparser.set_defaults(func=cmd_adduser)
+
+    # deluser
+    help = 'Delete a user.'
+    subparser = subparsers.add_parser('deluser', help=help)
+    subparser.add_argument('user', type=str)
+    subparser.set_defaults(func=cmd_deluser)
+
+    # listusers
+    help = 'List all users.'
+    subparser = subparsers.add_parser('listusers', aliases=['lsu'], help=help)
+    subparser.add_argument('--json', action='store_true')
+    subparser.set_defaults(func=cmd_listusers)
 
     # Go
     args = utils.run_parser(parser)
