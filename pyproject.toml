@@ -67,6 +67,11 @@ services = [
     "caterva2[base-services]",
     "caterva2[subscriber]",
 ]
+dev = [
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+]
 # Currently used to enable HDF5 support at the publisher.
 hdf5 = [
     "h5py",

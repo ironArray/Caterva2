@@ -1,6 +1,16 @@
 # Notes for developers
 
-For the time being, the code is not very well documented, so this need to be fixed asap.
+## Preliminaries
+
+We are using Ruff both as code formatter and as a linter.  This is automatically enforced
+if you activate these as plugins for [pre-commit](https://pre-commit.com).  You can activate
+the pre-commit actions by following the [instructions](https://pre-commit.com/#installation).
+As the config files are already there, this essentially boils down to:
+
+``` bash
+  python -m pip install pre-commit
+  pre-commit install
+```
 
 Also, for running the tests, one needs to run manually the broker, publisher and subscriber.
 There is a `caterva2.tests.services` script that does this.
