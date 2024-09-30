@@ -74,19 +74,11 @@ def get_roots(urlbase=None, auth_cookie=None):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> cat2.get_roots("https://demo.caterva2.net/")
-    {
-    'h5lung_j2k':
-        {'name': 'h5lung_j2k', 'http': 'localhost:8012', 'subscribed': True},
-    'example':
-        {'name': 'example', 'http': 'localhost:8010', 'subscribed': True},
-    'h5example':
-        {'name': 'h5example', 'http': 'localhost:8013', 'subscribed': None},
-    'h5numbers_j2k':
-        {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': None},
-    'b2tests':
-        {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
-    }
+    >>> roots_dict = cat2.get_roots("https://demo.caterva2.net")
+    >>> roots_dict.keys()
+    dict_keys(['b2tests', 'h5lung_j2k', 'h5numbers_j2k', 'example', 'h5example'])
+    >>> roots_dict['b2tests']
+    {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -115,10 +107,10 @@ def subscribe(root, urlbase=None, auth_cookie=None):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> urlbase = 'https://demo.caterva2.net'
     >>> root_name = 'h5numbers_j2k'
     >>> cat2.subscribe(root_name, urlbase)
-    Ok
+    'Ok'
     >>> cat2.get_roots(urlbase)[root_name]
     {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': True}
     """
@@ -150,10 +142,11 @@ def get_list(path, urlbase=None, auth_cookie=None):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> cat2.get_list('example', 'https://demo.caterva2.net/')
-    ['ds-2d-fields.b2nd', 'lung-jpeg2000_10x.b2nd', 'ds-1d-fields.b2nd', 'ds-1d.b2nd',
-    'ds-hello.b2frame', 'ds-sc-attr.b2nd', 'README.md', 'ds-1d-b.b2nd', 'tomo-guess-test.b2nd',
-    'dir2/ds-4d.b2nd', 'dir1/ds-3d.b2nd', 'dir1/ds-2d.b2nd']
+    >>> urlbase = 'https://demo.caterva2.net'
+    >>> cat2.subscribe('example', urlbase)
+    'Ok'
+    >>> cat2.get_list('example', urlbase)[:3]
+    ['ds-2d-fields.b2nd', 'lung-jpeg2000_10x.b2nd', 'ds-1d-fields.b2nd']
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -184,16 +177,15 @@ def get_info(path, urlbase=None, auth_cookie=None):
     Examples
     --------
     >>> import caterva2 as cat2
+    >>> urlbase = 'https://demo.caterva2.net'
+    >>> cat2.subscribe('example', urlbase)
+    'Ok'
     >>> path = 'example/ds-2d-fields.b2nd'
-    >>> cat2.get_info(path, 'https://demo.caterva2.net/')
-    {'shape': [100, 200], 'chunks': [100, 200], 'blocks': [25, 200],
-    'dtype': "[('a', '<f4'), ('b', '<f8')]",
-    'schunk': {'cbytes': 37192, 'chunkshape': 20000, 'chunksize': 240000,
-    'contiguous': True, 'cparams': {'codec': 5, 'filters': [0, 0, 0, 0, 0, 1],
-    'filters_meta': [0, 0, 0, 0, 0, 0], 'typesize': 12, 'blocksize': 60000,
-    'filters, meta': [[1, 0]]}, 'cratio': 6.453000645300064, 'nbytes': 240000,
-    'urlpath': '/home/caterva/caterva2-deploy/state/subscriber/cache/example/ds-2d-fields.b2nd',
-    'vlmeta': {}, 'nchunks': 1}}
+    >>> info = cat2.get_info(path, urlbase)
+    >>> info.keys()
+    dict_keys(['shape', 'chunks', 'blocks', 'dtype', 'schunk'])
+    >>> info['shape']
+    [100, 200]
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -226,10 +218,13 @@ def fetch(path, urlbase=None, slice_=None,
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> urlbase = 'https://demo.caterva2.net'
+    >>> cat2.subscribe('example', urlbase)
+    'Ok'
     >>> cat2.fetch('example/ds-2d-fields.b2nd', urlbase, "0:2, 0:2")
-    [[(0.0000000e+00, 1.       ) (5.0002502e-05, 1.00005  )]
-     [(1.0000500e-02, 1.0100005) (1.0050503e-02, 1.0100505)]]
+    array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
+       [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
+      dtype=[('a', '<f4'), ('b', '<f8')])
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -263,7 +258,9 @@ def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> urlbase = 'https://demo.caterva2.net'
+    >>> cat2.subscribe('example', urlbase)
+    'Ok'
     >>> info_schunk = cat2.get_info('example/ds-2d-fields.b2nd', urlbase)['schunk']
     >>> info_schunk['nchunks']
     1
@@ -309,10 +306,13 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> urlbase = 'https://demo.caterva2.net/'
+    >>> import pathlib
+    >>> urlbase = 'https://demo.caterva2.net'
     >>> path = 'example/ds-2d-fields.b2nd'
+    >>> cat2.subscribe('example', urlbase)
+    'Ok'
     >>> cat2.download(pathlib.Path(path), urlbase=urlbase)
-    example/ds-2d-fields.b2nd
+    PosixPath('example/ds-2d-fields.b2nd')
     """
     urlbase, dataset = _format_paths(urlbase, dataset)
     url = api_utils.get_download_url(dataset, urlbase)
@@ -638,6 +638,7 @@ class Root:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file
@@ -668,6 +669,7 @@ class Root:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> '@public/ds-1d.b2nd' in root
         True
@@ -686,6 +688,7 @@ class Root:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> for file in root:
         ...     print(file)
@@ -720,6 +723,7 @@ class Root:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> root.upload('foo/mydataset.b2nd')
         File: @public/foo/mydataset.md
@@ -759,6 +763,7 @@ class File:
 
     Examples
     --------
+    >>> import caterva2 as cat2
     >>> root = cat2.Root('foo')
     >>> file = root['README.md']
     >>> file.name
@@ -798,6 +803,7 @@ class File:
         Used to access variable-length metalayers (i.e. user attributes) for a
         file.
 
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('foo')
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
@@ -817,6 +823,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('foo')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
@@ -840,6 +847,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('foo')
         >>> ds = root['ds-1d.b2nd']
         >>> ds[1]
@@ -870,6 +878,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('foo')
         >>> ds = root['ds-1d.b2nd']
         >>> ds.fetch(1)
@@ -900,6 +909,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('foo')
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
@@ -928,6 +938,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file.move('@public/mypath/myds.b2nd')
@@ -951,6 +962,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file.copy('@public/mypath/myds.b2nd')
@@ -969,6 +981,7 @@ class File:
 
         Examples
         --------
+        >>> import caterva2 as cat2
         >>> root = cat2.Root('@public')
         >>> file = root['ds-1d.b2nd']
         >>> file.remove()
@@ -998,6 +1011,7 @@ class Dataset(File):
 
     Examples
     --------
+    >>> import caterva2 as cat2
     >>> root = cat2.Root('foo')
     >>> ds = root['ds-1d.b2nd']
     >>> ds.name
