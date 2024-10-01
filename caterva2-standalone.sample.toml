@@ -16,6 +16,7 @@ statedir = "_caterva2/sub"
 http = "localhost:8002"
 urlbase = "http://localhost:8002"
 quota = "10GB"
+maxusers = 5
 
 # The client section defines the credentials for the client to authenticate
 # against the subscriber.

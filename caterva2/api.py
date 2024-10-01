@@ -18,16 +18,16 @@ from caterva2 import api_utils, utils
 
 
 # Defaults
-bro_host_default = 'localhost:8000'
+bro_host_default = "localhost:8000"
 """The default HTTP endpoint for the broker (URL host & port)."""
 
-pub_host_default = 'localhost:8001'
+pub_host_default = "localhost:8001"
 """The default HTTP endpoint for the publisher (URL host & port)."""
 
-sub_host_default = 'localhost:8002'
+sub_host_default = "localhost:8002"
 """The default HTTP endpoint for the subscriber (URL host & port)."""
 
-sub_urlbase_default = f'http://{sub_host_default}'
+sub_urlbase_default = f"http://{sub_host_default}"
 """The default base of URLs provided by the subscriber."""
 
 _subscriber_data = {
@@ -82,7 +82,7 @@ def get_roots(urlbase=None, auth_cookie=None):
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.get(f'{urlbase}/api/roots', auth_cookie=auth_cookie)
+    return api_utils.get(f"{urlbase}/api/roots", auth_cookie=auth_cookie)
 
 
 def subscribe(root, urlbase=None, auth_cookie=None):
@@ -318,7 +318,7 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     url = api_utils.get_download_url(dataset, urlbase)
     localpath = pathlib.Path(localpath) if localpath else None
     if localpath is None:
-        path = '.' / dataset
+        path = "." / dataset
     elif localpath.is_dir():
         path = localpath / dataset.name
     else:
@@ -327,6 +327,7 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     return api_utils.download_url(url, str(path),
                                   try_unpack=api_utils.blosc2_is_here,
                                   auth_cookie=auth_cookie)
+
 
 def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     """
@@ -356,8 +357,13 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     """
     urlbase, dataset = _format_paths(urlbase, dataset)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.upload_file(localpath, dataset, urlbase, try_pack=api_utils.blosc2_is_here,
-                                 auth_cookie=auth_cookie)
+    return api_utils.upload_file(
+        localpath,
+        dataset,
+        urlbase,
+        try_pack=api_utils.blosc2_is_here,
+        auth_cookie=auth_cookie,
+    )
 
 
 def remove(path, urlbase=None, auth_cookie=None):
@@ -429,9 +435,11 @@ def move(src, dst, urlbase=None, auth_cookie=None):
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    result =  api_utils.post(f'{urlbase}/api/move/',
-                             {'src': str(src), 'dst': str(dst)},
-                             auth_cookie=auth_cookie)
+    result = api_utils.post(
+        f"{urlbase}/api/move/",
+        {"src": str(src), "dst": str(dst)},
+        auth_cookie=auth_cookie,
+    )
     return pathlib.Path(result)
 
 
@@ -504,7 +512,7 @@ def lazyexpr(name, expression, operands,
     # Convert possible Path objects in operands to strings so that they can be serialized
     operands = {k: str(v) for k, v in operands.items()}
     expr = dict(name=name, expression=expression, operands=operands)
-    dataset = api_utils.post(f'{urlbase}/api/lazyexpr/', expr, auth_cookie=auth_cookie)
+    dataset = api_utils.post(f"{urlbase}/api/lazyexpr/", expr, auth_cookie=auth_cookie)
     return pathlib.Path(dataset)
 
 
@@ -524,7 +532,7 @@ def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=N
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        A HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -544,13 +552,13 @@ def deluser(user, urlbase=None, auth_cookie=None):
 
     Parameters
     ----------
-    user : str
+    username : str
         The username of the user to delete.
     urlbase : str
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        A HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -562,17 +570,19 @@ def deluser(user, urlbase=None, auth_cookie=None):
     return api_utils.get(f'{urlbase}/api/deluser/{user}', auth_cookie=auth_cookie)
 
 
-def listusers(urlbase=None, auth_cookie=None):
+def listusers(username=None, urlbase=None, auth_cookie=None):
     """
     List the users in the subscriber.
 
     Parameters
     ----------
+    username : str
+        The username of the user to list (optional).
     urlbase : str
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        A HTTP cookie for authorizing access.
 
     Returns
     -------
@@ -581,7 +591,8 @@ def listusers(urlbase=None, auth_cookie=None):
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.get(f'{urlbase}/api/listusers', auth_cookie=auth_cookie)
+    url = f"{urlbase}/api/listusers/" + (f"?username={username}" if username else "")
+    return api_utils.get(url, auth_cookie=auth_cookie)
 
 
 class Root:
@@ -619,8 +630,11 @@ class Root:
                              auth_cookie=self.auth_cookie)
         if ret != 'Ok':
             roots = get_roots(urlbase)
-            raise ValueError(f'Could not subscribe to root {name}'
-                             f' (only {roots.keys()} available)')
+            raise ValueError(
+                f"Could not subscribe to root {name}"
+                f" (only {roots.keys()} available)"
+            )
+
     @property
     def file_list(self):
         """
@@ -630,7 +644,7 @@ class Root:
                              auth_cookie=self.auth_cookie)
 
     def __repr__(self):
-        return f'<Root: {self.name}>'
+        return f"<Root: {self.name}>"
 
     def __getitem__(self, path):
         """
@@ -655,11 +669,13 @@ class Root:
         """
         path = path.as_posix() if isinstance(path, pathlib.Path) else path
         if path.endswith((".b2nd", ".b2frame")):
-            return Dataset(path, root=self.name, urlbase=self.urlbase,
-                           auth_cookie=self.auth_cookie)
+            return Dataset(
+                path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie
+            )
         else:
-            return File(path, root=self.name, urlbase=self.urlbase,
-                        auth_cookie=self.auth_cookie)
+            return File(
+                path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie
+            )
 
     def __contains__(self, path):
         """
@@ -759,12 +775,14 @@ class Root:
             # localpath cannot be absolute in this case (too much prone to errors)
             if pathlib.Path(localpath).is_absolute():
                 raise ValueError(
-                    "When `dataset` is not specified, `localpath` must be a relative path")
+                    "When `dataset` is not specified, `localpath` must be a relative path"
+                )
             dataset = pathlib.Path(self.name) / localpath
         else:
             dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
-        uploadpath = upload(localpath, dataset, urlbase=self.urlbase,
-                            auth_cookie=self.auth_cookie)
+        uploadpath = upload(
+            localpath, dataset, urlbase=self.urlbase, auth_cookie=self.auth_cookie
+        )
         # Remove the first component of the uploadpath (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
@@ -804,6 +822,7 @@ class File:
     >>> file.meta['cbytes']
     119
     """
+
     def __init__(self, name, root, urlbase, auth_cookie=None):
         urlbase, name = _format_paths(urlbase, name)
         _, root = _format_paths(None, root)
@@ -818,7 +837,7 @@ class File:
         # print(f"self.meta: {self.meta['cparams']}")
 
     def __repr__(self):
-        return f'<File: {self.path}>'
+        return f"<File: {self.path}>"
 
     @functools.cached_property
     def vlmeta(self):
@@ -834,8 +853,8 @@ class File:
         >>> file.vlmeta
         {'a': 1, 'b': 'foo', 'c': 123.456}
         """
-        schunk_meta = self.meta.get('schunk', self.meta)
-        return schunk_meta.get('vlmeta', {})
+        schunk_meta = self.meta.get("schunk", self.meta)
+        return schunk_meta.get("vlmeta", {})
 
     def get_download_url(self):
         """
@@ -912,9 +931,9 @@ class File:
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
         slice_ = api_utils.slice_to_string(slice_)
-        data = api_utils.fetch_data(self.path, self.urlbase,
-                                    {'slice_': slice_},
-                                    auth_cookie=self.auth_cookie)
+        data = api_utils.fetch_data(
+            self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
+        )
         return data
 
     def download(self, localpath=None):
@@ -944,8 +963,12 @@ class File:
         >>> file.download('mypath/myds.b2nd')  # 'mypath' will be created if it doesn't exist
         PosixPath('mypath/myds.b2nd')
         """
-        return download(self.path, localpath=localpath,
-                        urlbase=self.urlbase, auth_cookie=self.auth_cookie)
+        return download(
+            self.path,
+            localpath=localpath,
+            urlbase=self.urlbase,
+            auth_cookie=self.auth_cookie,
+        )
 
     def move(self, dst):
         """
@@ -1012,7 +1035,7 @@ class File:
         >>> file.remove()
         '@public/ds-1d.b2nd'
         """
-        return remove(self.path, urlbase=self.urlbase,  auth_cookie=self.auth_cookie)
+        return remove(self.path, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
 
 
 class Dataset(File):
@@ -1044,6 +1067,7 @@ class Dataset(File):
     >>> ds[1:10]
     array([1, 2, 3, 4, 5, 6, 7, 8, 9])
     """
+
     def __init__(self, name, root, urlbase, auth_cookie=None):
         super().__init__(name, root, urlbase, auth_cookie)
 

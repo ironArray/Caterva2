@@ -75,7 +75,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     # support user verification and user deletion.
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
-        print(f"User {user.id} has been registered.")
+        print(f"User {user.email} with id {user.id} has been added.")
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None
