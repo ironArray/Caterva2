@@ -39,7 +39,7 @@ _subscriber_data = {
 
 def _format_paths(urlbase, path=None):
     if urlbase is None:
-        urlbase = _subscriber_data['urlbase']
+        urlbase = _subscriber_data["urlbase"]
     if isinstance(urlbase, pathlib.Path):
         urlbase = urlbase.as_posix()
     if urlbase.endswith("/"):
@@ -75,8 +75,8 @@ def get_roots(urlbase=None, auth_cookie=None):
     --------
     >>> import caterva2 as cat2
     >>> roots_dict = cat2.get_roots("https://demo.caterva2.net")
-    >>> roots_dict.keys()
-    dict_keys(['b2tests', 'h5lung_j2k', 'h5numbers_j2k', 'example', 'h5example'])
+    >>> sorted(roots_dict.keys())
+    ['b2tests', 'example', 'h5example', 'h5lung_j2k', 'h5numbers_j2k']
     >>> roots_dict['b2tests']
     {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
     """
@@ -116,8 +116,7 @@ def subscribe(root, urlbase=None, auth_cookie=None):
     """
     urlbase, root = _format_paths(urlbase, root)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.post(f'{urlbase}/api/subscribe/{root}',
-                          auth_cookie=auth_cookie)
+    return api_utils.post(f"{urlbase}/api/subscribe/{root}", auth_cookie=auth_cookie)
 
 
 def get_list(path, urlbase=None, auth_cookie=None):
@@ -150,8 +149,7 @@ def get_list(path, urlbase=None, auth_cookie=None):
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.get(f'{urlbase}/api/list/{path}',
-                         auth_cookie=auth_cookie)
+    return api_utils.get(f"{urlbase}/api/list/{path}", auth_cookie=auth_cookie)
 
 
 def get_info(path, urlbase=None, auth_cookie=None):
@@ -189,12 +187,10 @@ def get_info(path, urlbase=None, auth_cookie=None):
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.get(f'{urlbase}/api/info/{path}',
-                         auth_cookie=auth_cookie)
+    return api_utils.get(f"{urlbase}/api/info/{path}", auth_cookie=auth_cookie)
 
 
-def fetch(path, urlbase=None, slice_=None,
-          auth_cookie=None):
+def fetch(path, urlbase=None, slice_=None, auth_cookie=None):
     """
     Fetch (a slice of) the data in a dataset.
 
@@ -223,14 +219,12 @@ def fetch(path, urlbase=None, slice_=None,
     'Ok'
     >>> cat2.fetch('example/ds-2d-fields.b2nd', urlbase, "0:2, 0:2")
     array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
-       [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
-      dtype=[('a', '<f4'), ('b', '<f8')])
+           [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
+          dtype=[('a', '<f4'), ('b', '<f8')])
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    data = api_utils.fetch_data(path, urlbase,
-                                {'slice_': slice_},
-                                auth_cookie=auth_cookie)
+    data = api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=auth_cookie)
     return data
 
 
@@ -272,8 +266,7 @@ def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    data = api_utils._xget(f'{urlbase}/api/chunk/{path}', {'nchunk': nchunk},
-                           auth_cookie=auth_cookie)
+    data = api_utils._xget(f"{urlbase}/api/chunk/{path}", {"nchunk": nchunk}, auth_cookie=auth_cookie)
     return data.content
 
 
@@ -324,9 +317,9 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     else:
         path = localpath
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.download_url(url, str(path),
-                                  try_unpack=api_utils.blosc2_is_here,
-                                  auth_cookie=auth_cookie)
+    return api_utils.download_url(
+        url, str(path), try_unpack=api_utils.blosc2_is_here, auth_cookie=auth_cookie
+    )
 
 
 def upload(localpath, dataset, urlbase=None, auth_cookie=None):
@@ -348,12 +341,26 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        An HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     Path
         The path of the uploaded file.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To upload a file you need to be authenticated as an already registered used
+    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+    >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', newpath, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> str(uploaded_path) == newpath
+    True
     """
     urlbase, dataset = _format_paths(urlbase, dataset)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -383,7 +390,9 @@ def remove(path, urlbase=None, auth_cookie=None):
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        An HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
@@ -392,15 +401,20 @@ def remove(path, urlbase=None, auth_cookie=None):
 
     Examples
     --------
-    >>> remove('@public/ds-1d.b2nd')
-    '@public/ds-1d.b2nd'
-    >>> 'ds-1d.b2nd' in get_list('@public')
-    False
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To remove a file you need to be a registered used
+    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+    >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> removed_path = cat2.remove(path, urlbase, auth_cookie)
+    >>> removed_path == path
+    True
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.post(f'{urlbase}/api/remove/{path}',
-                          auth_cookie=auth_cookie)
+    return api_utils.post(f"{urlbase}/api/remove/{path}", auth_cookie=auth_cookie)
 
 
 def move(src, dst, urlbase=None, auth_cookie=None):
@@ -417,7 +431,9 @@ def move(src, dst, urlbase=None, auth_cookie=None):
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        An HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
@@ -426,12 +442,19 @@ def move(src, dst, urlbase=None, auth_cookie=None):
 
     Examples
     --------
-    >>> move('@public/ds-1d.b2nd', '@public/mypath/myds.b2nd')
-    '@public/mypath/myds.b2nd'
-    >>> 'ds-1d.b2nd' in get_list('@public')
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To move a file you need to be a registered used
+    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+    >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d-moved.b2nd'
+    >>> moved_path = cat2.move(path, newpath, urlbase, auth_cookie)
+    >>> str(moved_path) == newpath
+    True
+    >>> path.replace('@personal/', '') in cat2.get_list('@personal', urlbase, auth_cookie)
     False
-    >>> move('@public/dir1', '@public/mypath')
-    '@public/mypath/dir1'
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -457,7 +480,9 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        An HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
@@ -466,21 +491,32 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
 
     Examples
     --------
-    >>> copy('@public/ds-1d.b2nd', '@public/mypath/myds.b2nd')
-    '@public/mypath/myds.b2nd'
-    >>> copy('@public/dir1', '@public/mypath/')
-    '@public/mypath/dir1'
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To copy a file you need to be a registered used
+    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+    >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', src_path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> copy_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d-copy.b2nd'
+    >>> copied_path = cat2.copy(src_path, copy_path, urlbase, auth_cookie)
+    >>> str(copied_path) == copy_path
+    True
+    >>> datasets = cat2.get_list('@personal', urlbase, auth_cookie)
+    >>> src_path.replace('@personal/', '') in datasets
+    True
+    >>> copy_path.replace('@personal/', '') in datasets
+    True
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    result =  api_utils.post(f'{urlbase}/api/copy/',
-                             {'src': str(src), 'dst': str(dst)},
-                             auth_cookie=auth_cookie)
+    result = api_utils.post(
+        f"{urlbase}/api/copy/", {"src": str(src), "dst": str(dst)}, auth_cookie=auth_cookie
+    )
     return pathlib.Path(result)
 
 
-def lazyexpr(name, expression, operands,
-             urlbase=None, auth_cookie=None):
+def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     """
     Create a lazy expression dataset in personal space.
 
@@ -500,12 +536,28 @@ def lazyexpr(name, expression, operands,
         The base of URLs of the subscriber to query. Default is
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+        An HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     Path
         The path of the created dataset.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To create a lazyexpr you need to be a registered used
+    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+    >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> path = cat2.upload('root-example/dir1/ds-2d.b2nd', src_path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> cat2.lazyexpr('example-expr', 'a + a', {'a': path}, urlbase=urlbase, auth_cookie=auth_cookie)
+    PosixPath('@personal/example-expr.b2nd')
+    >>> 'example-expr.b2nd' in cat2.get_list('@personal', urlbase, auth_cookie)
+    True
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
@@ -533,17 +585,33 @@ def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=N
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         A HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     str
         An explanatory message.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To add a user you need to be a superuser
+    >>> # This example is intented to work when the subscriber is running locally
+    >>> super_auth_cookie = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=dict(username='superuser@example.com', password='foo'))
+    >>> username = f'user{np.random.randint(0, 100)}@example.com'
+    >>> message = cat2.adduser(username, 'foo', auth_cookie=super_auth_cookie)
+    >>> f"User added: username='{username}' password='foo' superuser=False" == message
+    True
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.post(f'{urlbase}/api/adduser/',
-                          {'username': newuser, 'password': password, 'superuser': superuser},
-                          auth_cookie=auth_cookie)
+    return api_utils.post(
+        f"{urlbase}/api/adduser/",
+        {"username": newuser, "password": password, "superuser": superuser},
+        auth_cookie=auth_cookie,
+    )
 
 
 def deluser(user, urlbase=None, auth_cookie=None):
@@ -559,6 +627,8 @@ def deluser(user, urlbase=None, auth_cookie=None):
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         A HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
@@ -567,7 +637,7 @@ def deluser(user, urlbase=None, auth_cookie=None):
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.get(f'{urlbase}/api/deluser/{user}', auth_cookie=auth_cookie)
+    return api_utils.get(f"{urlbase}/api/deluser/{user}", auth_cookie=auth_cookie)
 
 
 def listusers(username=None, urlbase=None, auth_cookie=None):
@@ -583,6 +653,8 @@ def listusers(username=None, urlbase=None, auth_cookie=None):
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str
         A HTTP cookie for authorizing access.
+        This must be specified unless it was already specified inside
+        a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
@@ -609,7 +681,8 @@ class Root:
     user_auth : dict
         An optional mapping of fields and values to be used as data to be
         posted for authenticating the user and get an authorization token for
-        further requests.
+        further requests. For some actions this must be specified unless it was
+        already specified inside a :py_obj:`caterva2.c2context`.
 
     Examples
     --------
@@ -618,6 +691,7 @@ class Root:
     >>> root.file_list[-3:]
     ['dir2/ds-4d.b2nd', 'dir1/ds-3d.b2nd', 'dir1/ds-2d.b2nd']
     """
+
     def __init__(self, name, urlbase=None, user_auth=None):
         urlbase, name = _format_paths(urlbase, name)
         self.name = name
@@ -626,22 +700,17 @@ class Root:
             self.auth_cookie = api_utils.get_auth_cookie(urlbase, user_auth)
         else:
             self.auth_cookie = _subscriber_data["auth_cookie"]
-        ret = api_utils.post(f'{urlbase}/api/subscribe/{name}',
-                             auth_cookie=self.auth_cookie)
-        if ret != 'Ok':
+        ret = api_utils.post(f"{urlbase}/api/subscribe/{name}", auth_cookie=self.auth_cookie)
+        if ret != "Ok":
             roots = get_roots(urlbase)
-            raise ValueError(
-                f"Could not subscribe to root {name}"
-                f" (only {roots.keys()} available)"
-            )
+            raise ValueError(f"Could not subscribe to root {name}" f" (only {roots.keys()} available)")
 
     @property
     def file_list(self):
         """
         A list with the files in this root.
         """
-        return api_utils.get(f'{self.urlbase}/api/list/{self.name}',
-                             auth_cookie=self.auth_cookie)
+        return api_utils.get(f"{self.urlbase}/api/list/{self.name}", auth_cookie=self.auth_cookie)
 
     def __repr__(self):
         return f"<Root: {self.name}>"
@@ -669,13 +738,9 @@ class Root:
         """
         path = path.as_posix() if isinstance(path, pathlib.Path) else path
         if path.endswith((".b2nd", ".b2frame")):
-            return Dataset(
-                path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie
-            )
+            return Dataset(path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
         else:
-            return File(
-                path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie
-            )
+            return File(path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
 
     def __contains__(self, path):
         """
@@ -774,15 +839,11 @@ class Root:
         if dataset is None:
             # localpath cannot be absolute in this case (too much prone to errors)
             if pathlib.Path(localpath).is_absolute():
-                raise ValueError(
-                    "When `dataset` is not specified, `localpath` must be a relative path"
-                )
+                raise ValueError("When `dataset` is not specified, `localpath` must be a relative path")
             dataset = pathlib.Path(self.name) / localpath
         else:
             dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
-        uploadpath = upload(
-            localpath, dataset, urlbase=self.urlbase, auth_cookie=self.auth_cookie
-        )
+        uploadpath = upload(localpath, dataset, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
         # Remove the first component of the uploadpath (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
@@ -805,6 +866,8 @@ class File:
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie: str
         An optional cookie to authorize requests via HTTP.
+        For some actions this must be specified unless it was
+        already specified inside a :py_obj:`caterva2.c2context`.
 
     Examples
     --------
@@ -829,10 +892,9 @@ class File:
         self.root = root
         self.name = name
         self.urlbase = urlbase
-        self.path = pathlib.Path(f'{self.root}/{self.name}')
+        self.path = pathlib.Path(f"{self.root}/{self.name}")
         self.auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-        self.meta = api_utils.get(f'{urlbase}/api/info/{self.path}',
-                                  auth_cookie=self.auth_cookie)
+        self.meta = api_utils.get(f"{urlbase}/api/info/{self.path}", auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
 
@@ -1073,7 +1135,7 @@ class Dataset(File):
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
-        return f'<Dataset: {self.path}>'
+        return f"<Dataset: {self.path}>"
 
 
 @contextmanager
@@ -1135,8 +1197,7 @@ def c2context(
     if username or password:
         if auth_cookie:
             raise ValueError("Either provide a username/password or an authorizaton token")
-        auth_cookie = api_utils.get_auth_cookie(urlbase,
-                                               {'username': username, 'password': password})
+        auth_cookie = api_utils.get_auth_cookie(urlbase, {"username": username, "password": password})
 
     try:
         old_sub_data = _subscriber_data
