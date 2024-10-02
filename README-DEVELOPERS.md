@@ -104,7 +104,7 @@ and the docs will appear in `doc/html`.
 
 ## Build frontend assets
 
-Install the requrired software (you will need Node.js):
+Install the required software (you will need Node.js):
 
 ```shell
 npm install

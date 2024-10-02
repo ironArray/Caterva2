@@ -8,7 +8,7 @@
 ###############################################################################
 import contextlib
 import pathlib
-
+import random
 import httpx
 
 import blosc2
@@ -615,14 +615,13 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     username = "test@user.com"
     password = "testpassword"
     is_superuser = False
-    message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
+    message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     assert "User added" in message
-    # Check that the user has been added
-    resp = httpx.post(f"{sub_urlbase}/auth/jwt/login", data=dict(username=username, password=password))
-    resp.raise_for_status()
-    assert resp.status_code == 204  # No content (kind of success)
+    with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
+        l = cat2.listusers()
+        assert username in [user["email"] for user in l]
     # Delete the user for future tests
-    message = cat2.deluser(sub_jwt_cookie, username)
+    message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "User deleted" in message
 
 
@@ -634,7 +633,7 @@ def test_adduser_malformed(sub_user, sub_jwt_cookie):
     password = "testpassword"
     is_superuser = False
     with pytest.raises(Exception) as e_info:
-        _ = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
+        _ = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     print(e_info)
     assert "Bad Request" in str(e_info)
 
@@ -655,7 +654,7 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
         password = "testpassword"
         is_superuser = False
         try:
-            message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
+            message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
             assert "User added" in message
         except Exception as e_info:
             assert n == maxusers - 1  # we already have one user
@@ -663,10 +662,10 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
             # Remove the created users
             for m in range(n):
                 username = f"test{m}@user.com"
-                message = cat2.deluser(sub_jwt_cookie, username)
+                message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
                 assert "User deleted" in message
             # Count the current number of users
-            data = cat2.listusers(sub_jwt_cookie)
+            data = cat2.listusers(auth_cookie=sub_jwt_cookie)
             assert len(data) == 1
             break
 
@@ -679,7 +678,7 @@ def test_adduser_unauthorized(sub_user, sub_jwt_cookie):
     password = "testpassword"
     is_superuser = False
     with pytest.raises(Exception) as e_info:
-        _ = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
+        _ = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     assert "Not Found" in str(e_info)
 
 
@@ -690,15 +689,19 @@ def test_deluser(sub_user, sub_jwt_cookie):
     username = "test@user.com"
     password = "testpassword"
     is_superuser = False
-    message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
+    message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     assert "User added" in message
     # Now, delete the user
-    message = cat2.deluser(sub_jwt_cookie, username)
+    message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "User deleted" in message
     # Check that the user has been deleted
     with pytest.raises(Exception) as e_info:
-        _ = cat2.deluser(sub_jwt_cookie, username)
+        _ = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "Bad Request" in str(e_info)
+
+    with pytest.raises(Exception) as e_info:
+        with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
+            _ = 0
 
 
 def test_deluser_unauthorized(sub_user, sub_jwt_cookie):
@@ -707,7 +710,7 @@ def test_deluser_unauthorized(sub_user, sub_jwt_cookie):
 
     username = "test@user.com"
     with pytest.raises(Exception) as e_info:
-        _ = cat2.deluser(sub_jwt_cookie, username)
+        _ = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "Not Found" in str(e_info)
 
 
@@ -718,16 +721,18 @@ def test_listusers(sub_user, sub_jwt_cookie):
     username = "test@user.com"
     password = "testpassword"
     is_superuser = False
-    message = cat2.adduser(sub_jwt_cookie, username, password, is_superuser)
-    assert "User added" in message
+    with cat2.c2context(auth_cookie=sub_jwt_cookie):
+        message = cat2.adduser(username, password, is_superuser)
+        assert "User added" in message
     # List users
-    data = cat2.listusers(sub_jwt_cookie)
+    data = cat2.listusers(auth_cookie=sub_jwt_cookie)
     assert username in [user["email"] for user in data]
     # Delete the user
-    message = cat2.deluser(sub_jwt_cookie, username)
-    assert "User deleted" in message
+    with cat2.c2context(auth_cookie=sub_jwt_cookie):
+        message = cat2.deluser(username)
+        assert "User deleted" in message
     # List users again
-    data = cat2.listusers(sub_jwt_cookie)
+    data = cat2.listusers(auth_cookie=sub_jwt_cookie)
     assert username not in [user["email"] for user in data]
 
 
@@ -736,5 +741,149 @@ def test_listusers_unauthorized(sub_user, sub_jwt_cookie):
         pytest.skip("not authentication needed")
 
     with pytest.raises(Exception) as e_info:
-        _ = cat2.listusers(sub_jwt_cookie)
+        _ = cat2.listusers(auth_cookie=sub_jwt_cookie)
     assert "Not Found" in str(e_info)
+
+
+def test_c2context_demo():
+    urlbase = "https://demo.caterva2.net"
+    expected_roots = cat2.get_roots(urlbase)
+    root = "example"
+    cat2.subscribe(root, urlbase)
+    expected_paths = cat2.get_list(root, urlbase)
+    path = pathlib.Path(root + "/dir1/ds-3d.b2nd")
+    expected_info = cat2.get_info(path, urlbase)
+
+    with cat2.c2context(urlbase=urlbase):
+        roots = cat2.get_roots()
+        assert len(roots) == len(expected_roots)
+        assert all(root_ in expected_roots for root_ in roots)
+        assert "Ok" == cat2.subscribe(root)
+        paths_list = cat2.get_list(root)
+        assert paths_list == expected_paths
+        info = cat2.get_info(path)
+        assert info == expected_info
+        a = cat2.fetch(path)
+        chunk = cat2.get_chunk(path, 0)
+        local_path = cat2.download(path)
+        b = blosc2.open(local_path, "r")
+        np.testing.assert_array_equal(a, b[:])
+        assert chunk == b.get_chunk(0)
+
+        rootobj = cat2.Root(root)
+        assert paths_list == rootobj.file_list
+        dataset = rootobj["dir1/ds-3d.b2nd"]
+        download_path = dataset.download()
+        c = blosc2.open(download_path, "r")
+        np.testing.assert_array_equal(dataset[:], c[:])
+        assert chunk == c.get_chunk(0)
+
+    roots_default = ["@public", "foo", "hdf5root"]
+    roots = cat2.get_roots()
+    assert len(roots) == len(roots_default)
+    assert all(root in roots_default for root in roots)
+
+
+def c2sub_user(urlbase):
+    def rand32():
+        return random.randint(0, 0x7FFFFFFF)
+
+    username = f"user+{rand32():x}@example.com"
+    password = hex(rand32())
+
+    for _ in range(3):
+        resp = httpx.post(
+            f"{urlbase}/auth/register", json={"email": username, "password": password}, timeout=15
+        )
+        if resp.status_code != 400:
+            break
+        # Retry on possible username collision.
+    resp.raise_for_status()
+
+    return (
+        username,
+        password,
+        cat2.get_auth_cookie(urlbase, dict(urlbase=urlbase, username=username, password=password)),
+    )
+
+
+@pytest.mark.parametrize(
+    "cookie",
+    [
+        True,
+        False,
+    ],
+)
+def test_c2context_demo_auth(cookie, sub_urlbase, sub_user, tmp_path):
+    urlbase = "https://cloud.caterva2.net/demo"
+    username, password, auth_cookie = c2sub_user(urlbase)
+    auth_cookie_ = auth_cookie
+    username_ = username
+    password_ = password
+    if cookie:
+        username_ = password_ = None
+    else:
+        auth_cookie_ = None
+    expected_roots = cat2.get_roots(urlbase, auth_cookie)
+    expected_roots_list = list(expected_roots.keys())
+
+    localpath, remotepath = ("root-example/dir1/ds-2d.b2nd", "dir2/dir3/dir4/ds-2d2.b2nd")
+    root = "@personal"
+    remote_root = cat2.Root(root, urlbase, dict(username=username, password=password))
+    remote_root.upload(localpath, remotepath)
+    expected_paths = cat2.get_list(root, urlbase, auth_cookie)
+    path = pathlib.Path(root + "/" + expected_paths[-1])
+    expected_info = cat2.get_info(path, urlbase, auth_cookie)
+
+    with cat2.c2context(urlbase=urlbase, username=username_, password=password_, auth_cookie=auth_cookie_):
+        roots = cat2.get_roots()
+        assert len(roots) == len(expected_roots)
+        assert all(root_ in expected_roots for root_ in roots)
+        assert "Ok" == cat2.subscribe(expected_roots_list[-1])
+        paths_list = cat2.get_list(root)
+        assert paths_list == expected_paths
+        info = cat2.get_info(path)
+        assert info == expected_info
+        a = cat2.fetch(path)
+        chunk = cat2.get_chunk(path, 0)
+        local_path = cat2.download(path)
+        b = blosc2.open(local_path, "r")
+        np.testing.assert_array_equal(a[:], b[:])
+        assert chunk == b.get_chunk(0)
+        # Root and File
+        root_personal = cat2.Root(root)
+        assert paths_list == root_personal.file_list
+        dataset = root_personal[expected_paths[-1]]
+        download_path = dataset.download()
+        c = blosc2.open(download_path, "r")
+        np.testing.assert_array_equal(dataset[:], c[:])
+        assert chunk == c.get_chunk(0)
+        # expr
+        expr_path = cat2.lazyexpr("expr", "a+1", {"a": path})
+        res = cat2.fetch(expr_path)
+        np.testing.assert_array_equal(a[:] + 1, res[:])
+
+        # upload
+        localpath = "root-example/ds-2d-fields.b2nd"
+        remotepath = root + "/dir2/ds-2d-fields.b2nd"
+        remote_ds = cat2.upload(localpath, remotepath)
+        # move
+        new_remotepath = root + "/dir4/ds-2d-fields.b2nd"
+        newpath = cat2.move(remote_ds, new_remotepath)
+        assert str(newpath) == new_remotepath
+        # copy
+        copy_remotepath = root + "/dir4/ds-2d-fields-copy.b2nd"
+        copy_newpath = cat2.copy(newpath, copy_remotepath)
+        assert str(copy_newpath) == copy_remotepath
+        # remove
+        remote_removed = pathlib.Path(cat2.remove(copy_newpath))
+        assert remote_removed == copy_newpath
+        # Check that the file has been removed
+        with pytest.raises(Exception) as e_info:
+            _ = cat2.remove(copy_newpath)
+        assert "Not Found" in str(e_info.value)
+
+    roots_default = ["@public", "foo", "hdf5root"]
+    roots = cat2.get_roots()
+    assert len(roots) == len(roots_default)
+    assert all(root in roots_default for root in roots)
