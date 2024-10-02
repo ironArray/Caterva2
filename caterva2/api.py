@@ -586,7 +586,8 @@ def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=N
     auth_cookie : str
         A HTTP cookie for authorizing access.
         This must be specified unless it was already specified inside
-        a :py_obj:`caterva2.c2context`.
+        a :py_obj:`caterva2.c2context`. The auth_cookie used must be
+        from a superuser.
 
     Returns
     -------
@@ -628,7 +629,8 @@ def deluser(user, urlbase=None, auth_cookie=None):
     auth_cookie : str
         A HTTP cookie for authorizing access.
         This must be specified unless it was already specified inside
-        a :py_obj:`caterva2.c2context`.
+        a :py_obj:`caterva2.c2context`. The auth_cookie used must be
+        from a superuser.
 
     Returns
     -------
@@ -667,7 +669,8 @@ def listusers(username=None, urlbase=None, auth_cookie=None):
     auth_cookie : str
         A HTTP cookie for authorizing access.
         This must be specified unless it was already specified inside
-        a :py_obj:`caterva2.c2context`.
+        a :py_obj:`caterva2.c2context`. The auth_cookie used must be
+        from a superuser.
 
     Returns
     -------
