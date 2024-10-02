@@ -693,19 +693,16 @@ def listusers(username=None, urlbase=None, auth_cookie=None):
     >>> len(users) + 1 == len(updated_users)
     True
     >>> user_info = cat2.listusers(username, auth_cookie=super_auth_cookie)
-    >>> user_info['is_superuser']
+    >>> user_info[0]['is_superuser']
     False
     >>> superuser_info = cat2.listusers('superuser@example.com', auth_cookie=super_auth_cookie)
-    >>> superuser_info['is_superuser']
+    >>> superuser_info[0]['is_superuser']
     True
     """
     urlbase, _ = _format_paths(urlbase)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     url = f"{urlbase}/api/listusers/" + (f"?username={username}" if username else "")
-    resp = api_utils.get(url, auth_cookie=auth_cookie)
-    if username is not None:
-        resp = resp[0]
-    return resp
+    return api_utils.get(url, auth_cookie=auth_cookie)
 
 
 class Root:
