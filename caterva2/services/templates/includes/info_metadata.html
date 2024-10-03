@@ -19,12 +19,14 @@
         {% set _ = meta.__setattr__('chunks', chunks) %}
 
         {% set cparams = meta.schunk.cparams %}
+        <!---  We don't want to show everything --->
         {% set _ = cparams.__delattr__('codec_meta') %}
         {% set _ = cparams.__delattr__('clevel') %}
         {% set _ = cparams.__delattr__('nthreads') %}
         {% set _ = cparams.__delattr__('splitmode') %}
         {% set _ = cparams.__delattr__('tuner') %}
         {% set _ = cparams.__delattr__('use_dict') %}
+        {% set _ = cparams.__delattr__('typesize')  %}
 
         {% set schunk = meta.schunk %}
         {% for key, value in cparams %}
@@ -56,28 +58,33 @@
         {% endif %}
     {% endif %}
 
+    {# All the next information is a bit too much for the main window #}
+    {% set excluded_keys = [
+        'chunkshape', 'chunksize', 'vlmeta',
+        'contiguous', 'urlpath', 'blocksize'
+        ] %}
     {% for key, value in meta %}
-            {% if key in ['schunk', 'cparams'] %}
-                {% for key2, value2 in meta[key] %}
-                    {% if key2 not in ['chunkshape', 'chunksize', 'vlmeta'] %}
-                        {% if key2 == 'urlpath' %}
-                            {% set key2 = 'cachepath' %}
-                        {% endif %}
-                        <tr>
-                            <th scope="row">{{ key2 }}</th>
-                            <td>{{ value2 }}</td>
-                        </tr>
+        {% if key in ['schunk', 'cparams'] %}
+            {% for key2, value2 in meta[key] %}
+                {% if key2 not in excluded_keys %}
+                    {% if key2 == 'urlpath' %}
+                        {% set key2 = 'cachepath' %}
                     {% endif %}
-                {% endfor %}
-            {% else %}
-                {% if key == 'urlpath' %}
-                    {% set key = 'cachepath' %}
+                    <tr>
+                        <th scope="row">{{ key2 }}</th>
+                        <td>{{ value2 }}</td>
+                    </tr>
                 {% endif %}
-                <tr>
-                    <th scope="row">{{ key }}</th>
-                    <td>{{ value }}</td>
-                </tr>
+            {% endfor %}
+        {% else %}
+            {% if key == 'urlpath' %}
+                {% set key = 'cachepath' %}
             {% endif %}
+            <tr>
+                <th scope="row">{{ key }}</th>
+                <td>{{ value }}</td>
+            </tr>
+        {% endif %}
     {% endfor %}
 </table>
 
