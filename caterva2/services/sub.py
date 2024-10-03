@@ -1362,7 +1362,7 @@ async def htmx_path_list(
                 url = make_url(request, "html_home", path=path, query=query)
                 datasets.append(
                     {
-                        "name": next(names),
+                        "name": "_",
                         "path": path,
                         "size": size,
                         "url": url,
@@ -1370,7 +1370,9 @@ async def htmx_path_list(
                     }
                 )
 
-    datasets = sorted(datasets, key=lambda x: x["name"])
+    datasets = sorted(datasets, key=lambda x: x["path"])
+    for i, dataset in enumerate(datasets):
+        dataset["name"] = next(names)
 
     # Render template
     cmd_url = make_url(request, "htmx_command")
