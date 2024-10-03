@@ -13,7 +13,6 @@ import itertools
 import logging
 import os
 import pathlib
-import random
 import re
 import shutil
 import string
@@ -90,6 +89,7 @@ class PubSourceDataset:
                     # This is a list, so we need to convert it to a string
                     dtype = eval(dtype)
                 self._dtype = np.dtype(dtype)
+                self._cparams = dict(metadata.schunk.cparams)
             else:
                 if suffix == ".b2frame":
                     metadata = models.SChunk(**metadata)
@@ -99,6 +99,9 @@ class PubSourceDataset:
                 self._typesize = metadata.cparams.typesize
                 self._chunksize = metadata.chunksize
                 self._nbytes = metadata.nbytes
+                self._cparams = dict(metadata.cparams)
+            del self._cparams["filters, meta"]
+            self._cparams = blosc2.CParams(**self._cparams)
             self.abspath = abspath
             if self.abspath is not None:
                 self.abspath.parent.mkdir(exist_ok=True, parents=True)
@@ -150,6 +153,10 @@ class PubNDDataset(blosc2.ProxyNDSource, PubSourceDataset):
     def dtype(self):
         return self._dtype
 
+    @property
+    def cparams(self):
+        return self._cparams
+
     def get_chunk(self, nchunk: int) -> bytes:
         return self._get_chunk(nchunk)
 
@@ -170,6 +177,10 @@ class PubSCDataset(blosc2.ProxySource, PubSourceDataset):
     @property
     def nbytes(self):
         return self._nbytes
+
+    @property
+    def cparams(self):
+        return self._cparams
 
     def get_chunk(self, nchunk: int) -> bytes:
         return self._get_chunk(nchunk)
