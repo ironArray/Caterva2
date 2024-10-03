@@ -19,6 +19,13 @@
         {% set _ = meta.__setattr__('chunks', chunks) %}
 
         {% set cparams = meta.schunk.cparams %}
+        {% set _ = cparams.__delattr__('codec_meta') %}
+        {% set _ = cparams.__delattr__('clevel') %}
+        {% set _ = cparams.__delattr__('nthreads') %}
+        {% set _ = cparams.__delattr__('splitmode') %}
+        {% set _ = cparams.__delattr__('tuner') %}
+        {% set _ = cparams.__delattr__('use_dict') %}
+
         {% set schunk = meta.schunk %}
         {% for key, value in cparams %}
             {% if key not in ['filters', 'filters_meta'] %}
