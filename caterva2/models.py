@@ -14,23 +14,29 @@ import blosc2
 import pydantic
 
 
-class CParams(pydantic.BaseModel, extra='allow'):
+class CParams(pydantic.BaseModel, extra="allow"):
     codec: blosc2.Codec
+    codec_meta: int
+    clevel: int
     filters: list[blosc2.Filter]
     filters_meta: list[int]
     typesize: int
     blocksize: int
+    nthreads: int
+    splitmode: blosc2.SplitMode
+    tuner: blosc2.Tuner
+    use_dict: bool
 
 
-class SChunk(pydantic.BaseModel, extra='allow'):
+class SChunk(pydantic.BaseModel, extra="allow"):
     cbytes: int
     chunkshape: int
     chunksize: int
     contiguous: bool
     cparams: CParams
     cratio: float
-#   dparams
-#   meta
+    #   dparams
+    #   meta
     nbytes: int
     urlpath: str
     vlmeta: dict = {}
