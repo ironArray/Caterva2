@@ -50,7 +50,7 @@ conf = ConnectionConfig(
 
 async def send_email(recipients, body):
     message = MessageSchema(
-        subject="Fastapi-Mail module",
+        subject="Reset password of your cat2.cloud account",
         recipients=recipients,
         body=body,
         subtype=MessageType.html)
