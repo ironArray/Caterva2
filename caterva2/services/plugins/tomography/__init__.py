@@ -77,7 +77,7 @@ async def __get_image(path, i, user):
     abspath, _ = abspath_and_dataprep(path, user=user)
     arr = open_b2(abspath, path)
 
-    img = arr[i,:]
+    img = arr[i]
     return Image.fromarray(img)
 
 
