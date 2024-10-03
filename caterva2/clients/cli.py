@@ -18,10 +18,10 @@ import string
 import httpx
 import rich
 
-# Project
-from caterva2 import api_utils
-from caterva2 import utils
 import caterva2 as cat2
+
+# Project
+from caterva2 import api_utils, utils
 
 
 def handle_errors(func):
@@ -159,18 +159,14 @@ def cmd_copy(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_download(args, auth_cookie):
-    path = cat2.download(
-        args.dataset, args.localpath, args.urlbase, auth_cookie=auth_cookie
-    )
+    path = cat2.download(args.dataset, args.localpath, args.urlbase, auth_cookie=auth_cookie)
     print(f"Dataset saved to {path}")
 
 
 @handle_errors
 @with_auth_cookie
 def cmd_upload(args, auth_cookie):
-    path = cat2.upload(
-        args.localpath, args.dataset, args.urlbase, auth_cookie=auth_cookie
-    )
+    path = cat2.upload(args.localpath, args.dataset, args.urlbase, auth_cookie=auth_cookie)
     print(f"Dataset stored in {path}")
 
 
@@ -184,11 +180,13 @@ def cmd_remove(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_adduser(args, auth_cookie):
-    newpass = args.newpass or "".join(
-        random.choice(string.ascii_letters) for _ in range(8)
-    )
+    newpass = args.newpass or "".join(random.choice(string.ascii_letters) for _ in range(8))
     message = cat2.adduser(
-        auth_cookie, args.newuser, newpass, args.superuser, args.urlbase
+        args.newuser,
+        newpass,
+        args.superuser,
+        args.urlbase,
+        auth_cookie=auth_cookie,
     )
     print(message)
 
@@ -196,14 +194,14 @@ def cmd_adduser(args, auth_cookie):
 @handle_errors
 @with_auth_cookie
 def cmd_deluser(args, auth_cookie):
-    message = cat2.deluser(auth_cookie, args.user, args.urlbase)
+    message = cat2.deluser(args.user, args.urlbase, auth_cookie=auth_cookie)
     print(message)
 
 
 @handle_errors
 @with_auth_cookie
 def cmd_listusers(args, auth_cookie):
-    data = cat2.listusers(auth_cookie, args.user, args.urlbase)
+    data = cat2.listusers(args.user, args.urlbase, auth_cookie=auth_cookie)
     if args.json:
         print(json.dumps(data))
         return
@@ -239,9 +237,7 @@ def main():
     subparser.set_defaults(func=cmd_subscribe)
 
     # list
-    help = (
-        "List all the available datasets in a root. Needs to be subscribed to the root."
-    )
+    help = "List all the available datasets in a root. Needs to be subscribed to the root."
     subparser = subparsers.add_parser("list", aliases=["ls"], help=help)
     subparser.add_argument("--json", action="store_true")
     subparser.add_argument("root")
