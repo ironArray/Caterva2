@@ -26,6 +26,18 @@ installing the wheel, then test it::
   $ python -m caterva2.tests -v
   $ cd -
 
+Check that the examples in docstrings are up to date. You will
+need to register a user in https://cloud.caterva2.net/demo/ with
+username 'user@example.com' and password 'foo'. Then, copy
+the content of `caterva2-standalone.sample.toml` to `caterva2.toml`
+and run the following commands::
+
+  $ rm -r _caterva2/
+  $ cat2adduser superuser@example.com foo -S
+  $ CATERVA2_SECRET="123" cat2sub
+  $ python -m doctest  caterva2/api.py
+  $ python -m doctest  caterva2/api_utils.py
+
 If the tests pass, you are ready to release.
 
 

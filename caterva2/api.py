@@ -76,7 +76,9 @@ def get_roots(urlbase=None, auth_cookie=None):
     >>> import caterva2 as cat2
     >>> roots_dict = cat2.get_roots("https://demo.caterva2.net")
     >>> sorted(roots_dict.keys())
-    ['b2tests', 'example', 'h5example', 'h5lung_j2k', 'h5numbers_j2k']
+    ['@public', 'b2tests', 'example', 'h5example', 'h5lung_j2k', 'h5numbers_j2k']
+    >>> cat2.subscribe('b2tests', "https://demo.caterva2.net")
+    'Ok'
     >>> roots_dict['b2tests']
     {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
     """
@@ -600,9 +602,10 @@ def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=N
     >>> import numpy as np
     >>> # To add a user you need to be a superuser
     >>> # This example is intended to work when the subscriber is running locally
-    >>> super_auth_cookie = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=dict(username='superuser@example.com', password='foo'))
+    >>> super_user = {'username': 'superuser@example.com', 'password': 'foo'}
+    >>> super_auth = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=super_user)
     >>> username = f'user{np.random.randint(0, 100)}@example.com'
-    >>> message = cat2.adduser(username, 'foo', auth_cookie=super_auth_cookie)
+    >>> message = cat2.adduser(username, 'foo', auth_cookie=super_auth)
     >>> f"User added: username='{username}' password='foo' superuser=False" == message
     True
     """
@@ -643,10 +646,11 @@ def deluser(user, urlbase=None, auth_cookie=None):
     >>> import numpy as np
     >>> # To delete a user you need to be a superuser
     >>> # This example is intended to work when the subscriber is running locally
-    >>> super_auth_cookie = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=dict(username='superuser@example.com', password='foo'))
+    >>> super_user = {'username': 'superuser@example.com', 'password': 'foo'}
+    >>> super_auth = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=super_user)
     >>> username = f'user{np.random.randint(0, 100)}@example.com'
-    >>> _ = cat2.adduser(username, 'foo', auth_cookie=super_auth_cookie)
-    >>> message = cat2.deluser(username, auth_cookie=super_auth_cookie)
+    >>> _ = cat2.adduser(username, 'foo', auth_cookie=super_auth)
+    >>> message = cat2.deluser(username, auth_cookie=super_auth)
     >>> message == f"User deleted: {username}"
     True
     """
@@ -683,19 +687,20 @@ def listusers(username=None, urlbase=None, auth_cookie=None):
     >>> import numpy as np
     >>> # To list the users you need to be a superuser
     >>> # This example is intended to work when the subscriber is running locally
-    >>> super_auth_cookie = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=dict(username='superuser@example.com', password='foo'))
-    >>> users = cat2.listusers(auth_cookie=super_auth_cookie)
+    >>> super_user = {'username': 'superuser@example.com', 'password': 'foo'}
+    >>> super_auth = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=super_user)
+    >>> users = cat2.listusers(auth_cookie=super_auth)
     >>> sorted(users[0].keys())
     ['email', 'hashed_password', 'id', 'is_active', 'is_superuser', 'is_verified']
     >>> username = f'user{np.random.randint(0, 100)}@example.com'
-    >>> _ = cat2.adduser(username, 'foo', auth_cookie=super_auth_cookie)
-    >>> updated_users = cat2.listusers(auth_cookie=super_auth_cookie)
+    >>> _ = cat2.adduser(username, 'foo', auth_cookie=super_auth)
+    >>> updated_users = cat2.listusers(auth_cookie=super_auth)
     >>> len(users) + 1 == len(updated_users)
     True
-    >>> user_info = cat2.listusers(username, auth_cookie=super_auth_cookie)
+    >>> user_info = cat2.listusers(username, auth_cookie=super_auth)
     >>> user_info[0]['is_superuser']
     False
-    >>> superuser_info = cat2.listusers('superuser@example.com', auth_cookie=super_auth_cookie)
+    >>> superuser_info = cat2.listusers('superuser@example.com', auth_cookie=super_auth)
     >>> superuser_info[0]['is_superuser']
     True
     """
@@ -1064,8 +1069,8 @@ class File:
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
         PosixPath('example/ds-1d.b2nd')
-        >>> file.download('mypath')
-        PosixPath('mypath')
+        >>> file.download('mydir/myarray.b2nd')
+        PosixPath('mydir/myarray.b2nd')
         """
         return download(
             self.path,
