@@ -22,7 +22,7 @@ Getting roots, subscribing and listing datasets
 
 
 Fetch / download / upload datasets
--------------------------
+----------------------------------
 
 .. autosummary::
    :toctree: autofiles/top_level/
@@ -31,6 +31,17 @@ Fetch / download / upload datasets
     fetch
     download
     upload
+
+User management
+---------------
+
+.. autosummary::
+   :toctree: autofiles/top_level/
+   :nosignatures:
+
+    adduser
+    deluser
+    listusers
 
 
 Utility functions
