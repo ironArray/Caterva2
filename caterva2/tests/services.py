@@ -150,10 +150,15 @@ class ManagedServices(Services):
                 f"check for service \"{name}\" succeeded before start"
                 f" (external service running?): {check.__name__}")
 
+        if os.environ.get('CATERVA2_SECRET'):
+            conf_file = 'caterva2-login.toml'
+        else:
+            conf_file = 'caterva2-nologin.toml'
+
         popen_args = [
             sys.executable,
             f"-mcaterva2.services.{name[:3]}",
-            f"--conf={BASE_DIR / 'caterva2.toml'}",
+            f"--conf={BASE_DIR / conf_file}",
             f"--statedir={self.state_dir / name}",
             *([f"--http={check.host}"] if check else []),
             *args

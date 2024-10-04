@@ -1,0 +1,7 @@
+[broker]
+http = "localhost:8000"
+
+[subscriber]
+login = false
+register = false
+maxusers = 5

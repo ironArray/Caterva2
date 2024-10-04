@@ -2,4 +2,6 @@
 http = "localhost:8000"
 
 [subscriber]
+login = true
+register = true
 maxusers = 5
