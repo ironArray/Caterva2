@@ -50,6 +50,10 @@ body {
     display: block;
 }
 
+#path-list-wrapper {
+    z-index: 10;
+}
+
 #path-list .active {
     background-color: #008287;
     border-color: #008287;
