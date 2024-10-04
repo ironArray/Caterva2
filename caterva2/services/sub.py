@@ -375,16 +375,30 @@ def follow(name: str):
 #
 
 
-def user_auth_enabled():
-    return bool(os.environ.get("CATERVA2_SECRET"))
+def user_login_enabled():
+    if settings.login:
+        if not bool(os.environ.get("CATERVA2_SECRET")):
+            raise RuntimeError('CATERVA2_SECRET envvar is required')
+        return True
+
+    return False
 
 
-current_active_user = users.current_active_user if user_auth_enabled() else (lambda: None)
+def user_register_enabled():
+    if settings.register:
+        if not settings.login:
+            raise RuntimeError('login config must be enabled')
+        return True
+
+    return False
+
+
+current_active_user = users.current_active_user if user_login_enabled() else (lambda: None)
 """Depend on this if the route needs an authenticated user (if enabled)."""
 
 optional_user = (
     users.fastapi_users.current_user(optional=True, verified=False)  # TODO: set when verification works
-    if user_auth_enabled()
+    if user_login_enabled()
     else (lambda: None)
 )
 """Depend on this if the route may do something with no authentication."""
@@ -403,7 +417,7 @@ _setup_plugin_globals()
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
-    if user_auth_enabled():
+    if user_login_enabled():
         await db.create_db_and_tables(statedir)
 
     # Initialize roots from the broker
@@ -463,21 +477,25 @@ def custom_filesizeformat(value):
 
 
 app = FastAPI(lifespan=lifespan)
-if user_auth_enabled():
+
+# TODO: Support user verification
+if user_login_enabled():
     app.include_router(
         users.fastapi_users.get_auth_router(users.auth_backend), prefix="/auth/jwt", tags=["auth"]
-    )
-    app.include_router(
-        users.fastapi_users.get_register_router(schemas.UserRead, schemas.UserCreate),
-        prefix="/auth",
-        tags=["auth"],
     )
     app.include_router(
         users.fastapi_users.get_reset_password_router(),
         prefix="/auth",
         tags=["auth"],
     )
-    # TODO: Support user verification and user deletion.
+
+
+if user_register_enabled():
+    app.include_router(
+        users.fastapi_users.get_register_router(schemas.UserRead, schemas.UserCreate),
+        prefix="/auth",
+        tags=["auth"],
+    )
 
 
 def url(path: str) -> str:
@@ -1126,14 +1144,17 @@ async def remove(
 # HTML interface
 #
 
-if user_auth_enabled():
+if user_login_enabled():
 
     @app.get("/login", response_class=HTMLResponse)
     async def html_login(request: Request, user: db.User = Depends(optional_user)):
         if user:
             return RedirectResponse(urlbase, status_code=307)
 
-        return templates.TemplateResponse(request, "login.html")
+        context = {
+            "user_register_enabled": user_register_enabled(),
+        }
+        return templates.TemplateResponse(request, "login.html", context)
 
     @app.get("/logout", response_class=HTMLResponse)
     async def html_logout(request: Request, user: db.User = Depends(optional_user)):
@@ -1141,13 +1162,6 @@ if user_auth_enabled():
             return RedirectResponse(urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "logout.html")
-
-    @app.get("/register", response_class=HTMLResponse)
-    async def html_register(request: Request, user: db.User = Depends(optional_user)):
-        if user:
-            return RedirectResponse(urlbase, status_code=307)
-
-        return templates.TemplateResponse(request, "register.html")
 
     @app.get("/forgot-password", response_class=HTMLResponse)
     async def html_forgot_password(request: Request, user: db.User = Depends(optional_user)):
@@ -1264,6 +1278,15 @@ if user_auth_enabled():
     # TODO: Support user verification
 
 
+if user_register_enabled():
+    @app.get("/register", response_class=HTMLResponse)
+    async def html_register(request: Request, user: db.User = Depends(optional_user)):
+        if user:
+            return RedirectResponse(urlbase, status_code=307)
+
+        return templates.TemplateResponse(request, "register.html")
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/roots/{path:path}")
 async def html_home(
@@ -1278,11 +1301,14 @@ async def html_home(
     # Disk usage
     size = get_disk_usage()
     context = {
-        "user_auth_enabled": user_auth_enabled(),
+        "user_login_enabled": user_login_enabled(),
         "roots_url": make_url(request, "htmx_root_list", {"roots": roots}),
         "username": user.email if user else None,
         # Disk usage
         "usage_total": custom_filesizeformat(size),
+    }
+
+    context["config"] = {
     }
 
     if quota:

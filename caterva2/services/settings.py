@@ -9,3 +9,5 @@ from caterva2 import utils
 
 conf = utils.get_conf('subscriber', allow_id=True)
 urlbase = conf.get('.urlbase')
+login = conf.get(".login")
+register = conf.get(".register")

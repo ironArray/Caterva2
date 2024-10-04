@@ -23,9 +23,10 @@
 </form>
 
 <p class="mt-2">
-<a href="{{ url('forgot-password') }}">Reset password</a>
-<br>
-<a href="{{ url('register') }}">Register as a new user</a>
+    <a href="{{ url('forgot-password') }}">Reset password</a>
+    {% if user_register_enabled %}
+    <br><a href="{{ url('register') }}">Register as a new user</a>
+    {% endif %}
 </p>
 
 {% endblock %}
