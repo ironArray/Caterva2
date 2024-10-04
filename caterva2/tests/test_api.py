@@ -815,7 +815,7 @@ def c2sub_user(urlbase):
     ],
 )
 def test_c2context_demo_auth(cookie, sub_urlbase, sub_user, tmp_path):
-    urlbase = "https://cloud.caterva2.net/demo"
+    urlbase = "https://cat2.cloud/demo"
     username, password, auth_cookie = c2sub_user(urlbase)
     auth_cookie_ = auth_cookie
     username_ = username

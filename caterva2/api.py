@@ -357,7 +357,7 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     >>> import caterva2 as cat2
     >>> import numpy as np
     >>> # To upload a file you need to be authenticated as an already registered used
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
     >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', newpath, urlbase=urlbase, auth_cookie=auth_cookie)
@@ -406,7 +406,7 @@ def remove(path, urlbase=None, auth_cookie=None):
     >>> import caterva2 as cat2
     >>> import numpy as np
     >>> # To remove a file you need to be a registered used
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
     >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase=urlbase, auth_cookie=auth_cookie)
@@ -447,7 +447,7 @@ def move(src, dst, urlbase=None, auth_cookie=None):
     >>> import caterva2 as cat2
     >>> import numpy as np
     >>> # To move a file you need to be a registered used
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
     >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase=urlbase, auth_cookie=auth_cookie)
@@ -496,7 +496,7 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
     >>> import caterva2 as cat2
     >>> import numpy as np
     >>> # To copy a file you need to be a registered used
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
     >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', src_path, urlbase=urlbase, auth_cookie=auth_cookie)
@@ -552,7 +552,7 @@ def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     >>> import caterva2 as cat2
     >>> import numpy as np
     >>> # To create a lazyexpr you need to be a registered used
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
     >>> path = cat2.upload('root-example/dir1/ds-2d.b2nd', src_path, urlbase=urlbase, auth_cookie=auth_cookie)
@@ -877,7 +877,7 @@ class Root:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To upload a file you must be registered as a user.
-        >>> urlbase = 'https://cloud.caterva2.net/demo'
+        >>> urlbase = 'https://cat2.cloud/demo'
         >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
         >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
@@ -1097,7 +1097,7 @@ class File:
         --------
         >>> import caterva2 as cat2
         >>> # For moving a file you need to be a registered user
-        >>> urlbase = 'https://cloud.caterva2.net/demo'
+        >>> urlbase = 'https://cat2.cloud/demo'
         >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
         <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
@@ -1130,7 +1130,7 @@ class File:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # For copying a file you need to be a registered user
-        >>> urlbase = 'https://cloud.caterva2.net/demo'
+        >>> urlbase = 'https://cat2.cloud/demo'
         >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
         <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
@@ -1159,7 +1159,7 @@ class File:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To remove a file you need to be a registered user
-        >>> urlbase = 'https://cloud.caterva2.net/demo'
+        >>> urlbase = 'https://cat2.cloud/demo'
         >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
         >>> path = 'root-example/dir2/ds-4d.b2nd'
         >>> root.upload(path)
@@ -1263,7 +1263,7 @@ def c2context(
     ...     print(cat2.get_roots()['h5lung_j2k'])
     ...
     {'name': 'h5lung_j2k', 'http': 'localhost:8012', 'subscribed': None}
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> with cat2.c2context(urlbase=urlbase, username='user@example.com', password='foo'):
     ...     print(cat2.upload('root-example/ds-2d-fields.b2nd', '@personal/fields.b2nd'))
     ...

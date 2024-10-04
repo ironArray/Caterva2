@@ -81,7 +81,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> urlbase = 'https://cloud.caterva2.net/demo'
+    >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> cat2.upload('root-example/ds-sc-attr.b2nd', '@personal/attr.b2nd', urlbase, auth_cookie)
     PosixPath('@personal/attr.b2nd')
