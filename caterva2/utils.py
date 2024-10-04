@@ -119,8 +119,7 @@ def run_parser(parser):
 # Web server related
 #
 
-def uvicorn_run(app, args, root_path=''):
-    http = args.http
+def uvicorn_run(app, http, root_path=''):
     if http.uds:
         uvicorn.run(app, uds=http.uds, root_path=root_path)
     else:
@@ -130,9 +129,6 @@ def uvicorn_run(app, args, root_path=''):
 #
 # Configuration file
 #
-
-conf_file_name = 'caterva2.toml'
-
 
 class Conf:
     def __init__(self, conf, prefix=None, id=None):
@@ -163,8 +159,7 @@ class Conf:
 
 
 def _add_preliminary_args(parser, id=None):
-    parser.add_argument('--conf', default=conf_file_name,
-                        type=pathlib.Path,
+    parser.add_argument('--conf', type=pathlib.Path,
                         help=("path to alternative configuration file "
                               "(may not exist)"))
     if id is not None:  # the empty string is a valid (default) ID
@@ -199,8 +194,9 @@ def get_conf(prefix=None, allow_id=False):
         if any(p in opts.id for p in [os.curdir, os.pardir, os.sep]):
             raise ValueError("invalid identifier", opts.id)
     id_ = opts.id if allow_id else None
+    config_file = opts.conf or 'caterva2.toml'
     try:
-        with open(opts.conf, 'rb') as conf_file:
+        with open(config_file, 'rb') as conf_file:
             conf = toml.load(conf_file)
             return Conf(conf, prefix=prefix, id=id_)
     except FileNotFoundError:

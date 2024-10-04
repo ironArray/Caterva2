@@ -33,10 +33,13 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+      env:
+        CATERVA2_SETTINGS: settings-nologin.py
     - name: Test with pytest (auth on)
       run: |
         pytest
       env:
+        CATERVA2_SETTINGS: settings-login.py
         CATERVA2_SECRET: c2sikrit
     - name: Test building docs
       run: |

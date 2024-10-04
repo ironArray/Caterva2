@@ -13,7 +13,6 @@ import itertools
 import logging
 import os
 import pathlib
-import re
 import shutil
 import string
 import tarfile
@@ -39,9 +38,9 @@ import numpy as np
 
 # Project
 from caterva2 import utils, api_utils, models
+from caterva2.conf import settings
 from caterva2.services import srv_utils
 from caterva2.services.subscriber import db, schemas, users
-from caterva2.services import settings
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -54,11 +53,8 @@ logger = logging.getLogger("sub")
 
 # Configuration
 broker = None
-quota: int = 0
-maxusers: int = 0
 
 # State
-statedir = None
 cache = None
 personal = None
 shared = None
@@ -206,7 +202,7 @@ def PubDataset(abspath, path, metadata=None):
 
 def get_disk_usage():
     exclude = {"db.json", "db.sqlite"}
-    return sum(path.stat().st_size for path, _ in utils.walk_files(statedir, exclude=exclude))
+    return sum(path.stat().st_size for path, _ in utils.walk_files(settings.statedir, exclude=exclude))
 
 
 def truncate_path(path, size=35):
@@ -418,7 +414,7 @@ _setup_plugin_globals()
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
     if user_login_enabled():
-        await db.create_db_and_tables(statedir)
+        await db.create_db_and_tables(settings.statedir)
 
     # Initialize roots from the broker
     client = None
@@ -1203,15 +1199,15 @@ if user_login_enabled():
 
         # Get the number of current users
         users = await utils.alist_users()
-        if len(users) >= maxusers:
-            raise srv_utils.raise_bad_request(f"Only a maximum of {maxusers} users are allowed")
+        if len(users) >= settings.maxusers:
+            raise srv_utils.raise_bad_request(f"Only a maximum of {settings.maxusers} users are allowed")
 
         try:
             await utils.aadd_user(
                 payload.username,
                 payload.password,
                 payload.superuser,
-                state_dir=statedir,
+                state_dir=settings.statedir,
             )
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
@@ -1311,9 +1307,9 @@ async def html_home(
     context["config"] = {
     }
 
-    if quota:
-        context["usage_quota"] = custom_filesizeformat(quota)
-        context["usage_percent"] = round((size / quota) * 100)
+    if settings.quota:
+        context["usage_quota"] = custom_filesizeformat(settings.quota)
+        context["usage_percent"] = round((size / settings.quota) * 100)
 
     if roots:
         paths_url = make_url(request, "htmx_path_list", {"roots": roots, "search": search})
@@ -1785,10 +1781,10 @@ async def htmx_upload(
     data = await file.read()
 
     # Check quota
-    if quota:
+    if settings.quota:
         upload_size = len(data)
         total_size = get_disk_usage() + upload_size
-        if total_size > quota:
+        if total_size > settings.quota:
             error = "Upload failed because quota limit has been exceeded."
             return htmx_error(request, error)
 
@@ -1930,42 +1926,15 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
     return None
 
 
-def parse_size(size):
-    if size is None:
-        return None
-
-    units = {
-        "B": 1,
-        "KB": 2**10,
-        "MB": 2**20,
-        "GB": 2**30,
-        "TB": 2**40,
-        "": 1,
-        "KiB": 10**3,
-        "MiB": 10**6,
-        "GiB": 10**9,
-        "TiB": 10**12,
-    }
-    m = re.match(r"^([\d\.]+)\s*([a-zA-Z]{0,3})$", str(size).strip())
-    number, unit = float(m.group(1)), m.group(2).upper()
-    return int(number * units[unit])
-
-
 def main():
     # Read configuration file
     conf = utils.get_conf("subscriber", allow_id=True)
-    global quota, urlbase, maxusers
-    quota = parse_size(conf.get(".quota"))
     urlbase = conf.get(".urlbase")
-    maxusers = conf.get(".maxusers")
 
     # Parse command line arguments
-    _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
     parser = utils.get_parser(
         broker=conf.get("broker.http", ""),
-        http=conf.get(".http", "localhost:8002"),
         loglevel=conf.get(".loglevel", "warning"),
-        statedir=conf.get(".statedir", _stdir),
         id=conf.id,
     )
     args = utils.run_parser(parser)
@@ -1973,23 +1942,22 @@ def main():
     broker = args.broker
 
     # Init cache
-    global statedir, cache
-    statedir = args.statedir.resolve()
-    cache = statedir / "cache"
+    global cache
+    cache = settings.statedir / "cache"
     cache.mkdir(exist_ok=True, parents=True)
     # Use `download_cached()`, `StaticFiles` does not support authorization.
     # app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Shared/Public dirs
     global shared, public
-    shared = statedir / "shared"
+    shared = settings.statedir / "shared"
     shared.mkdir(exist_ok=True, parents=True)
-    public = statedir / "public"
+    public = settings.statedir / "public"
     public.mkdir(exist_ok=True, parents=True)
 
     # personal dir
     global personal
-    personal = statedir / "personal"
+    personal = settings.statedir / "personal"
     personal.mkdir(exist_ok=True, parents=True)
     # Use `download_personal()`, `StaticFiles` does not support authorization.
     # app.mount("/personal", StaticFiles(directory=personal), name="personal")
@@ -1997,7 +1965,7 @@ def main():
     # Init database
     global database
     model = models.Subscriber(roots={}, etags={})
-    database = srv_utils.Database(statedir / "db.json", model)
+    database = srv_utils.Database(settings.statedir / "db.json", model)
 
     # Register display plugins
     from .plugins import tomography  # delay module load
@@ -2008,7 +1976,7 @@ def main():
 
     # Run
     root_path = str(furl.furl(urlbase).path)
-    utils.uvicorn_run(app, args, root_path=root_path)
+    utils.uvicorn_run(app, utils.Socket(settings.http), root_path=root_path)
 
 
 if __name__ == "__main__":

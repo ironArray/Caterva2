@@ -1,4 +1,3 @@
-from .conf import configuration  # noqa: F401
 from .files import examples_dir, examples_hdf5  # noqa: F401
 from .services import services  # noqa: F401
 from .sub_auth import sub_user, sub_jwt_cookie  # noqa: F401
@@ -6,8 +5,9 @@ from .sub_auth import sub_user, sub_jwt_cookie  # noqa: F401
 import caterva2 as cat2
 import httpx
 import numpy as np
-import sys
 import platform
+import pytest
+import sys
 
 
 try:  # Python-Blosc2 is optional
@@ -27,3 +27,9 @@ def pytest_configure(config):
     print('Platform:              %s' % platform.platform())
     print('Rootdir:               %s' % config.rootdir)
     print('-=' * 38)
+
+
+@pytest.fixture(scope='session')
+def configuration():
+    """Caterva2 configuration, if available"""
+    return cat2.utils.get_conf()

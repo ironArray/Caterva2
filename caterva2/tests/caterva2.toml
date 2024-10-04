@@ -1,5 +1,0 @@
-[broker]
-http = "localhost:8000"
-
-[subscriber]
-maxusers = 5

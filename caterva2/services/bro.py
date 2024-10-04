@@ -61,7 +61,7 @@ def main():
     print(database.data)
 
     # Run
-    utils.uvicorn_run(app, args)
+    utils.uvicorn_run(app, args.http)
 
 
 if __name__ == '__main__':

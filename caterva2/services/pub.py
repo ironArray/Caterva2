@@ -222,7 +222,7 @@ def main():
     api_utils.post('/api/roots', json=data, server=args.broker)
 
     # Run
-    utils.uvicorn_run(app, args)
+    utils.uvicorn_run(app, args.http)
 
 
 if __name__ == '__main__':
