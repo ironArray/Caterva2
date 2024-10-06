@@ -1,8 +1,8 @@
 <p class="d-flex gap-4">
-    <a href="/{{ urlpostfix }}api/fetch/{{ path }}" class="text-decoration-none"><i class="fa-solid fa-download"></i> Download</a>
+    <a href="{{ url("api/fetch/") }}{{ path }}" class="text-decoration-none"><i class="fa-solid fa-download"></i> Download</a>
     {% if can_delete %}
     <a href="#" class="text-decoration-none link-danger"
-        hx-delete="/{{ urlpostfix }}htmx/delete/{{path}}" hx-confirm="Do you confirm deletion?"
+        hx-delete="{{ url("htmx/delete/") }}{{path}}" hx-confirm="Do you confirm deletion?"
     >
         <i class="fa-solid fa-trash"></i> Delete
     </a>

@@ -67,7 +67,6 @@ clients = {}  # topic: <PubSubClient>
 database = None  # <Database> instance
 locks = {}
 urlbase: str = ""
-urlpostfix: str = ""
 
 
 class PubSourceDataset:
@@ -1457,7 +1456,6 @@ async def htmx_path_info(
 
     context = {
         "path": path,
-        "urlpostfix": urlpostfix,
         "meta": meta,
         "display": display,
         "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
@@ -1953,20 +1951,10 @@ def parse_size(size):
 def main():
     # Read configuration file
     conf = utils.get_conf("subscriber", allow_id=True)
-    global quota, urlbase, maxusers, urlpostfix
+    global quota, urlbase, maxusers
     quota = parse_size(conf.get(".quota"))
     urlbase = conf.get(".urlbase")
     maxusers = conf.get(".maxusers")
-
-    # Get the postfix part (after the ://host:port) of the urlbase
-    if urlbase is None:
-        # In some situations, the urlbase may not be defined yet
-        urlpostfix = ""
-    else:
-        _, trailer = urlbase.split("://", 1)
-        urlpostfix = trailer.split("/", 1)[1] if '/' in trailer else ""
-        # Add a trailing slash if needed
-        urlpostfix = urlpostfix + ("/" if urlpostfix else "")
 
     # Parse command line arguments
     _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
