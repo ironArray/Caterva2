@@ -745,7 +745,10 @@ def test_listusers_unauthorized(sub_user, sub_jwt_cookie):
     assert "Not Found" in str(e_info)
 
 
-def test_c2context_demo():
+# Depending on sub_user fixture is an easy way to start
+# the server in a subprocess with the correct configuration
+# (useful for running this test in isolation)
+def test_c2context_demo(sub_user):
     urlbase = "https://demo.caterva2.net"
     expected_roots = cat2.get_roots(urlbase)
     root = "example"
