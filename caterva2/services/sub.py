@@ -1687,7 +1687,6 @@ async def htmx_command(
             return htmx_error(request, f"Error listing users: {exc}")
         # Get the list of users
         users = [user.email for user in lusers]
-        print(users)
         return htmx_message(request, f"Users: {users}")
 
     elif argv[0] in {"mv", "move"}:
