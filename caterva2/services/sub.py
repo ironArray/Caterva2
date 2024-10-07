@@ -375,7 +375,7 @@ def follow(name: str):
 def user_login_enabled():
     if settings.login:
         if not bool(os.environ.get("CATERVA2_SECRET")):
-            raise RuntimeError('CATERVA2_SECRET envvar is required')
+            raise RuntimeError("CATERVA2_SECRET envvar is required")
         return True
 
     return False
@@ -384,7 +384,7 @@ def user_login_enabled():
 def user_register_enabled():
     if settings.register:
         if not settings.login:
-            raise RuntimeError('login config must be enabled')
+            raise RuntimeError("login config must be enabled")
         return True
 
     return False
@@ -1276,6 +1276,7 @@ if user_login_enabled():
 
 
 if user_register_enabled():
+
     @app.get("/register", response_class=HTMLResponse)
     async def html_register(request: Request, user: db.User = Depends(optional_user)):
         if user:
@@ -1305,8 +1306,7 @@ async def html_home(
         "usage_total": custom_filesizeformat(size),
     }
 
-    context["config"] = {
-    }
+    context["config"] = {}
 
     if quota:
         context["usage_quota"] = custom_filesizeformat(quota)
@@ -1443,12 +1443,12 @@ async def htmx_path_info(
     plugin = plugins.get(contenttype)
     if plugin:
         display = {
-            "url": f"/plugins/{plugin.name}/display/{path}",
+            "url": url(f"plugins/{plugin.name}/display/{path}"),
             "label": plugin.label,
         }
     elif path.suffix == ".md":
         display = {
-            "url": f"/markdown/{path}",
+            "url": url(f"markdown/{path}"),
             "label": "Display",
         }
     else:
@@ -2000,7 +2000,7 @@ def main():
 
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(abspath_and_dataprep)
+    tomography.init(abspath_and_dataprep, urlbase)
 
     # Run
     root_path = str(furl.furl(urlbase).path)

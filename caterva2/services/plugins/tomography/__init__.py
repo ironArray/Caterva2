@@ -17,27 +17,35 @@ app = FastAPI()
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
-name = "tomography" # Identifies the plugin
+name = "tomography"  # Identifies the plugin
 label = "Tomography"
 contenttype = "tomography"
 
 
 abspath_and_dataprep = None
+urlbase = None
 
-def init(absp_n_datap):
+
+def init(absp_n_datap, urlbase_):
     global abspath_and_dataprep
+    global urlbase
     abspath_and_dataprep = absp_n_datap
+    urlbase = urlbase_
+
+
+def url(path: str) -> str:
+    return f"{urlbase}/{path}"
 
 
 def guess(path: pathlib.Path, meta) -> bool:
     """Does dataset (given path and metadata) seem of this content type?"""
-    if not hasattr(meta, 'dtype'):
+    if not hasattr(meta, "dtype"):
         return False  # not an array
 
     dtype = meta.dtype
 
     # Structured dtype
-    if isinstance(dtype, str) and dtype.startswith('['):
+    if isinstance(dtype, str) and dtype.startswith("["):
         dtype = eval(dtype)  # TODO Make it safer
 
     dtype = numpy.dtype(dtype)
@@ -58,11 +66,10 @@ def display(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
 ):
-
     abspath, _ = abspath_and_dataprep(path, user=user)
     arr = open_b2(abspath, path)
 
-    base = f"/plugins/{name}"
+    base = url(f"plugins/{name}")
     context = {
         "href": f"{base}/display_one/{path}",
         "pages": arr.shape[0],
@@ -90,24 +97,22 @@ async def display_one(
     i: int,
     user: db.User = Depends(optional_user),
 ):
-
     img = await __get_image(path, i, user)
     width = 768  # Max size
 
-    base = f"/plugins/{name}"
+    base = url(f"plugins/{name}")
 
     links = []
     if width and img.width > width:
-        links.append({
-            "href": f"{base}/image/{path}?i={i}",
-            "label": f"{img.width} x {img.height} (original size)",
-            "target": "blank_",
-        })
+        links.append(
+            {
+                "href": f"{base}/image/{path}?i={i}",
+                "label": f"{img.width} x {img.height} (original size)",
+                "target": "blank_",
+            }
+        )
 
-    context = {
-        "src": f"{base}/image/{path}?{i=}&{width=}",
-        "links": links
-    }
+    context = {"src": f"{base}/image/{path}?{i=}&{width=}", "links": links}
     return templates.TemplateResponse(request, "display_one.html", context=context)
 
 
@@ -121,7 +126,6 @@ async def image_file(
     width: int | None = None,
     user: db.User = Depends(optional_user),
 ):
-
     img = await __get_image(path, i, user)
 
     if width and img.width > width:
