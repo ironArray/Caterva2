@@ -13,3 +13,6 @@ A root is a remote repository that can be subscribed to.
     Root.__getitem__
     Root.__contains__
     Root.__iter__
+    Root.__len__
+    Root.file_list
+    Root.upload

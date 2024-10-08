@@ -21,6 +21,7 @@ Getting roots, subscribing and listing datasets
     get_info
 
 
+
 Fetch / download / upload datasets
 ----------------------------------
 
@@ -29,6 +30,7 @@ Fetch / download / upload datasets
    :nosignatures:
 
     fetch
+    get_chunk
     download
     upload
 
