@@ -1595,12 +1595,14 @@ async def htmx_command(
         try:
             result_name, expr = command.split("=")
             result_path = make_lazyexpr(result_name, expr, operands, user)
-        except (SyntaxError, ValueError):
+        except SyntaxError:
             return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
-        except TypeError as te:
-            return htmx_error(request, f"Invalid expression: {te}")
-        except KeyError as ke:
-            error = f"Expression error: {ke.args[0]} is not in the list of available datasets"
+        except ValueError as exc:
+            return htmx_error(request, f"Invalid expression: {exc}")
+        except TypeError as exc:
+            return htmx_error(request, f"Invalid expression: {exc}")
+        except KeyError as exc:
+            error = f"Expression error: {exc.args[0]} is not in the list of available datasets"
             return htmx_error(request, error)
         except RuntimeError as exc:
             return htmx_error(request, str(exc))
@@ -1723,9 +1725,9 @@ def htmx_message(request, msg):
     return templates.TemplateResponse(request, "message.html", context, status_code=400)
 
 
-def htmx_error(request, msg):
+def htmx_error(request, msg, status_code=400):
     context = {"error": msg}
-    return templates.TemplateResponse(request, "error.html", context, status_code=400)
+    return templates.TemplateResponse(request, "error.html", context, status_code=status_code)
 
 
 def htmx_redirect(current_url, target_url, root=None):
