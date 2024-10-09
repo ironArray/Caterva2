@@ -13,7 +13,6 @@ import itertools
 import logging
 import os
 import pathlib
-import re
 import shutil
 import string
 import tarfile
@@ -52,21 +51,9 @@ dotenv.load_dotenv()
 # Logging
 logger = logging.getLogger("sub")
 
-# Configuration
-broker = None
-quota: int = 0
-maxusers: int = 0
-
 # State
-statedir = None
-cache = None
-personal = None
-shared = None
-public = None
 clients = {}  # topic: <PubSubClient>
-database = None  # <Database> instance
 locks = {}
-urlbase: str = ""
 
 
 class PubSourceDataset:
@@ -108,7 +95,7 @@ class PubSourceDataset:
 
     def _get_request_args(self, nchunk, return_async_client):
         root, *name = self.path.parts
-        root = database.roots[root]
+        root = settings.database.roots[root]
         name = pathlib.Path(*name)
 
         url = f"/api/download/{name}"
@@ -206,7 +193,7 @@ def PubDataset(abspath, path, metadata=None):
 
 def get_disk_usage():
     exclude = {"db.json", "db.sqlite"}
-    return sum(path.stat().st_size for path, _ in utils.walk_files(statedir, exclude=exclude))
+    return sum(path.stat().st_size for path, _ in utils.walk_files(settings.statedir, exclude=exclude))
 
 
 def truncate_path(path, size=35):
@@ -247,15 +234,15 @@ def make_url(request, name, query=None, **path_params):
 async def new_root(data, topic):
     logger.info(f"NEW root {topic} {data=}")
     root = models.Root(**data)
-    database.roots[root.name] = root
-    database.save()
+    settings.database.roots[root.name] = root
+    settings.database.save()
 
 
 async def updated_dataset(data, topic):
     name = topic
     relpath = data["path"]
 
-    rootdir = cache / name
+    rootdir = settings.cache / name
     abspath = rootdir / relpath
     metadata = data.get("metadata")
     if metadata is None:
@@ -292,7 +279,9 @@ def open_b2(abspath, path):
             for key, value in operands.items():
                 if "proxy-source" in value.schunk.meta:
                     # Save operand as Proxy, see blosc2.open doc for more info
-                    relpath = srv_utils.get_relpath(value, cache, personal, shared, public)
+                    relpath = srv_utils.get_relpath(value, settings.cache,
+                                                    settings.personal, settings.shared,
+                                                    settings.public)
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
         else:
@@ -311,17 +300,17 @@ def open_b2(abspath, path):
 
 
 def follow(name: str):
-    root = database.roots.get(name)
+    root = settings.database.roots.get(name)
     if root is None:
         errors = {name: "This dataset does not exist in the network"}
         return errors
 
     if not root.subscribed:
         root.subscribed = True
-        database.save()
+        settings.database.save()
 
     # Create root directory in the cache
-    rootdir = cache / name
+    rootdir = settings.cache / name
     if not rootdir.exists():
         rootdir.mkdir(exist_ok=True)
 
@@ -335,7 +324,7 @@ def follow(name: str):
     for relpath in data:
         # If-None-Match header
         key = f"{name}/{relpath}"
-        val = database.etags.get(key)
+        val = settings.database.etags.get(key)
         headers = None if val is None else {"If-None-Match": val}
 
         # Call API
@@ -357,12 +346,12 @@ def follow(name: str):
         init_b2(abspath, key, metadata)
 
         # Save etag
-        database.etags[key] = response.headers["etag"]
-        database.save()
+        settings.database.etags[key] = response.headers["etag"]
+        settings.database.save()
 
     # Subscribe to changes in the dataset
     if name not in clients:
-        client = srv_utils.start_client(f"ws://{broker}/pubsub")
+        client = srv_utils.start_client(f"ws://{settings.broker}/pubsub")
         client.subscribe(name, updated_dataset)
         clients[name] = client
 
@@ -415,43 +404,43 @@ _setup_plugin_globals()
 async def lifespan(app: FastAPI):
     # Initialize the (users) database
     if user_login_enabled():
-        await db.create_db_and_tables(statedir)
+        await db.create_db_and_tables(settings.statedir)
 
     # Initialize roots from the broker
     client = None
-    if broker:
+    if settings.broker:
         try:
-            data = api_utils.get("/api/roots", server=broker)
+            data = api_utils.get("/api/roots", server=settings.broker)
         except httpx.ConnectError:
-            logger.warning(f'Broker "{broker}" not available')
+            logger.warning(f'Broker "{settings.broker}" not available')
         else:
             changed = False
             # Deleted
-            d = list(database.roots.items())
+            d = list(settings.database.roots.items())
             for name, root in d:
                 if name not in data:
-                    del database.roots[name]
+                    del settings.database.roots[name]
                     changed = True
 
             # New or updated
             for name, data in data.items():
                 root = models.Root(**data)
-                if name not in database.roots:
-                    database.roots[root.name] = root
+                if name not in settings.database.roots:
+                    settings.database.roots[root.name] = root
                     changed = True
-                elif database.roots[root.name].http != root.http:
-                    database.roots[root.name].http = root.http
+                elif settings.database.roots[root.name].http != root.http:
+                    settings.database.roots[root.name].http = root.http
                     changed = True
 
             if changed:
-                database.save()
+                settings.database.save()
 
             # Follow the @new channel to know when a new root is added
-            client = srv_utils.start_client(f"ws://{broker}/pubsub")
+            client = srv_utils.start_client(f"ws://{settings.broker}/pubsub")
             client.subscribe("@new", new_root)
 
             # Resume following
-            for path in cache.iterdir():
+            for path in settings.cache.iterdir():
                 if path.is_dir():
                     follow(path.name)
 
@@ -496,7 +485,7 @@ if user_register_enabled():
 
 
 def url(path: str) -> str:
-    return f"{urlbase}/{path}"
+    return f"{settings.urlbase}/{path}"
 
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -517,7 +506,7 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     """
     # Here we just return the roots that are known by the broker
     # plus the special roots @personal, @shared and @public
-    roots = database.roots.copy()
+    roots = settings.database.roots.copy()
     root = models.Root(name="@public", http="", subscribed=True)
     roots[root.name] = root
     if user:
@@ -529,7 +518,7 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
 
 
 def get_root(name):
-    root = database.roots.get(name)
+    root = settings.database.roots.get(name)
     if root is None:
         srv_utils.raise_not_found(f"{name} not known by the broker")
 
@@ -586,18 +575,18 @@ async def get_list(
     # Get the root
     root = path.parts[0]
     if root == "@public":
-        rootdir = public
+        rootdir = settings.public
     elif root == "@personal":
         if not user:
             srv_utils.raise_not_found("@personal needs authentication")
-        rootdir = personal / str(user.id)
+        rootdir = settings.personal / str(user.id)
     elif root == "@shared":
         if not user:
             srv_utils.raise_not_found("@shared needs authentication")
-        rootdir = shared
+        rootdir = settings.shared
     else:
         root = get_root(root)
-        rootdir = cache / root.name
+        rootdir = settings.cache / root.name
 
     # List the datasets in root or directory
     directory = rootdir / pathlib.Path(*path.parts[1:])
@@ -629,7 +618,7 @@ async def get_info(
         The metadata of the dataset.
     """
     abspath, _ = abspath_and_dataprep(path, user=user)
-    return srv_utils.read_metadata(abspath, cache, personal, shared, public)
+    return srv_utils.read_metadata(abspath, settings.cache, settings.personal, settings.shared, settings.public)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -674,8 +663,8 @@ def abspath_and_dataprep(
         if not user:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
-        filepath = personal / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(personal, filepath, may_not_exist)
+        filepath = settings.personal / str(user.id) / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(settings.personal, filepath, may_not_exist)
 
         async def dataprep():
             pass
@@ -684,22 +673,22 @@ def abspath_and_dataprep(
         if not user:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
-        filepath = shared / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(shared, filepath, may_not_exist)
+        filepath = settings.shared / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(settings.shared, filepath, may_not_exist)
 
         async def dataprep():
             pass
 
     elif parts[0] == "@public":
-        filepath = public / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(public, filepath, may_not_exist)
+        filepath = settings.public / pathlib.Path(*parts[1:])
+        abspath = srv_utils.cache_lookup(settings.public, filepath, may_not_exist)
 
         async def dataprep():
             pass
 
     else:
-        filepath = cache / path
-        abspath = srv_utils.cache_lookup(cache, filepath, may_not_exist)
+        filepath = settings.cache / path
+        abspath = srv_utils.cache_lookup(settings.cache, filepath, may_not_exist)
 
         async def dataprep():
             return await partial_download(abspath, path, slice_)
@@ -866,13 +855,13 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User)
         # Detect special roots
         path = pathlib.Path(path)
         if path.parts[0] == "@personal":
-            abspath = personal / str(user.id) / pathlib.Path(*path.parts[1:])
+            abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
         elif path.parts[0] == "@shared":
-            abspath = shared / pathlib.Path(*path.parts[1:])
+            abspath = settings.shared / pathlib.Path(*path.parts[1:])
         elif path.parts[0] == "@public":
-            abspath = public / pathlib.Path(*path.parts[1:])
+            abspath = settings.public / pathlib.Path(*path.parts[1:])
         else:
-            abspath = cache / path
+            abspath = settings.cache / path
         var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
@@ -881,7 +870,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User)
         cname = type(arr).__name__
         raise TypeError(f"Evaluates to {cname} instead of lazy expression")
 
-    path = personal / str(user.id)
+    path = settings.personal / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     arr.save(urlpath=f"{path / name}.b2nd", mode="w")
 
@@ -987,7 +976,7 @@ async def copy(
 
     src, dst = payload.src, payload.dst
     # src should start with a special root or known root
-    if not src.startswith(("@personal", "@shared", "@public")) and src not in database.roots:
+    if not src.startswith(("@personal", "@shared", "@public")) and src not in settings.database.roots:
         raise fastapi.HTTPException(status_code=400, detail="Only copying from existing roots is allowed")
     # dst should start with a special root
     if not dst.startswith(("@personal", "@shared", "@public")):
@@ -1048,11 +1037,11 @@ async def upload_file(
     # Replace the root with absolute path
     root = path.parts[0]
     if root == "@personal":
-        path2 = personal / str(user.id) / pathlib.Path(*path.parts[1:])
+        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == "@shared":
-        path2 = shared / pathlib.Path(*path.parts[1:])
+        path2 = settings.shared / pathlib.Path(*path.parts[1:])
     elif root == "@public":
-        path2 = public / pathlib.Path(*path.parts[1:])
+        path2 = settings.public / pathlib.Path(*path.parts[1:])
     else:
         raise fastapi.HTTPException(
             status_code=400,  # bad request
@@ -1103,11 +1092,11 @@ async def remove(
     # Replace the root with absolute path
     root = path.parts[0]
     if root == "@personal":
-        path2 = personal / str(user.id) / pathlib.Path(*path.parts[1:])
+        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == "@shared":
-        path2 = shared / pathlib.Path(*path.parts[1:])
+        path2 = settings.shared / pathlib.Path(*path.parts[1:])
     elif root == "@public":
-        path2 = public / pathlib.Path(*path.parts[1:])
+        path2 = settings.public / pathlib.Path(*path.parts[1:])
     else:
         # Only allow removing from the special roots
         raise fastapi.HTTPException(
@@ -1146,7 +1135,7 @@ if user_login_enabled():
     @app.get("/login", response_class=HTMLResponse)
     async def html_login(request: Request, user: db.User = Depends(optional_user)):
         if user:
-            return RedirectResponse(urlbase, status_code=307)
+            return RedirectResponse(settings.urlbase, status_code=307)
 
         context = {
             "user_register_enabled": user_register_enabled(),
@@ -1156,21 +1145,21 @@ if user_login_enabled():
     @app.get("/logout", response_class=HTMLResponse)
     async def html_logout(request: Request, user: db.User = Depends(optional_user)):
         if user:
-            return RedirectResponse(urlbase, status_code=307)
+            return RedirectResponse(settings.urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "logout.html")
 
     @app.get("/forgot-password", response_class=HTMLResponse)
     async def html_forgot_password(request: Request, user: db.User = Depends(optional_user)):
         if user:
-            return RedirectResponse(urlbase, status_code=307)
+            return RedirectResponse(settings.urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "forgot-password.html")
 
     @app.get("/reset-password/{token}", response_class=HTMLResponse, name="html-reset-password")
     async def html_reset_password(request: Request, token: str, user: db.User = Depends(optional_user)):
         if user:
-            return RedirectResponse(urlbase, status_code=307)
+            return RedirectResponse(settings.urlbase, status_code=307)
 
         context = {"token": token}
         return templates.TemplateResponse(request, "reset-password.html", context)
@@ -1200,15 +1189,15 @@ if user_login_enabled():
 
         # Get the number of current users
         users = await utils.alist_users()
-        if len(users) >= maxusers:
-            raise srv_utils.raise_bad_request(f"Only a maximum of {maxusers} users are allowed")
+        if len(users) >= settings.maxusers:
+            raise srv_utils.raise_bad_request(f"Only a maximum of {settings.maxusers} users are allowed")
 
         try:
             await utils.aadd_user(
                 payload.username,
                 payload.password,
                 payload.superuser,
-                state_dir=statedir,
+                state_dir=settings.statedir,
             )
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
@@ -1247,7 +1236,7 @@ if user_login_enabled():
         # Remove the personal directory of the user
         userid = str(users[0].id)
         print(f"User {username} with id {userid} has been deleted")
-        shutil.rmtree(personal / userid, ignore_errors=True)
+        shutil.rmtree(settings.personal / userid, ignore_errors=True)
         return f"User deleted: {username}"
 
     @app.get("/api/listusers/")
@@ -1280,7 +1269,7 @@ if user_register_enabled():
     @app.get("/register", response_class=HTMLResponse)
     async def html_register(request: Request, user: db.User = Depends(optional_user)):
         if user:
-            return RedirectResponse(urlbase, status_code=307)
+            return RedirectResponse(settings.urlbase, status_code=307)
 
         return templates.TemplateResponse(request, "register.html")
 
@@ -1308,9 +1297,9 @@ async def html_home(
 
     context["config"] = {}
 
-    if quota:
-        context["usage_quota"] = custom_filesizeformat(quota)
-        context["usage_percent"] = round((size / quota) * 100)
+    if settings.quota:
+        context["usage_quota"] = custom_filesizeformat(settings.quota)
+        context["usage_percent"] = round((size / settings.quota) * 100)
 
     if roots:
         paths_url = make_url(request, "htmx_path_list", {"roots": roots, "search": search})
@@ -1332,7 +1321,7 @@ async def htmx_root_list(
 ):
     context = {
         "checked": roots,
-        "roots": sorted(database.roots.values(), key=lambda x: x.name),
+        "roots": sorted(settings.database.roots.values(), key=lambda x: x.name),
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1366,15 +1355,15 @@ async def htmx_path_list(
     datasets = []
     for root in roots:
         if user and root == "@personal":
-            rootdir = personal / str(user.id)
+            rootdir = settings.personal / str(user.id)
         elif user and root == "@shared":
-            rootdir = shared
+            rootdir = settings.shared
         elif root == "@public":
-            rootdir = public
+            rootdir = settings.public
         else:
             if not get_root(root).subscribed:
                 follow(root)
-            rootdir = cache / root
+            rootdir = settings.cache / root
 
         for path, relpath in utils.walk_files(rootdir):
             size = path.stat().st_size
@@ -1436,7 +1425,7 @@ async def htmx_path_info(
     except FileNotFoundError:
         return htmx_error(request, "FileNotFoundError: missing operand(s)")
 
-    meta = srv_utils.read_metadata(abspath, cache, personal, shared, public)
+    meta = srv_utils.read_metadata(abspath, settings.cache, settings.personal, settings.shared, settings.public)
 
     vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
     contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)
@@ -1766,11 +1755,11 @@ async def htmx_upload(
         raise srv_utils.raise_unauthorized("Uploading files requires authentication")
 
     if name == "@personal":
-        path = personal / str(user.id)
+        path = settings.personal / str(user.id)
     elif name == "@shared":
-        path = shared
+        path = settings.shared
     elif name == "@public":
-        path = public
+        path = settings.public
     else:
         raise fastapi.HTTPException(status_code=404)  # NotFound
 
@@ -1781,10 +1770,10 @@ async def htmx_upload(
     data = await file.read()
 
     # Check quota
-    if quota:
+    if settings.quota:
         upload_size = len(data)
         total_size = get_disk_usage() + upload_size
-        if total_size > quota:
+        if total_size > settings.quota:
             error = "Upload failed because quota limit has been exceeded."
             return htmx_error(request, error)
 
@@ -1873,13 +1862,13 @@ async def htmx_delete(
     if name == "@personal":
         parts[0] = str(user.id)
         path = pathlib.Path(*parts)
-        abspath = personal / path
+        abspath = settings.personal / path
     elif name == "@shared":
         path = pathlib.Path(*parts[1:])
-        abspath = shared / path
+        abspath = settings.shared / path
     elif name == "@public":
         path = pathlib.Path(*parts[1:])
-        abspath = public / path
+        abspath = settings.public / path
     else:
         return fastapi.HTTPException(status_code=400)
 
@@ -1926,34 +1915,9 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
     return None
 
 
-def parse_size(size):
-    if size is None:
-        return None
-
-    units = {
-        "B": 1,
-        "KB": 2**10,
-        "MB": 2**20,
-        "GB": 2**30,
-        "TB": 2**40,
-        "": 1,
-        "KiB": 10**3,
-        "MiB": 10**6,
-        "GiB": 10**9,
-        "TiB": 10**12,
-    }
-    m = re.match(r"^([\d\.]+)\s*([a-zA-Z]{0,3})$", str(size).strip())
-    number, unit = float(m.group(1)), m.group(2).upper()
-    return int(number * units[unit])
-
-
 def main():
     # Read configuration file
     conf = utils.get_conf("subscriber", allow_id=True)
-    global quota, urlbase, maxusers
-    quota = parse_size(conf.get(".quota"))
-    urlbase = conf.get(".urlbase")
-    maxusers = conf.get(".maxusers")
 
     # Parse command line arguments
     _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
@@ -1965,45 +1929,40 @@ def main():
         id=conf.id,
     )
     args = utils.run_parser(parser)
-    global broker
-    broker = args.broker
+    settings.broker = args.broker
 
     # Init cache
-    global statedir, cache
-    statedir = args.statedir.resolve()
-    cache = statedir / "cache"
-    cache.mkdir(exist_ok=True, parents=True)
+    settings.statedir = args.statedir.resolve()
+    settings.cache = settings.statedir / "cache"
+    settings.cache.mkdir(exist_ok=True, parents=True)
     # Use `download_cached()`, `StaticFiles` does not support authorization.
     # app.mount("/files", StaticFiles(directory=cache), name="files")
 
     # Shared/Public dirs
-    global shared, public
-    shared = statedir / "shared"
-    shared.mkdir(exist_ok=True, parents=True)
-    public = statedir / "public"
-    public.mkdir(exist_ok=True, parents=True)
+    settings.shared = settings.statedir / "shared"
+    settings.shared.mkdir(exist_ok=True, parents=True)
+    settings.public = settings.statedir / "public"
+    settings.public.mkdir(exist_ok=True, parents=True)
 
     # personal dir
-    global personal
-    personal = statedir / "personal"
-    personal.mkdir(exist_ok=True, parents=True)
+    settings.personal = settings.statedir / "personal"
+    settings.personal.mkdir(exist_ok=True, parents=True)
     # Use `download_personal()`, `StaticFiles` does not support authorization.
-    # app.mount("/personal", StaticFiles(directory=personal), name="personal")
+    # app.mount("/personal", StaticFiles(directory=settings.personal), name="personal")
 
     # Init database
-    global database
     model = models.Subscriber(roots={}, etags={})
-    database = srv_utils.Database(statedir / "db.json", model)
+    settings.database = srv_utils.Database(settings.statedir / "db.json", model)
 
     # Register display plugins
     from .plugins import tomography  # delay module load
 
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(abspath_and_dataprep, urlbase)
+    tomography.init(abspath_and_dataprep, settings.urlbase)
 
     # Run
-    root_path = str(furl.furl(urlbase).path)
+    root_path = str(furl.furl(settings.urlbase).path)
     utils.uvicorn_run(app, args, root_path=root_path)
 
 
