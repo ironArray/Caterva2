@@ -57,6 +57,9 @@
 
 <div id="alert-error"></div>
 
+<template id="alert-error-template">{% include 'error.html' %}</template>
+
+
 <a href="https://ironarray.io/caterva2" target="blank_" class="float-end m-3 text-decoration-none" style="font-size: 1.1rem">
     <i class="fa-regular fa-circle-question"></i> Help
 </a>
@@ -79,11 +82,20 @@
 document.body.addEventListener('htmx:beforeSwap', function(evt) {
     // Allow 400 responses to swap, we treat these as form validation errors
     let detail = evt.detail;
-    let status_code = detail.xhr.status;
-    if (status_code === 400) {
+    let xhr = detail.xhr;
+    if (xhr.status === 400) {
         detail.isError = false;  // Avoid error message in console
         detail.shouldSwap = true;
         detail.target = htmx.find("#alert-error");
+    }
+    else if (xhr.status === 413) {
+        const container = document.querySelector("#alert-error");
+        const template = document.querySelector("#alert-error-template");
+        const clone = template.content.cloneNode(true);
+        const errorText = `${xhr.status} ${xhr.statusText}`
+        clone.querySelector("#alert-error-text").textContent = errorText;
+        container.replaceChildren(clone);
+        detail.isError = false;  // Avoid error message in console
     }
 });
 </script>
