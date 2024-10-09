@@ -12,10 +12,10 @@
 <table class="table table-sm">
     <!---  Adapt meta to desired output --->
     {% if meta.schunk %}
-        {% set shape = '%s items (%d bytes)' % (meta.shape, meta.schunk.nbytes) %}
+        {% set shape = '%s items (%s)' % (meta.shape, meta.schunk.nbytes|filesizeformat) %}
         {% set _ = meta.__setattr__('shape', shape) %}
 
-        {% set chunks = '%s items (%d bytes)' % (meta.chunks, meta.schunk.chunksize) %}
+        {% set chunks = '%s items (%s)' % (meta.chunks, meta.schunk.chunksize|filesizeformat) %}
         {% set _ = meta.__setattr__('chunks', chunks) %}
 
         {% set cparams = meta.schunk.cparams %}
@@ -37,7 +37,7 @@
         {% set _ = schunk.__delattr__('cparams') %}
         {% set _ = meta.__setattr__('schunk', schunk) %}
 
-        {% set blocks = '%s items (%d bytes)' % (meta.blocks, meta.schunk.blocksize) %}
+        {% set blocks = '%s items (%s)' % (meta.blocks, meta.schunk.blocksize|filesizeformat) %}
         {% set _ = meta.__setattr__('blocks', blocks) %}
 
         {% set nbytes_value = '%d (cbytes: %d ; cratio: %.2f)' %
