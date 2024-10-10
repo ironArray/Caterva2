@@ -14,16 +14,10 @@ def parse_size(size):
         return None
 
     units = {
-        "B": 1,
-        "KB": 2**10,
-        "MB": 2**20,
-        "GB": 2**30,
-        "TB": 2**40,
         "": 1,
-        "KiB": 10**3,
-        "MiB": 10**6,
-        "GiB": 10**9,
-        "TiB": 10**12,
+        "K": 2**10, "k": 2**10,
+        "M": 2**20, "m": 2**20,
+        "G": 2**30, "g": 2**30,
     }
     m = re.match(r"^([\d\.]+)\s*([a-zA-Z]{0,3})$", str(size).strip())
     number, unit = float(m.group(1)), m.group(2).upper()

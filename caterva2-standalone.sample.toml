@@ -15,7 +15,7 @@ statedir = "_caterva2/sub"
 #http = "_caterva2/sub/uvicorn.socket"
 http = "localhost:8002"
 urlbase = "http://localhost:8002"
-quota = "10GB"
+quota = "10G"
 maxusers = 5
 
 # The client section defines the credentials for the client to authenticate
