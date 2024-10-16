@@ -1584,8 +1584,8 @@ async def htmx_command(
     request: Request,
     # Body
     command: typing.Annotated[str, Form()],
-    names: typing.Annotated[list[str], Form()],
-    paths: typing.Annotated[list[str], Form()],
+    names: typing.Annotated[list[str], Form()] = [],
+    paths: typing.Annotated[list[str], Form()] = [],
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
