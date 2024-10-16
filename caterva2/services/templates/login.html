@@ -1,6 +1,6 @@
 {% extends "base_anon.html" %}
 
-{% block title %}User login{% endblock %}
+{% block title %}Sign in{% endblock %}
 
 {% block main %}
 
@@ -19,13 +19,13 @@
         <input type="password" name="password" class="form-control" placeholder="" required>
         <label class="form-label">Password</label>
     </div>
-    <button type="submit" class="btn btn-primary">Login</button>
+    <button type="submit" class="btn btn-primary">Sign in</button>
 </form>
 
 <p class="mt-2">
-    <a href="{{ url('forgot-password') }}">Reset password</a>
+    <a href="{{ url('forgot-password') }}">Reset your password</a>
     {% if user_register_enabled %}
-    <br><a href="{{ url('register') }}">Register as a new user</a>
+    <br><a href="{{ url('register') }}">Sign up</a>
     {% endif %}
 </p>
 

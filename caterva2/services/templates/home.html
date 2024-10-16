@@ -28,10 +28,10 @@
         Logged in as {{ username }}.
         <form action="{{ url('auth/jwt/logout') }}" method="post" class="d-inline-block" id="logout-form"
               onsubmit="submitForm(this, '{{ url("logout") }}'); return false">
-            <button type="submit" class="btn btn-link">Logout</button>
+            <button type="submit" class="btn btn-link">Sign out</button>
         </form>
         {% else %}
-        <a href="{{ url('login') }}">Log in</a>
+        <a href="{{ url('login') }}">Sign in</a>
         {% endif %}
     </div>
     <div>
