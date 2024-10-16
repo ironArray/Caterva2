@@ -27,8 +27,8 @@ def parse_size(size):
 conf = utils.get_conf('subscriber', allow_id=True)
 
 urlbase = conf.get('.urlbase')
-login = conf.get(".login")
-register = conf.get(".register")
+login = conf.get(".login", True)
+register = conf.get(".register", False)
 
 quota = parse_size(conf.get(".quota"))
 maxusers = conf.get(".maxusers")

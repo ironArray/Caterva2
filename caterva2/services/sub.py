@@ -1193,7 +1193,8 @@ if user_login_enabled():
 
         # Get the number of current users
         users = await utils.alist_users()
-        if len(users) >= settings.maxusers:
+        # None or 0 means unlimited users
+        if settings.maxusers and len(users) >= settings.maxusers:
             raise srv_utils.raise_bad_request(f"Only a maximum of {settings.maxusers} users are allowed")
 
         try:
