@@ -1156,6 +1156,10 @@ if user_login_enabled():
 
         return templates.TemplateResponse(request, "forgot-password.html")
 
+    @app.get("/forgot-password-ok", response_class=HTMLResponse)
+    async def html_forgot_password_ok(request: Request):
+        return templates.TemplateResponse(request, "forgot-password-ok.html")
+
     @app.get("/reset-password/{token}", response_class=HTMLResponse, name="html-reset-password")
     async def html_reset_password(request: Request, token: str, user: db.User = Depends(optional_user)):
         if user:
