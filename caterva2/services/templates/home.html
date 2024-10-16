@@ -42,9 +42,8 @@
                  title="Disk usage: {{ usage_percent }} % ({{ usage_total }} of {{ usage_quota }})"
                  aria-label="Disk usage" aria-valuenow="{{ usage_percent }}" aria-valuemin="0" aria-valuemax="100"
             >
-                <div class="progress-bar bg-{% if usage_percent > 90 %}danger{% elif usage_percent > 50 %}warning{% else %}success{% endif %}"
-                     style="width: {{ usage_percent }}%">
-                    {% if usage_percent > 15 %}{{ usage_percent }} %{% endif %}
+                <div class="progress-bar overflow-visible text-dark bg-warning" style="width: {{ usage_percent }}%">
+                    Disk usage: {{ usage_percent }} %
                 </div>
             </div>
         {% else %}
