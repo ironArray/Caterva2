@@ -1424,12 +1424,12 @@ async def htmx_path_info(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    try:
-        abspath, _ = abspath_and_dataprep(path, user=user)
-    except FileNotFoundError:
-        return htmx_error(request, "FileNotFoundError: missing operand(s)")
+    abspath, _ = abspath_and_dataprep(path, user=user)
 
-    meta = srv_utils.read_metadata(abspath, settings.cache, settings.personal, settings.shared, settings.public)
+    try:
+        meta = srv_utils.read_metadata(abspath, settings.cache, settings.personal, settings.shared, settings.public)
+    except FileNotFoundError as exc:
+        return htmx_error(request, f"FileNotFoundError: {exc} (missing operand?)")
 
     vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
     contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)

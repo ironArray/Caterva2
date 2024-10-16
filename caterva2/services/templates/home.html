@@ -80,7 +80,15 @@
 </div>
 
 <script>
-document.body.addEventListener('htmx:beforeSwap', function(evt) {
+function showAlert(content) {
+    const container = document.querySelector("#alert-error");
+    const template = document.querySelector("#alert-error-template");
+    const clone = template.content.cloneNode(true);
+    clone.querySelector("#alert-error-text").textContent = content;
+    container.replaceChildren(clone);
+}
+
+htmx.on('htmx:beforeSwap', function(evt) {
     // Allow 400 responses to swap, we treat these as form validation errors
     let detail = evt.detail;
     let xhr = detail.xhr;
@@ -90,13 +98,13 @@ document.body.addEventListener('htmx:beforeSwap', function(evt) {
         detail.target = htmx.find("#alert-error");
     }
     else if (xhr.status === 413) {
-        const container = document.querySelector("#alert-error");
-        const template = document.querySelector("#alert-error-template");
-        const clone = template.content.cloneNode(true);
-        const errorText = `${xhr.status} ${xhr.statusText}`
-        clone.querySelector("#alert-error-text").textContent = errorText;
-        container.replaceChildren(clone);
+        showAlert(`${xhr.status} ${xhr.statusText}`);
         detail.isError = false;  // Avoid error message in console
+    }
+    else if (xhr.status === 500) {
+        showAlert(`${xhr.status} ${xhr.statusText}`);
+        detail.isError = false;  // Avoid error message in console
+        //showAlert(ev.detail.error, "danger");
     }
 });
 </script>
