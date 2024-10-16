@@ -71,6 +71,10 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
                 ));
             }
         }
+        else if (typeof detail == 'object') {
+            const error = detail.reason;
+            msg.appendChild(document.createTextNode(error));
+        }
         else if (detail) {
             const error = errors[detail] || detail;
             msg.appendChild(document.createTextNode(error));
