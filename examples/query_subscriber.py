@@ -25,7 +25,7 @@ ROOT_NAME = 'example'
 user_auth = None
 # Uncomment the following line and use your username and password
 # if the subscriber requires authentication.
-#user_auth = {'username': 'user@example.com', 'password': 'foobar'}
+#user_auth = {'username': 'user@example.com', 'password': 'foobar11'}
 
 auth_cookie = (cat2.api_utils.get_auth_cookie(URLBASE, user_auth)
                if user_auth else None)

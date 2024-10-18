@@ -247,7 +247,7 @@ The Caterva2 subscriber includes some initial and incomplete support for authent
 To tell the command line client to authenticate against a subscriber, add the `--username` and `--password` options:
 
 ```sh
-cat2cli --user "user@example.com" --pass "foobar" info foo/README.md
+cat2cli --user "user@example.com" --pass "foobar11" info foo/README.md
 ```
 
 ## Tools

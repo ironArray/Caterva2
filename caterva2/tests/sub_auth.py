@@ -23,7 +23,7 @@ def make_sub_user(services):
         return None
 
     state_dir = services.state_dir / 'subscriber'
-    return add_user('user@example.com', password='foobar', is_superuser=True,
+    return add_user('user@example.com', password='foobar11', is_superuser=True,
                     state_dir=state_dir)
 
 

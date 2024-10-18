@@ -17,7 +17,7 @@ roots = caterva2.get_roots()
 ```python
 cookie = caterva2.api_utils.get_auth_cookie(
     'http://localhost:8002',
-    {'username': 'user@example.com', 'password': 'foobar'})
+    {'username': 'user@example.com', 'password': 'foobar11'})
 roots = caterva2.get_roots(auth_cookie=cookie)
 ```
 

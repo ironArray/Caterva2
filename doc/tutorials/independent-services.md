@@ -160,7 +160,7 @@ urlbase = "http://sub.edu.example.org:3126"  # "https://..." if needed
 
 #[client]  # uncomment section if needed
 #username = "user@example.com"
-#password = "foobar"
+#password = "foobar11"
 ```
 
 Should allow you to run the previous command just like this:
