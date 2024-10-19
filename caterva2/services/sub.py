@@ -753,7 +753,7 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape)
         )
 
-    if whole and schunk is not None:  # whole and not lazy expr
+    if whole and not isinstance(container, blosc2.LazyExpr):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")

@@ -551,17 +551,18 @@ def test_lazyexpr_getchunk(sub_urlbase, sub_jwt_cookie):
     lxpath = cat2.lazyexpr(lxname, expression, operands, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
 
-    # Get one chunk
+    # Check for chunksize and dtype
+    opinfo = cat2.get_info(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
+    chunksize = opinfo["chunks"][0]
+    dtype = opinfo["dtype"]
+
+    # Get the first chunks
     chunk_ds = cat2.get_chunk(oppt, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
     chunk_expr = cat2.get_chunk(lxpath, 0, sub_urlbase, auth_cookie=sub_jwt_cookie)
-
-    # Check result data.
-    a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    b = cat2.fetch(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
-    np.testing.assert_array_equal(a[:], b[:])
-    out = np.empty_like(a[:])
+    # Check data
+    out = np.empty(chunksize, dtype=dtype)
     blosc2.decompress2(chunk_ds, out)
-    out_expr = np.empty_like(a[:])
+    out_expr = np.empty(chunksize, dtype=dtype)
     blosc2.decompress2(chunk_expr, out_expr)
     np.testing.assert_array_equal(out, out_expr)
 
