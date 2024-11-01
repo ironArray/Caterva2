@@ -27,11 +27,7 @@ A Caterva2 deployment includes:
 
 Publishers and subscribers may be apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).
 
-The Caterva2 package includes all the aforementioned components, although its main role is to provide a very simple and lightweight library to build your own Caterva2 clients.
-
-## Use with caution
-
-Although this project is in advanced beta stage, it is not meant for production use yet.  In case you are interested in Caterva2, please contact us at <contact@blosc.org>.
+The Caterva2 package includes all the aforementioned components, although its main role is to provide a simple and lightweight library to build your own Caterva2 clients.
 
 ## Installation
 
