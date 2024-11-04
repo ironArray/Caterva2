@@ -845,13 +845,12 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User)
     expr = expr.strip()
     if not name or not expr:
         raise ValueError("Name or expression should not be empty")
-    vars = ne.NumExpr(expr).input_names
+    vars = blosc2.expr_operands(expr)
 
     # Open expression datasets
     var_dict = {}
     for var in vars:
         path = operands[var]
-
         # Detect special roots
         path = pathlib.Path(path)
         if path.parts[0] == "@personal":
@@ -865,7 +864,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User)
         var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
-    arr = eval(expr, var_dict)
+    arr = blosc2.lazyexpr(expr, var_dict)
     if not isinstance(arr, blosc2.LazyExpr):
         cname = type(arr).__name__
         raise TypeError(f"Evaluates to {cname} instead of lazy expression")
@@ -906,7 +905,7 @@ async def lazyexpr(
     except KeyError as ke:
         raise error(f"Expression error: {ke.args[0]} is not in the list of available datasets")
     except RuntimeError as exc:
-        raise error(str(exc))
+        raise error(f"Runtime error: {exc}")
 
     return result_path
 
@@ -1598,7 +1597,7 @@ async def htmx_command(
     # First check for expressions
     if len(argv) > 1 and argv[1] == "=":
         try:
-            result_name, expr = command.split("=")
+            result_name, expr = command.split("=", maxsplit=1)
             result_path = make_lazyexpr(result_name, expr, operands, user)
         except SyntaxError:
             return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
@@ -1610,7 +1609,8 @@ async def htmx_command(
             error = f"Expression error: {exc.args[0]} is not in the list of available datasets"
             return htmx_error(request, error)
         except RuntimeError as exc:
-            return htmx_error(request, str(exc))
+            return htmx_error(request, f"Runtime error: {exc}")
+
 
     # Commands
 
