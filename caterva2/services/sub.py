@@ -845,7 +845,7 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User)
     expr = expr.strip()
     if not name or not expr:
         raise ValueError("Name or expression should not be empty")
-    vars = blosc2.expr_operands(expr)
+    vars = blosc2.get_expr_operands(expr)
 
     # Open expression datasets
     var_dict = {}
