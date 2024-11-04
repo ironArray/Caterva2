@@ -528,8 +528,8 @@ def test_lazyexpr(sub_urlbase, sub_jwt_cookie):
     lxinfo = cat2.get_info(lxpath, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxinfo["shape"] == opinfo["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"]
-    assert lxinfo["expression"] == f"({expression})".replace(opnm, "o0")
-    assert lxinfo["operands"] == dict(o0=operands[opnm])
+    assert lxinfo["expression"] == f"{expression}"
+    assert lxinfo["operands"] == operands
 
     # Check result data.
     a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
@@ -583,7 +583,7 @@ def test_expr_from_expr(sub_urlbase, sub_jwt_cookie):
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
 
     expression2 = f"{opnm} * 2"
-    operands2 = {opnm: lxpath}
+    operands2 = {opnm: f"@personal/{lxname}.b2nd"}
     lxname = "expr_from_expr"
     lxpath2 = cat2.lazyexpr(lxname, expression2, operands2, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxpath2 == pathlib.Path(f"@personal/{lxname}.b2nd")
@@ -593,10 +593,10 @@ def test_expr_from_expr(sub_urlbase, sub_jwt_cookie):
     lxinfo2 = cat2.get_info(lxpath2, sub_urlbase, auth_cookie=sub_jwt_cookie)
     assert lxinfo["shape"] == opinfo["shape"] == lxinfo2["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"] == lxinfo2["dtype"]
-    assert lxinfo["expression"] == f"({expression})".replace(opnm, "o0")
-    assert lxinfo2["expression"] == "((o0 + 1) * 2)"
-    assert lxinfo["operands"] == dict(o0=operands[opnm])
-    assert lxinfo2["operands"] == dict(o0=operands[opnm])
+    assert lxinfo["expression"] == f"{expression}"
+    assert lxinfo2["expression"] == f"{expression2}"
+    assert lxinfo["operands"] == operands
+    assert lxinfo2["operands"] == operands2
 
     # Check result data.
     a = cat2.fetch(oppt, sub_urlbase, auth_cookie=sub_jwt_cookie)
