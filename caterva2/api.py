@@ -68,7 +68,7 @@ def get_roots(urlbase=None, auth_cookie=None):
     Returns
     -------
     dict
-        Dictionary mapping available root names to their details: 
+        Dictionary mapping available root names to their details:
         - ``name``: the root name
         - ``http``: the HTTP endpoint
         - ``subscribed``: whether it is subscribed or not.
@@ -158,7 +158,7 @@ def get_list(path, urlbase=None, auth_cookie=None):
 
 def get_info(path, urlbase=None, auth_cookie=None):
     """
-    Retrives information about a specified dataset.
+    Retrieves information about a specified dataset.
 
     Parameters
     ----------
@@ -205,7 +205,8 @@ def fetch(path, urlbase=None, slice_=None, auth_cookie=None):
         Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
     slice_ : str, optional
-        Slice of the dataset to retrieve. Fetches the entire dataset if not provided.
+        Slice of the dataset to retrieve. Fetches the entire dataset if
+        not provided.
     auth_cookie : str, optional
         HTTP cookie for authorization.
 
@@ -277,15 +278,17 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     """
     Downloads a dataset to local storage.
 
-    **Note:** If the dataset is a regular file and Blosc2 is installed, it will be downloaded
-    and decompressed. Otherwise, it will remain compressed in its `.b2` format.
+    **Note:** If the dataset is a regular file and Blosc2 is installed,
+    it will be downloaded and decompressed. Otherwise, it will remain
+    compressed in its `.b2` format.
 
     Parameters
     ----------
     dataset : Path
         Path to the dataset.
     localpath : Path, optional
-        Local path to save the downloaded dataset. Defaults to the current working directory if not specified.
+        Local path to save the downloaded dataset. Defaults to the current
+        working directory if not specified.
     urlbase : str, optional
         Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
@@ -328,8 +331,8 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     Uploads a local dataset to a remote repository.
 
     **Note:** If `localpath` is a regular file without a `.b2nd`,
-    `.b2frame` or `.b2` extension, it will be automatically compressed with Blosc2 on the
-    server, adding a `.b2` extension internally.
+    `.b2frame` or `.b2` extension, it will be automatically compressed
+    with Blosc2 on the server, adding a `.b2` extension internally.
 
     Parameters
     ----------
@@ -342,7 +345,7 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
         :py:obj:`caterva2.sub_urlbase_default`.
     auth_cookie : str, optional
         HTTP cookie for authorization.
-        Must be provided unless already set in 
+        Must be provided unless already set in
         a :py_obj:`caterva2.c2context`.
 
     Returns
@@ -358,7 +361,7 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', newpath, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', newpath, urlbase, auth_cookie)
     >>> str(uploaded_path) == newpath
     True
     """
@@ -405,7 +408,7 @@ def remove(path, urlbase=None, auth_cookie=None):
     >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase, auth_cookie)
     >>> removed_path = cat2.remove(path, urlbase, auth_cookie)
     >>> removed_path == path
     True
@@ -445,7 +448,7 @@ def move(src, dst, urlbase=None, auth_cookie=None):
     >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase, auth_cookie)
     >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d-moved.b2nd'
     >>> moved_path = cat2.move(path, newpath, urlbase, auth_cookie)
     >>> str(moved_path) == newpath
@@ -493,7 +496,7 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
     >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', src_path, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', src_path, urlbase, auth_cookie)
     >>> copy_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d-copy.b2nd'
     >>> copied_path = cat2.copy(src_path, copy_path, urlbase, auth_cookie)
     >>> str(copied_path) == copy_path
@@ -516,7 +519,7 @@ def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     """
     Creates a lazy expression dataset in personal space.
 
-    A dataset with the specified name will created or overwritten if already
+    A dataset with the specified name will be created or overwritten if already
     exists.
 
     Parameters
@@ -547,8 +550,8 @@ def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
     >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-    >>> path = cat2.upload('root-example/dir1/ds-2d.b2nd', src_path, urlbase=urlbase, auth_cookie=auth_cookie)
-    >>> cat2.lazyexpr('example-expr', 'a + a', {'a': path}, urlbase=urlbase, auth_cookie=auth_cookie)
+    >>> path = cat2.upload('root-example/dir1/ds-2d.b2nd', src_path, urlbase, auth_cookie)
+    >>> cat2.lazyexpr('example-expr', 'a + a', {'a': path}, urlbase, auth_cookie)
     PosixPath('@personal/example-expr.b2nd')
     >>> 'example-expr.b2nd' in cat2.get_list('@personal', urlbase, auth_cookie)
     True
@@ -711,9 +714,10 @@ class Root:
         Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
     user_auth : dict, optional
-        Mapping of fields and values for user authentication. This is used to post data 
-        for obtaining an authorization token for further requests. For some actions, this must be 
-        provided unless already specified in a :py_obj:`caterva2.c2context`.
+        Mapping of fields and values for user authentication. This is
+        used to post data for obtaining an authorization token for further
+        requests. For some actions, this must be provided unless already
+        specified in a :py_obj:`caterva2.c2context`.
 
     Examples
     --------
@@ -739,7 +743,7 @@ class Root:
     @property
     def file_list(self):
         """
-        Retrives a list of files in this root.
+        Retrieves a list of files in this root.
         """
         return api_utils.get(f"{self.urlbase}/api/list/{self.name}", auth_cookie=self.auth_cookie)
 
@@ -748,7 +752,7 @@ class Root:
 
     def __getitem__(self, path):
         """
-        Retrives a file or dataset from the root.
+        Retrieves a file or dataset from the root.
 
         Parameters
         ----------
@@ -881,7 +885,7 @@ class Root:
         else:
             dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
         uploadpath = upload(localpath, dataset, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
-        # Remove the first component of the uploadpath (the root name) and return a new File/Dataset
+        # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
 
@@ -943,7 +947,7 @@ class File:
         """
         Returns a mapping of metalayer names to their respective values.
 
-        This is used to access variable-length metalayers (user attributes) 
+        This is used to access variable-length metalayers (user attributes)
         associated with the file.
 
         >>> import caterva2 as cat2
@@ -957,7 +961,7 @@ class File:
 
     def get_download_url(self):
         """
-        Retrives the download URL for the file.
+        Retrieves the download URL for the file.
 
         Returns
         -------
@@ -976,7 +980,7 @@ class File:
 
     def __getitem__(self, slice_):
         """
-        Retrives a slice of the dataset.
+        Retrieves a slice of the dataset.
 
         Parameters
         ----------
@@ -1215,7 +1219,7 @@ def c2context(
     for the URL and `None` for the authentication cookie. Parameters set to an empty string
     will not be used in requests.
 
-    To authorize requests, provide either an existing `auth_cookie` or both `username` 
+    To authorize requests, provide either an existing `auth_cookie` or both `username`
     and `password` to log in and obtain the cookie. The cookie will persist until explicitly
     reset or reobtained in a subsequent context manager invocation.
 
@@ -1226,11 +1230,11 @@ def c2context(
     urlbase : str | None
         The base URL to use for all operations within the context.
     username : str | None
-        The username for logging in to obtain an authorization token. 
+        The username for logging in to obtain an authorization token.
     password : str | None
         The password for logging in to obtain an authorization cookie.
     auth_cookie : str | None
-        The cookie used as the default for operations within the context. 
+        The cookie used as the default for operations within the context.
 
     Yields
     ------
