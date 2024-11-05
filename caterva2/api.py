@@ -54,22 +54,24 @@ def _format_paths(urlbase, path=None):
 
 def get_roots(urlbase=None, auth_cookie=None):
     """
-    Get the list of available roots.
+    Retrieves the list of available roots.
 
     Parameters
     ----------
 
-    urlbase : str
-        The base of URLs of the subscriber to query. The default is
+    urlbase : str, optional
+        Base URL of the subscriber to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    auth_cookie : str, optional
+        HTTP cookie used for authorization.
 
     Returns
     -------
     dict
-        A mapping of available root names to their ``name``, ``http``
-        endpoint and whether they are ``subscribed`` or not.
+        Dictionary mapping available root names to their details: 
+        - ``name``: the root name
+        - ``http``: the HTTP endpoint
+        - ``subscribed``: whether it is subscribed or not.
 
     Examples
     --------
@@ -89,22 +91,22 @@ def get_roots(urlbase=None, auth_cookie=None):
 
 def subscribe(root, urlbase=None, auth_cookie=None):
     """
-    Subscribe to a root.
+    Subscribes to a specified root.
 
     Parameters
     ----------
     root : str
-        The name of the root to subscribe to.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Name of the root to subscribe to.
+    urlbase : str, optional
+        Base URL of the subscriber to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    auth_cookie : str, optional
+        HTTP cookie used for authorization.
 
     Returns
     -------
     str
-        The response from the server.
+        Server response as a string.
 
     Examples
     --------
@@ -123,22 +125,22 @@ def subscribe(root, urlbase=None, auth_cookie=None):
 
 def get_list(path, urlbase=None, auth_cookie=None):
     """
-    List the datasets in a path.
+    Lists datasets in a specified path.
 
     Parameters
     ----------
     path : str
-        The path to a root, directory or dataset.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Path to a root, directory or dataset.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
 
     Returns
     -------
     list
-        The list of datasets, as name strings relative to it.
+        List of dataset names as strings, relative to the specified path.
 
     Examples
     --------
@@ -156,23 +158,22 @@ def get_list(path, urlbase=None, auth_cookie=None):
 
 def get_info(path, urlbase=None, auth_cookie=None):
     """
-    Get information about a dataset.
+    Retrives information about a specified dataset.
 
     Parameters
     ----------
     path : str
-        The path of the dataset.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Path to the dataset.
+    urlbase : str, optional
+        Base URL of to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
 
     Returns
     -------
     dict
-        The information about the dataset, as a mapping of property names to
-        their respective values.
+        Dictionary of dataset properties, mapping property names to their values.
 
     Examples
     --------
@@ -194,24 +195,24 @@ def get_info(path, urlbase=None, auth_cookie=None):
 
 def fetch(path, urlbase=None, slice_=None, auth_cookie=None):
     """
-    Fetch (a slice of) the data in a dataset.
+    Retrieves a specified slice (or the entire content) of a dataset.
 
     Parameters
     ----------
     path : str
-        The path of the dataset.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Path to the dataset.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    slice_ : str
-        The slice to fetch (the whole dataset if missing).
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    slice_ : str, optional
+        Slice of the dataset to retrieve. Fetches the entire dataset if not provided.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
 
     Returns
     -------
     numpy.ndarray
-        The slice of the dataset.
+        The requested slice of the dataset as a Numpy array.
 
     Examples
     --------
@@ -232,24 +233,24 @@ def fetch(path, urlbase=None, slice_=None, auth_cookie=None):
 
 def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
     """
-    Get the unidimensional compressed chunk of a dataset.
+    Retrieves a specified compressed chunk from a dataset.
 
     Parameters
     ----------
     path : str
-        The path of the dataset.
+        Path of the dataset.
     nchunk : int
-        The unidimensional chunk id to get.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        ID of the unidimensional chunk to retrieve.
+    urlbase : str, optional
+        Base URL to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
 
     Returns
     -------
     bytes obj
-        The compressed chunk.
+        The compressed chunk data.
 
     Examples
     --------
@@ -274,24 +275,22 @@ def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
 
 def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     """
-    Download a dataset to storage.
+    Downloads a dataset to local storage.
 
-    **Note:** If the dataset is a regular file, it will be downloaded and
-    decompressed if Blosc2 is installed.  Otherwise, it will be downloaded
-    as-is (i.e. compressed with Blosc2, and with the `.b2` extension).
+    **Note:** If the dataset is a regular file and Blosc2 is installed, it will be downloaded
+    and decompressed. Otherwise, it will remain compressed in its `.b2` format.
 
     Parameters
     ----------
     dataset : Path
-        The path of the dataset.
-    localpath : Path
-        The path to download the dataset to.  If not provided,
-        the dataset will be downloaded to the current working directory.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Path to the dataset.
+    localpath : Path, optional
+        Local path to save the downloaded dataset. Defaults to the current working directory if not specified.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An optional HTTP cookie for authorizing access.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
 
     Returns
     -------
@@ -326,31 +325,30 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
 
 def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     """
-    Upload a local dataset to a remote repository.
+    Uploads a local dataset to a remote repository.
 
-    **Note:** If `localpath` is a regular file (i.e. without a `.b2nd`,
-    `.b2frame` or `.b2` extension), it will be compressed with Blosc2 on the
-    server side (i.e. it will have the `.b2` extension appended internally,
-    although this won't be visible when using the web, API or CLI interfaces).
+    **Note:** If `localpath` is a regular file without a `.b2nd`,
+    `.b2frame` or `.b2` extension, it will be automatically compressed with Blosc2 on the
+    server, adding a `.b2` extension internally.
 
     Parameters
     ----------
     localpath : Path
-        The path of the local dataset.
+        Path to the local dataset.
     dataset : Path
-        The remote path to upload the dataset to.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Remote path to upload the dataset to.
+    urlbase : str, optional
+        Base URL to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
+        Must be provided unless already set in 
         a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     Path
-        The path of the uploaded file.
+        Path of the uploaded file on ther server.
 
     Examples
     --------
@@ -377,29 +375,27 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
 
 def remove(path, urlbase=None, auth_cookie=None):
     """
-    Remove a dataset or directory path from a remote repository.
+    Removes a dataset or the contents of a directory from a remote repository.
 
-    Note that when a directory is removed, only its contents are removed.
-    The directory itself is not removed. This can be handy for future
-    uploads to the same directory.  This is preliminary and may change in
-    future versions.
+    **Note:** When a directory is removed, only its contents are deleted;
+    the directory itself remains. This behavior allows for future
+    uploads to the same directory. It is subject to in future versions.
 
     Parameters
     ----------
     path : Path
-        The path of the dataset or directory.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Path of the dataset or directory to remove.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
         a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     str
-        The removed path.
+        The path that was removed.
 
     Examples
     --------
@@ -421,26 +417,25 @@ def remove(path, urlbase=None, auth_cookie=None):
 
 def move(src, dst, urlbase=None, auth_cookie=None):
     """
-    Move a dataset or directory to a new location.
+    Moves a dataset or directory to a new location.
 
     Parameters
     ----------
     src : Path
-        The source path of the dataset or directory.
+        Source path of the dataset or directory.
     dst : Path
-        The destination path of the dataset or directory.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        The destination path for the dataset or directory.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
         a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     str
-        The new path of the dataset.
+        New path of the moved dataset or directory.
 
     Examples
     --------
@@ -470,26 +465,25 @@ def move(src, dst, urlbase=None, auth_cookie=None):
 
 def copy(src, dst, urlbase=None, auth_cookie=None):
     """
-    Copy a dataset or directory to a new location.
+    Copies a dataset or directory to a new location.
 
     Parameters
     ----------
     src : Path
-        The source path of the dataset or directory.
+        Source path of the dataset or directory.
     dst : Path
-        The destination path of the dataset or directory.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Destination path for the dataset or directory.
+    urlbase : str, optional
+        Base URL to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
         a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     str
-        The new path of the dataset.
+        New path of the copied dataset or directory.
 
     Examples
     --------
@@ -520,32 +514,30 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
 
 def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     """
-    Create a lazy expression dataset in personal space.
+    Creates a lazy expression dataset in personal space.
 
-    A dataset with the given name is created anew (or overwritten if already
-    existing).
+    A dataset with the specified name will created or overwritten if already
+    exists.
 
     Parameters
     ----------
     name : str
-        The name of the dataset to be created (without extension).
+        Name of the dataset to be created (without extension).
     expression : str
-        The expression to be evaluated.  It must result in a lazy expression.
+        Expression to be evaluated, which must yield a lazy expression.
     operands : dict
-        A mapping of the variables used in the expression to the dataset paths
-        that they refer to.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Mapping of variables in the expression to their corresponding dataset paths.
+    urlbase : str, optional
+        Base URL to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        An HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
         a :py_obj:`caterva2.c2context`.
 
     Returns
     -------
     Path
-        The path of the created dataset.
+        Path of the created dataset.
 
     Examples
     --------
@@ -572,29 +564,28 @@ def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
 
 def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=None):
     """
-    Add a user to the subscriber.
+    Adds a user to the subscriber.
 
     Parameters
     ----------
     newuser : str
-        The username of the user to add.
-    password : str
-        The password of the user to add.
-    superuser : bool
-        Whether the user is a superuser or not.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Username of the user to add.
+    password : str, optional
+        Password for the user to add.
+    superuser : bool, optional
+        Indicates if the user is a superuser.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        A HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
         a :py_obj:`caterva2.c2context`. The auth_cookie used must be
         from a superuser.
 
     Returns
     -------
     str
-        An explanatory message.
+        An explanatory message about the operation's success or failure.
 
     Examples
     --------
@@ -620,25 +611,24 @@ def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=N
 
 def deluser(user, urlbase=None, auth_cookie=None):
     """
-    Delete a user from the subscriber.
+    Deletes a user from the subscriber.
 
     Parameters
     ----------
     username : str
-        The username of the user to delete.
+        Username of the user to delete.
     urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        A HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
-        a :py_obj:`caterva2.c2context`. The auth_cookie used must be
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
+        a :py_obj:`caterva2.c2context`. The auth_cookie must be
         from a superuser.
 
     Returns
     -------
     str
-        An explanatory message.
+        An explanatory message about the operation's success or failure.
 
     Examples
     --------
@@ -661,25 +651,24 @@ def deluser(user, urlbase=None, auth_cookie=None):
 
 def listusers(username=None, urlbase=None, auth_cookie=None):
     """
-    List the users in the subscriber.
+    Lists the users in the subscriber.
 
     Parameters
     ----------
-    username : str
-        The username of the user to list (optional).
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+    username : str, optional
+        Username of the specific user to list.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str
-        A HTTP cookie for authorizing access.
-        This must be specified unless it was already specified inside
-        a :py_obj:`caterva2.c2context`. The auth_cookie used must be
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
+        a :py_obj:`caterva2.c2context`. The auth_cookie must be
         from a superuser.
 
     Returns
     -------
     list of dict
-        The list of users in the subscriber.
+        A list of user dictionaries in the subscriber.
 
     Examples
     --------
@@ -712,20 +701,19 @@ def listusers(username=None, urlbase=None, auth_cookie=None):
 
 class Root:
     """
-    A root is a remote repository that can be subscribed to.
+    Represents a remote repository that can be subscribed to.
 
     Parameters
     ----------
     root : str
-        The name of the root to subscribe to.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        Name of the root to subscribe to.
+    urlbase : str, optional
+        Base URL to query. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    user_auth : dict
-        An optional mapping of fields and values to be used as data to be
-        posted for authenticating the user and get an authorization token for
-        further requests. For some actions this must be specified unless it was
-        already specified inside a :py_obj:`caterva2.c2context`.
+    user_auth : dict, optional
+        Mapping of fields and values for user authentication. This is used to post data 
+        for obtaining an authorization token for further requests. For some actions, this must be 
+        provided unless already specified in a :py_obj:`caterva2.c2context`.
 
     Examples
     --------
@@ -751,7 +739,7 @@ class Root:
     @property
     def file_list(self):
         """
-        A list with the files in this root.
+        Retrives a list of files in this root.
         """
         return api_utils.get(f"{self.urlbase}/api/list/{self.name}", auth_cookie=self.auth_cookie)
 
@@ -760,17 +748,17 @@ class Root:
 
     def __getitem__(self, path):
         """
-        Get a file or dataset from the root.
+        Retrives a file or dataset from the root.
 
         Parameters
         ----------
         path : str or Path
-            The path of the file or dataset.
+            Path of the file or dataset to retrieve.
 
         Returns
         -------
         File
-            A :class:`File` or :class:`Dataset` instance.
+            An instance of :class:`File` or :class:`Dataset`.
 
         Examples
         --------
@@ -787,17 +775,17 @@ class Root:
 
     def __contains__(self, path):
         """
-        Check if a path exists in the root.
+        Checks if a path exists in the root.
 
         Parameters
         ----------
         path : str or Path
-            The path of the file or dataset.
+            The path of the file or dataset to check.
 
         Returns
         -------
         bool
-            Whether the path exists in the root.
+            True if the path exists in the root, otherwise False.
 
         Examples
         --------
@@ -811,12 +799,12 @@ class Root:
 
     def __iter__(self):
         """
-        Iterate over the files and datasets in the root.
+        Iterates over the files and datasets in the root.
 
         Returns
         -------
         iter
-            An iterator over the files and datasets in the root.
+            An iterator for the files and datasets in the root.
 
         Examples
         --------
@@ -841,7 +829,7 @@ class Root:
 
     def __len__(self):
         """
-        Return the number of files in the root.
+        Returns the number of files in the root.
 
         Examples
         --------
@@ -857,20 +845,20 @@ class Root:
 
     def upload(self, localpath, dataset=None):
         """
-        Upload a local dataset to this root.
+        Uploads a local dataset to this root.
 
         Parameters
         ----------
         localpath : Path
-            The path of the local dataset.
-        dataset : Path
-            The remote path to upload the dataset to.  If not provided, the
-            dataset will be uploaded to this root in top level.
+            Path of the local dataset to upload.
+        dataset : Path, optional
+            Remote path where the dataset will be uploaded.  If not provided, the
+            dataset will be uploaded to the top level of this root.
 
         Returns
         -------
         File
-            A :class:`File` or :class:`Dataset` instance.
+            A instance of :class:`File` or :class:`Dataset`.
 
         Examples
         --------
@@ -899,24 +887,24 @@ class Root:
 
 class File:
     """
-    A file is either a Blosc2 dataset or a regular file on a root repository.
+    Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
 
-    This is not intended to be instantiated directly, but accessed via a
-    :class:`Root` instance instead.
+    This class is not intended for direct instantiation; it should be accessed through a
+    :class:`Root` instance.
 
     Parameters
     ----------
     name : str
         The name of the file.
     root : str
-        The name of the root.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        The name of the root repository.
+    urlbase : str, optional
+        Base URL for querying the subscriber. Defaults to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie: str
-        An optional cookie to authorize requests via HTTP.
-        For some actions this must be specified unless it was
-        already specified inside a :py_obj:`caterva2.c2context`.
+    auth_cookie: str, optional
+        An optional cookie for HTTP request authorization.
+        This must be specified for certain actions unless
+        already provided in a :py_obj:`caterva2.c2context`.
 
     Examples
     --------
@@ -953,10 +941,10 @@ class File:
     @functools.cached_property
     def vlmeta(self):
         """
-        A mapping of metalayer names to their respective values.
+        Returns a mapping of metalayer names to their respective values.
 
-        Used to access variable-length metalayers (i.e. user attributes) for a
-        file.
+        This is used to access variable-length metalayers (user attributes) 
+        associated with the file.
 
         >>> import caterva2 as cat2
         >>> root = cat2.Root('example', 'https://demo.caterva2.net')
@@ -969,12 +957,12 @@ class File:
 
     def get_download_url(self):
         """
-        Get the download URL for a file.
+        Retrives the download URL for the file.
 
         Returns
         -------
         str
-            The download URL.
+            The file's download URL.
 
         Examples
         --------
@@ -988,17 +976,17 @@ class File:
 
     def __getitem__(self, slice_):
         """
-        Get a slice of the dataset.
+        Retrives a slice of the dataset.
 
         Parameters
         ----------
         slice_ : int, slice, tuple of ints and slices, or None
-            The slice to fetch.
+            Specifies the slice to fetch.
 
         Returns
         -------
         numpy.ndarray
-            The slice of the dataset.
+            The requested slice of the dataset.
 
         Examples
         --------
@@ -1017,19 +1005,19 @@ class File:
 
     def fetch(self, slice_=None):
         """
-        Fetch a slice of a dataset.
+        Fetches a slice of the dataset.
 
-        Equivalent to `__getitem__()`.
+        This method is equivalent to `__getitem__()`.
 
         Parameters
         ----------
         slice_ : int, slice, tuple of ints and slices, or None
-            The slice to fetch.
+            Specifies the slice to fetch.
 
         Returns
         -------
         numpy.ndarray
-            The slice of the dataset.
+            The requested slice of the dataset.
 
         Examples
         --------
@@ -1049,12 +1037,12 @@ class File:
 
     def download(self, localpath=None):
         """
-        Download a file to storage.
+        Downloads the file to storage.
 
         Parameters
         ----------
-        localpath : Path
-            The path to download the file to.  If not provided, the file will
+        localpath : Path, optional
+            The destination path for the downloaded file.  If not specified, the file will
             be downloaded to the current working directory.
 
         Returns
@@ -1081,17 +1069,17 @@ class File:
 
     def move(self, dst):
         """
-        Move a file to a new location.
+        Moves the file to a new location.
 
         Parameters
         ----------
         dst : Path
-            The destination path of the file.
+            The destination path for the file.
 
         Returns
         -------
         Path
-            The new path of the file.
+            The new path of the file after the move.
 
         Examples
         --------
@@ -1113,17 +1101,17 @@ class File:
 
     def copy(self, dst):
         """
-        Copy a file to a new location.
+        Copies the file to a new location.
 
         Parameters
         ----------
         dst : Path
-            The destination path of the file.
+            The destination path for the file.
 
         Returns
         -------
         Path
-            The new path of the file.
+            The new path of the copied file.
 
         Examples
         --------
@@ -1147,7 +1135,7 @@ class File:
 
     def remove(self):
         """
-        Remove a file from a remote repository.
+        Removes the file from the remote repository.
 
         Returns
         -------
@@ -1176,22 +1164,22 @@ class File:
 
 class Dataset(File):
     """
-    A dataset is a Blosc2 container in a file.
+    Represents a dataset as a Blosc2 container within a file.
 
-    This is not intended to be instantiated directly, but accessed via a
-    :class:`Root` instance instead.
+    This class is not intended to be instantiated directly; it should be accessed through a
+    :class:`Root` instance.
 
     Parameters
     ----------
     name : str
         The name of the dataset.
     root : str
-        The name of the root.
-    urlbase : str
-        The base of URLs of the subscriber to query. Default is
+        The name of the root repository.
+    urlbase : str, optional
+        The base URL for the subscriber queries. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie: str
-        An optional cookie to authorize requests via HTTP.
+    auth_cookie: str, optional
+        A cookie for authorizing HTTP requests.
 
     Examples
     --------
@@ -1220,37 +1208,29 @@ def c2context(
     auth_cookie: (str | None) = None,
 ) -> None:
     """
-    Context manager that sets parameters in Caterva2 subscriber requests.
+    Context manager for setting parameters in Caterva2 subscriber requests.
 
-    A parameter not specified or set to ``None`` inherits the value set by the
-    previous context manager,
-    defaulting the subscriber url to :py:obj:`caterva2.sub_urlbase_default`
-    and the authentication cookie to `None`.
-    Parameters set to the empty string
-    are not to be used in requests (with no default either).
+    Parameters not specified or set to ``None`` will inherit values from the
+    previous context manager, defaulting to :py:obj:`caterva2.sub_urlbase_default`
+    for the URL and `None` for the authentication cookie. Parameters set to an empty string
+    will not be used in requests.
 
-    If the subscriber requires authorization for requests, you may either
-    provide `auth_cookie` (which you should have obtained previously from the
-    subscriber), or both `username` and `password` to get that cookie by first
-    logging in to the subscriber.  The cookie will be reused until explicitly
-    reset or requested again in a latter context manager invocation.
+    To authorize requests, provide either an existing `auth_cookie` or both `username` 
+    and `password` to log in and obtain the cookie. The cookie will persist until explicitly
+    reset or reobtained in a subsequent context manager invocation.
 
-    Please note that this manager is reentrant but not concurrency-safe.
+    Note that this manager is reentrant but not safe for concurrent use.
 
     Parameters
     ----------
     urlbase : str | None
-        A URL base that will be used as default for all operations inside the
-        context manager.
+        The base URL to use for all operations within the context.
     username : str | None
-        A name to be used in credentials to login to the subscriber and get an
-        authorization token from it.
+        The username for logging in to obtain an authorization token. 
     password : str | None
-        A secret to be used in credentials to login to the subscriber and get
-        an authorization cookie from it.
+        The password for logging in to obtain an authorization cookie.
     auth_cookie : str | None
-        A token that will be used as default for all operations inside the
-        context manager.
+        The cookie used as the default for operations within the context. 
 
     Yields
     ------
