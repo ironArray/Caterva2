@@ -71,6 +71,7 @@ dev = [
     "pre-commit",
     "pytest",
     "pytest-cov",
+    "ruff",
 ]
 # Currently used to enable HDF5 support at the publisher.
 hdf5 = [
@@ -117,26 +118,31 @@ cat2adduser = "caterva2.tools.adduser:main"
 [tool.ruff]
 line-length = 109
 
-
 [tool.ruff.lint]
 extend-select = [
     "B",
+    "C4",
+    "C90",
     "I",
     "NPY",
     "PT",
     "RET",
+    "RUF",
     "SIM",
     "TCH",
     "UP",
 ]
 ignore = [
     "B028",
-    "PT006",
     "PT004",  # deprecated
+    "PT005",  # deprecated
     "PT011",
     "RET505",
     "RET508",
+    "RUF005",
+    "RUF015",
     "SIM108",
+    "UP027",  # deprecated
     "UP038",  # https://github.com/astral-sh/ruff/issues/7871
 ]
 

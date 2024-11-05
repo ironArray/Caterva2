@@ -16,7 +16,6 @@ from contextlib import contextmanager
 
 from caterva2 import api_utils, utils
 
-
 # Defaults
 bro_host_default = "localhost:8000"
 """The default HTTP endpoint for the broker (URL host & port)."""
@@ -228,8 +227,7 @@ def fetch(path, urlbase=None, slice_=None, auth_cookie=None):
     """
     urlbase, path = _format_paths(urlbase, path)
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    data = api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=auth_cookie)
-    return data
+    return api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=auth_cookie)
 
 
 def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
@@ -560,7 +558,7 @@ def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     # Convert possible Path objects in operands to strings so that they can be serialized
     operands = {k: str(v) for k, v in operands.items()}
-    expr = dict(name=name, expression=expression, operands=operands)
+    expr = {"name": name, "expression": expression, "operands": operands}
     dataset = api_utils.post(f"{urlbase}/api/lazyexpr/", expr, auth_cookie=auth_cookie)
     return pathlib.Path(dataset)
 
@@ -1004,8 +1002,7 @@ class File:
         >>> ds[0:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        data = self.fetch(slice_=slice_)
-        return data
+        return self.fetch(slice_=slice_)
 
     def fetch(self, slice_=None):
         """
@@ -1034,10 +1031,9 @@ class File:
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
         slice_ = api_utils.slice_to_string(slice_)
-        data = api_utils.fetch_data(
+        return api_utils.fetch_data(
             self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
         )
-        return data
 
     def download(self, localpath=None):
         """
