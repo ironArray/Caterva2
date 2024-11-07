@@ -31,6 +31,8 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
             'Incorrect credentials, please verify the email address and password.',
         REGISTER_USER_ALREADY_EXISTS:
             'Email address already registered, did you forget your password?',
+        RESET_PASSWORD_BAD_TOKEN:
+            'Invalid or expired link, did you click an old or already used link?',
     };
 
     // Empty the result view
