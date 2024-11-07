@@ -1458,7 +1458,7 @@ async def htmx_path_info(
         }
     else:
         mimetype, encoding = mimetypes.guess_type(path)
-        if mimetype in {"text/markdown"} or mimetype.startswith("image/"):
+        if mimetype and (mimetype in {"text/markdown"} or mimetype.startswith("image/")):
             display = {
                 "url": url(f"display/{path}"),
                 "label": "Display",
