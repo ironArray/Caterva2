@@ -15,7 +15,7 @@
         <input type="number" class="form-control" placeholder="" size="4"
                name="sizes" value="{{ input.size }}"
                hx-post="{{ view_url }}" hx-target="#info-view"
-               min="0" max="{{ input.size_max }}">
+               min="1" max="{{ input.size_max }}">
         {% else %}
         <input type="hidden" name="sizes" value="1">
         {% endif %}
