@@ -25,6 +25,22 @@ function clearContent(selector) {
     document.querySelector(selector).innerHTML = "";
 }
 
+function _cleanMessage(resultElementID) {
+    const msg = document.getElementById(resultElementID);
+    if (msg) {
+        msg.style.display = 'none';
+        msg.replaceChildren();
+    }
+
+    return msg;
+}
+
+function displayMessage(message, resultElementID="result") {
+    const msg = _cleanMessage(resultElementID);
+    msg.appendChild(document.createTextNode(message));
+    msg.style.display = 'block';
+}
+
 async function _submitForm(form, successURL, resultElementID, asJSON) {
     const errors = {
         LOGIN_BAD_CREDENTIALS:
@@ -36,17 +52,14 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
     };
 
     // Empty the result view
-    const msg = document.getElementById(resultElementID);
-    if (msg) {
-        msg.style.display = 'none';
-        msg.replaceChildren();
-    }
+    const msg = _cleanMessage(resultElementID);
 
     // Send form
     const params = {};
-    for (const field of form.elements)
+    for (const field of form.elements) {
         if (field.name != "")
             params[field.name] = field.value;
+    }
 
     const response = await fetch(
         form.action,

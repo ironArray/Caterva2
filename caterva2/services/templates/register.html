@@ -8,9 +8,7 @@
 
 <div id="result" class="alert alert-danger" style="display: none"></div>
 
-<form action="{{ url('auth/register') }}" method="post"
-      onsubmit="submitFormAsJSON(this, '{{ url("login") }}'); return false"
->
+<form action="{{ url('auth/register') }}" method="post" onsubmit="return register(this)">
     <div class="form-floating mb-2">
         <input type="email" name="email" class="form-control" placeholder="" required>
         <label class="form-label">Email address</label>
@@ -26,5 +24,13 @@
 <a href="{{ url('login') }}">Sign in if you already have an account</a>
 </p>
 
-{% endblock %}
+<script>
+function register(form) {
+    const message = 'Successful registration! Please type your email and password.';
+    const successURL = `{{ url("login") }}?message=${encodeURIComponent(message)}`;
+    submitFormAsJSON(form, successURL);
+    return false;
+}
+</script>
 
+{% endblock %}
