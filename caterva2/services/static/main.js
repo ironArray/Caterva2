@@ -47,12 +47,14 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
             params[field.name] = field.value;
 
     const response = await fetch(
-        form.action, {
+        form.action,
+        {
             method: form.method,
-            headers: {'Content-Type': (asJSON ? 'application/json'
-                                       : 'application/x-www-form-urlencoded')},
-            body: (asJSON ? JSON.stringify(params)
-                   : new URLSearchParams(params))},
+            headers: {
+                'Content-Type': (asJSON ? 'application/json' : 'application/x-www-form-urlencoded')
+            },
+            body: (asJSON ? JSON.stringify(params) : new URLSearchParams(params))
+        },
     );
 
     if (response.ok) {
@@ -61,30 +63,37 @@ async function _submitForm(form, successURL, resultElementID, asJSON) {
     }
     else {
         // Error
-        const json = await response.json();
-        const detail = json.detail;
-        if (Array.isArray(detail)) {
-            // TODO Improve error display
-            for (let error of detail) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") != -1) {
+            const json = await response.json();
+            const detail = json.detail;
+            if (Array.isArray(detail)) {
+                // TODO Improve error display
+                for (let error of detail) {
+                    msg.appendChild(document.createTextNode(
+                        `${error.msg}, `
+                    ));
+                }
+            }
+            else if (typeof detail == 'object') {
+                const error = detail.reason;
+                msg.appendChild(document.createTextNode(error));
+            }
+            else if (detail) {
+                const error = errors[detail] || detail;
+                msg.appendChild(document.createTextNode(error));
+            }
+            else {
                 msg.appendChild(document.createTextNode(
-                    `${error.msg}, `
+                    `Unexpected error: ${response.status} ${response.statusText}`
                 ));
+                msg.appendChild(document.createElement("pre"))
+                   .textContent = JSON.stringify(json);
             }
         }
-        else if (typeof detail == 'object') {
-            const error = detail.reason;
+        else {  // e.g. 500
+            const error = await response.text();
             msg.appendChild(document.createTextNode(error));
-        }
-        else if (detail) {
-            const error = errors[detail] || detail;
-            msg.appendChild(document.createTextNode(error));
-        }
-        else {
-            msg.appendChild(document.createTextNode(
-                `Unexpected error: ${response.status} ${response.statusText}`
-            ));
-            msg.appendChild(document.createElement("pre"))
-               .textContent = JSON.stringify(json);
         }
 
         msg.style.display = 'block';
@@ -97,4 +106,34 @@ async function submitForm(form, successURL, resultElementID="result") {
 
 async function submitFormAsJSON(form, successURL, resultElementID="result") {
     return await _submitForm(form, successURL, resultElementID, true);
+}
+
+function showAlert(content) {
+    const container = document.querySelector("#alert-error");
+    const template = document.querySelector("#alert-error-template");
+    const clone = template.content.cloneNode(true);
+    clone.querySelector("#alert-error-text").textContent = content;
+    container.replaceChildren(clone);
+}
+
+function handleHtmxErrors() {
+    htmx.on('htmx:beforeSwap', function (evt) {
+        // Allow 400 responses to swap, we treat these as form validation errors
+        let detail = evt.detail;
+        let xhr = detail.xhr;
+        if (xhr.status === 400) {
+            detail.isError = false;  // Avoid error message in console
+            detail.shouldSwap = true;
+            detail.target = htmx.find("#alert-error");
+        }
+        else if (xhr.status === 413) {
+            detail.isError = false;  // Avoid error message in console
+            showAlert(`${xhr.status} ${xhr.statusText}`);
+        }
+        else if (xhr.status === 500) {
+            detail.isError = false;  // Avoid error message in console
+            showAlert(`${xhr.status} ${xhr.statusText}`);
+            //showAlert(ev.detail.error, "danger");
+        }
+    })
 }
