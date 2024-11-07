@@ -19,7 +19,6 @@ management of users is set in the 'CATERVA2_SECRET' environment variable.
 import functools
 import os
 import uuid
-from typing import Optional
 
 from fastapi import Depends, Request
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
@@ -31,9 +30,7 @@ from fastapi_users.authentication import (
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
 
-
 from .db import User, get_user_db
-
 
 conf = ConnectionConfig(
     MAIL_USERNAME="",
@@ -51,6 +48,8 @@ conf = ConnectionConfig(
 
 
 async def send_email(recipients, body):
+    from caterva2.services import settings  # ruff: noqa: I001
+
     message = MessageSchema(
         subject="Reset password of your cat2.cloud account",
         recipients=recipients,
@@ -58,11 +57,13 @@ async def send_email(recipients, body):
         subtype=MessageType.html,
     )
 
-    fm = FastMail(conf)
-    #   print('<<<<<<<<<<')
-    #   print(message.body)
-    #   print('>>>>>>>>>>')
-    await fm.send_message(message)
+    if settings.urlbase.startswith("http://localhost:"):
+        print("<<<<<<<<<<")
+        print(message.body)
+        print(">>>>>>>>>>")
+    else:
+        fm = FastMail(conf)
+        await fm.send_message(message)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -81,10 +82,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if len(password) < 8:
             raise InvalidPasswordException(reason="Password should be at least 8 characters")
 
-    async def on_after_register(self, user: User, request: Optional[Request] = None):
+    async def on_after_register(self, user: User, request: Request | None = None):
         print(f"User {user.email} with id {user.id} has been added.")
 
-    async def on_after_forgot_password(self, user: User, token: str, request: Optional[Request] = None):
+    async def on_after_forgot_password(self, user: User, token: str, request: Request | None = None):
         from caterva2.services.sub import make_url, templates
 
         template = templates.get_template("emails/forgot-password.html")
@@ -92,7 +93,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         body = template.render({"reset_url": url})
         await send_email([user.email], body)
 
-    async def on_after_request_verify(self, user: User, token: str, request: Optional[Request] = None):
+    async def on_after_request_verify(self, user: User, token: str, request: Request | None = None):
         print(f"Verification requested for user {user.id}. Verification token: {token}")
 
 

@@ -133,6 +133,7 @@ extend-select = [
     "UP",
 ]
 ignore = [
+    "B008",  # function call in default argument is normal in FastAPI
     "B028",
     "PT004",  # deprecated
     "PT005",  # deprecated
