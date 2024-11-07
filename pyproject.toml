@@ -135,6 +135,7 @@ extend-select = [
 ignore = [
     "B008",  # function call in default argument is normal in FastAPI
     "B028",
+    "C901",  # Checks for functions with a high McCabe complexity
     "PT004",  # deprecated
     "PT005",  # deprecated
     "PT011",

@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import itertools
 import logging
+import mimetypes
 import os
 import pathlib
 import shutil
@@ -20,28 +21,25 @@ import typing
 import zipfile
 from collections.abc import Awaitable, Callable
 
-# FastAPI
-from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import fastapi
-
 # Requirements
 import blosc2
 import dotenv
+import fastapi
 import furl
 import httpx
 import markdown
-import numexpr as ne
 import numpy as np
 
-# Project
-from caterva2 import utils, api_utils, models
-from caterva2.services import srv_utils
-from caterva2.services.subscriber import db, schemas, users
-from caterva2.services import settings
+# FastAPI
+from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
+# Project
+from caterva2 import api_utils, models, utils
+from caterva2.services import settings, srv_utils
+from caterva2.services.subscriber import db, schemas, users
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -100,7 +98,7 @@ class PubSourceDataset:
 
         url = f"/api/download/{name}"
         client, url = api_utils.get_client_and_url(root.http, url, return_async_client=return_async_client)
-        args = dict(url=url, params={"nchunk": nchunk}, timeout=5)
+        args = {"url": url, "params": {"nchunk": nchunk}, "timeout": 5}
         return client, args
 
     def _get_chunk(self, nchunk):
@@ -108,8 +106,7 @@ class PubSourceDataset:
 
         response = client.get(**req_args)
         response.raise_for_status()
-        chunk = response.content
-        return chunk
+        return response.content
 
     async def _aget_chunk(self, nchunk):
         client, req_args = self._get_request_args(nchunk, return_async_client=True)
@@ -118,8 +115,7 @@ class PubSourceDataset:
             buffer = []
             async for chunk in resp.aiter_bytes():
                 buffer.append(chunk)
-            chunk = b"".join(buffer)
-            return chunk
+            return b"".join(buffer)
 
 
 # Class representing a NDArray in a publisher
@@ -226,9 +222,7 @@ def make_url(request, name, query=None, **path_params):
     url = str(url)  # <starlette.datastructures.URLPath>
     if query:
         url = furl.furl(url).set(query).url
-    url = settings.urlbase + url
-
-    return url
+    return settings.urlbase + url
 
 
 async def new_root(data, topic):
@@ -279,9 +273,9 @@ def open_b2(abspath, path):
             for key, value in operands.items():
                 if "proxy-source" in value.schunk.meta:
                     # Save operand as Proxy, see blosc2.open doc for more info
-                    relpath = srv_utils.get_relpath(value, settings.cache,
-                                                    settings.personal, settings.shared,
-                                                    settings.public)
+                    relpath = srv_utils.get_relpath(
+                        value, settings.cache, settings.personal, settings.shared, settings.public
+                    )
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
         else:
@@ -302,8 +296,7 @@ def open_b2(abspath, path):
 def follow(name: str):
     root = settings.database.roots.get(name)
     if root is None:
-        errors = {name: "This dataset does not exist in the network"}
-        return errors
+        return {name: "This dataset does not exist in the network"}
 
     if not root.subscribed:
         root.subscribed = True
@@ -318,7 +311,7 @@ def follow(name: str):
     try:
         data = api_utils.get("/api/list", server=root.http)
     except httpx.ConnectError:
-        return
+        return None
 
     # Initialize the datasets in the cache
     for relpath in data:
@@ -354,6 +347,8 @@ def follow(name: str):
         client = srv_utils.start_client(f"ws://{settings.broker}/pubsub")
         client.subscribe(name, updated_dataset)
         clients[name] = client
+
+    return None
 
 
 #
@@ -417,14 +412,14 @@ async def lifespan(app: FastAPI):
             changed = False
             # Deleted
             d = list(settings.database.roots.items())
-            for name, root in d:
+            for name, _root in d:
                 if name not in data:
                     del settings.database.roots[name]
                     changed = True
 
             # New or updated
-            for name, data in data.items():
-                root = models.Root(**data)
+            for name, values in data.items():
+                root = models.Root(**values)
                 if name not in settings.database.roots:
                     settings.database.roots[root.name] = root
                     changed = True
@@ -618,7 +613,9 @@ async def get_info(
         The metadata of the dataset.
     """
     abspath, _ = abspath_and_dataprep(path, user=user)
-    return srv_utils.read_metadata(abspath, settings.cache, settings.personal, settings.shared, settings.public)
+    return srv_utils.read_metadata(
+        abspath, settings.cache, settings.personal, settings.shared, settings.public
+    )
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -699,7 +696,7 @@ def abspath_and_dataprep(
 @app.get("/api/fetch/{path:path}")
 async def fetch_data(
     path: pathlib.Path,
-    slice_: str = None,
+    slice_: str | None = None,
     user: db.User = Depends(optional_user),
 ):
     """
@@ -750,7 +747,7 @@ async def fetch_data(
             and (sl.start or 0) == 0
             and (sl.stop is None or sl.stop >= sh)
             and sl.step in (None, 1)
-            for sl, sh in zip(slice_, shape)
+            for sl, sh in zip(slice_, shape, strict=False)
         )
 
     if whole and not isinstance(container, blosc2.LazyExpr):
@@ -785,6 +782,22 @@ async def fetch_data(
     downloader = srv_utils.iterchunk(data)
 
     return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+
+
+@app.get("/api/download/{path:path}")
+async def download_data(
+    path: pathlib.Path,
+    user: db.User = Depends(optional_user),
+):
+    abspath, dataprep = abspath_and_dataprep(path, None, user=user)
+    await dataprep()
+    container = open_b2(abspath, path)
+
+    async def downloader():
+        yield container[:]
+
+    mimetype, encoding = mimetypes.guess_type(path)
+    return responses.StreamingResponse(downloader(), media_type=mimetype)
 
 
 @app.get("/api/chunk/{path:path}")
@@ -901,11 +914,11 @@ async def lazyexpr(
     try:
         result_path = make_lazyexpr(expr.name, expr.expression, expr.operands, user)
     except (SyntaxError, ValueError, TypeError) as exc:
-        raise error(f"Invalid name or expression: {exc}")
+        raise error(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
-        raise error(f"Expression error: {ke.args[0]} is not in the list of available datasets")
+        raise error(f"Expression error: {ke.args[0]} is not in the list of available datasets") from ke
     except RuntimeError as exc:
-        raise error(f"Runtime error: {exc}")
+        raise error(f"Runtime error: {exc}") from exc
 
     return result_path
 
@@ -1115,11 +1128,11 @@ async def remove(
             path2 = path2.with_suffix(path2.suffix + ".b2")
             try:
                 path2.unlink()
-            except FileNotFoundError:
+            except FileNotFoundError as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
                     detail="The specified path does not exist",
-                )
+                ) from exc
 
     # Return the path
     return path
@@ -1205,7 +1218,9 @@ if user_login_enabled():
             )
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            raise srv_utils.raise_bad_request(f"Error in adding {payload.username}: {error_message}")
+            raise srv_utils.raise_bad_request(
+                f"Error in adding {payload.username}: {error_message}"
+            ) from exc
         return f"User added: {payload}"
 
     @app.get("/api/deluser/{username}")
@@ -1236,7 +1251,7 @@ if user_login_enabled():
             await utils.adel_user(username)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
-            raise srv_utils.raise_bad_request(f"Error in deleting {username}: {error_message}")
+            raise srv_utils.raise_bad_request(f"Error in deleting {username}: {error_message}") from exc
         # Remove the personal directory of the user
         userid = str(users[0].id)
         print(f"User {username} with id {userid} has been deleted")
@@ -1245,7 +1260,7 @@ if user_login_enabled():
 
     @app.get("/api/listusers/")
     async def list_users(
-        username: str = None,
+        username: str | None = None,
         user: db.User = Depends(current_active_user),
     ):
         """
@@ -1387,7 +1402,7 @@ async def htmx_path_list(
                 )
 
     datasets = sorted(datasets, key=lambda x: x["path"])
-    for i, dataset in enumerate(datasets):
+    for dataset in datasets:
         dataset["name"] = next(names)
 
     # Render template
@@ -1427,7 +1442,9 @@ async def htmx_path_info(
     abspath, _ = abspath_and_dataprep(path, user=user)
 
     try:
-        meta = srv_utils.read_metadata(abspath, settings.cache, settings.personal, settings.shared, settings.public)
+        meta = srv_utils.read_metadata(
+            abspath, settings.cache, settings.personal, settings.shared, settings.public
+        )
     except FileNotFoundError as exc:
         return htmx_error(request, f"FileNotFoundError: {exc} (missing operand?)")
 
@@ -1439,13 +1456,15 @@ async def htmx_path_info(
             "url": url(f"plugins/{plugin.name}/display/{path}"),
             "label": plugin.label,
         }
-    elif path.suffix == ".md":
-        display = {
-            "url": url(f"markdown/{path}"),
-            "label": "Display",
-        }
     else:
-        display = None
+        mimetype, encoding = mimetypes.guess_type(path)
+        if mimetype in {"text/markdown"} or mimetype.startswith("image/"):
+            display = {
+                "url": url(f"display/{path}"),
+                "label": "Display",
+            }
+        else:
+            display = None
 
     context = {
         "path": path,
@@ -1485,9 +1504,9 @@ async def htmx_path_view(
     # Path parameters
     path: pathlib.Path,
     # Input parameters
-    index: typing.Annotated[list[int], Form()] = None,
-    sizes: typing.Annotated[list[int], Form()] = None,
-    fields: typing.Annotated[list[str], Form()] = None,
+    index: typing.Annotated[list[int], Form()] | None = None,
+    sizes: typing.Annotated[list[int], Form()] | None = None,
+    fields: typing.Annotated[list[str], Form()] | None = None,
     # Depends
     user: db.User = Depends(optional_user),
 ):
@@ -1516,7 +1535,7 @@ async def htmx_path_view(
 
     inputs = []
     tags = []
-    for i, (start, size, size_max) in enumerate(zip(index, sizes, shape)):
+    for i, (start, size, size_max) in enumerate(zip(index, sizes, shape, strict=False)):
         mod = size_max % size
         start_max = size_max - (mod or size)
         inputs.append(
@@ -1529,7 +1548,7 @@ async def htmx_path_view(
             }
         )
         if inputs[-1]["with_size"]:
-            tags.append([k for k in range(start, min(start + size, size_max))])
+            tags.append(list(range(start, min(start + size, size_max))))
 
     if has_ndfields:
         cols = list(arr.fields.keys())
@@ -1584,14 +1603,20 @@ async def htmx_command(
     request: Request,
     # Body
     command: typing.Annotated[str, Form()],
-    names: typing.Annotated[list[str], Form()] = [],
-    paths: typing.Annotated[list[str], Form()] = [],
+    names: typing.Annotated[list[str], Form()] | None = None,
+    paths: typing.Annotated[list[str], Form()] | None = None,
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
     user: db.User = Depends(current_active_user),
 ):
-    operands = dict(zip(names, paths))
+    if names is None:
+        names = []
+
+    if paths is None:
+        paths = []
+
+    operands = dict(zip(names, paths, strict=False))
     argv = command.split()
 
     # First check for expressions
@@ -1610,7 +1635,6 @@ async def htmx_command(
             return htmx_error(request, error)
         except RuntimeError as exc:
             return htmx_error(request, f"Runtime error: {exc}")
-
 
     # Commands
 
@@ -1821,7 +1845,7 @@ async def htmx_upload(
         new_members = [
             member
             for member in members
-            if not (path / member).is_dir() and not member.suffix in {".b2", ".b2frame", ".b2nd"}
+            if not (path / member).is_dir() and member.suffix not in {".b2", ".b2frame", ".b2nd"}
         ]
         for member in new_members:
             member_path = path / member
@@ -1891,8 +1915,8 @@ async def htmx_delete(
     return htmx_redirect(hx_current_url, url, root=name)
 
 
-@app.get("/markdown/{path:path}", response_class=HTMLResponse)
-async def html_markdown(
+@app.get("/display/{path:path}", response_class=HTMLResponse)
+async def html_display(
     request: Request,
     # Path parameters
     path: pathlib.Path,
@@ -1900,11 +1924,17 @@ async def html_markdown(
     # Response
     response_class=HTMLResponse,
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    arr = open_b2(abspath, path)
-    content = arr[:]
-    # Markdown
-    return markdown.markdown(content.decode("utf-8"))
+    mimetype, encoding = mimetypes.guess_type(path)
+    if mimetype == "text/markdown":
+        abspath, _ = abspath_and_dataprep(path, user=user)
+        arr = open_b2(abspath, path)
+        content = arr[:]
+        return markdown.markdown(content.decode("utf-8"))
+    elif mimetype.startswith("image/"):
+        download_url = f"{url('api/download/')}{path}"
+        return f'<img src="{download_url}">'
+
+    return "Format not supported"
 
 
 #
