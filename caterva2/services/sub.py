@@ -800,25 +800,24 @@ async def download_data(
     return responses.StreamingResponse(downloader(), media_type=mimetype, headers=headers)
 
 
-@app.get("/api/download-image/{path:path}")
-async def download_image(
+@app.get("/api/preview/{path:path}")
+async def preview(
     path: pathlib.Path,
     # Query parameters
     width: int | None = None,
     user: db.User = Depends(optional_user),
 ):
-    if width:
+    mimetype, encoding = mimetypes.guess_type(path)
+    if mimetype.startswith("image/") and width:
         img = await get_image(path, user)
-        img_file = resize_image(img, width)
 
         def downloader():
-            yield from img_file
+            yield from resize_image(img, width)
     else:
 
         async def downloader():
             yield await get_file_content(path, user)
 
-    mimetype, encoding = mimetypes.guess_type(path)
     return responses.StreamingResponse(downloader(), media_type=mimetype)
 
 
@@ -1986,10 +1985,10 @@ async def html_display(
         content = await get_file_content(path, user)
         return markdown.markdown(content.decode("utf-8"))
     elif mimetype == "application/pdf":
-        data = f"{url('api/download/')}{path}"
+        data = f"{url('api/preview/')}{path}"
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
     elif mimetype.startswith("image/"):
-        src = f"{url('api/download-image/')}{path}"
+        src = f"{url('api/preview/')}{path}"
         img = await get_image(path, user)
 
         width = 768  # Max size
