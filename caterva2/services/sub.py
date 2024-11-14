@@ -1585,6 +1585,8 @@ async def htmx_path_view(
                 arr = arr[filter]
             except TypeError as exc:
                 return htmx_error(request, f"Error in filter: {exc}")
+            except NameError as exc:
+                return htmx_error(request, f"Unknown field: {exc}")
 
         # Get array view
         if ndims >= 2:
