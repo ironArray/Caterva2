@@ -1480,7 +1480,7 @@ async def htmx_path_info(
         }
     else:
         mimetype, encoding = mimetypes.guess_type(path)
-        if mimetype and (mimetype in {"text/markdown"} or mimetype.startswith("image/")):
+        if mimetype and (mimetype in {"application/pdf", "text/markdown"} or mimetype.startswith("image/")):
             display = {
                 "url": url(f"display/{path}"),
                 "label": "Display",
@@ -1985,6 +1985,9 @@ async def html_display(
     if mimetype == "text/markdown":
         content = await get_file_content(path, user)
         return markdown.markdown(content.decode("utf-8"))
+    elif mimetype == "application/pdf":
+        data = f"{url('api/download/')}{path}"
+        return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
     elif mimetype.startswith("image/"):
         src = f"{url('api/download-image/')}{path}"
         img = await get_image(path, user)
