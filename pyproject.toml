@@ -60,6 +60,7 @@ subscriber = [
     "furl",
     "jinja2",
     "markdown",
+    "pillow",
     "python-dotenv",
     "python-multipart",
 ]
@@ -93,7 +94,6 @@ tests = [
     "pytest<8",
 ]
 plugins = [
-    "pillow",
 ]
 blosc2-plugins = [
     "blosc2-grok",

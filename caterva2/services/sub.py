@@ -9,6 +9,7 @@
 
 import asyncio
 import contextlib
+import io
 import itertools
 import logging
 import mimetypes
@@ -29,6 +30,7 @@ import furl
 import httpx
 import markdown
 import numpy as np
+import PIL.Image
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
@@ -787,14 +789,36 @@ async def fetch_data(
 @app.get("/api/download/{path:path}")
 async def download_data(
     path: pathlib.Path,
+    # Query parameters
     user: db.User = Depends(optional_user),
 ):
-    abspath, dataprep = abspath_and_dataprep(path, None, user=user)
-    await dataprep()
-    container = open_b2(abspath, path)
+    content = await get_file_content(path, user)
 
     async def downloader():
-        yield container[:]
+        yield content
+
+    mimetype, encoding = mimetypes.guess_type(path)
+    return responses.StreamingResponse(downloader(), media_type=mimetype)
+
+
+@app.get("/api/download-image/{path:path}")
+async def download_image(
+    path: pathlib.Path,
+    # Query parameters
+    width: int | None = None,
+    user: db.User = Depends(optional_user),
+):
+    if width:
+        img = await get_image(path, user)
+        img_file = resize_image(img, width)
+
+        def downloader():
+            yield from img_file
+    else:
+        content = await get_file_content(path, user)
+
+        async def downloader():
+            yield content
 
     mimetype, encoding = mimetypes.guess_type(path)
     return responses.StreamingResponse(downloader(), media_type=mimetype)
@@ -1917,6 +1941,33 @@ async def htmx_delete(
     return htmx_redirect(hx_current_url, url, root=name)
 
 
+async def get_container(path, user):
+    abspath, dataprep = abspath_and_dataprep(path, user=user)
+    await dataprep()
+    return open_b2(abspath, path)
+
+
+async def get_file_content(path, user):
+    container = await get_container(path, user)
+    return container[:]
+
+
+async def get_image(path, user):
+    content = await get_file_content(path, user)
+    return PIL.Image.open(io.BytesIO(content))
+
+
+def resize_image(img, width):
+    if width and img.width > width:
+        height = (img.height * width) // img.width
+        img = img.resize((width, height))
+
+    img_file = io.BytesIO()
+    img.save(img_file, format="PNG")
+    img_file.seek(0)
+    return img_file
+
+
 @app.get("/display/{path:path}", response_class=HTMLResponse)
 async def html_display(
     request: Request,
@@ -1928,13 +1979,26 @@ async def html_display(
 ):
     mimetype, encoding = mimetypes.guess_type(path)
     if mimetype == "text/markdown":
-        abspath, _ = abspath_and_dataprep(path, user=user)
-        arr = open_b2(abspath, path)
-        content = arr[:]
+        content = await get_file_content(path, user)
         return markdown.markdown(content.decode("utf-8"))
     elif mimetype.startswith("image/"):
-        download_url = f"{url('api/download/')}{path}"
-        return f'<img src="{download_url}">'
+        src = f"{url('api/download-image/')}{path}"
+        img = await get_image(path, user)
+
+        width = 768  # Max size
+        links = []
+        if img.width > width:
+            links.append(
+                {
+                    "href": src,
+                    "label": f"{img.width} x {img.height} (original size)",
+                    "target": "blank_",
+                }
+            )
+            src = f"{src}?{width=}"
+
+        context = {"src": src, "links": links}
+        return templates.TemplateResponse(request, "display_image.html", context=context)
 
     return "Format not supported"
 

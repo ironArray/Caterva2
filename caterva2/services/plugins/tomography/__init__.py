@@ -1,17 +1,18 @@
-import io
 import pathlib
 
-import blosc2
-
+# Requirements
 import numpy
+import PIL.Image
 from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+# Project
 from caterva2.services.sub import optional_user
-from ...subscriber import db
-from ...sub import open_b2
 
+from ...sub import get_container, open_b2, resize_image
+from ...sub import templates as sub_templates
+from ...subscriber import db
 
 app = FastAPI()
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -52,11 +53,12 @@ def guess(path: pathlib.Path, meta) -> bool:
     shape = tuple(meta.shape)
     if dtype.kind != "u":
         return False
+
     if len(shape) == 3:
         return True  # grayscale
-    if len(shape) == 4 and shape[-1] in (3, 4):
-        return True  # RGB(A)
-    return False
+
+    # RGB(A)
+    return len(shape) == 4 and shape[-1] in (3, 4)
 
 
 @app.get("/display/{path:path}", response_class=HTMLResponse)
@@ -77,15 +79,11 @@ def display(
     return templates.TemplateResponse(request, "display.html", context=context)
 
 
-async def __get_image(path, i, user):
-    from PIL import Image
-
+async def __get_image(path, user, i):
     # Alternatively, call abspath_and_dataprep with the corresponding slice to download data async
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    arr = open_b2(abspath, path)
-
-    img = arr[i]
-    return Image.fromarray(img)
+    array = await get_container(path, user)
+    content = array[i]
+    return PIL.Image.fromarray(content)
 
 
 @app.get("/display_one/{path:path}", response_class=HTMLResponse)
@@ -97,23 +95,25 @@ async def display_one(
     i: int,
     user: db.User = Depends(optional_user),
 ):
-    img = await __get_image(path, i, user)
-    width = 768  # Max size
+    img = await __get_image(path, user, i)
 
     base = url(f"plugins/{name}")
+    src = f"{base}/image/{path}?{i=}"
 
+    width = 768  # Max size
     links = []
-    if width and img.width > width:
+    if img.width > width:
         links.append(
             {
-                "href": f"{base}/image/{path}?i={i}",
+                "href": src,
                 "label": f"{img.width} x {img.height} (original size)",
                 "target": "blank_",
             }
         )
+        src = f"{src}&{width=}"
 
-    context = {"src": f"{base}/image/{path}?{i=}&{width=}", "links": links}
-    return templates.TemplateResponse(request, "display_one.html", context=context)
+    context = {"src": src, "links": links}
+    return sub_templates.TemplateResponse(request, "display_image.html", context=context)
 
 
 @app.get("/image/{path:path}")
@@ -126,17 +126,10 @@ async def image_file(
     width: int | None = None,
     user: db.User = Depends(optional_user),
 ):
-    img = await __get_image(path, i, user)
-
-    if width and img.width > width:
-        height = (img.height * width) // img.width
-        img = img.resize((width, height))
-
-    img_byte_arr = io.BytesIO()
-    img.save(img_byte_arr, format="PNG")
-    img_byte_arr.seek(0)
+    img = await __get_image(path, user, i)
+    img_file = resize_image(img, width)
 
     def iterfile():
-        yield from img_byte_arr
+        yield from img_file
 
     return responses.StreamingResponse(iterfile(), media_type="image/png")
