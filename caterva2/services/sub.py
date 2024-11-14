@@ -792,13 +792,12 @@ async def download_data(
     # Query parameters
     user: db.User = Depends(optional_user),
 ):
-    content = await get_file_content(path, user)
-
     async def downloader():
-        yield content
+        yield await get_file_content(path, user)
 
     mimetype, encoding = mimetypes.guess_type(path)
-    return responses.StreamingResponse(downloader(), media_type=mimetype)
+    headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
+    return responses.StreamingResponse(downloader(), media_type=mimetype, headers=headers)
 
 
 @app.get("/api/download-image/{path:path}")
@@ -815,10 +814,9 @@ async def download_image(
         def downloader():
             yield from img_file
     else:
-        content = await get_file_content(path, user)
 
         async def downloader():
-            yield content
+            yield await get_file_content(path, user)
 
     mimetype, encoding = mimetypes.guess_type(path)
     return responses.StreamingResponse(downloader(), media_type=mimetype)
@@ -1949,6 +1947,12 @@ async def get_container(path, user):
 
 async def get_file_content(path, user):
     container = await get_container(path, user)
+
+    # Return compressed (this is used only by the downloader)
+    if path.suffix in {".b2frame", ".b2nd"}:
+        return container.to_cframe()
+
+    # Return uncompressed
     return container[:]
 
 
