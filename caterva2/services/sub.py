@@ -1528,6 +1528,7 @@ async def htmx_path_view(
     index: typing.Annotated[list[int] | None, Form()] = None,
     sizes: typing.Annotated[list[int] | None, Form()] = None,
     fields: typing.Annotated[list[str] | None, Form()] = None,
+    filter: typing.Annotated[str, Form()] = "",
     # Depends
     user: db.User = Depends(optional_user),
 ):
@@ -1577,6 +1578,14 @@ async def htmx_path_view(
         idxs = [cols.index(f) for f in fields]
         rows = [fields]
 
+        # Filter rows
+        filter = filter.strip()
+        if filter:
+            try:
+                arr = arr[filter]
+            except TypeError as exc:
+                return htmx_error(request, f"Error in filter: {exc}")
+
         # Get array view
         if ndims >= 2:
             arr = arr[index[:-1]]
@@ -1614,6 +1623,7 @@ async def htmx_path_view(
         "rows": rows,
         "cols": cols,
         "fields": fields,
+        "filter": filter,
         "tags": tags if len(tags) == 0 else tags[0],
     }
     return templates.TemplateResponse(request, "info_view.html", context)

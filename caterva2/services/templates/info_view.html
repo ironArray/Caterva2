@@ -1,11 +1,11 @@
-<form class="mb-2">
+<form class="mb-2" hx-target="#info-view">
     {% for input in inputs %}
     <div class="input-group mb-3 me-2 d-inline-flex w-auto">
         <span class="input-group-text">dim {{ loop.index0 }}</span>
         <input type="number" class="form-control" placeholder="" size="4"
                name="index" value="{{ input.start }}"
                {% if input.size < input.size_max %}
-               hx-post="{{ view_url }}" hx-target="#info-view"
+               hx-post="{{ view_url }}"
                min="0" max="{{ input.start_max }}" step="{{ input.size }}"
                {% else %}
                readonly
@@ -14,7 +14,7 @@
         {% if input.with_size %}
         <input type="number" class="form-control" placeholder="" size="4"
                name="sizes" value="{{ input.size }}"
-               hx-post="{{ view_url }}" hx-target="#info-view"
+               hx-post="{{ view_url }}"
                min="1" max="{{ input.size_max }}">
         {% else %}
         <input type="hidden" name="sizes" value="1">
@@ -25,7 +25,7 @@
     <div class="dropdown d-inline-flex" id="id_fields">
         <button type="button" class="btn btn-light dropdown-toggle"
                 data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside"
-                hx-post="{{ view_url }}" hx-target="#info-view" hx-trigger="hidden.bs.dropdown"
+                hx-post="{{ view_url }}" hx-trigger="hidden.bs.dropdown"
                 >
             Fields
         </button>
@@ -41,6 +41,10 @@
             </div>
             {% endfor %}
         </div>
+    </div>
+    <div>
+        <input type="text" class="form-control" placeholder="Filter" name="filter" value="{{ filter }}"
+               hx-post="{{ view_url }}">
     </div>
     {% endif %}
 </form>
