@@ -1504,9 +1504,9 @@ async def htmx_path_view(
     # Path parameters
     path: pathlib.Path,
     # Input parameters
-    index: typing.Annotated[list[int], Form()] | None = None,
-    sizes: typing.Annotated[list[int], Form()] | None = None,
-    fields: typing.Annotated[list[str], Form()] | None = None,
+    index: typing.Annotated[list[int] | None, Form()] = None,
+    sizes: typing.Annotated[list[int] | None, Form()] = None,
+    fields: typing.Annotated[list[str] | None, Form()] = None,
     # Depends
     user: db.User = Depends(optional_user),
 ):
@@ -1603,8 +1603,8 @@ async def htmx_command(
     request: Request,
     # Body
     command: typing.Annotated[str, Form()],
-    names: typing.Annotated[list[str], Form()] | None = None,
-    paths: typing.Annotated[list[str], Form()] | None = None,
+    names: typing.Annotated[list[str] | None, Form()] = None,
+    paths: typing.Annotated[list[str] | None, Form()] = None,
     # Headers
     hx_current_url: srv_utils.HeaderType = None,
     # Depends
