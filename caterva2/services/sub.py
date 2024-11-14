@@ -1862,7 +1862,6 @@ async def htmx_upload(
         path = f"{name}/{first_member}"
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
-    webpath = f"{name}/{filename}"
     if filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
@@ -1873,7 +1872,10 @@ async def htmx_upload(
         dst.write(data)
 
     # Redirect to display new dataset
-    url = make_url(request, "html_home", path=webpath)
+    path = f"{name}/{filename}"
+    if path.endswith(".b2"):
+        path = path[:-3]
+    url = make_url(request, "html_home", path=path)
     return htmx_redirect(hx_current_url, url, root=name)
 
 
