@@ -1582,7 +1582,8 @@ async def htmx_path_view(
         filter = filter.strip()
         if filter:
             try:
-                arr = arr[filter]
+                # Let's create a compressed in-memory container
+                arr = arr[filter].compute()
             except TypeError as exc:
                 return htmx_error(request, f"Error in filter: {exc}")
             except NameError as exc:
