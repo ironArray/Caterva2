@@ -1519,6 +1519,9 @@ async def htmx_path_info(
     return response
 
 
+# Global dictionary to store objects
+object_cache = {}
+
 @app.post("/htmx/path-view/{path:path}", response_class=HTMLResponse)
 async def htmx_path_view(
     request: Request,
@@ -1533,7 +1536,30 @@ async def htmx_path_view(
     user: db.User = Depends(optional_user),
 ):
     abspath, _ = abspath_and_dataprep(path, user=user)
-    arr = open_b2(abspath, path)
+    filter = filter.strip()
+    # Check if the object is already in the cache (only for registered users)
+    key = (str(user.id), str(path), filter) if user else None
+    if key is not None and key in object_cache:
+        arr = object_cache[key]
+    else:
+        abspath, _ = abspath_and_dataprep(path, user=user)
+        arr = open_b2(abspath, path)
+        # Filter rows only for NDArray with fields
+        has_ndfields = hasattr(arr, "fields") and arr.fields != {}
+        if has_ndfields and filter:
+            try:
+                # Let's create a compressed in-memory container
+                arr = arr[filter].compute()
+            except TypeError as exc:
+                return htmx_error(request, f"Error in filter: {exc}")
+            except NameError as exc:
+                return htmx_error(request, f"Unknown field: {exc}")
+            except AttributeError as exc:
+                return htmx_error(request, f"Invalid filter: {exc}."
+                                           f" Only expressions can be used as filters, not filters.")
+        # Clear the cache and store the object in the cache
+        object_cache.clear()
+        object_cache[key] = arr
 
     # Local variables
     shape = arr.shape
@@ -1577,17 +1603,6 @@ async def htmx_path_view(
         fields = fields or cols[:5]
         idxs = [cols.index(f) for f in fields]
         rows = [fields]
-
-        # Filter rows
-        filter = filter.strip()
-        if filter:
-            try:
-                # Let's create a compressed in-memory container
-                arr = arr[filter].compute()
-            except TypeError as exc:
-                return htmx_error(request, f"Error in filter: {exc}")
-            except NameError as exc:
-                return htmx_error(request, f"Unknown field: {exc}")
 
         # Get array view
         if ndims >= 2:
