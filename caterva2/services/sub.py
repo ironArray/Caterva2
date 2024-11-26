@@ -848,7 +848,7 @@ async def get_chunk(
     return responses.StreamingResponse(downloader)
 
 
-def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User) -> str:
+def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, lazy: bool = True) -> str:
     """
     Create a lazy expression dataset in personal space.
 
@@ -904,9 +904,14 @@ def make_lazyexpr(name: str, expr: str, operands: dict[str, str], user: db.User)
         cname = type(arr).__name__
         raise TypeError(f"Evaluates to {cname} instead of lazy expression")
 
+    # Save to filesystem
     path = settings.personal / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
-    arr.save(urlpath=f"{path / name}.b2nd", mode="w")
+    urlpath = f"{path / name}.b2nd"
+    if lazy:
+        arr.save(urlpath=urlpath, mode="w")
+    else:
+        arr.compute(urlpath=urlpath, mode="w")
 
     return f"@personal/{name}.b2nd"
 
@@ -934,7 +939,7 @@ async def lazyexpr(
         return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
 
     try:
-        result_path = make_lazyexpr(expr.name, expr.expression, expr.operands, user)
+        result_path = make_expr(expr.name, expr.expression, expr.operands, user)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise error(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
@@ -1695,10 +1700,12 @@ async def htmx_command(
     argv = command.split()
 
     # First check for expressions
-    if len(argv) > 1 and argv[1] == "=":
+    if len(argv) > 1 and argv[1] in {"=", ":="}:
+        operator = argv[1]
+        lazy = operator == "="
         try:
-            result_name, expr = command.split("=", maxsplit=1)
-            result_path = make_lazyexpr(result_name, expr, operands, user)
+            result_name, expr = command.split(operator, maxsplit=1)
+            result_path = make_expr(result_name, expr, operands, user, lazy=lazy)
         except SyntaxError:
             return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
         except ValueError as exc:
