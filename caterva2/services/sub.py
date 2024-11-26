@@ -1526,6 +1526,7 @@ def get_filtered_array(abspath, path, filter, sortby):
     arr = open_b2(abspath, path)
     has_ndfields = hasattr(arr, "fields") and arr.fields != {}
     assert has_ndfields
+    idx = None
 
     # Filter rows only for NDArray with fields
     if filter:
@@ -1536,6 +1537,7 @@ def get_filtered_array(abspath, path, filter, sortby):
             arr = arr[idx[:]]
             arr = blosc2.asarray(arr)
         else:
+            idx = arr[filter].indices().compute()  # FIXME larr.indices().compute() changes internal state
             arr = larr.compute()
     elif sortby:
         larr = blosc2.lazyexpr("arr")
@@ -1543,7 +1545,7 @@ def get_filtered_array(abspath, path, filter, sortby):
         arr = arr[idx[:]]
         arr = blosc2.asarray(arr)
 
-    return arr
+    return arr, idx
 
 
 @app.post("/htmx/path-view/{path:path}", response_class=HTMLResponse)
@@ -1564,16 +1566,21 @@ async def htmx_path_view(
     filter = filter.strip()
     if filter or sortby:
         try:
-            arr = get_filtered_array(abspath, path, filter, sortby)
+            arr, idx = get_filtered_array(abspath, path, filter, sortby)
         except TypeError as exc:
             return htmx_error(request, f"Error in filter: {exc}")
         except NameError as exc:
             return htmx_error(request, f"Unknown field: {exc}")
+        except ValueError as exc:
+            return htmx_error(request, f"ValueError: {exc}")
         except AttributeError as exc:
-            return htmx_error(request, f"Invalid filter: {exc}."
-                                       f" Only expressions can be used as filters, not field names.")
+            return htmx_error(
+                request,
+                f"Invalid filter: {exc}." f" Only expressions can be used as filters, not field names.",
+            )
     else:
         arr = open_b2(abspath, path)
+        idx = None
 
     # Local variables
     shape = arr.shape
@@ -1610,7 +1617,11 @@ async def htmx_path_view(
             }
         )
         if inputs[-1]["with_size"]:
-            tags.append(list(range(start, min(start + size, size_max))))
+            stop = min(start + size, size_max)
+            if idx is None:
+                tags.append(list(range(start, stop)))
+            else:
+                tags.append(list(idx[start:stop]))
 
     if has_ndfields:
         cols = list(arr.fields.keys())

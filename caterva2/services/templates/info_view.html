@@ -43,12 +43,12 @@
                 {% endfor %}
             </div>
         </div>
-        <div class="input-group">
+        <div class="input-group w-auto">
             <label class="input-group-text" for="id_sortby">Sort by</label>
             <select class="form-select" name="sortby" id="id_sortby" hx-post="{{ view_url }}">
                 <option value=""></option>
                 {% for col in cols %}
-                <option value="{{ col }}">{{ col }}</option>
+                <option value="{{ col }}" {% if col == sortby %}selected{% endif %}>{{ col }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -65,7 +65,7 @@
     <tbody>
     <tr>
     {% if tags|length != 0 %}
-        <th>{{ " " }}</th>
+        <th></th>
     {% endif %}
     {% if rows[0] is not iterable %}
         {% for value in rows %}
