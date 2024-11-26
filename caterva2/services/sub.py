@@ -9,6 +9,7 @@
 
 import asyncio
 import contextlib
+import functools
 import io
 import itertools
 import logging
@@ -1520,7 +1521,30 @@ async def htmx_path_info(
 
 
 # Global dictionary to store objects
-object_cache = {}
+@functools.lru_cache(maxsize=16)
+def get_filtered_array(abspath, path, filter, sortby):
+    arr = open_b2(abspath, path)
+    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
+    assert has_ndfields
+
+    # Filter rows only for NDArray with fields
+    if filter:
+        # Let's create a compressed in-memory container
+        larr = arr[filter]
+        if sortby:
+            idx = larr.sort(sortby).indices().compute()
+            arr = arr[idx[:]]
+            arr = blosc2.asarray(arr)
+        else:
+            arr = larr.compute()
+    elif sortby:
+        larr = blosc2.lazyexpr("arr")
+        idx = larr.sort(sortby).indices().compute()  # FIXME ValueError: unknown type void184
+        arr = arr[idx[:]]
+        arr = blosc2.asarray(arr)
+
+    return arr
+
 
 @app.post("/htmx/path-view/{path:path}", response_class=HTMLResponse)
 async def htmx_path_view(
@@ -1532,42 +1556,32 @@ async def htmx_path_view(
     sizes: typing.Annotated[list[int] | None, Form()] = None,
     fields: typing.Annotated[list[str] | None, Form()] = None,
     filter: typing.Annotated[str, Form()] = "",
+    sortby: typing.Annotated[str, Form()] = "",
     # Depends
     user: db.User = Depends(optional_user),
 ):
     abspath, _ = abspath_and_dataprep(path, user=user)
     filter = filter.strip()
-    # Check if the object is already in the cache (only for registered users)
-    key = (str(user.id), str(path), filter) if user else None
-    if key is not None and key in object_cache:
-        arr = object_cache[key]
+    if filter or sortby:
+        try:
+            arr = get_filtered_array(abspath, path, filter, sortby)
+        except TypeError as exc:
+            return htmx_error(request, f"Error in filter: {exc}")
+        except NameError as exc:
+            return htmx_error(request, f"Unknown field: {exc}")
+        except AttributeError as exc:
+            return htmx_error(request, f"Invalid filter: {exc}."
+                                       f" Only expressions can be used as filters, not field names.")
     else:
-        abspath, _ = abspath_and_dataprep(path, user=user)
         arr = open_b2(abspath, path)
-        # Filter rows only for NDArray with fields
-        has_ndfields = hasattr(arr, "fields") and arr.fields != {}
-        if has_ndfields and filter:
-            try:
-                # Let's create a compressed in-memory container
-                arr = arr[filter].compute()
-            except TypeError as exc:
-                return htmx_error(request, f"Error in filter: {exc}")
-            except NameError as exc:
-                return htmx_error(request, f"Unknown field: {exc}")
-            except AttributeError as exc:
-                return htmx_error(request, f"Invalid filter: {exc}."
-                                           f" Only expressions can be used as filters, not field names.")
-        # Clear the cache and store the object in the cache
-        object_cache.clear()
-        object_cache[key] = arr
 
     # Local variables
     shape = arr.shape
     ndims = len(shape)
-    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
 
     # Set of dimensions that define the window
     # TODO Allow the user to choose the window dimensions
+    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
     dims = list(range(ndims))
     if ndims == 0:
         view_dims = {}
@@ -1642,6 +1656,7 @@ async def htmx_path_view(
         "cols": cols,
         "fields": fields,
         "filter": filter,
+        "sortby": sortby,
         "tags": tags if len(tags) == 0 else tags[0],
     }
     return templates.TemplateResponse(request, "info_view.html", context)

@@ -1,51 +1,63 @@
 <form class="mb-2" hx-target="#info-view">
-    {% for input in inputs %}
-    <div class="input-group mb-3 me-2 d-inline-flex w-auto">
-        <span class="input-group-text">dim {{ loop.index0 }}</span>
-        <input type="number" class="form-control" placeholder="" size="4"
-               name="index" value="{{ input.start }}"
-               {% if input.size < input.size_max %}
-               hx-post="{{ view_url }}"
-               min="0" max="{{ input.start_max }}" step="{{ input.size }}"
-               {% else %}
-               readonly
-               {% endif %}
-        >
-        {% if input.with_size %}
-        <input type="number" class="form-control" placeholder="" size="4"
-               name="sizes" value="{{ input.size }}"
-               hx-post="{{ view_url }}"
-               min="1" max="{{ input.size_max }}">
-        {% else %}
-        <input type="hidden" name="sizes" value="1">
+    <div class="d-flex gap-1 mb-2">
+        {% for input in inputs %}
+        <div class="input-group d-inline-flex w-auto">
+            <span class="input-group-text">dim {{ loop.index0 }}</span>
+            <input type="number" class="form-control" placeholder="" size="4"
+                   name="index" value="{{ input.start }}"
+                   {% if input.size < input.size_max %}
+                   hx-post="{{ view_url }}"
+                   min="0" max="{{ input.start_max }}" step="{{ input.size }}"
+                   {% else %}
+                   readonly
+                   {% endif %}
+            >
+            {% if input.with_size %}
+            <input type="number" class="form-control" placeholder="" size="4"
+                   name="sizes" value="{{ input.size }}"
+                   hx-post="{{ view_url }}"
+                   min="1" max="{{ input.size_max }}">
+            {% else %}
+            <input type="hidden" name="sizes" value="1">
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% if cols %}
+        <div class="dropdown" id="id_fields">
+            <button type="button" class="btn btn-light dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside"
+                    hx-post="{{ view_url }}" hx-trigger="hidden.bs.dropdown"
+                    >
+                Fields
+            </button>
+            <div class="dropdown-menu p-2">
+                {% for col in cols %}
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox"
+                           name="fields"
+                           value="{{ col }}"
+                           id="id_{{ col }}"
+                           {% if col in fields %}checked{% endif %}>
+                    <label class="form-check-label" for="id_{{ col }}">{{ col }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="input-group">
+            <label class="input-group-text" for="id_sortby">Sort by</label>
+            <select class="form-select" name="sortby" id="id_sortby" hx-post="{{ view_url }}">
+                <option value=""></option>
+                {% for col in cols %}
+                <option value="{{ col }}">{{ col }}</option>
+                {% endfor %}
+            </select>
+        </div>
         {% endif %}
     </div>
-    {% endfor %}
+
     {% if cols %}
-    <div class="dropdown d-inline-flex" id="id_fields">
-        <button type="button" class="btn btn-light dropdown-toggle"
-                data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside"
-                hx-post="{{ view_url }}" hx-trigger="hidden.bs.dropdown"
-                >
-            Fields
-        </button>
-        <div class="dropdown-menu p-2">
-            {% for col in cols %}
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox"
-                       name="fields"
-                       value="{{ col }}"
-                       id="id_{{ col }}"
-                       {% if col in fields %}checked{% endif %}>
-                <label class="form-check-label" for="id_{{ col }}">{{ col }}</label>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    <div>
-        <input type="text" class="form-control" placeholder="Filter" name="filter" value="{{ filter }}"
-               hx-post="{{ view_url }}">
-    </div>
+    <input type="text" class="form-control" placeholder="Filter" name="filter" value="{{ filter }}"
+           hx-post="{{ view_url }}">
     {% endif %}
 </form>
 
