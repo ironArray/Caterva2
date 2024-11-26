@@ -1556,7 +1556,7 @@ async def htmx_path_view(
                 return htmx_error(request, f"Unknown field: {exc}")
             except AttributeError as exc:
                 return htmx_error(request, f"Invalid filter: {exc}."
-                                           f" Only expressions can be used as filters, not filters.")
+                                           f" Only expressions can be used as filters, not field names.")
         # Clear the cache and store the object in the cache
         object_cache.clear()
         object_cache[key] = arr
