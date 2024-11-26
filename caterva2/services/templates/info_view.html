@@ -1,4 +1,4 @@
-<form class="mb-2" hx-target="#info-view">
+<form class="mb-2" hx-target="#info-view" hx-indicator="#id_data_indicator">
     <div class="d-flex gap-1 mb-2">
         {% for input in inputs %}
         <div class="input-group d-inline-flex w-auto">
@@ -53,6 +53,9 @@
             </select>
         </div>
         {% endif %}
+        {% with id="id_data_indicator" %}
+            {% include 'includes/loading.html' %}
+        {% endwith %}
     </div>
 
     {% if cols %}
