@@ -1532,23 +1532,22 @@ def get_filtered_array(abspath, path, filter, sortby):
     has_ndfields = hasattr(arr, "fields") and arr.fields != {}
     assert has_ndfields
     idx = None
+    sortby = sortby.strip() if sortby else None
 
     # Filter rows only for NDArray with fields
     if filter:
-        # Let's create a compressed in-memory container
+        # Let's create a LazyExpr with the filter
         larr = arr[filter]
-        if sortby:
-            idx = larr.sort(sortby).indices().compute()
-            arr = arr[idx[:]]
-            arr = blosc2.asarray(arr)
-        else:
-            idx = arr[filter].indices().compute()  # FIXME larr.indices().compute() changes internal state
-            arr = larr.compute()
+        # TODO: do some benchmarking to see if this is worth it
+        idx = larr.indices(sortby).compute()
+        # TODO: do some benchmarking to see if a numpy array is faster
+        # but be aware that this will consume more memory (uncompressed)
+        # idx = larr.indices(sortby)[:]
+        arr = larr.sort(sortby).compute()
     elif sortby:
-        larr = blosc2.lazyexpr("arr")
-        idx = larr.sort(sortby).indices().compute()  # FIXME ValueError: unknown type void184
-        arr = arr[idx[:]]
-        arr = blosc2.asarray(arr)
+        # NDArray with fields; no need for the compute step
+        idx = arr.indices(sortby)
+        arr = arr.sort(sortby)
 
     return arr, idx
 
@@ -1578,6 +1577,10 @@ async def htmx_path_view(
             return htmx_error(request, f"Unknown field: {exc}")
         except ValueError as exc:
             return htmx_error(request, f"ValueError: {exc}")
+        except SyntaxError as exc:
+            return htmx_error(request, f"SyntaxError: {exc}")
+        except IndexError as exc:
+            return htmx_error(request, f"IndexError: {exc}")
         except AttributeError as exc:
             return htmx_error(
                 request,
