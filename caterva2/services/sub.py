@@ -1676,6 +1676,7 @@ async def htmx_path_view(
         "fields": fields,
         "filter": filter,
         "sortby": sortby,
+        "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
     }
     return templates.TemplateResponse(request, "info_view.html", context)

@@ -37,9 +37,6 @@
     {% if view_url %}
     <div class="tab-pane fade" id="data-tab-pane" tabindex="0"
          role="tabpanel" aria-labelledby="tab-data">
-
-        shape = {{ shape }}
-
         <div id="info-view" hx-post="{{ view_url }}" hx-trigger="load" hx-ext="morph" hx-swap="morph:innerHTML">
         </div>
     </div>
