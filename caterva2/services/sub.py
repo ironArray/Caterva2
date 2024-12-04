@@ -35,7 +35,7 @@ import PIL.Image
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1704,7 +1704,11 @@ async def htmx_command(
     argv = command.split()
 
     # First check for expressions
-    if len(argv) > 1 and argv[1] in {"=", ":="}:
+    nargs = len(argv)
+    if nargs == 0:
+        return Response(status_code=204)
+
+    elif nargs > 1 and argv[1] in {"=", ":="}:
         operator = argv[1]
         lazy = operator == "="
         try:
