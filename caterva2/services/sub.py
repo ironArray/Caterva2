@@ -1767,7 +1767,7 @@ async def htmx_command(
 
     # Commands
 
-    elif argv[0] in {"adduser"}:
+    if argv[0] in {"adduser"}:
         if len(argv) != 2:
             return htmx_error(request, "Invalid syntax: expected adduser <username>")
         try:
@@ -1777,18 +1777,7 @@ async def htmx_command(
             return htmx_error(request, f"Error adding user: {exc}")
         return htmx_message(request, message)
 
-    elif argv[0] in {"cp", "copy"}:
-        if len(argv) != 3:
-            return htmx_error(request, "Invalid syntax: expected cp/copy <src> <dst>")
-        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
-        payload = models.MoveCopyPayload(src=src, dst=dst)
-        try:
-            result_path = await copy(payload, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error copying file: {exc}")
-        result_path = await display_first(result_path, user)
-
-    elif argv[0] in {"deluser"}:
+    if argv[0] in {"deluser"}:
         if len(argv) != 2:
             return htmx_error(request, "Invalid syntax: expected deluser <username>")
         try:
@@ -1797,37 +1786,8 @@ async def htmx_command(
             return htmx_error(request, f"Error deleting user: {exc}")
         return htmx_message(request, message)
 
-    elif argv[0] in {"i", "info"}:
-        if len(argv) != 2:
-            return htmx_error(request, "Invalid syntax: expected i/info <path>")
-        path = operands.get(argv[1], argv[1])
-        path = pathlib.Path(path)
-        try:
-            paths = await get_list(path, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error listing path: {exc}")
-        if len(paths) != 1:
-            return htmx_error(request, f'dataset "{path}" not found')
-        result_path = path
-
-    elif argv[0] in {"ls", "list"}:
-        if len(argv) != 2:
-            return htmx_error(request, "Invalid syntax: expected ls/list <path>")
-        path = operands.get(argv[1], argv[1])
-        path = pathlib.Path(path)
-        try:
-            paths = await get_list(path, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error listing path: {exc}")
-        # Get the first path to display
-        first_path = next(iter(paths), None)
-        if path.name == first_path:
-            result_path = path
-        else:
-            result_path = f"{path}/{first_path}" if first_path else path
-
     # Where to display this in web interface?
-    elif argv[0] in {"lsu", "listusers"}:
+    if argv[0] in {"lsu", "listusers"}:
         if len(argv) != 1:
             return htmx_error(request, "Invalid syntax: expected lsu/listusers")
         try:
@@ -1838,7 +1798,21 @@ async def htmx_command(
         users = [user.email for user in lusers]
         return htmx_message(request, f"Users: {users}")
 
-    elif argv[0] in {"mv", "move"}:
+    if argv[0] in {"cp", "copy"}:
+        if len(argv) != 3:
+            return htmx_error(request, "Invalid syntax: expected cp/copy <src> <dst>")
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MoveCopyPayload(src=src, dst=dst)
+        try:
+            result_path = await copy(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f"Error copying file: {exc}")
+        result_path = await display_first(result_path, user)
+        # Redirect to display new dataset
+        url = make_url(request, "html_home", path=result_path)
+        return htmx_redirect(hx_current_url, url)
+
+    if argv[0] in {"mv", "move"}:
         if len(argv) != 3:
             return htmx_error(request, "Invalid syntax: expected mv/move <src> <dst>")
         src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
@@ -1848,8 +1822,11 @@ async def htmx_command(
         except Exception as exc:
             return htmx_error(request, f"Error moving file: {exc}")
         result_path = await display_first(result_path, user)
+        # Redirect to display new dataset
+        url = make_url(request, "html_home", path=result_path)
+        return htmx_redirect(hx_current_url, url)
 
-    elif argv[0] in {"rm", "remove"}:
+    if argv[0] in {"rm", "remove"}:
         if len(argv) != 2:
             return htmx_error(request, "Invalid syntax: expected rm/remove <path>")
         path = operands.get(argv[1], argv[1])
@@ -1860,12 +1837,8 @@ async def htmx_command(
         except Exception as exc:
             return htmx_error(request, f"Error removing file: {exc}")
 
-    else:
-        return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')
-
-    # Redirect to display new dataset
-    url = make_url(request, "html_home", path=result_path)
-    return htmx_redirect(hx_current_url, url)
+    # If the command is not recognized
+    return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')
 
 
 async def display_first(result_path, user):
