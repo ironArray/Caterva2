@@ -1430,8 +1430,8 @@ async def htmx_path_list(
         for abspath, relpath in utils.walk_files(rootdir):
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
-            if search in str(relpath):
-                path = f"{root}/{relpath}"
+            path = f"{root}/{relpath}"
+            if search in path:
                 add_dataset(path, abspath)
 
     # Add current path if not already in the list
