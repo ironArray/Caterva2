@@ -591,10 +591,12 @@ async def get_list(
     if directory.is_file():
         name = pathlib.Path(directory.name)
         return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
-    return [
+    # Sort the list of datasets and return
+    paths = [
         str(relpath.with_suffix("") if relpath.suffix == ".b2" else relpath)
         for _, relpath in utils.walk_files(directory)
     ]
+    return sorted(paths)
 
 
 @app.get("/api/info/{path:path}")
