@@ -1939,15 +1939,8 @@ async def htmx_upload(
             if not (path / member).is_dir() and member.suffix not in {".b2", ".b2frame", ".b2nd"}
         ]
         for member in new_members:
-            member_path = path / member
-            with open(member_path, "rb") as src:
-                data = src.read()
-                schunk = blosc2.SChunk(data=data)
-                data = schunk.to_cframe()
-                member_path2 = f"{member_path}.b2"
-            with open(member_path2, "wb") as dst:
-                dst.write(data)
-            member_path.unlink()
+            srv_utils.compress_file(path / member)
+
         # We are done, redirect to home, and show the new files, starting with the first one
         first_member = next((m for m in new_members), None)
         path = f"{name}/{first_member}"

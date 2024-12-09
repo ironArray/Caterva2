@@ -22,6 +22,18 @@ import safer
 from caterva2 import models
 
 
+def compress_file(path):
+    with open(path, "rb") as src:
+        data = src.read()
+        schunk = blosc2.SChunk(data=data)
+        data = schunk.to_cframe()
+        path2 = f"{path}.b2"
+    with open(path2, "wb") as dst:
+        dst.write(data)
+
+    path.unlink()
+
+
 def cache_lookup(cachedir, path, may_not_exist=False):
     if cachedir == path:
         # Special case for the cache root
@@ -30,14 +42,18 @@ def cache_lookup(cachedir, path, may_not_exist=False):
     if (cachedir / path).is_dir():
         # Special case for directories
         return cachedir / path
-    if path.suffix not in {'.b2frame', '.b2nd'} and not may_not_exist:
-        path = f'{path}.b2'
+
+    if path.suffix not in {".b2frame", ".b2nd"} and not may_not_exist:
+        if path.is_file():
+            compress_file(path)
+        path = f"{path}.b2"
 
     return get_abspath(cachedir, path, may_not_exist)
 
 
 def get_model_from_obj(obj, model_class, **kwargs):
     if isinstance(obj, dict):
+
         def getter(o, k):
             return o[k]
     else:
@@ -63,13 +79,13 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
             raise FileNotFoundError(f'File "{path}" does not exist or is a directory')
 
         suffix = path.suffix
-        if suffix in {'.b2frame', '.b2nd', '.b2'}:
+        if suffix in {".b2frame", ".b2nd", ".b2"}:
             obj = blosc2.open(path)
         else:
             # Special case for regular files
             stat = path.stat()
-            keys = ['mtime', 'size']
-            data = {key: getattr(stat, f'st_{key}') for key in keys}
+            keys = ["mtime", "size"]
+            data = {key: getattr(stat, f"st_{key}") for key in keys}
             return get_model_from_obj(data, models.File)
 
     # Read metadata
@@ -83,21 +99,25 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
-        model = get_model_from_obj(schunk, models.SChunk, cparams=cparams)
-        return model
+        return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
     elif isinstance(obj, blosc2.LazyExpr):
         operands = operands_as_paths(obj.operands, cache, personal, shared, public)
         return get_model_from_obj(obj, models.LazyArray, operands=operands)
     else:
-        raise TypeError(f'unexpected {type(obj)}')
+        raise TypeError(f"unexpected {type(obj)}")
 
 
 def reformat_cparams(cparams):
-    cparams.__setattr__('filters, meta', [(cparams.filters[i], cparams.filters_meta[i])
-                        for i in range(len(cparams.filters))
-                        if cparams.filters[i] != blosc2.Filter.NOFILTER])
-#   delattr(cparams, 'filters')
-#   delattr(cparams, 'filters_meta')
+    cparams.__setattr__(
+        "filters, meta",
+        [
+            (cparams.filters[i], cparams.filters_meta[i])
+            for i in range(len(cparams.filters))
+            if cparams.filters[i] != blosc2.Filter.NOFILTER
+        ],
+    )
+    #   delattr(cparams, 'filters')
+    #   delattr(cparams, 'filters_meta')
     return cparams
 
 
@@ -116,21 +136,20 @@ def get_relpath(ndarr, cache, personal, shared, public):
         # personal: /.../<uid>/<subpath> to @personal/<subpath>
         path = path.relative_to(personal)
         parts = list(path.parts)
-        parts[0] = '@personal'
+        parts[0] = "@personal"
         path = pathlib.Path(*parts)
 
     return path
 
+
 def operands_as_paths(operands, cache, personal, shared, public):
-    return dict(
-        (nm, str(get_relpath(op, cache, personal, shared, public)))
-        for (nm, op) in operands.items()
-    )
+    return {nm: str(get_relpath(op, cache, personal, shared, public)) for (nm, op) in operands.items()}
 
 
 #
 # Pub/Sub helpers
 #
+
 
 def start_client(url):
     client = fastapi_websocket_pubsub.PubSubClient()
@@ -154,10 +173,12 @@ HeaderType = typing.Annotated[str | None, fastapi.Header()]
 def raise_bad_request(detail):
     raise fastapi.HTTPException(status_code=400, detail=detail)
 
-def raise_unauthorized(detail='Unauthorized'):
+
+def raise_unauthorized(detail="Unauthorized"):
     raise fastapi.HTTPException(status_code=401, detail=detail)
 
-def raise_not_found(detail='Not Found'):
+
+def raise_not_found(detail="Not Found"):
     raise fastapi.HTTPException(status_code=404, detail=detail)
 
 
@@ -166,7 +187,7 @@ def get_abspath(root, path, may_not_exist=False):
 
     # Security check
     if root not in abspath.parents:
-        raise_bad_request(f'Invalid path {path}')
+        raise_bad_request(f"Invalid path {path}")
 
     # Existence check
     if not abspath.is_file() and not may_not_exist:
@@ -179,10 +200,11 @@ def check_dset_path(proot, path):
     try:
         exists = proot.exists_dset(path)
     except ValueError:
-        raise_bad_request(f'Invalid path {path}')
+        raise_bad_request(f"Invalid path {path}")
     else:
         if not exists:
             raise_not_found()
+
 
 #
 # Blosc2 related helpers
@@ -201,15 +223,15 @@ def compress(data, dst=None):
     cparams = {}
     dparams = {}
     storage = {
-        'urlpath': dst,
-        'cparams': cparams,
-        'dparams': dparams,
+        "urlpath": dst,
+        "cparams": cparams,
+        "dparams": dparams,
     }
     schunk = blosc2.SChunk(**storage)
 
     # Append data
     if isinstance(data, pathlib.Path):
-        with open(data, 'rb') as f:
+        with open(data, "rb") as f:
             data = f.read()
 
     schunk.append_data(data)
@@ -226,8 +248,8 @@ def iterchunk(chunk):
 # Facility to persist program state
 #
 
-class Database:
 
+class Database:
     def __init__(self, path, initial):
         self.path = path
         self.model = initial.__class__
@@ -245,7 +267,7 @@ class Database:
 
     def save(self):
         dump = self.data.model_dump_json(exclude_none=True)
-        with safer.open(self.path, 'w') as file:
+        with safer.open(self.path, "w") as file:
             file.write(dump)
 
     def __getattr__(self, name):
