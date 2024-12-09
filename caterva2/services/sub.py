@@ -1491,8 +1491,20 @@ async def htmx_path_info(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
+    # Used to deselect
+    if len(path.parts) == 0:
+        response = HTMLResponse("")
+        push_url = make_url(request, "html_home")
+        # Keep query
+        current_query = furl.furl(hx_current_url).query
+        if current_query:
+            push_url = f"{push_url}?{current_query.encode()}"
 
+        response.headers["HX-Push-Url"] = push_url
+        return response
+
+    # Read metadata
+    abspath, _ = abspath_and_dataprep(path, user=user)
     try:
         meta = srv_utils.read_metadata(
             abspath, settings.cache, settings.personal, settings.shared, settings.public

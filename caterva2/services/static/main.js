@@ -1,23 +1,16 @@
 function activate(selector, trigger) {
     const url = new URL(document.URL);
     for (let el of document.querySelectorAll(selector)) {
-        if (trigger === undefined) {
-            const href = new URL(el.href)
-            if (url.pathname.startsWith(href.pathname)) {
-                el.classList.add("active");
-            }
-            else {
-                el.classList.remove("active");
-            }
+        const href = new URL(el.href)
+        if (url.pathname.startsWith(href.pathname)) {
+            el.classList.add("active");
+            el.setAttribute("hx-get", el.dataset.url);
         }
         else {
-            if (trigger == el) {
-                el.classList.add("active");
-            }
-            else {
-                el.classList.remove("active");
-            }
+            el.classList.remove("active");
+            el.setAttribute("hx-get", el.dataset.url + el.dataset.path);
         }
+        htmx.process(el);
     }
 }
 
