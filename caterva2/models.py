@@ -7,7 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import typing
+import datetime
 
 # Requirements
 import blosc2
@@ -41,6 +41,7 @@ class SChunk(pydantic.BaseModel, extra="allow"):
     urlpath: str
     vlmeta: dict = {}
     nchunks: int
+    mtime: datetime.datetime | None
 
 
 class Metadata(pydantic.BaseModel):
@@ -49,19 +50,21 @@ class Metadata(pydantic.BaseModel):
     blocks: tuple
     dtype: str
     schunk: SChunk
+    mtime: datetime.datetime
 
 
 class LazyArray(pydantic.BaseModel):
     shape: tuple
     dtype: str
     expression: str
-    operands: typing.Dict[str, str]
+    operands: dict[str, str]
+    mtime: datetime.datetime
 
 
 class NewLazyExpr(pydantic.BaseModel):
     name: str
     expression: str
-    operands: typing.Dict[str, str]
+    operands: dict[str, str]
 
 
 class MoveCopyPayload(pydantic.BaseModel):
@@ -71,7 +74,7 @@ class MoveCopyPayload(pydantic.BaseModel):
 
 class AddUserPayload(pydantic.BaseModel):
     username: str
-    password: typing.Optional[str]
+    password: str | None
     superuser: bool
 
 
@@ -83,17 +86,17 @@ class File(pydantic.BaseModel):
 class Root(pydantic.BaseModel):
     name: str
     http: str
-    subscribed: typing.Optional[bool] = None  # Used only by the subscriber program
+    subscribed: bool | None = None  # Used only by the subscriber program
 
 
 class Broker(pydantic.BaseModel):
-    roots: typing.Dict[str, Root]
+    roots: dict[str, Root]
 
 
 class Publisher(pydantic.BaseModel):
-    etags: typing.Dict[str, str]
+    etags: dict[str, str]
 
 
 class Subscriber(pydantic.BaseModel):
-    roots: typing.Dict[str, Root]
-    etags: typing.Dict[str, str]
+    roots: dict[str, Root]
+    etags: dict[str, str]

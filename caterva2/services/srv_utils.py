@@ -78,31 +78,26 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         if not path.is_file():
             raise FileNotFoundError(f'File "{path}" does not exist or is a directory')
 
-        suffix = path.suffix
-        if suffix in {".b2frame", ".b2nd", ".b2"}:
-            obj = blosc2.open(path)
-        else:
-            # Special case for regular files
-            stat = path.stat()
-            keys = ["mtime", "size"]
-            data = {key: getattr(stat, f"st_{key}") for key in keys}
-            return get_model_from_obj(data, models.File)
+        assert path.suffix in {".b2frame", ".b2nd", ".b2"}
+        obj = blosc2.open(path)
+        stat = path.stat()
+        mtime = stat.st_mtime
 
     # Read metadata
     if isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
-        schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
-        return get_model_from_obj(array, models.Metadata, schunk=schunk)
+        schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams, mtime=None)
+        return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime)
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
-        return get_model_from_obj(schunk, models.SChunk, cparams=cparams)
+        return get_model_from_obj(schunk, models.SChunk, cparams=cparams, mtime=mtime)
     elif isinstance(obj, blosc2.LazyExpr):
         operands = operands_as_paths(obj.operands, cache, personal, shared, public)
-        return get_model_from_obj(obj, models.LazyArray, operands=operands)
+        return get_model_from_obj(obj, models.LazyArray, operands=operands, mtime=mtime)
     else:
         raise TypeError(f"unexpected {type(obj)}")
 
