@@ -1900,10 +1900,11 @@ async def htmx_upload(
 
     # If a tarball or zipfile, extract the files in path
     # We also filter out hidden files and MacOSX metadata
-    suffixes = filename.suffixes
-    if suffixes in ([".tar", ".gz"], [".tar"], [".tgz"], [".zip"]):
+    suffix = filename.suffix
+    suffixes = filename.suffixes[-2:]
+    if suffix in [".tar", ".tgz", ".zip"] or suffixes == [".tar", ".gz"]:
         file.file.seek(0)  # Reset file pointer
-        if suffixes == [".zip"]:
+        if suffix == ".zip":
             with zipfile.ZipFile(file.file, "r") as archive:
                 members = [
                     m
@@ -1917,7 +1918,7 @@ async def htmx_upload(
                 # Convert members elements to Path instances
                 members = [pathlib.Path(m) for m in members]
         else:
-            mode = "r:gz" if suffixes[-1] in {".tgz", ".gz"} else "r"
+            mode = "r:gz" if suffix in {".tgz", ".gz"} else "r"
             with tarfile.open(fileobj=file.file, mode=mode) as archive:
                 members = [
                     m
