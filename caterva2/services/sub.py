@@ -1397,9 +1397,7 @@ async def htmx_path_list(
 
     names = get_names()
 
-    query = {"roots": roots, "search": search}
-    datasets = []
-    for root in roots:
+    def get_rootdir(root):
         if user and root == "@personal":
             rootdir = settings.personal / str(user.id)
         elif user and root == "@shared":
@@ -1411,23 +1409,50 @@ async def htmx_path_list(
                 follow(root)
             rootdir = settings.cache / root
 
-        for path, relpath in utils.walk_files(rootdir):
-            size = path.stat().st_size
+        return rootdir
+
+    datasets = []
+    query = {"roots": roots, "search": search}
+
+    def add_dataset(path, abspath):
+        datasets.append(
+            {
+                "name": "_",
+                "path": path,
+                "size": abspath.stat().st_size,
+                "url": make_url(request, "html_home", path=path, query=query),
+                "label": truncate_path(path),
+            }
+        )
+
+    for root in roots:
+        rootdir = get_rootdir(root)
+        for abspath, relpath in utils.walk_files(rootdir):
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             if search in str(relpath):
                 path = f"{root}/{relpath}"
-                url = make_url(request, "html_home", path=path, query=query)
-                datasets.append(
-                    {
-                        "name": "_",
-                        "path": path,
-                        "size": size,
-                        "url": url,
-                        "label": truncate_path(path),
-                    }
-                )
+                add_dataset(path, abspath)
 
+    # Add current path if not already in the list
+    current_path = hx_current_url.path
+    segments = current_path.segments
+    if segments and segments[0] == "roots":
+        path = str(pathlib.Path(*segments[1:]))
+        for dataset in datasets:
+            if dataset["path"] == path:
+                break
+        else:
+            root = segments[1]
+            rootdir = get_rootdir(root)
+            relpath = pathlib.Path(*segments[2:])
+            abspath = rootdir / relpath
+            if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
+                abspath = pathlib.Path(f"{abspath}.b2")
+
+            add_dataset(path, abspath)
+
+    # Assign names to datasets
     datasets = sorted(datasets, key=lambda x: x["path"])
     for dataset in datasets:
         dataset["name"] = next(names)
