@@ -67,7 +67,7 @@
         {% if key in ['schunk', 'cparams'] %}
             {% for key2, value2 in meta[key] %}
                 {% if key2 not in excluded_keys %}
-                    {% if key2 != 'urlpath' %}
+                    {% if value2 is not none %}
                     <tr>
                         <th scope="row" class="text-nowrap">{{ key2 }}</th>
                         <td>{{ value2 }}</td>
@@ -76,7 +76,7 @@
                 {% endif %}
             {% endfor %}
         {% else %}
-            {% if key != 'urlpath' %}
+            {% if key != 'urlpath' and value is not none %}
             <tr>
                 <th scope="row" class="text-nowrap">{{ key }}</th>
                 <td style="width: 100%">{{ value }}</td>

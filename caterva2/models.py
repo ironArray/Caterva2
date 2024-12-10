@@ -41,7 +41,7 @@ class SChunk(pydantic.BaseModel, extra="allow"):
     urlpath: str
     vlmeta: dict = {}
     nchunks: int
-    mtime: datetime.datetime | None
+    mtime: datetime.datetime | None = None
 
 
 class Metadata(pydantic.BaseModel):

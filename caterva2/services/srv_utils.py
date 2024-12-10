@@ -62,7 +62,11 @@ def get_model_from_obj(obj, model_class, **kwargs):
     data = kwargs.copy()
     for key, info in model_class.model_fields.items():
         if key not in data:
-            value = getter(obj, key)
+            try:
+                value = getter(obj, key)
+            except AttributeError:
+                continue
+
             if info.annotation is str:
                 value = str(value)
 
@@ -90,7 +94,7 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
-        schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams, mtime=None)
+        schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
         return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime)
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
