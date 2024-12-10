@@ -50,7 +50,7 @@ class Metadata(pydantic.BaseModel):
     blocks: tuple
     dtype: str
     schunk: SChunk
-    mtime: datetime.datetime
+    mtime: datetime.datetime | None
 
 
 class LazyArray(pydantic.BaseModel):
@@ -58,7 +58,7 @@ class LazyArray(pydantic.BaseModel):
     dtype: str
     expression: str
     operands: dict[str, str]
-    mtime: datetime.datetime
+    mtime: datetime.datetime | None
 
 
 class NewLazyExpr(pydantic.BaseModel):

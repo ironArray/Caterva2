@@ -82,6 +82,8 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         obj = blosc2.open(path)
         stat = path.stat()
         mtime = stat.st_mtime
+    else:
+        mtime = None
 
     # Read metadata
     if isinstance(obj, blosc2.ndarray.NDArray):
