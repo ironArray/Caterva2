@@ -17,6 +17,11 @@ http = "localhost:8002"
 urlbase = "http://localhost:8002"
 quota = "10G"
 maxusers = 5
+login = true
+# By default, users are not allowed to register and will
+# need to be added manually by a superuser.
+# Let's override this and allow registering.
+register = true
 
 # The client section defines the credentials for the client to authenticate
 # against the subscriber.
