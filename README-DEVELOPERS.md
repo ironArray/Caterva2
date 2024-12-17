@@ -15,6 +15,27 @@ As the config files are already there, this essentially boils down to:
 Also, for running the tests, one needs to run manually the broker, publisher and subscriber.
 There is a `caterva2.tests.services` script that does this.
 
+## Build CSS and JS
+
+If you modify the CSS or JS (in the `src/` directory) you will need to setup a development
+environment, you need the following software installed:
+
+- nodejs
+- jq
+
+Then install the nodejs modules:
+
+```shell
+npm install
+```
+
+Now every time you change the CSS or JS files in the `src/` directory, you have to rebuild
+the assets:
+
+```shell
+make assets
+```
+
 ## Running the tests
 
 Testing needs Caterva2 to be installed with the `tests` extra:
@@ -101,19 +122,3 @@ sphinx-build doc doc/html
 ```
 
 and the docs will appear in `doc/html`.
-
-## Build frontend assets
-
-Install the required software (you will need Node.js):
-
-```shell
-npm install
-```
-
-To build the CSS/JS files from source:
-
-```shell
-npm run build
-```
-
-The source files are located in the `src/` directory.

@@ -12,6 +12,7 @@ import contextlib
 import functools
 import io
 import itertools
+import json
 import logging
 import mimetypes
 import os
@@ -490,6 +491,15 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["filesizeformat"] = custom_filesizeformat
 templates.env.globals["url"] = url
+
+
+# Add CSS/JS to templates namespace
+BUILD_DIR = "static/build"
+with (BASE_DIR / BUILD_DIR / "manifest.json").open() as file:
+    manifest = json.load(file)
+    entry = manifest["src/main.js"]
+    templates.env.globals["main_css"] = url(BUILD_DIR + entry["css"][0])
+    templates.env.globals["main_js"] = url(BUILD_DIR + entry["file"])
 
 
 @app.get("/api/roots")

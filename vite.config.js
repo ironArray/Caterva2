@@ -6,7 +6,7 @@ export default defineConfig(({ command, mode }) => {
     let config = {
         base: '/static/',
         build: {
-            //manifest: 'manifest.json',
+            manifest: 'manifest.json',
             outDir: 'caterva2/services/static/build',
             rollupOptions: {
             }

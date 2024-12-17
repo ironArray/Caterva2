@@ -11,6 +11,10 @@ install:
 	${BIN}/pip install -e .[clients]
 	${BIN}/pip install -e .[tests]
 
+assets:
+	rm caterva2/services/static/build/*
+	npm run build
+
 bro:
 	${BIN}/python3 -m caterva2.services.bro
 

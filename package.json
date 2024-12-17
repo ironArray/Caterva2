@@ -8,8 +8,9 @@
     "example": "examples"
   },
   "scripts": {
-    "build": "vite build && npm run minify",
+    "build": "vite build && npm run minify && npm run rename",
     "minify": "esbuild caterva2/services/static/build/main.js --minify --outfile=caterva2/services/static/build/main.min.js",
+    "rename": "bash scripts/rename.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
