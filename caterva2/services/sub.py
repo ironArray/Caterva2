@@ -1085,38 +1085,50 @@ async def upload_file(
     # Replace the root with absolute path
     root = path.parts[0]
     if root == "@personal":
-        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
+        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
     elif root == "@shared":
-        path2 = settings.shared / pathlib.Path(*path.parts[1:])
+        abspath = settings.shared / pathlib.Path(*path.parts[1:])
     elif root == "@public":
-        path2 = settings.public / pathlib.Path(*path.parts[1:])
+        abspath = settings.public / pathlib.Path(*path.parts[1:])
     else:
         raise fastapi.HTTPException(
             status_code=400,  # bad request
             detail="Only uploading to @personal or @shared or @public roots is allowed",
         )
 
-    # Read the file
+    # We may upload a new file, or replace an existing file
+    if abspath.is_dir():
+        abspath /= file.filename
+        path /= file.filename
+
+    # Check quota
+    # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
+    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+        schunk = blosc2.SChunk(data=data)
+        newsize = schunk.nbytes
+    else:
+        newsize = len(data)
+
     if settings.quota:
-        total_size = get_disk_usage() + len(data)
+        try:
+            oldsize = abspath.stat().st_size
+        except FileNotFoundError:
+            oldsize = 0
+
+        total_size = get_disk_usage() - oldsize + newsize
         if total_size > settings.quota:
             error = "Upload failed because quota limit has been exceeded."
             raise fastapi.HTTPException(status_code=400, detail=error)
 
-    if path2.is_dir():
-        path2 /= file.filename
-        path /= file.filename
-    path2.parent.mkdir(exist_ok=True, parents=True)
-
     # If regular file, compress it
-    if path2.suffix not in {".b2", ".b2frame", ".b2nd"}:
-        schunk = blosc2.SChunk(data=data)
+    abspath.parent.mkdir(exist_ok=True, parents=True)
+    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
         data = schunk.to_cframe()
-        path2 = path2.with_suffix(path2.suffix + ".b2")
+        abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
-    with open(path2, "wb") as f:
+    with open(abspath, "wb") as f:
         f.write(data)
 
     # Return the urlpath
