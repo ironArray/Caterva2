@@ -4,15 +4,11 @@
     <title>{% block title %}{% endblock %}</title>
     <link rel="icon" type="image/png" href="{{ url('static/logo-caterva2-16x16.png') }}">
 
-    {# Custom bootstrap #}
+    {# Project's assets #}
     <link href="{{ url('static/build/style.css') }}" rel="stylesheet">
     <script type="module" src="{{ url('static/build/main.min.js') }}"></script>
 
     {# <script src="{{ url('static/vendor/htmx-2.0.1.min.js') }}"></script> #}
-
-    {# Project's assets #}
-    <script src="{{ url('static/main.js') }}"></script>
-    <link href="{{ url('static/main.css') }}" rel="stylesheet">
 </head>
 
 <body class="vh-100 d-flex align-items-center">

@@ -11,13 +11,9 @@
     <script src="{{ url('static/vendor/htmx-2.0.1.min.js') }}"></script>
     <script src="{{ url('static/vendor/htmx-idiomorph-ext-0.3.0.min.js') }}"></script>
 
-    {# Custom bootstrap #}
+    {# Project's assets #}
     <link href="{{ url('static/build/style.css') }}" rel="stylesheet">
     <script type="module" src="{{ url('static/build/main.min.js') }}"></script>
-
-    {# Project's assets #}
-    <script src="{{ url('static/main.js') }}"></script>
-    <link href="{{ url('static/main.css') }}" rel="stylesheet">
 </head>
 
 <body class="vh-100">
@@ -79,7 +75,25 @@
 </div>
 
 <script>
-handleHtmxErrors();
+htmx.on('htmx:beforeSwap', function (evt) {
+    // Allow 400 responses to swap, we treat these as form validation errors
+    let detail = evt.detail;
+    let xhr = detail.xhr;
+    if (xhr.status === 400) {
+        detail.isError = false;  // Avoid error message in console
+        detail.shouldSwap = true;
+        detail.target = htmx.find("#alert-error");
+    }
+    else if (xhr.status === 413) {
+        detail.isError = false;  // Avoid error message in console
+        _showAlert(`${xhr.status} ${xhr.statusText}`);
+    }
+    else if (xhr.status === 500) {
+        detail.isError = false;  // Avoid error message in console
+        _showAlert(`${xhr.status} ${xhr.statusText}`);
+        //_showAlert(ev.detail.error, "danger");
+    }
+})
 </script>
 
 </body>
