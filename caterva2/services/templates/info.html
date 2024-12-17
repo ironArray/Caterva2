@@ -50,17 +50,8 @@
     {% endif %}
 </div>
 
-<script type="module">
-    import { bootstrap } from "{{ url('static/build/main.min.js') }}";
-
+<script>
     // If the url has a hash open the appropriate tab
-    function openTab(id) {
-        if (id) {
-            let el = document.querySelector(`${id}-tab`);
-            let tab = new bootstrap.Tab(el);
-            tab.show();
-        }
-    }
     openTab(window.location.hash);
 
     // Append hash to the url when a tab is clicked, so the url can be copied including the hash

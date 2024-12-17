@@ -129,9 +129,17 @@ function _showAlert(content) {
     container.replaceChildren(clone);
 }
 
+function openTab(id) {
+    if (id) {
+        let el = document.querySelector(`${id}-tab`);
+        let tab = new bootstrap.Tab(el);
+        tab.show();
+    }
+}
 
 window.activate = activate;
 window.clearContent = clearContent;
+window.openTab = openTab;
 window.submitForm = submitForm;
 window.submitFormAsJSON = submitFormAsJSON;
 

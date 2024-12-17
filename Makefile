@@ -14,6 +14,7 @@ install:
 assets:
 	rm caterva2/services/static/build/*
 	npm run build
+	git add caterva2/services/static/build/
 
 bro:
 	${BIN}/python3 -m caterva2.services.bro
