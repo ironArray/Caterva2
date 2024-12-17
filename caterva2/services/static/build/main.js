@@ -3255,7 +3255,7 @@ class Qt extends Y {
 }
 be(Qt);
 j(Qt);
-const gl = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const El = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   Alert: zt,
   Button: Gt,
@@ -3337,6 +3337,10 @@ async function _l(n, t, e = "result") {
   return await si(n, t, e, !0);
 }
 function ml(n) {
+  const t = document.querySelector("#alert-error"), s = document.querySelector("#alert-error-template").content.cloneNode(!0);
+  s.querySelector("#alert-error-text").textContent = n, t.replaceChildren(s);
+}
+function gl(n) {
   if (n) {
     let t = document.querySelector(`${n}-tab`);
     new st(t).show();
@@ -3344,9 +3348,10 @@ function ml(n) {
 }
 window.activate = dl;
 window.clearContent = hl;
-window.openTab = ml;
+window.openTab = gl;
+window.showAlert = ml;
 window.submitForm = pl;
 window.submitFormAsJSON = _l;
 export {
-  gl as bootstrap
+  El as bootstrap
 };

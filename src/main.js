@@ -121,7 +121,7 @@ async function submitFormAsJSON(form, successURL, resultElementID="result") {
     return await _submitForm(form, successURL, resultElementID, true);
 }
 
-function _showAlert(content) {
+function showAlert(content) {
     const container = document.querySelector("#alert-error");
     const template = document.querySelector("#alert-error-template");
     const clone = template.content.cloneNode(true);
@@ -140,6 +140,7 @@ function openTab(id) {
 window.activate = activate;
 window.clearContent = clearContent;
 window.openTab = openTab;
+window.showAlert = showAlert;
 window.submitForm = submitForm;
 window.submitFormAsJSON = submitFormAsJSON;
 

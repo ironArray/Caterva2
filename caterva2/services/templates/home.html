@@ -86,12 +86,12 @@ htmx.on('htmx:beforeSwap', function (evt) {
     }
     else if (xhr.status === 413) {
         detail.isError = false;  // Avoid error message in console
-        _showAlert(`${xhr.status} ${xhr.statusText}`);
+        showAlert(`${xhr.status} ${xhr.statusText}`);
     }
     else if (xhr.status === 500) {
         detail.isError = false;  // Avoid error message in console
-        _showAlert(`${xhr.status} ${xhr.statusText}`);
-        //_showAlert(ev.detail.error, "danger");
+        showAlert(`${xhr.status} ${xhr.statusText}`);
+        //showAlert(ev.detail.error, "danger");
     }
 })
 </script>
