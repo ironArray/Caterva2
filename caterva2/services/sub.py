@@ -1082,9 +1082,6 @@ async def upload_file(
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
-    # Read the file
-    data = await file.read()
-
     # Replace the root with absolute path
     root = path.parts[0]
     if root == "@personal":
@@ -1098,6 +1095,14 @@ async def upload_file(
             status_code=400,  # bad request
             detail="Only uploading to @personal or @shared or @public roots is allowed",
         )
+
+    # Read the file
+    data = await file.read()
+    if settings.quota:
+        total_size = get_disk_usage() + len(data)
+        if total_size > settings.quota:
+            error = "Upload failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(status_code=400, detail=error)
 
     if path2.is_dir():
         path2 /= file.filename
@@ -1906,19 +1911,16 @@ async def htmx_upload(
     else:
         raise fastapi.HTTPException(status_code=404)  # NotFound
 
-    path.mkdir(exist_ok=True, parents=True)
-
-    # Read file
-    filename = pathlib.Path(file.filename)
+    # Read the file and check quota
     data = await file.read()
-
-    # Check quota
     if settings.quota:
-        upload_size = len(data)
-        total_size = get_disk_usage() + upload_size
+        total_size = get_disk_usage() + len(data)
         if total_size > settings.quota:
             error = "Upload failed because quota limit has been exceeded."
             return htmx_error(request, error)
+
+    path.mkdir(exist_ok=True, parents=True)
+    filename = pathlib.Path(file.filename)
 
     # If a tarball or zipfile, extract the files in path
     # We also filter out hidden files and MacOSX metadata
