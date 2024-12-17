@@ -31,6 +31,8 @@ import fastapi
 import furl
 import httpx
 import markdown
+import nbconvert
+import nbformat
 import numpy as np
 import PIL.Image
 
@@ -56,6 +58,15 @@ logger = logging.getLogger("sub")
 # State
 clients = {}  # topic: <PubSubClient>
 locks = {}
+
+
+mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
+mimetypes.add_type("application/vnd.jupyter", ".ipynb")
+
+
+def guess_type(path):
+    mimetype, encoding = mimetypes.guess_type(path)
+    return mimetype
 
 
 class PubSourceDataset:
@@ -808,9 +819,12 @@ async def download_data(
     async def downloader():
         yield await get_file_content(path, user)
 
-    mimetype, encoding = mimetypes.guess_type(path)
+    mimetype = guess_type(path)
     headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
     return responses.StreamingResponse(downloader(), media_type=mimetype, headers=headers)
+
+
+html_exporter = nbconvert.HTMLExporter()
 
 
 @app.get("/api/preview/{path:path}")
@@ -820,12 +834,19 @@ async def preview(
     width: int | None = None,
     user: db.User = Depends(optional_user),
 ):
-    mimetype, encoding = mimetypes.guess_type(path)
+    mimetype = guess_type(path)
     if mimetype.startswith("image/") and width:
         img = await get_image(path, user)
 
         def downloader():
             yield from resize_image(img, width)
+
+    elif mimetype == "application/vnd.jupyter":
+        content = await get_file_content(path, user)
+        nb = nbformat.reads(content, as_version=4)
+        html, resources = html_exporter.from_notebook_node(nb)
+        return HTMLResponse(html)
+
     else:
 
         async def downloader():
@@ -1550,8 +1571,11 @@ async def htmx_path_info(
             "label": plugin.label,
         }
     else:
-        mimetype, encoding = mimetypes.guess_type(path)
-        if mimetype and (mimetype in {"application/pdf", "text/markdown"} or mimetype.startswith("image/")):
+        mimetype = guess_type(path)
+        if mimetype and (
+            mimetype in {"application/pdf", "application/vnd.jupyter", "text/markdown"}
+            or mimetype.startswith("image/")
+        ):
             display = {
                 "url": url(f"display/{path}"),
                 "label": "Display",
@@ -2079,13 +2103,16 @@ async def html_display(
     # Response
     response_class=HTMLResponse,
 ):
-    mimetype, encoding = mimetypes.guess_type(path)
-    if mimetype == "text/markdown":
-        content = await get_file_content(path, user)
-        return markdown.markdown(content.decode("utf-8"))
-    elif mimetype == "application/pdf":
+    mimetype = guess_type(path)
+    if mimetype == "application/pdf":
         data = f"{url('api/preview/')}{path}"
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
+    elif mimetype == "application/vnd.jupyter":
+        src = f"{url('api/preview/')}{path}"
+        return f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
+    elif mimetype == "text/markdown":
+        content = await get_file_content(path, user)
+        return markdown.markdown(content.decode("utf-8"))
     elif mimetype.startswith("image/"):
         src = f"{url('api/preview/')}{path}"
         img = await get_image(path, user)
