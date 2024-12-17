@@ -324,6 +324,34 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     )
 
 
+def resize(path, shape, urlbase=None, auth_cookie=None):
+    """
+    Resizes a dataset to the specified shape.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the dataset to resize.
+    shape : tuple
+        New shape of the dataset.
+    urlbase : str, optional
+        Base URL to query. Defaults to
+        :py:obj:`caterva2.sub_urlbase_default`.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
+
+    Returns
+    -------
+    str
+        An explanatory message about the operation's success or failure.
+    """
+    urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
+    return api_utils.post(
+            f"{urlbase}/api/resize/{path}", {"shape": shape}, auth_cookie=auth_cookie
+    )
+
+
 def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     """
     Uploads a local dataset to a remote repository.
@@ -1033,6 +1061,61 @@ class File:
         slice_ = api_utils.slice_to_string(slice_)
         return api_utils.fetch_data(
             self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
+        )
+
+    def __setitem__(self, slice_, data):
+        """
+        Sets a slice of the dataset.
+
+        Parameters
+        ----------
+        slice_ : int, slice, tuple of ints and slices, or None
+            Specifies the slice to set.
+        data : numpy.ndarray
+            The data to set.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds[1] = np.array(1)
+        >>> ds[1]
+        array(1)
+        >>> ds[:10] = np.arange(10)
+        >>> ds[:10]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        self.set(slice_, data)
+
+    def set(self, slice_, data):
+        """
+        Sets a slice of the dataset.
+
+        Parameters
+        ----------
+        slice_ : int, slice, tuple of ints and slices, or None
+            Specifies the slice to set.
+        data : numpy.ndarray
+            The data to set.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.set(1, np.array(1))
+        >>> ds.fetch(1)
+        array(1)
+        >>> ds.set(slice(0, 10), np.arange(10))
+        >>> ds.fetch(slice(0, 10))
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        slice_ = api_utils.slice_to_string(slice_)
+        api_utils.set_data(
+            self.path, data, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
         )
 
     def download(self, localpath=None):

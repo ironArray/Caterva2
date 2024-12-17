@@ -1058,6 +1058,67 @@ async def copy(
     return str(destpath)
 
 
+@app.post("/api/set/{path:path}")
+async def set_data(
+    path: pathlib.Path,
+    data: bytes,
+    user: db.User = Depends(current_active_user),
+):
+
+
+@app.post("/api/resize/{path:path}")
+async def resize(
+    path: pathlib.Path,
+    shape: list | tuple,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Resize a dataset.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to the dataset.
+    shape : list or tuple
+        The new shape of the dataset.
+    user : db.User
+        The user making the request.
+
+    Returns
+    -------
+    str
+        The path of the resized dataset.
+
+    Raises
+    ------
+    HTTPException
+        If the user is not authenticated or quota is exceeded.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Resizing files requires authentication")
+
+    # Get the dataset
+    abspath, _ = abspath_and_dataprep(path, user=user)
+    container = open_b2(abspath, path)
+
+    # Resize the dataset
+    if isinstance(container, blosc2.LazyExpr):
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail="Resizing lazy expressions is not supported",
+        )
+    elif isinstance(container, blosc2.SChunk):
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail="Resizing SChunks is not supported",
+        )
+
+    # Resize the dataset
+    container.resize(shape)
+
+    return str(path)
+
+
 @app.post("/api/upload/{path:path}")
 async def upload_file(
     path: pathlib.Path,
