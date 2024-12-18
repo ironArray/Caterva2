@@ -1059,7 +1059,7 @@ async def copy(
 
 
 @app.post("/api/store/{path:path}")
-async def set_data(
+async def store(
     path: pathlib.Path,
     request: Request,
     slice_: str | None = None,
@@ -1097,7 +1097,7 @@ async def set_data(
             status_code=400,  # bad request
             detail="Storing in lazy expressions is not supported",
         )
-    elif isinstance(container, blosc2.SChunk):
+    if isinstance(container, blosc2.SChunk):
         raise fastapi.HTTPException(
             status_code=400,  # bad request
             detail="Storing in SChunks is not supported",
@@ -1115,7 +1115,7 @@ async def set_data(
 @app.post("/api/resize/{path:path}")
 async def resize(
     path: pathlib.Path,
-    shape: list | tuple,
+    request: models.ResizePayload,
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -1125,8 +1125,8 @@ async def resize(
     ----------
     path : pathlib.Path
         The path to the dataset.
-    shape : list or tuple
-        The new shape of the dataset.
+    request : ResizePayload
+        The request object.
     user : db.User
         The user making the request.
 
@@ -1141,26 +1141,31 @@ async def resize(
         If the user is not authenticated or quota is exceeded.
     """
     if not user:
-        raise srv_utils.raise_unauthorized("Resizing files requires authentication")
+        raise srv_utils.raise_unauthorized("Resizing requires authentication")
 
     # Get the dataset
     abspath, _ = abspath_and_dataprep(path, user=user)
     container = open_b2(abspath, path)
 
-    # Resize the dataset
     if isinstance(container, blosc2.LazyExpr):
         raise fastapi.HTTPException(
             status_code=400,  # bad request
             detail="Resizing lazy expressions is not supported",
         )
-    elif isinstance(container, blosc2.SChunk):
+    if isinstance(container, blosc2.SChunk):
         raise fastapi.HTTPException(
             status_code=400,  # bad request
-            detail="Resizing SChunks is not supported",
+            detail="Resizing SChunks is not supported yet",
         )
 
-    # Resize the dataset
-    container.resize(shape)
+    shape = request.shape
+    try:
+        container.resize(shape)
+    except ValueError as exc:
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail=f"Error during resize: {exc}",
+        ) from exc
 
     return str(path)
 

@@ -72,6 +72,10 @@ class MoveCopyPayload(pydantic.BaseModel):
     dst: str
 
 
+class ResizePayload(pydantic.BaseModel):
+    shape: list[int]
+
+
 class AddUserPayload(pydantic.BaseModel):
     username: str
     password: str | None

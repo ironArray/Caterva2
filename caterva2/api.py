@@ -11,8 +11,8 @@ This module provides a Python API to Caterva2.
 """
 
 import functools
-import pathlib
 from contextlib import contextmanager
+from pathlib import Path
 
 from caterva2 import api_utils, utils
 
@@ -39,13 +39,13 @@ _subscriber_data = {
 def _format_paths(urlbase, path=None):
     if urlbase is None:
         urlbase = _subscriber_data["urlbase"]
-    if isinstance(urlbase, pathlib.Path):
+    if isinstance(urlbase, Path):
         urlbase = urlbase.as_posix()
     if urlbase.endswith("/"):
         urlbase = urlbase[:-1]
-        urlbase = pathlib.Path(urlbase)
+        urlbase = Path(urlbase)
     if path is not None:
-        p = path.as_posix() if isinstance(path, pathlib.Path) else path
+        p = path.as_posix() if isinstance(path, Path) else path
         if p.startswith("/"):
             raise ValueError("path cannot start with a slash")
     return urlbase, path
@@ -230,6 +230,47 @@ def fetch(path, urlbase=None, slice_=None, auth_cookie=None):
     return api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=auth_cookie)
 
 
+def store(path, data, slice_=None, urlbase=None, auth_cookie=None):
+    """
+    Stores a ndarray in an existing dataset in a remote repository.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path to store the dataset.
+    data : numpy.ndarray
+        Numpy array to store.
+    slice_ : slice, optional
+        Slice of the dataset to store. Defaults to `None`.
+    urlbase : str, optional
+        Base URL to query. Defaults to
+        :py:obj:`caterva2.sub_urlbase_default`.
+    auth_cookie : str, optional
+        HTTP cookie for authorization. Must be provided unless specified in
+        a :py_obj:`caterva2.c2context`.
+
+    Returns
+    -------
+    str
+        Path of the stored dataset on the server.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> urlbase = 'https://demo.caterva2.net'
+    >>> cat2.subscribe('example', urlbase)
+    'Ok'
+    >>> path = 'example/ds-2d-fields.b2nd'
+    >>> data = np.random.rand(100, 200)
+    >>> stored_path = cat2.store(path, data, urlbase)
+    >>> stored_path
+    'example/ds-2d-fields.b2nd'
+    """
+    slice_ = api_utils.slice_to_string(slice_)
+    api_utils.store_data(path, data, urlbase, {"slice_": slice_}, auth_cookie=auth_cookie)
+
+
 def get_chunk(path, nchunk, urlbase=None, auth_cookie=None):
     """
     Retrieves a specified compressed chunk from a dataset.
@@ -282,9 +323,9 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
 
     Parameters
     ----------
-    dataset : Path
+    dataset : str | Path
         Path to the dataset.
-    localpath : Path, optional
+    localpath : str | Path, optional
         Local path to save the downloaded dataset. Defaults to the current
         working directory if not specified.
     urlbase : str, optional
@@ -306,12 +347,12 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     >>> path = 'example/ds-2d-fields.b2nd'
     >>> cat2.subscribe('example', urlbase)
     'Ok'
-    >>> cat2.download(pathlib.Path(path), urlbase=urlbase)
+    >>> cat2.download(path, urlbase=urlbase)
     PosixPath('example/ds-2d-fields.b2nd')
     """
     urlbase, dataset = _format_paths(urlbase, dataset)
     url = api_utils.get_download_url(dataset, urlbase)
-    localpath = pathlib.Path(localpath) if localpath else None
+    localpath = Path(localpath) if localpath else None
     if localpath is None:
         path = "." / dataset
     elif localpath.is_dir():
@@ -321,34 +362,6 @@ def download(dataset, localpath=None, urlbase=None, auth_cookie=None):
     auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
     return api_utils.download_url(
         url, str(path), try_unpack=api_utils.blosc2_is_here, auth_cookie=auth_cookie
-    )
-
-
-def resize(path, shape, urlbase=None, auth_cookie=None):
-    """
-    Resizes a dataset to the specified shape.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the dataset to resize.
-    shape : tuple
-        New shape of the dataset.
-    urlbase : str, optional
-        Base URL to query. Defaults to
-        :py:obj:`caterva2.sub_urlbase_default`.
-    auth_cookie : str, optional
-        HTTP cookie for authorization.
-
-    Returns
-    -------
-    str
-        An explanatory message about the operation's success or failure.
-    """
-    urlbase, path = _format_paths(urlbase, path)
-    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
-    return api_utils.post(
-            f"{urlbase}/api/resize/{path}", {"shape": shape}, auth_cookie=auth_cookie
     )
 
 
@@ -362,9 +375,9 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
 
     Parameters
     ----------
-    localpath : Path
+    localpath : str | Path
         Path to the local dataset.
-    dataset : Path
+    dataset : str | Path
         Remote path to upload the dataset to.
     urlbase : str, optional
         Base URL to query. Default to
@@ -412,7 +425,7 @@ def remove(path, urlbase=None, auth_cookie=None):
 
     Parameters
     ----------
-    path : Path
+    path : str | Path
         Path of the dataset or directory to remove.
     urlbase : str, optional
         Base URL to query. Defaults to
@@ -444,15 +457,41 @@ def remove(path, urlbase=None, auth_cookie=None):
     return api_utils.post(f"{urlbase}/api/remove/{path}", auth_cookie=auth_cookie)
 
 
+def resize(path, shape, urlbase=None, auth_cookie=None):
+    """
+    Resizes a dataset to the specified shape.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path to the dataset to resize.
+    shape : list or tuple
+        New shape of the dataset.
+    urlbase : str, optional
+        Base URL to query. Defaults to
+        :py:obj:`caterva2.sub_urlbase_default`.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
+
+    Returns
+    -------
+    str
+        An explanatory message about the operation's success or failure.
+    """
+    urlbase, path = _format_paths(urlbase, path)
+    auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
+    return api_utils.post(f"{urlbase}/api/resize/{path}", {"shape": shape}, auth_cookie=auth_cookie)
+
+
 def move(src, dst, urlbase=None, auth_cookie=None):
     """
     Moves a dataset or directory to a new location.
 
     Parameters
     ----------
-    src : Path
+    src : str | Path
         Source path of the dataset or directory.
-    dst : Path
+    dst : str | Path
         The destination path for the dataset or directory.
     urlbase : str, optional
         Base URL to query. Defaults to
@@ -489,7 +528,7 @@ def move(src, dst, urlbase=None, auth_cookie=None):
         {"src": str(src), "dst": str(dst)},
         auth_cookie=auth_cookie,
     )
-    return pathlib.Path(result)
+    return Path(result)
 
 
 def copy(src, dst, urlbase=None, auth_cookie=None):
@@ -498,9 +537,9 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
 
     Parameters
     ----------
-    src : Path
+    src : str | Path
         Source path of the dataset or directory.
-    dst : Path
+    dst : str | Path
         Destination path for the dataset or directory.
     urlbase : str, optional
         Base URL to query. Default to
@@ -538,7 +577,7 @@ def copy(src, dst, urlbase=None, auth_cookie=None):
     result = api_utils.post(
         f"{urlbase}/api/copy/", {"src": str(src), "dst": str(dst)}, auth_cookie=auth_cookie
     )
-    return pathlib.Path(result)
+    return Path(result)
 
 
 def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
@@ -588,7 +627,7 @@ def lazyexpr(name, expression, operands, urlbase=None, auth_cookie=None):
     operands = {k: str(v) for k, v in operands.items()}
     expr = {"name": name, "expression": expression, "operands": operands}
     dataset = api_utils.post(f"{urlbase}/api/lazyexpr/", expr, auth_cookie=auth_cookie)
-    return pathlib.Path(dataset)
+    return Path(dataset)
 
 
 def adduser(newuser, password=None, superuser=False, urlbase=None, auth_cookie=None):
@@ -787,7 +826,7 @@ class Root:
 
         Returns
         -------
-        File
+        File or Dataset
             An instance of :class:`File` or :class:`Dataset`.
 
         Examples
@@ -797,7 +836,7 @@ class Root:
         >>> root['ds-1d.b2nd']
         <Dataset: example/ds-1d.b2nd>
         """
-        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        path = path.as_posix() if isinstance(path, Path) else path
         if path.endswith((".b2nd", ".b2frame")):
             return Dataset(path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
         else:
@@ -824,7 +863,7 @@ class Root:
         >>> 'ds-1d.b2nd' in root
         True
         """
-        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        path = path.as_posix() if isinstance(path, Path) else path
         return path in self.file_list
 
     def __iter__(self):
@@ -879,9 +918,9 @@ class Root:
 
         Parameters
         ----------
-        localpath : Path
+        localpath : str or Path
             Path of the local dataset to upload.
-        dataset : Path, optional
+        dataset : str or Path, optional
             Remote path where the dataset will be uploaded.  If not provided, the
             dataset will be uploaded to the top level of this root.
 
@@ -905,11 +944,11 @@ class Root:
         """
         if dataset is None:
             # localpath cannot be absolute in this case (too much prone to errors)
-            if pathlib.Path(localpath).is_absolute():
+            if Path(localpath).is_absolute():
                 raise ValueError("When `dataset` is not specified, `localpath` must be a relative path")
-            dataset = pathlib.Path(self.name) / localpath
+            dataset = Path(self.name) / localpath
         else:
-            dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
+            dataset = Path(self.name) / Path(dataset)
         uploadpath = upload(localpath, dataset, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
@@ -959,7 +998,7 @@ class File:
         self.root = root
         self.name = name
         self.urlbase = urlbase
-        self.path = pathlib.Path(f"{self.root}/{self.name}")
+        self.path = Path(f"{self.root}/{self.name}")
         self.auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
         self.meta = api_utils.get(f"{urlbase}/api/info/{self.path}", auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
@@ -1063,71 +1102,13 @@ class File:
             self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
         )
 
-    def __setitem__(self, slice_, data):
-        """
-        Sets a slice of the dataset.
-
-        Parameters
-        ----------
-        slice_ : int, slice, tuple of ints and slices, or None
-            Specifies the slice to set.
-        data : numpy.ndarray
-            The data to set.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds[1] = np.array(1)
-        >>> ds[1]
-        array(1)
-        >>> ds[:10] = np.arange(10)
-        >>> ds[:10]
-        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        """
-        import numpy as np
-        if not isinstance(data, np.ndarray):
-            data = np.array(data)
-        self.store(slice_, data)
-
-    def store(self, slice_, data):
-        """
-        Store a slice of the dataset.
-
-        Parameters
-        ----------
-        slice_ : int, slice, tuple of ints and slices, or None
-            Specifies the slice to set.
-        data : numpy.ndarray
-            The data to set.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds.store(1, np.array(1))
-        >>> ds.fetch(1)
-        array(1)
-        >>> ds.store(slice(0, 10), np.arange(10))
-        >>> ds.fetch(slice(0, 10))
-        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        """
-        slice_ = api_utils.slice_to_string(slice_)
-        api_utils.store_data(
-            self.path, data, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
-        )
-
     def download(self, localpath=None):
         """
         Downloads the file to storage.
 
         Parameters
         ----------
-        localpath : Path, optional
+        localpath : str or Path, optional
             The destination path for the downloaded file.  If not specified, the file will
             be downloaded to the current working directory.
 
@@ -1159,7 +1140,7 @@ class File:
 
         Parameters
         ----------
-        dst : Path
+        dst : str or Path
             The destination path for the file.
 
         Returns
@@ -1191,7 +1172,7 @@ class File:
 
         Parameters
         ----------
-        dst : Path
+        dst : str or Path
             The destination path for the file.
 
         Returns
@@ -1283,6 +1264,83 @@ class Dataset(File):
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
         return f"<Dataset: {self.path}>"
+
+    def __setitem__(self, slice_, data):
+        """
+        Sets a slice of the dataset.
+
+        Parameters
+        ----------
+        slice_ : int, slice, tuple of ints and slices, or None
+            Specifies the slice to set.
+        data : numpy.ndarray
+            The data to set.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds[1] = np.array(1)
+        >>> ds[1]
+        array(1)
+        >>> ds[:10] = np.arange(10)
+        >>> ds[:10]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        import numpy as np
+
+        if not isinstance(data, np.ndarray):
+            data = np.array(data)
+        self.store(data, slice_)
+
+    def store(self, data, slice_=None):
+        """
+        Store a slice of the dataset.
+
+        Parameters
+        ----------
+        slice_ : int, slice, tuple of ints and slices, or None
+            Specifies the slice to set.
+        data : numpy.ndarray
+            The data to set.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.store(1, np.array(1))
+        >>> ds.fetch(1)
+        array(1)
+        >>> ds.store(slice(0, 10), np.arange(10))
+        >>> ds.fetch(slice(0, 10))
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        store(self.path, data, slice_, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
+
+    def resize(self, shape: list | tuple):
+        """
+        Resizes the dataset to the specified shape.
+
+        Parameters
+        ----------
+        shape : list or tuple
+            The new shape of the dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.resize([10])
+        >>> ds.shape
+        (10,)
+        """
+        resize(self.path, shape, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
 
 
 @contextmanager

@@ -52,7 +52,7 @@ def parse_slice(string):
         if ":" not in segment:
             segment = int(segment)
         else:
-            segment = slice(*map(lambda x: int(x.strip()) if x.strip() else None, segment.split(":")))
+            segment = slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
         obj.append(segment)
 
     return tuple(obj) if len(obj) > 1 else obj[0]
@@ -93,8 +93,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
         user_auth = user_auth._asdict()
     resp = client.post(url, data=user_auth)
     resp.raise_for_status()
-    auth_cookie = "=".join(list(resp.cookies.items())[0])
-    return auth_cookie
+    return "=".join(list(resp.cookies.items())[0])
 
 
 def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
@@ -111,13 +110,14 @@ def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
 
 
 def store_data(path, data, urlbase, params, auth_cookie=None, server=None):
-    # Only accept NDArrays
+    # Serialize the data
     if not isinstance(data, blosc2.NDArray):
         data = blosc2.asarray(data)
+    data = data.to_cframe()
 
     client, url = get_client_and_url(server, f"{urlbase}/api/store/{path}")
     headers = {"Cookie": auth_cookie} if auth_cookie else {}
-    response = client.post(url, params=params, headers=headers, data=data.to_cframe())
+    response = client.post(url, params=params, headers=headers, data=data)
     response.raise_for_status()
     return response.json()
 
