@@ -1087,11 +1087,14 @@ class File:
         >>> ds[:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        self.set(slice_, data)
+        import numpy as np
+        if not isinstance(data, np.ndarray):
+            data = np.array(data)
+        self.store(slice_, data)
 
-    def set(self, slice_, data):
+    def store(self, slice_, data):
         """
-        Sets a slice of the dataset.
+        Store a slice of the dataset.
 
         Parameters
         ----------
@@ -1106,15 +1109,15 @@ class File:
         >>> import numpy as np
         >>> root = cat2.Root('example', 'https://demo.caterva2.net')
         >>> ds = root['ds-1d.b2nd']
-        >>> ds.set(1, np.array(1))
+        >>> ds.store(1, np.array(1))
         >>> ds.fetch(1)
         array(1)
-        >>> ds.set(slice(0, 10), np.arange(10))
+        >>> ds.store(slice(0, 10), np.arange(10))
         >>> ds.fetch(slice(0, 10))
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
         slice_ = api_utils.slice_to_string(slice_)
-        api_utils.set_data(
+        api_utils.store_data(
             self.path, data, self.urlbase, {"slice_": slice_}, auth_cookie=self.auth_cookie
         )
 

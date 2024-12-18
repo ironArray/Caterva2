@@ -110,16 +110,14 @@ def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
     return data
 
 
-def set_data(path, data, urlbase, params, auth_cookie=None, server=None):
+def store_data(path, data, urlbase, params, auth_cookie=None, server=None):
     # Only accept NDArrays
     if not isinstance(data, blosc2.NDArray):
         data = blosc2.asarray(data)
 
-    client, url = get_client_and_url(server, f"{urlbase}/api/set/{path}")
+    client, url = get_client_and_url(server, f"{urlbase}/api/store/{path}")
     headers = {"Cookie": auth_cookie} if auth_cookie else {}
-    # Check that 
-    headers["Content-Type"] = "application/octet-stream"
-    response = client.post(url, data=data.to_cframe(), headers=headers, params=params)
+    response = client.post(url, params=params, headers=headers, data=data.to_cframe())
     response.raise_for_status()
     return response.json()
 

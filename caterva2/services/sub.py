@@ -1058,12 +1058,58 @@ async def copy(
     return str(destpath)
 
 
-@app.post("/api/set/{path:path}")
+@app.post("/api/store/{path:path}")
 async def set_data(
     path: pathlib.Path,
-    data: bytes,
+    request: Request,
+    slice_: str | None = None,
     user: db.User = Depends(current_active_user),
 ):
+    """
+    Set the data of a dataset.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to the dataset.
+    request : Request
+        The request object.
+    slice_ : str
+        The slice to set.
+    user : db.User
+        The user making the request.
+
+    Returns
+    -------
+    str
+        The path of the dataset.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Storing requires authentication")
+
+    slice_ = api_utils.parse_slice(slice_)
+    abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
+    await dataprep()
+    container = open_b2(abspath, path)
+
+    if isinstance(container, blosc2.LazyExpr):
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail="Storing in lazy expressions is not supported",
+        )
+    elif isinstance(container, blosc2.SChunk):
+        raise fastapi.HTTPException(
+            status_code=400,  # bad request
+            detail="Storing in SChunks is not supported",
+        )
+
+    # Deserialize data
+    data = await request.body()
+    data = blosc2.ndarray_from_cframe(data)
+    # Store the data
+    container[slice_] = data
+
+    return str(path)
 
 
 @app.post("/api/resize/{path:path}")
