@@ -501,7 +501,6 @@ def url(path: str) -> str:
     return f"{settings.urlbase}/{path}"
 
 
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["filesizeformat"] = custom_filesizeformat
 templates.env.globals["url"] = url
@@ -1426,6 +1425,21 @@ async def htmx_root_list(
     return templates.TemplateResponse(request, "root_list.html", context)
 
 
+def _get_rootdir(user, root):
+    if user and root == "@personal":
+        return settings.personal / str(user.id)
+    elif user and root == "@shared":
+        return settings.shared
+    elif root == "@public":
+        return settings.public
+    else:
+        if not get_root(root).subscribed:
+            follow(root)
+        return settings.cache / root
+
+    return None
+
+
 @app.get("/htmx/path-list/", response_class=HTMLResponse)
 async def htmx_path_list(
     request: Request,
@@ -1450,20 +1464,6 @@ async def htmx_path_list(
 
     names = get_names()
 
-    def get_rootdir(root):
-        if user and root == "@personal":
-            rootdir = settings.personal / str(user.id)
-        elif user and root == "@shared":
-            rootdir = settings.shared
-        elif root == "@public":
-            rootdir = settings.public
-        else:
-            if not get_root(root).subscribed:
-                follow(root)
-            rootdir = settings.cache / root
-
-        return rootdir
-
     datasets = []
     query = {"roots": roots, "search": search}
 
@@ -1479,7 +1479,7 @@ async def htmx_path_list(
         )
 
     for root in roots:
-        rootdir = get_rootdir(root)
+        rootdir = _get_rootdir(user, root)
         for abspath, relpath in utils.walk_files(rootdir):
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
@@ -1497,7 +1497,7 @@ async def htmx_path_list(
                 break
         else:
             root = segments[1]
-            rootdir = get_rootdir(root)
+            rootdir = _get_rootdir(user, root)
             relpath = pathlib.Path(*segments[2:])
             abspath = rootdir / relpath
             if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
@@ -2112,7 +2112,10 @@ async def html_display(
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
     elif mimetype == "application/vnd.jupyter":
         src = f"{url('api/preview/')}{path}"
-        return f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
+        return (
+            f'<a href="/static/jupyterlite/notebooks/index.html?path={path}" target="_blank">Run</a><br>'
+            f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
+        )
     elif mimetype == "text/markdown":
         content = await get_file_content(path, user)
         return markdown.markdown(content.decode("utf-8"))
@@ -2136,6 +2139,97 @@ async def html_display(
         return templates.TemplateResponse(request, "display_image.html", context=context)
 
     return "Format not supported"
+
+
+#
+# For Jupyterlite
+#
+
+
+@app.get("/static/jupyterlite/api/contents/{path:path}")
+def jupyterlite_contents(
+    request: Request,
+    # Path parameters
+    path: pathlib.Path,
+    user: db.User = Depends(optional_user),
+):
+    parts = path.parts
+    if parts[-1] != "all.json":
+        raise fastapi.HTTPException(status_code=404)  # NotFound
+
+    content = []
+
+    def directory(path):
+        return {
+            "name": pathlib.Path(path).name,
+            "path": path,
+            "size": None,
+            "type": "directory",
+        }
+
+    parts = parts[:-1]
+    if len(parts) == 0:
+        # TODO pub/sub roots: settings.database.roots.values()
+        if user:
+            content.append(directory("@personal"))
+            content.append(directory("@shared"))
+
+        content.append(directory("@public"))
+    else:
+        root = parts[0]
+        rootdir = _get_rootdir(user, root)
+        if rootdir is None:
+            raise fastapi.HTTPException(status_code=404)  # NotFound
+
+        for abspath, relpath in utils.iterdir(rootdir):
+            if abspath.is_file():
+                if relpath.suffix == ".b2":
+                    relpath = relpath.with_suffix("")
+
+                if relpath.suffix == ".ipynb":
+                    type = "notebook"
+                else:
+                    type = "file"  # XXX Is this the correct type?
+
+                stat = abspath.stat()
+                content.append(
+                    {
+                        "created": utils.epoch_to_iso(stat.st_ctime),
+                        "last_modified": utils.epoch_to_iso(stat.st_mtime),
+                        "name": relpath.name,
+                        "path": relpath,
+                        "size": stat.st_size,  # XXX Return the uncompressed size?
+                        "type": type,
+                    }
+                )
+            else:
+                content.append(directory(relpath))
+
+    return {
+        "content": content,
+    }
+
+
+@app.get("/static/jupyterlite/files/{path:path}")
+def jupyterlite_files(
+    request: Request,
+    # Path parameters
+    path: pathlib.Path,
+    user: db.User = Depends(optional_user),
+):
+    async def downloader():
+        yield await get_file_content(path, user)
+
+    mimetype = guess_type(path)
+    # mimetype = 'application/json'
+    return responses.StreamingResponse(downloader(), media_type=mimetype)
+
+
+#
+# Static
+#
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 
 #
