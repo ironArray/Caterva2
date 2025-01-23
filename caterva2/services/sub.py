@@ -1426,10 +1426,12 @@ async def htmx_root_list(
 
 
 def _get_rootdir(user, root):
-    if user and root == "@personal":
-        return settings.personal / str(user.id)
-    elif user and root == "@shared":
-        return settings.shared
+    if root == "@personal":
+        if user:
+            return settings.personal / str(user.id)
+    elif root == "@shared":
+        if user:
+            return settings.shared
     elif root == "@public":
         return settings.public
     else:
@@ -2159,55 +2161,79 @@ def jupyterlite_contents(
 
     content = []
 
-    def directory(path):
+    def directory(abspath, relpath):
+        stat = abspath.stat()
         return {
-            "name": pathlib.Path(path).name,
-            "path": path,
+            "created": utils.epoch_to_iso(stat.st_ctime),
+            "format": "json",
+            "hash": None,
+            "hash_algorithm": None,
+            "last_modified": utils.epoch_to_iso(stat.st_mtime),
+            "mimetype": None,
+            "name": pathlib.Path(relpath).name,
+            "path": relpath,
             "size": None,
             "type": "directory",
+            "writable": True,
         }
 
     parts = parts[:-1]
     if len(parts) == 0:
-        # TODO pub/sub roots: settings.database.roots.values()
-        if user:
-            content.append(directory("@personal"))
-            content.append(directory("@shared"))
+        rootdir = _get_rootdir(user, "@personal")
+        if rootdir is not None:
+            content.append(directory(rootdir, "@personal"))
 
-        content.append(directory("@public"))
+        rootdir = _get_rootdir(user, "@shared")
+        if rootdir is not None:
+            content.append(directory(rootdir, "@shared"))
+
+        rootdir = _get_rootdir(user, "@public")
+        if rootdir is not None:
+            content.append(directory(rootdir, "@public"))
+
+        # TODO pub/sub roots: settings.database.roots.values()
+        response = directory(rootdir.parent, "")
     else:
         root = parts[0]
         rootdir = _get_rootdir(user, root)
         if rootdir is None:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
+        response = directory(rootdir, root)
         for abspath, relpath in utils.iterdir(rootdir):
             if abspath.is_file():
                 if relpath.suffix == ".b2":
                     relpath = relpath.with_suffix("")
 
                 if relpath.suffix == ".ipynb":
-                    type = "notebook"
+                    content_type = "notebook"
+                    writable = True
                 else:
-                    type = "file"  # XXX Is this the correct type?
+                    content_type = "file"
+                    writable = False
 
                 stat = abspath.stat()
                 content.append(
                     {
+                        "content": None,
                         "created": utils.epoch_to_iso(stat.st_ctime),
+                        "format": None,
+                        "hash": None,
+                        "hash_algorithm": None,
                         "last_modified": utils.epoch_to_iso(stat.st_mtime),
+                        "mimetype": None,
                         "name": relpath.name,
-                        "path": relpath,
+                        "path": f"{root}/{relpath}",
                         "size": stat.st_size,  # XXX Return the uncompressed size?
-                        "type": type,
+                        "type": content_type,
+                        "writable": writable,
                     }
                 )
             else:
-                content.append(directory(relpath))
+                content.append(directory(relpath))  # FIXME
 
-    return {
-        "content": content,
-    }
+    response["content"] = content
+    return response
 
 
 @app.get("/static/jupyterlite/files/{path:path}")
@@ -2220,9 +2246,18 @@ def jupyterlite_files(
     async def downloader():
         yield await get_file_content(path, user)
 
-    mimetype = guess_type(path)
-    # mimetype = 'application/json'
+    # mimetype = guess_type(path)
+    mimetype = "application/json"
     return responses.StreamingResponse(downloader(), media_type=mimetype)
+
+
+@app.get("/service-worker.js")
+def jupyterlite_worker(
+    # Query parameters
+    enableCache: bool | None = None,
+):
+    abspath = BASE_DIR / "static/jupyterlite/service-worker.js"
+    return FileResponse(abspath, filename=abspath.name, media_type="application/javascript")
 
 
 #

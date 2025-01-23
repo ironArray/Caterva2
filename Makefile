@@ -10,6 +10,7 @@ install:
 	${BIN}/pip install -e .[services,hdf5,plugins,blosc2-plugins]
 	${BIN}/pip install -e .[clients]
 	${BIN}/pip install -e .[tests]
+	${BIN}/pip install pre-commit
 
 assets:
 	rm caterva2/services/static/build/*
@@ -30,3 +31,8 @@ pub-gris:
 
 sub:
 	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub
+
+lite:
+	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
+	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
+	cp 6941.cc0d6a3.js ./caterva2/services/static/jupyterlite/build/

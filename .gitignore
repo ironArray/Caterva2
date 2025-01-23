@@ -9,3 +9,7 @@
 
 .*.swp
 __pycache__
+
+# jupyterlite
+/.jupyterlite.doit.db
+/caterva2/services/static/jupyterlite/

@@ -6,6 +6,7 @@ Install:
 Generate static files:
 
     cd caterva2/services/static
+    rm .jupyterlite.doit.db jupyterlite -rf
     jupyter lite build --output-dir jupyterlite
 
 Usage:
