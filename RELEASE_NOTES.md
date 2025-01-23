@@ -1,6 +1,44 @@
 # Release notes
 
-#XXX version-specific blurb XXX#
+## Changes from 2024.07.01 to 2025.01.24
+
+### Web client
+* Support for user registration and login.
+* New list/remove/move/copy commands in Prompt box.
+* User management commands (adduser/deluser/listusers) added to the Prompt box. Only superusers can use these commands.
+* Display file size in list of datasets.
+* Much improved display of dataset information.
+* Quota information displayed in top bar.
+* Support for uploading tar (tar.gz and .tgz) and zip files. The files are extracted in the server automatically.
+* Show 500 kind of errors in a more user-friendly way.
+* Tables (arrays with structured dtypes) can be sorted by specified fields.  Also, the fields can be selected to be hidden or shown.
+* Tables can be filtered by specified fields.
+* Hash CSS/JS files to avoid browser cache issues.
+* Jupyter notebooks can be uploaded and previewed in the server. We are working on a way to run them too; stay tuned.
+* PDF files can be displayed now.
+* Support for displaying image files.
+* When visualizing an image, resize it to fit the window.
+
+* TODO: Add better docs and video tutorials for the web client.
+
+### Client API
+* New upload/remove/move/copy commands in the subscriber.
+* New adduser/deluser/listusers APIs.
+* New c2context context manager to handle the connection to the server.
+* Support for new lazy expressions in Python-Blosc2 3.0 (with support for saving reductions).
+
+### Subscriber improvements
+* Blosc2 Proxy class adoption. That allows the subscriber to fetch data from a publisher in chunks that are needed, instead of the whole dataset at once. This is useful for large datasets, where the subscriber may not have enough memory to hold the whole dataset.
+* New @personal and @shared areas in the server, where users can create new datasets and upload files accessible to them and to a group of users, respectively.
+* New @public area in the server, where users can publish datasets that are accessible to everyone.
+* Allow for the subscriber to run standalone, without a publisher.
+* New quota configuration in the server, to limit the amount of data that can be stored.
+* Support for Unix Domain Sockets.
+
+### Other improvements and fixes
+* Minimal version is Python 3.11 now.
+* Update to run with latest Python-Blosc2 3.0 release.
+* Fix httpx for being able to use Caterva2 clients inside Pyodide.
 
 ## Changes from 2024.06.27 to 2024.07.01
 
