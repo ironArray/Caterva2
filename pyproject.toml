@@ -48,6 +48,7 @@ base-services = [
     "fastapi_websocket_pubsub",
     "pydantic>=2",
     "safer",
+    "urllib3",  # Needed by pyodide
     "uvicorn",
     "watchfiles",
 ]

@@ -6,12 +6,15 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import json
 import os
 import pathlib
 import re
+import sys
 
 # Requirements
 import httpx
+import urllib3
 
 # Caterva2
 from caterva2 import utils
@@ -52,7 +55,7 @@ def parse_slice(string):
         if ":" not in segment:
             segment = int(segment)
         else:
-            segment = slice(*map(lambda x: int(x.strip()) if x.strip() else None, segment.split(":")))
+            segment = slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
         obj.append(segment)
 
     return tuple(obj) if len(obj) > 1 else obj[0]
@@ -93,8 +96,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
         user_auth = user_auth._asdict()
     resp = client.post(url, data=user_auth)
     resp.raise_for_status()
-    auth_cookie = "=".join(list(resp.cookies.items())[0])
-    return auth_cookie
+    return "=".join(list(resp.cookies.items())[0])
 
 
 def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
@@ -170,6 +172,21 @@ def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None
 #
 # HTTP client helpers
 #
+
+
+# https://github.com/encode/httpx/discussions/2994
+class URLLib3Transport(httpx.BaseTransport):
+    def __init__(self):
+        self.pool = urllib3.PoolManager()
+
+    def handle_request(self, request: httpx.Request):
+        urllib3_response = self.pool.request("GET", str(request.url))  # Convert httpx.URL to string
+        content = json.loads(urllib3_response.data.decode("utf-8"))  # Decode the data and load as JSON
+        stream = httpx.ByteStream(json.dumps(content).encode("utf-8"))  # Convert back to JSON and encode
+        headers = [(b"content-type", b"application/json")]
+        return httpx.Response(200, headers=headers, stream=stream)
+
+
 def get_client_and_url(server, url, return_async_client=False):
     if return_async_client:
         client_class = httpx.AsyncClient
@@ -178,21 +195,23 @@ def get_client_and_url(server, url, return_async_client=False):
         client_class = httpx.Client
         transport_class = httpx.HTTPTransport
 
-    if server is None:
-        client = client_class()
-    elif server:
+    transport = None
+    if server is not None:
         if type(server) is str:
             server = utils.Socket(server)
 
         assert url.startswith("/"), f'expected absolute path, got "{url}"'
         if server.uds:
             transport = transport_class(uds=server.uds)
-            client = client_class(transport=transport)
             url = f"http://localhost{url}"
         else:
-            client = client_class()
             url = f"http://{server}{url}"
 
+    # Make httpx work with pyodide
+    if transport is None and sys.platform == "emscripten":
+        transport = URLLib3Transport()
+
+    client = client_class(transport=transport)
     return client, url
 
 
