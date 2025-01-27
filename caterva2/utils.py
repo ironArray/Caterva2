@@ -19,6 +19,7 @@ import string
 
 # Requirements
 import uvicorn
+from fastapi_users.exceptions import UserNotExists
 
 try:
     import tomllib as toml
@@ -223,14 +224,17 @@ async def aadd_user(username, password, is_superuser, state_dir=None):
     sub_state.mkdir(parents=True, exist_ok=True)
     await sub_db.create_db_and_tables(sub_state)
     cx = contextlib.asynccontextmanager
-    async with cx(sub_db.get_async_session)() as session:
-        async with cx(sub_db.get_user_db)(session) as udb:
-            async with cx(sub_users.get_user_manager)(udb) as umgr:
-                schema = sub_schemas.UserCreate(
-                    email=user.username,
-                    password=user.password,
-                    is_superuser=is_superuser)
-                await umgr.create(schema)
+    async with (cx(sub_db.get_async_session)() as session,
+                cx(sub_db.get_user_db)(session) as udb,
+                cx(sub_users.get_user_manager)(udb) as umgr):
+        # Check that the user does not exist
+        try:
+            await umgr.get_by_email(user.username)
+            return user
+        except UserNotExists:
+            schema = sub_schemas.UserCreate(
+                email = user.username, password = user.password, is_superuser = is_superuser)
+            await umgr.create(schema)
 
     return user
 
