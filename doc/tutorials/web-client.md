@@ -139,5 +139,5 @@ The dataset has very reduced metadata that just describes its shape, type, expre
 
 Lazy expressions are a very versatile tool to have complex computations performed by a powerful and well-connected machine (the subscriber), and get the result to your device once satisfied with the result.  Many [arithmetic and reduction operations][b2-lazyexpr] are supported, just play with them and find out!
 
-[b2-lazyexpr]: https://www.blosc.org/python-blosc2/getting_started/tutorials/03.lazyarray-expressions.html
+[b2-lazyexpr]: https://www.blosc.org/python-blosc2/getting_started/tutorials/02.lazyarray-expressions.html
     "LazyArray: Expressions containing NDArray objects (and others) (Python-Blosc2 documentation)"
