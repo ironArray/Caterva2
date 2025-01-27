@@ -266,8 +266,9 @@ async def updated_dataset(data, topic):
 
 def init_b2(abspath, path, metadata):
     dataset = PubDataset(abspath, path, metadata)
-    if os.path.exists(dataset.abspath):
-        return
+    # TODO: not sure if this would prevent some kind of update in dataset. @jdavid?
+    # if os.path.exists(dataset.abspath):
+    #     return
     schunk_meta = metadata.get("schunk", metadata)
     vlmeta = {}
     for k, v in schunk_meta["vlmeta"].items():
