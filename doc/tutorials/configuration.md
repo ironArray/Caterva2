@@ -3,17 +3,39 @@
 
 We've seen that the `cat2cli` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).
 
-The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.
-
-The configuration file may also hold settings for different instances of the same program (e.g. services of the same category).  To distinguish them, an arbitrary identifier may be provided to the program using the `--id` option (empty by default).  For instance:
+The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.  For instance, below is a sample configuration file for the subscriber program and some client app:
 
 ```toml
-[publisher]
-# Settings for publisher with default ID.
-[publisher.foo]
-# Settings for publisher with `--id foo`.
-[publisher.bar]
-# Settings for publisher with `--id bar`.
+# Example configuration for a standalone subscriber
+#
+# It's possible to run only the subscriber. Then the configuration has only a
+# section for the subscriber. And maybe another one for the client.
+
+# The subscriber section must define:
+#
+# - statedir: the directory where the subcriber's data will be stored
+# - http: where the subscriber listens to (a unix socket or a host/port)
+# - urlbase: the base url for reaching the subscriber
+# - quota: if defined, it will limit the disk usage
+# - maxusers: if defined, it will limit the number of users
+# - login: if true, users will need to authenticate
+# - register: if true, users will be able to register
+
+[subscriber]
+statedir = "_caterva2/sub"
+#http = "_caterva2/sub/uvicorn.socket"
+http = "localhost:8002"
+urlbase = "http://localhost:8002"
+quota = "10G"
+maxusers = 5
+login = true
+register = true
+
+# The client section defines the credentials for the client to authenticate
+# against the subscriber.
+[client]
+username = ""
+password = ""
 ```
 
 Some of the supported settings will be explained in [](Running-independent-Caterva2-services).  See [caterva2.sample.toml](https://github.com/ironArray/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.

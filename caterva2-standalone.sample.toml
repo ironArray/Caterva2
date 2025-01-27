@@ -7,8 +7,11 @@
 #
 # - statedir: the directory where the subcriber's data will be stored
 # - http: where the subscriber listens to (a unix socket or a host/port)
-# - url: the base url users will use to reach the subscriber
-# - quota: if defined it will limit the disk usage
+# - urlbase: the base url users will use to reach the subscriber
+# - quota: if defined, it will limit the disk usage
+# - maxusers: if defined, it will limit the number of users
+# - login: if true, users will need to authenticate
+# - register: if true, users will be able to register
 #
 [subscriber]
 statedir = "_caterva2/sub"
@@ -17,11 +20,8 @@ http = "localhost:8002"
 urlbase = "http://localhost:8002"
 quota = "10G"
 maxusers = 5
-login = true
-# By default, users are not allowed to register and will
-# need to be added manually by a superuser.
-# Let's override this and allow registering.
-register = true
+login = true   # users need to authenticate
+register = true  # allow users to register
 
 # The client section defines the credentials for the client to authenticate
 # against the subscriber.
