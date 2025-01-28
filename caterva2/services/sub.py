@@ -38,7 +38,7 @@ import PIL.Image
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1801,7 +1801,7 @@ async def htmx_command(
     # First check for expressions
     nargs = len(argv)
     if nargs == 0:
-        return Response(status_code=204)
+        return responses.Response(status_code=204)
 
     elif nargs > 1 and argv[1] in {"=", ":="}:
         operator = argv[1]
@@ -1918,7 +1918,7 @@ def htmx_error(request, msg, status_code=400):
 
 
 def htmx_redirect(current_url, target_url, root=None):
-    response = JSONResponse("OK")
+    response = responses.JSONResponse("OK")
     query = furl.furl(current_url).query
     roots = query.params.getlist("roots")
 
@@ -2258,6 +2258,11 @@ def jupyterlite_worker(
 ):
     abspath = BASE_DIR / "static/jupyterlite/service-worker.js"
     return FileResponse(abspath, filename=abspath.name, media_type="application/javascript")
+
+
+@app.get("/api/service-worker-heartbeat", response_class=responses.PlainTextResponse)
+def jupyter_heartbeat():
+    return "ok"
 
 
 #
