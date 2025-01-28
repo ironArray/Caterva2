@@ -44,7 +44,7 @@ def with_auth_cookie(func):
     def wrapper(args):
         auth_cookie = None
         if args.username and args.password:
-            user_auth = dict(username=args.username, password=args.password)
+            user_auth = {"username": args.username, "password": args.password}
             auth_cookie = api_utils.get_auth_cookie(args.urlbase, user_auth)
         return func(args, auth_cookie=auth_cookie)
 

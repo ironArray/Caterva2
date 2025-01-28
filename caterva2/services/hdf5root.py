@@ -195,13 +195,13 @@ def create_example_root(path):
 
         ds = h5f.create_dataset('/attrs', data=0)
         a = numpy.arange(4, dtype='uint8').reshape(2, 2)
-        for k, v in dict(Int=42, IntT=numpy.int16(42),
-                         Bin=b"foo", BinT=numpy.bytes_(b"foo"),
-                         Str="bar", # StrT=numpy.str_("bar"),
-                         Arr=a.tolist(), ArrT=a,
-                         NilBin=h5py.Empty('|S4'),
+        for k, v in {'Int': 42, 'IntT': numpy.int16(42),
+                         'Bin': b"foo", 'BinT': numpy.bytes_(b"foo"),
+                         'Str': "bar", # StrT=numpy.str_("bar"),
+                         'Arr': a.tolist(), 'ArrT': a,
+                         'NilBin': h5py.Empty('|S4'),
                          # NilStr=h5py.Empty('|U4'),
-                         NilInt=h5py.Empty('uint8')).items():
+                         'NilInt': h5py.Empty('uint8')}.items():
             ds.attrs[k] = v
 
         h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))

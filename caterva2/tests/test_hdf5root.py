@@ -55,7 +55,8 @@ def test_string(api_root):
 def test_nonchunked(api_root):
     ds = api_root['arrays/2d-nochunks.b2nd']
     ds_chunks = ds.meta['chunks']
-    assert ds_chunks is not None and len(ds_chunks) == 2  # auto chunking
+    assert ds_chunks is not None
+    assert len(ds_chunks) == 2
     v = ds[:]
     a = np.arange(100, dtype='complex128').reshape(10, 10)
     a = a + a*1j

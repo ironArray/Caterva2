@@ -55,9 +55,9 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     if not h5dset_is_compatible(h5_dset):
         raise TypeError("HDF5 dataset is not compatible with Blosc2")
 
-    b2_args = dict(
-        chunks=h5_dset.chunks,  # None is ok (let Blosc2 decide)
-    )
+    b2_args = {
+        'chunks': h5_dset.chunks,  # None is ok (let Blosc2 decide)
+    }
 
     if (h5_dset.chunks is None
             or list(h5_dset._filters) != [f'{BLOSC2_HDF5_FID:#d}']
@@ -96,8 +96,8 @@ def _msgpack_h5attr(obj):
 
 def b2attrs_from_h5dset(
         h5_dset: h5py.Dataset,
-        attr_ok: Callable[[h5py.Dataset, str], None] = None,
-        attr_err: Callable[[h5py.Dataset, str, Exception], None] = None) -> (
+        attr_ok: Callable[[h5py.Dataset, str], None] | None = None,
+        attr_err: Callable[[h5py.Dataset, str, Exception], None] | None = None) -> (
             Mapping[str, object]):
     """Get msgpack-encoded attributes from the given HDF5 dataset.
 

@@ -116,7 +116,7 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
             ndim,  # chunk rank (number of dimensions)
             *b2_array.chunks,  # length of chunk dimension i
         )
-    return dict(compression=hdf5.BLOSC2_HDF5_FID, compression_opts=opts)
+    return {'compression': hdf5.BLOSC2_HDF5_FID, 'compression_opts': opts}
 
 
 def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (

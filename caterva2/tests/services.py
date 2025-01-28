@@ -237,7 +237,7 @@ class ManagedServices(Services):
         return self._endpoints.get(service)
 
     def get_urlbase(self, service):
-        return 'http://%s' % self.get_endpoint(service)
+        return f'http://{self.get_endpoint(service)}'
 
 
 class ExternalServices(Services):
@@ -272,7 +272,7 @@ class ExternalServices(Services):
 
     def get_urlbase(self, service):
         ep = self.get_endpoint(service)
-        return 'http://%s' % ep if ep else None
+        return f'http://{ep}' if ep else None
 
 
 @pytest.fixture(scope='session')

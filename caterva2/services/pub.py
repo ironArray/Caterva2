@@ -21,10 +21,8 @@ import caterva2.services.dirroot
 from caterva2 import api_utils, models, utils
 from caterva2.services import pubroot, srv_utils
 
-try:
-    import caterva2.services.hdf5root
-except ImportError:
-    pass
+with contextlib.suppress(ImportError):
+    import caterva2.services.hdf5root  # noqa: F401
 
 
 logger = logging.getLogger('pub')
@@ -160,7 +158,7 @@ async def get_info(
     if relpath.suffix in {'.b2frame', '.b2nd'}:
         meta = proot.get_dset_meta(relpath)
     else:
-        b2path = srv_utils.get_abspath(cache, '%s.b2' % relpath)
+        b2path = srv_utils.get_abspath(cache, f'{relpath}.b2')
         meta = srv_utils.read_metadata(b2path)
 
     # Return
@@ -179,7 +177,7 @@ async def get_download(path: str, nchunk: int = -1):
     if relpath.suffix in {'.b2frame', '.b2nd'}:
         chunk = proot.get_dset_chunk(relpath, nchunk)
     else:
-        b2path = cache / ('%s.b2' % relpath)
+        b2path = cache / (f'{relpath}.b2')
         schunk = blosc2.open(b2path)
         chunk = schunk.get_chunk(nchunk)
 

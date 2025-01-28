@@ -106,7 +106,7 @@ def test_root(sub_urlbase, sub_user):
 def test_list(examples_dir, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     example = examples_dir
-    files = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
+    files = {str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file()}
     assert set(myroot.file_list) == files
     if sub_user:
         mypersonal = cat2.Root("@personal", sub_urlbase, sub_user)
@@ -180,6 +180,7 @@ def test_move(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
         else:
             assert str(newpath) == f"{myshared.name}/{new_fname}"
             assert myshared[new_fname].path == newpath
+    return None
 
 
 @pytest.mark.parametrize("dest", ["..", ".", "foo", "foo/bar"])
@@ -196,6 +197,7 @@ def test_move_not_allowed(dest, sub_urlbase, sub_user, fill_public):
         print(e_info)
         assert "Bad Request" in str(e_info)
         assert fname in mypublic
+    return None
 
 
 @pytest.mark.parametrize("dirpath", [None, "dir1", "dir2", "dir2/dir3/dir4"])
@@ -222,6 +224,7 @@ def test_copy(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
         else:
             assert str(newpath) == f"{myshared.name}/{new_fname}"
             assert myshared[new_fname].path == newpath
+    return None
 
 
 @pytest.mark.parametrize(
@@ -455,7 +458,8 @@ def test_upload(fnames, remove, root, examples_dir, sub_urlbase, sub_user, tmp_p
         path = ds.download()
         assert path == ds.path
         # Check whether path exists and is a file
-        assert path.exists() and path.is_file()
+        assert path.exists()
+        assert path.is_file()
         # Now, upload the file to the remote root
         remote_ds = remote_root.upload(path, remotepath)
         # Check whether the file has been uploaded with the correct name
@@ -502,7 +506,7 @@ def test_vlmeta(name, sub_urlbase):
 def test_vlmeta_data(sub_urlbase):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot["ds-sc-attr.b2nd"]
-    assert ds.vlmeta == dict(a=1, b="foo", c=123.456)
+    assert ds.vlmeta == {"a": 1, "b": "foo", "c": 123.456}
 
 
 ### Lazy expressions
@@ -806,7 +810,7 @@ def c2sub_user(urlbase):
     return (
         username,
         password,
-        cat2.get_auth_cookie(urlbase, dict(urlbase=urlbase, username=username, password=password)),
+        cat2.get_auth_cookie(urlbase, {"urlbase": urlbase, "username": username, "password": password}),
     )
 
 
@@ -832,7 +836,7 @@ def test_c2context_demo_auth(cookie, sub_urlbase, sub_user, tmp_path):
 
     localpath, remotepath = ("root-example/dir1/ds-2d.b2nd", "dir2/dir3/dir4/ds-2d2.b2nd")
     root = "@personal"
-    remote_root = cat2.Root(root, urlbase, dict(username=username, password=password))
+    remote_root = cat2.Root(root, urlbase, {"username": username, "password": password})
     remote_root.upload(localpath, remotepath)
     expected_paths = cat2.get_list(root, urlbase, auth_cookie)
     path = pathlib.Path(root + "/" + expected_paths[-1])

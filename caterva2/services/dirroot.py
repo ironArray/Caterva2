@@ -98,9 +98,9 @@ class DirectoryRoot:
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         async for changes in watchfiles.awatch(self.abspath):
-            relpaths = set(
+            relpaths = {
                 self.Path(pathlib.Path(abspath).relative_to(self.abspath))
-                for change, abspath in changes)
+                for change, abspath in changes}
             yield relpaths
 
 
@@ -164,7 +164,7 @@ def create_example_root(path):
     # A scalar (string) with variable-length metalayers (user attributes).
     a = np.str_("foobar")
     b = blosc2.asarray(a, urlpath=path / "ds-sc-attr.b2nd", mode="w")
-    for k, v in dict(a=1, b="foo", c=123.456).items():
+    for k, v in {'a': 1, 'b': "foo", 'c': 123.456}.items():
         b.schunk.vlmeta[k] = v
 
     (path / "dir1").mkdir()
