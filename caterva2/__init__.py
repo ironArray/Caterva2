@@ -38,3 +38,31 @@ from .api import (
                   upload,
 )
 from .api_utils import get_auth_cookie
+
+__all__ = [
+    "Dataset",
+    "File",
+    "Root",
+    "adduser",
+    "bro_host_default",
+    "c2context",
+    "copy",
+    "deluser",
+    "download",
+    "fetch",
+    "get_chunk",
+    "get_info",
+    "get_list",
+    "get_roots",
+    "lazyexpr",
+    "listusers",
+    "move",
+    "pub_host_default",
+    "remove",
+    "sub_host_default",
+    "sub_urlbase_default",
+    "subscribe",
+    "upload",
+    "get_auth_cookie",
+]
+"""List of symbols exported by the Caterva2 package."""
