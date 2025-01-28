@@ -1372,6 +1372,11 @@ if user_register_enabled():
         return templates.TemplateResponse(request, "register.html")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse(BASE_DIR / "static/logo-caterva2-16x16.png")
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/roots/{path:path}")
 async def html_home(
