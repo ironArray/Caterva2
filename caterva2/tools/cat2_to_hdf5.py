@@ -146,7 +146,7 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             name=pathlib.Path(c2_leaf).stem,
             shape=(len(b2_schunk),),
             dtype=(numpy.uint8 if b2_schunk.typesize == 1
-                   else numpy.dtype('|V%d' % b2_schunk.typesize)),
+                   else numpy.dtype(f'|V{b2_schunk.typesize}')),
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
         )
@@ -234,10 +234,9 @@ def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
 
 def export(cat2_path, hdf5_path):
     """Export Caterva2 root at `cat2_path` to new HDF5 file in `hdf5_path`."""
-    with os.scandir(cat2_path) as c2i:  # keeps directory open
-        with h5py.File(hdf5_path, 'x') as h5f:  # create, fail if existing
-            export_root(c2i, h5f)
-
+    with os.scandir(cat2_path) as c2i, h5py.File(hdf5_path, 'x') as h5f:
+        # keeps directory open, create, fail if existing
+        export_root(c2i, h5f)
 
 def main():
     try:

@@ -622,8 +622,8 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     assert "User added" in message
     with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
-        l = cat2.listusers()
-        assert username in [user["email"] for user in l]
+        lusers = cat2.listusers()
+        assert username in [user["email"] for user in lusers]
     # Delete the user for future tests
     message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "User deleted" in message
@@ -657,21 +657,18 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
         username = f"test{n}@user.com"
         password = "testpassword"
         is_superuser = False
-        try:
+        with pytest.raises(Exception) as e_info:
             message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
-            assert "User added" in message
-        except Exception as e_info:
-            assert n == maxusers - 1  # we already have one user
-            assert "Bad Request" in str(e_info)
-            # Remove the created users
-            for m in range(n):
-                username = f"test{m}@user.com"
-                message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
-                assert "User deleted" in message
-            # Count the current number of users
-            data = cat2.listusers(auth_cookie=sub_jwt_cookie)
-            assert len(data) == 1
-            break
+        assert n == maxusers - 1  # we already have one user
+        assert "Bad Request" in str(e_info.value)
+        # Remove the created users
+        for m in range(n):
+            username = f"test{m}@user.com"
+            message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
+            assert "User deleted" in message
+        # Count the current number of users
+        data = cat2.listusers(auth_cookie=sub_jwt_cookie)
+        assert len(data) == 1
 
 
 def test_adduser_unauthorized(sub_user, sub_jwt_cookie):
@@ -703,7 +700,7 @@ def test_deluser(sub_user, sub_jwt_cookie):
         _ = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "Bad Request" in str(e_info)
 
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(Exception) as e_info:  # noqa: SIM117
         with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
             _ = 0
 
