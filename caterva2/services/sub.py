@@ -2160,12 +2160,19 @@ async def jupyterlite_contents(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
 ):
+    """
+    See https://jupyter-server.readthedocs.io/en/latest/developers/rest-api.html#get--api-contents-path
+    """
+
+    # The path must end with all.json
     parts = path.parts
     if parts[-1] != "all.json":
         raise fastapi.HTTPException(status_code=404)  # NotFound
 
-    content = []
+    parts = parts[:-1]
+    path = pathlib.Path(*parts)
 
+    # Helper function for directories
     def directory(abspath, relpath):
         stat = abspath.stat()
         return {
@@ -2182,7 +2189,7 @@ async def jupyterlite_contents(
             "writable": True,
         }
 
-    parts = parts[:-1]
+    content = []
     if len(parts) == 0:
         rootdir = _get_rootdir(user, "@personal")
         if rootdir is not None:
@@ -2199,13 +2206,18 @@ async def jupyterlite_contents(
         # TODO pub/sub roots: settings.database.roots.values()
         response = directory(rootdir.parent, "")
     else:
-        root = parts[0]
+        # Check access to the root
+        root, *subpath = parts
         rootdir = _get_rootdir(user, root)
         if rootdir is None:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
-        response = directory(rootdir, root)
+        # Get absolute path to the directory
+        rootdir = rootdir / pathlib.Path(*subpath)
+
+        response = directory(rootdir, path)
         for abspath, relpath in utils.iterdir(rootdir):
+            relpath = path / relpath
             if abspath.is_file():
                 if relpath.suffix == ".b2":
                     relpath = relpath.with_suffix("")
@@ -2228,14 +2240,14 @@ async def jupyterlite_contents(
                         "last_modified": utils.epoch_to_iso(stat.st_mtime),
                         "mimetype": None,
                         "name": relpath.name,
-                        "path": f"{root}/{relpath}",
+                        "path": relpath,
                         "size": stat.st_size,  # XXX Return the uncompressed size?
                         "type": content_type,
                         "writable": writable,
                     }
                 )
             else:
-                content.append(directory(relpath))  # FIXME
+                content.append(directory(abspath, relpath))
 
     response["content"] = content
     return response
