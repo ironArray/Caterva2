@@ -65,7 +65,7 @@ subscriber = [
     "pillow",
     "python-dotenv",
     "python-multipart",
-    "jupyterlite-core==0.6.0a0",
+    "jupyterlite-core[contents]==0.6.0a0",
     "jupyterlite-pyodide-kernel==0.6.0a0",
 ]
 services = [
