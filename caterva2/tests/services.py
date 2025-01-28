@@ -79,7 +79,7 @@ def service_ep_getter(first):
         if first is not None:
             ep, first = first, None
             return ep
-        return 'localhost:%d' % next(local_port_iter)
+        return f'localhost:{next(local_port_iter)}'
     return get_service_ep
 
 

@@ -141,6 +141,7 @@ ignore = [
     "B028",
     "C901",  # Checks for functions with a high McCabe complexity
     "PT011",
+    "SIM103",
     "RET505",
     "RET508",
     "RUF005",
@@ -150,4 +151,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**" = ["F841"]
+"caterva2/tests/**" = ["F841", "SIM115"]

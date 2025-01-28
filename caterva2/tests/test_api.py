@@ -253,7 +253,7 @@ def test_dataset_step_diff_1(sub_urlbase, sub_user):
     assert ds.name == "ds-hello.b2frame"
     assert ds.urlbase == sub_urlbase
     # We don't support step != 1
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(Exception) as e_info:  # noqa: PT012
         _ = ds[::2]
         assert str(e_info.value) == "Only step=1 is supported"
 
