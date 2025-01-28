@@ -9,16 +9,15 @@
 import contextlib
 import pathlib
 import random
-import httpx
 
 import blosc2
+import httpx
+import numpy as np
 import pytest
 
 import caterva2 as cat2
-import numpy as np
 
 from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
-
 
 try:
     chdir_ctxt = contextlib.chdir
@@ -63,11 +62,11 @@ def fill_public(examples_dir, sub_urlbase, sub_user):
 
 
 def test_subscribe(sub_urlbase, sub_jwt_cookie):
-    assert "Ok" == cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase)
-    assert "Ok" == cat2.subscribe("@public", sub_urlbase)
+    assert cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase) == "Ok"
+    assert cat2.subscribe("@public", sub_urlbase) == "Ok"
     for root in ["@personal", "@shared"]:
         if sub_jwt_cookie:
-            assert "Ok" == cat2.subscribe(root, sub_urlbase, auth_cookie=sub_jwt_cookie)
+            assert cat2.subscribe(root, sub_urlbase, auth_cookie=sub_jwt_cookie) == "Ok"
         else:
             with pytest.raises(Exception) as e_info:
                 _ = cat2.subscribe(root, sub_urlbase)
@@ -762,7 +761,7 @@ def test_c2context_demo(sub_user):
         roots = cat2.get_roots()
         assert len(roots) == len(expected_roots)
         assert all(root_ in expected_roots for root_ in roots)
-        assert "Ok" == cat2.subscribe(root)
+        assert cat2.subscribe(root) == "Ok"
         paths_list = cat2.get_list(root)
         assert paths_list == expected_paths
         info = cat2.get_info(path)
@@ -843,7 +842,7 @@ def test_c2context_demo_auth(cookie, sub_urlbase, sub_user, tmp_path):
         roots = cat2.get_roots()
         assert len(roots) == len(expected_roots)
         assert all(root_ in expected_roots for root_ in roots)
-        assert "Ok" == cat2.subscribe(expected_roots_list[-1])
+        assert cat2.subscribe(expected_roots_list[-1]) == "Ok"
         paths_list = cat2.get_list(root)
         assert paths_list == expected_paths
         info = cat2.get_info(path)

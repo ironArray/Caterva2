@@ -55,14 +55,12 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import httpx
 import pytest
 
 import caterva2 as cat2
-
-from pathlib import Path
-
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = '_caterva2'
@@ -316,7 +314,7 @@ def defers(func):
 
 @defers
 def main(defer):
-    from . import files, conf, sub_auth
+    from . import conf, files, sub_auth
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
     hdf5source = files.make_examples_hdf5()

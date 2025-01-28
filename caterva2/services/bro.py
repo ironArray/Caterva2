@@ -7,7 +7,6 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import typing
 
 # Requirements
 from fastapi import FastAPI
@@ -15,9 +14,8 @@ from fastapi.routing import APIRouter
 from fastapi_websocket_pubsub import PubSubEndpoint
 
 # Project
-from caterva2 import utils, models
+from caterva2 import models, utils
 from caterva2.services import srv_utils
-
 
 # State
 database = None
@@ -28,7 +26,7 @@ app = FastAPI()
 
 
 @app.get('/api/roots', response_model_exclude_none=True)
-async def get_roots() -> typing.Dict[str, models.Root]:
+async def get_roots() -> dict[str, models.Root]:
     return database.roots
 
 

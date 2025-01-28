@@ -19,8 +19,8 @@ The database will be stored in SQLite format inside the state directory
 given to `create_db_and_tables()`.
 """
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import AsyncGenerator
 
 from fastapi import Depends
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID, SQLAlchemyUserDatabase

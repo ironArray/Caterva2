@@ -34,16 +34,14 @@ import operator
 import os
 import pathlib
 import sys
+from collections.abc import Callable, Iterator, Mapping
 
 import blosc2
 import h5py
 import hdf5plugin
 import numpy
 
-from collections.abc import Callable, Iterator, Mapping
-
 from .. import hdf5
-
 
 # Set to empty mapping to store files as uncompressed HDF5 datasets.
 file_h5_compargs = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
@@ -63,7 +61,7 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
 
     try:
         h5_dataset = h5mkempty(h5_group)
-        for (chunk_slice, chunk) in zip(h5_dataset.iter_chunks(), h5_chunks):
+        for (chunk_slice, chunk) in zip(h5_dataset.iter_chunks(), h5_chunks, strict=False):
             # Cannot use ``h5_dataset.id.get_chunk_info(nchunk)``
             # as there are indeed no chunks yet.
             chunk_offset = tuple(cs.start for cs in chunk_slice)

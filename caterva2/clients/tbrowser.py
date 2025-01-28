@@ -11,11 +11,11 @@
 
 import pathlib
 
-# Project
-from caterva2 import utils, api, api_utils
-
 from textual.app import App, ComposeResult
 from textual.widgets import Tree
+
+# Project
+from caterva2 import api, api_utils, utils
 
 
 class TreeApp(App):

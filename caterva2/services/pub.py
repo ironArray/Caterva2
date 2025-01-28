@@ -15,10 +15,12 @@ import logging
 import blosc2
 from fastapi import FastAPI, Response, responses
 
-# Project
-from caterva2 import utils, api_utils, models
-from caterva2.services import pubroot, srv_utils
 import caterva2.services.dirroot
+
+# Project
+from caterva2 import api_utils, models, utils
+from caterva2.services import pubroot, srv_utils
+
 try:
     import caterva2.services.hdf5root
 except ImportError:

@@ -1,14 +1,15 @@
+import platform
+import sys
+
+import httpx
+import numpy as np
+
+import caterva2 as cat2
+
 from .conf import configuration  # noqa: F401
 from .files import examples_dir, examples_hdf5  # noqa: F401
 from .services import services  # noqa: F401
-from .sub_auth import sub_user, sub_jwt_cookie  # noqa: F401
-
-import caterva2 as cat2
-import httpx
-import numpy as np
-import sys
-import platform
-
+from .sub_auth import sub_jwt_cookie, sub_user  # noqa: F401
 
 try:  # Python-Blosc2 is optional
     import blosc2

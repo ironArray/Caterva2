@@ -7,14 +7,12 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import blosc2
 import numpy as np
 import pytest
 
 import caterva2 as cat2
 
 from .services import TEST_HDF5_ROOT
-
 
 hdf5root = pytest.importorskip('caterva2.services.hdf5root',
                                reason="HDF5 support not present")

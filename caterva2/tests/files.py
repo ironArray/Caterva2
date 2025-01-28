@@ -1,8 +1,7 @@
 import tempfile
+from pathlib import Path
 
 import pytest
-
-from pathlib import Path
 
 try:
     from caterva2.services import hdf5root

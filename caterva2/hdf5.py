@@ -12,10 +12,8 @@ from collections.abc import Callable, Iterator, Mapping
 # Requirements
 import blosc2
 import h5py
-import hdf5plugin  # enable Blosc2 support in HDF5
 import msgpack
 import numpy
-
 
 """The registered identifier for Blosc2 in HDF5 filters."""
 BLOSC2_HDF5_FID = 32026
@@ -211,7 +209,7 @@ def b2chunkers_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
         # TODO: check if schunk is compatible with creation arguments
         if b2_schunk.nchunks < 1:
-            raise IOError(f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
+            raise OSError(f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
                           f"contains Blosc2 super-chunk with no chunks")
         if b2_schunk.nchunks > 1:
             # TODO: warn, check shape, re-compress as single chunk
@@ -271,7 +269,7 @@ def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
             raise IndexError(nchunk)
         chunk_start = h5_dset.id.get_chunk_info(nchunk).chunk_offset
         chunk_slice = tuple(slice(cst, cst + csz, 1)
-                            for (cst, csz) in zip(chunk_start, h5_dset.chunks))
+                            for (cst, csz) in zip(chunk_start, h5_dset.chunks, strict=False))
         return _b2getchunk_slice(chunk_slice)
 
     def _b2getchunk_slice(chunk_slice) -> bytes:
