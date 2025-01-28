@@ -61,7 +61,7 @@ locks = {}
 
 
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
-mimetypes.add_type("application/vnd.jupyter", ".ipynb")
+mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 
 
 def guess_type(path):
@@ -843,7 +843,7 @@ async def preview(
         def downloader():
             yield from resize_image(img, width)
 
-    elif mimetype == "application/vnd.jupyter":
+    elif mimetype == "application/x-ipynb+json":
         content = await get_file_content(path, user)
         nb = nbformat.reads(content, as_version=4)
         html, resources = html_exporter.from_notebook_node(nb)
@@ -1583,7 +1583,7 @@ async def htmx_path_info(
     else:
         mimetype = guess_type(path)
         if mimetype and (
-            mimetype in {"application/pdf", "application/vnd.jupyter", "text/markdown"}
+            mimetype in {"application/pdf", "application/x-ipynb+json", "text/markdown"}
             or mimetype.startswith("image/")
         ):
             display = {
@@ -2117,7 +2117,7 @@ async def html_display(
     if mimetype == "application/pdf":
         data = f"{url('api/preview/')}{path}"
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
-    elif mimetype == "application/vnd.jupyter":
+    elif mimetype == "application/x-ipynb+json":
         src = f"{url('api/preview/')}{path}"
         return (
             f'<a href="/static/jupyterlite/notebooks/index.html?path={path}" target="_blank">Run</a><br>'
@@ -2173,11 +2173,12 @@ async def jupyterlite_contents(
     path = pathlib.Path(*parts)
 
     # Helper function for directories
-    def directory(abspath, relpath):
+    def directory(abspath, relpath, content=None):
         stat = abspath.stat()
         return {
+            "content": content,
             "created": utils.epoch_to_iso(stat.st_ctime),
-            "format": "json",
+            "format": None if content is None else "json",
             "hash": None,
             "hash_algorithm": None,
             "last_modified": utils.epoch_to_iso(stat.st_mtime),
@@ -2186,7 +2187,7 @@ async def jupyterlite_contents(
             "path": relpath,
             "size": None,
             "type": "directory",
-            "writable": True,
+            "writable": False,
         }
 
     content = []
@@ -2204,7 +2205,8 @@ async def jupyterlite_contents(
             content.append(directory(rootdir, "@public"))
 
         # TODO pub/sub roots: settings.database.roots.values()
-        response = directory(rootdir.parent, "")
+        dir_abspath = rootdir.parent
+        dir_relpath = ""
     else:
         # Check access to the root
         root, *subpath = parts
@@ -2212,19 +2214,22 @@ async def jupyterlite_contents(
         if rootdir is None:
             raise fastapi.HTTPException(status_code=404)  # NotFound
 
-        # Get absolute path to the directory
-        rootdir = rootdir / pathlib.Path(*subpath)
+        # Get absolute and relative paths to the directory
+        dir_abspath = rootdir / pathlib.Path(*subpath)
+        dir_relpath = path
 
-        response = directory(rootdir, path)
-        for abspath, relpath in utils.iterdir(rootdir):
+        for abspath, relpath in utils.iterdir(dir_abspath):
             relpath = path / relpath
-            if abspath.is_file():
+            if abspath.is_dir():
+                content.append(directory(abspath, relpath))
+            elif abspath.is_file():
                 if relpath.suffix == ".b2":
                     relpath = relpath.with_suffix("")
 
-                if relpath.suffix == ".ipynb":
+                mimetype = guess_type(relpath)
+                if mimetype == "application/x-ipynb+json":
                     content_type = "notebook"
-                    writable = True
+                    writable = False
                 else:
                     content_type = "file"
                     writable = False
@@ -2238,7 +2243,7 @@ async def jupyterlite_contents(
                         "hash": None,
                         "hash_algorithm": None,
                         "last_modified": utils.epoch_to_iso(stat.st_mtime),
-                        "mimetype": None,
+                        "mimetype": mimetype,
                         "name": relpath.name,
                         "path": relpath,
                         "size": stat.st_size,  # XXX Return the uncompressed size?
@@ -2247,10 +2252,9 @@ async def jupyterlite_contents(
                     }
                 )
             else:
-                content.append(directory(abspath, relpath))
+                raise NotImplementedError("Only directories and files are supported")
 
-    response["content"] = content
-    return response
+    return directory(dir_abspath, dir_relpath, content=content)
 
 
 @app.get("/static/jupyterlite/files/{path:path}")
@@ -2263,8 +2267,7 @@ async def jupyterlite_files(
     async def downloader():
         yield await get_file_content(path, user)
 
-    # mimetype = guess_type(path)
-    mimetype = "application/json"
+    mimetype = guess_type(path)
     return responses.StreamingResponse(downloader(), media_type=mimetype)
 
 
