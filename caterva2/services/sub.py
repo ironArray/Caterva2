@@ -2149,7 +2149,7 @@ async def html_display(
 
 
 @app.get("/static/jupyterlite/api/contents/{path:path}")
-def jupyterlite_contents(
+async def jupyterlite_contents(
     request: Request,
     # Path parameters
     path: pathlib.Path,
@@ -2237,7 +2237,7 @@ def jupyterlite_contents(
 
 
 @app.get("/static/jupyterlite/files/{path:path}")
-def jupyterlite_files(
+async def jupyterlite_files(
     request: Request,
     # Path parameters
     path: pathlib.Path,
@@ -2252,7 +2252,7 @@ def jupyterlite_files(
 
 
 @app.get("/service-worker.js")
-def jupyterlite_worker(
+async def jupyterlite_worker(
     # Query parameters
     enableCache: bool | None = None,
 ):
@@ -2261,7 +2261,7 @@ def jupyterlite_worker(
 
 
 @app.get("/api/service-worker-heartbeat", response_class=responses.PlainTextResponse)
-def jupyter_heartbeat():
+async def jupyter_heartbeat():
     return "ok"
 
 
