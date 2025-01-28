@@ -18,7 +18,7 @@ try:
     from typing import Self
 except ImportError:  # Python < 3.11
     from typing import TypeVar
-    Self = TypeVar('Self', bound='PubRoot')
+    Self = TypeVar('Self', bound='PubRoot')    # noqa: F821
 
 # Requirements
 import h5py

@@ -16,7 +16,7 @@ try:
     from typing import Self
 except ImportError:  # Python < 3.11
     from typing import TypeVar
-    Self = TypeVar('Self', bound='PubRoot')
+    Self = TypeVar('Self', bound='PubRoot')    # noqa: F821
 
 # Requirements
 import blosc2
@@ -146,7 +146,7 @@ def create_example_root(path):
     a["b"] = np.linspace(0, 1, 1000, dtype="float64")
     a["c"] = np.array([f"foobar{i}" for i in range(1000)], dtype="S10")
     # A field with random booleans
-    a["d"] = np.random.choice([True, False], 1000)
+    a["d"] = np.random.default_rng().choice([True, False], 1000)
     blosc2.asarray(a, chunks=(100,), blocks=(10,),
                    urlpath=path / "ds-1d-fields.b2nd", mode="w")
 
