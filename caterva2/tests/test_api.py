@@ -648,7 +648,7 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
 
     # TODO: make this to work; currently this returns None
     # maxusers = configuration.get("subscriber.maxusers")
-    # For now, keep in sync with subscriber.maxusers in caterva2/tests/caterva2.toml
+    # For now, keep in sync with subscriber.maxusers in caterva2/tests/caterva2-login.toml
     maxusers = 5
     # Add maxusers users; we already have one user, so the next loop should fail
     # when reaching the creation of last user
@@ -657,18 +657,21 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
         username = f"test{n}@user.com"
         password = "testpassword"
         is_superuser = False
-        with pytest.raises(Exception) as e_info:
+        if n == maxusers - 1:  # we already have one user
+            with pytest.raises(Exception) as e_info:
+                _ = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+            assert "Bad Request" in str(e_info.value)
+        else:
             message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
-        assert n == maxusers - 1  # we already have one user
-        assert "Bad Request" in str(e_info.value)
-        # Remove the created users
-        for m in range(n):
-            username = f"test{m}@user.com"
-            message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
-            assert "User deleted" in message
-        # Count the current number of users
-        data = cat2.listusers(auth_cookie=sub_jwt_cookie)
-        assert len(data) == 1
+            assert "User added" in message
+    # Remove the created users
+    for m in range(n):
+        username = f"test{m}@user.com"
+        message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
+        assert "User deleted" in message
+    # Count the current number of users
+    data = cat2.listusers(auth_cookie=sub_jwt_cookie)
+    assert len(data) == 1
 
 
 def test_adduser_unauthorized(sub_user, sub_jwt_cookie):
