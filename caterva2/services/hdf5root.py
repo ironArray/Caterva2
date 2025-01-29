@@ -12,16 +12,15 @@ import io
 import logging
 import pathlib
 import re
-from collections.abc import (
-    AsyncIterator, Callable, Collection, Iterator, Mapping)
+from collections.abc import AsyncIterator, Callable, Collection, Iterator, Mapping
+
 try:
     from typing import Self
 except ImportError:  # Python < 3.11
     from typing import TypeVar
-    Self = TypeVar('Self', bound='PubRoot')
+    Self = TypeVar('Self', bound='PubRoot')    # noqa: F821
 
 # Requirements
-import blosc2
 import h5py
 import pydantic
 import watchfiles
@@ -29,7 +28,6 @@ import watchfiles
 # Project
 from caterva2 import hdf5
 from caterva2.services import pubroot, srv_utils
-
 
 _MAX_CACHED_CHUNKERS = 32
 """Maximum number of dataset chunkers to keep in per-instance LRU cache."""
@@ -166,10 +164,9 @@ def _is_dataset(node: h5py.Group | h5py.Dataset) -> bool:
 
 def create_example_root(path):
     """Create an example HDF5 file to be used as a root."""
-    import blosc2
     import h5py
-    from hdf5plugin import Blosc2 as B2Comp
     import numpy
+    from hdf5plugin import Blosc2 as B2Comp
 
     with h5py.File(path, 'x') as h5f:
         h5f.create_dataset('/scalar', data=123.456)
@@ -198,13 +195,13 @@ def create_example_root(path):
 
         ds = h5f.create_dataset('/attrs', data=0)
         a = numpy.arange(4, dtype='uint8').reshape(2, 2)
-        for k, v in dict(Int=42, IntT=numpy.int16(42),
-                         Bin=b"foo", BinT=numpy.bytes_(b"foo"),
-                         Str="bar", # StrT=numpy.str_("bar"),
-                         Arr=a.tolist(), ArrT=a,
-                         NilBin=h5py.Empty('|S4'),
+        for k, v in {'Int': 42, 'IntT': numpy.int16(42),
+                         'Bin': b"foo", 'BinT': numpy.bytes_(b"foo"),
+                         'Str': "bar", # StrT=numpy.str_("bar"),
+                         'Arr': a.tolist(), 'ArrT': a,
+                         'NilBin': h5py.Empty('|S4'),
                          # NilStr=h5py.Empty('|U4'),
-                         NilInt=h5py.Empty('uint8')).items():
+                         'NilInt': h5py.Empty('uint8')}.items():
             ds.attrs[k] = v
 
         h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))

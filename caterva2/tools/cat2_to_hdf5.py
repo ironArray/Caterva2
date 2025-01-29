@@ -34,16 +34,14 @@ import operator
 import os
 import pathlib
 import sys
+from collections.abc import Callable, Iterator, Mapping
 
 import blosc2
 import h5py
 import hdf5plugin
 import numpy
 
-from collections.abc import Callable, Iterator, Mapping
-
 from .. import hdf5
-
 
 # Set to empty mapping to store files as uncompressed HDF5 datasets.
 file_h5_compargs = hdf5plugin.Blosc2(cname='zstd', clevel=5, filters=1)
@@ -63,7 +61,7 @@ def export_leaf(c2_leaf: os.DirEntry, h5_group: h5py.Group) -> None:
 
     try:
         h5_dataset = h5mkempty(h5_group)
-        for (chunk_slice, chunk) in zip(h5_dataset.iter_chunks(), h5_chunks):
+        for (chunk_slice, chunk) in zip(h5_dataset.iter_chunks(), h5_chunks, strict=False):
             # Cannot use ``h5_dataset.id.get_chunk_info(nchunk)``
             # as there are indeed no chunks yet.
             chunk_offset = tuple(cs.start for cs in chunk_slice)
@@ -118,7 +116,7 @@ def h5compargs_from_b2(b2_array: blosc2.NDArray | blosc2.SChunk) -> Mapping:
             ndim,  # chunk rank (number of dimensions)
             *b2_array.chunks,  # length of chunk dimension i
         )
-    return dict(compression=hdf5.BLOSC2_HDF5_FID, compression_opts=opts)
+    return {'compression': hdf5.BLOSC2_HDF5_FID, 'compression_opts': opts}
 
 
 def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
@@ -148,7 +146,7 @@ def h5mkempty_h5chunkit_h5attrs_from_leaf(c2_leaf: os.DirEntry) -> (
             name=pathlib.Path(c2_leaf).stem,
             shape=(len(b2_schunk),),
             dtype=(numpy.uint8 if b2_schunk.typesize == 1
-                   else numpy.dtype('|V%d' % b2_schunk.typesize)),
+                   else numpy.dtype(f'|V{b2_schunk.typesize}')),
             chunks=(b2_schunk.chunkshape,),
             **h5compargs_from_b2(b2_schunk),
         )
@@ -236,10 +234,9 @@ def export_root(c2_iter: Iterator[os.DirEntry], h5_group: h5py.Group) -> None:
 
 def export(cat2_path, hdf5_path):
     """Export Caterva2 root at `cat2_path` to new HDF5 file in `hdf5_path`."""
-    with os.scandir(cat2_path) as c2i:  # keeps directory open
-        with h5py.File(hdf5_path, 'x') as h5f:  # create, fail if existing
-            export_root(c2i, h5f)
-
+    with os.scandir(cat2_path) as c2i, h5py.File(hdf5_path, 'x') as h5f:
+        # keeps directory open, create, fail if existing
+        export_root(c2i, h5f)
 
 def main():
     try:

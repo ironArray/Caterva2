@@ -9,16 +9,15 @@
 import contextlib
 import pathlib
 import random
-import httpx
 
 import blosc2
+import httpx
+import numpy as np
 import pytest
 
 import caterva2 as cat2
-import numpy as np
 
 from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
-
 
 try:
     chdir_ctxt = contextlib.chdir
@@ -63,11 +62,11 @@ def fill_public(examples_dir, sub_urlbase, sub_user):
 
 
 def test_subscribe(sub_urlbase, sub_jwt_cookie):
-    assert "Ok" == cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase)
-    assert "Ok" == cat2.subscribe("@public", sub_urlbase)
+    assert cat2.subscribe(TEST_CATERVA2_ROOT, sub_urlbase) == "Ok"
+    assert cat2.subscribe("@public", sub_urlbase) == "Ok"
     for root in ["@personal", "@shared"]:
         if sub_jwt_cookie:
-            assert "Ok" == cat2.subscribe(root, sub_urlbase, auth_cookie=sub_jwt_cookie)
+            assert cat2.subscribe(root, sub_urlbase, auth_cookie=sub_jwt_cookie) == "Ok"
         else:
             with pytest.raises(Exception) as e_info:
                 _ = cat2.subscribe(root, sub_urlbase)
@@ -107,7 +106,7 @@ def test_root(sub_urlbase, sub_user):
 def test_list(examples_dir, sub_urlbase, sub_user):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase, sub_user)
     example = examples_dir
-    files = set(str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file())
+    files = {str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file()}
     assert set(myroot.file_list) == files
     if sub_user:
         mypersonal = cat2.Root("@personal", sub_urlbase, sub_user)
@@ -181,6 +180,7 @@ def test_move(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
         else:
             assert str(newpath) == f"{myshared.name}/{new_fname}"
             assert myshared[new_fname].path == newpath
+    return None
 
 
 @pytest.mark.parametrize("dest", ["..", ".", "foo", "foo/bar"])
@@ -197,6 +197,7 @@ def test_move_not_allowed(dest, sub_urlbase, sub_user, fill_public):
         print(e_info)
         assert "Bad Request" in str(e_info)
         assert fname in mypublic
+    return None
 
 
 @pytest.mark.parametrize("dirpath", [None, "dir1", "dir2", "dir2/dir3/dir4"])
@@ -223,6 +224,7 @@ def test_copy(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
         else:
             assert str(newpath) == f"{myshared.name}/{new_fname}"
             assert myshared[new_fname].path == newpath
+    return None
 
 
 @pytest.mark.parametrize(
@@ -251,7 +253,7 @@ def test_dataset_step_diff_1(sub_urlbase, sub_user):
     assert ds.name == "ds-hello.b2frame"
     assert ds.urlbase == sub_urlbase
     # We don't support step != 1
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(Exception) as e_info:  # noqa: PT012
         _ = ds[::2]
         assert str(e_info.value) == "Only step=1 is supported"
 
@@ -456,7 +458,8 @@ def test_upload(fnames, remove, root, examples_dir, sub_urlbase, sub_user, tmp_p
         path = ds.download()
         assert path == ds.path
         # Check whether path exists and is a file
-        assert path.exists() and path.is_file()
+        assert path.exists()
+        assert path.is_file()
         # Now, upload the file to the remote root
         remote_ds = remote_root.upload(path, remotepath)
         # Check whether the file has been uploaded with the correct name
@@ -503,7 +506,7 @@ def test_vlmeta(name, sub_urlbase):
 def test_vlmeta_data(sub_urlbase):
     myroot = cat2.Root(TEST_CATERVA2_ROOT, sub_urlbase)
     ds = myroot["ds-sc-attr.b2nd"]
-    assert ds.vlmeta == dict(a=1, b="foo", c=123.456)
+    assert ds.vlmeta == {"a": 1, "b": "foo", "c": 123.456}
 
 
 ### Lazy expressions
@@ -619,8 +622,8 @@ def test_adduser(sub_urlbase, sub_user, sub_jwt_cookie):
     message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
     assert "User added" in message
     with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
-        l = cat2.listusers()
-        assert username in [user["email"] for user in l]
+        lusers = cat2.listusers()
+        assert username in [user["email"] for user in lusers]
     # Delete the user for future tests
     message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "User deleted" in message
@@ -645,7 +648,7 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
 
     # TODO: make this to work; currently this returns None
     # maxusers = configuration.get("subscriber.maxusers")
-    # For now, keep in sync with subscriber.maxusers in caterva2/tests/caterva2.toml
+    # For now, keep in sync with subscriber.maxusers in caterva2/tests/caterva2-login.toml
     maxusers = 5
     # Add maxusers users; we already have one user, so the next loop should fail
     # when reaching the creation of last user
@@ -654,21 +657,21 @@ def test_adduser_maxexceeded(sub_user, sub_jwt_cookie, configuration):
         username = f"test{n}@user.com"
         password = "testpassword"
         is_superuser = False
-        try:
+        if n == maxusers - 1:  # we already have one user
+            with pytest.raises(Exception) as e_info:
+                _ = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
+            assert "Bad Request" in str(e_info.value)
+        else:
             message = cat2.adduser(username, password, is_superuser, auth_cookie=sub_jwt_cookie)
             assert "User added" in message
-        except Exception as e_info:
-            assert n == maxusers - 1  # we already have one user
-            assert "Bad Request" in str(e_info)
-            # Remove the created users
-            for m in range(n):
-                username = f"test{m}@user.com"
-                message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
-                assert "User deleted" in message
-            # Count the current number of users
-            data = cat2.listusers(auth_cookie=sub_jwt_cookie)
-            assert len(data) == 1
-            break
+    # Remove the created users
+    for m in range(n):
+        username = f"test{m}@user.com"
+        message = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
+        assert "User deleted" in message
+    # Count the current number of users
+    data = cat2.listusers(auth_cookie=sub_jwt_cookie)
+    assert len(data) == 1
 
 
 def test_adduser_unauthorized(sub_user, sub_jwt_cookie):
@@ -700,7 +703,7 @@ def test_deluser(sub_user, sub_jwt_cookie):
         _ = cat2.deluser(username, auth_cookie=sub_jwt_cookie)
     assert "Bad Request" in str(e_info)
 
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(Exception) as e_info:  # noqa: SIM117
         with cat2.c2context(urlbase=sub_urlbase, username=username, password=password):
             _ = 0
 
@@ -762,7 +765,7 @@ def test_c2context_demo(sub_user):
         roots = cat2.get_roots()
         assert len(roots) == len(expected_roots)
         assert all(root_ in expected_roots for root_ in roots)
-        assert "Ok" == cat2.subscribe(root)
+        assert cat2.subscribe(root) == "Ok"
         paths_list = cat2.get_list(root)
         assert paths_list == expected_paths
         info = cat2.get_info(path)
@@ -807,7 +810,7 @@ def c2sub_user(urlbase):
     return (
         username,
         password,
-        cat2.get_auth_cookie(urlbase, dict(urlbase=urlbase, username=username, password=password)),
+        cat2.get_auth_cookie(urlbase, {"urlbase": urlbase, "username": username, "password": password}),
     )
 
 
@@ -833,7 +836,7 @@ def test_c2context_demo_auth(cookie, sub_urlbase, sub_user, tmp_path):
 
     localpath, remotepath = ("root-example/dir1/ds-2d.b2nd", "dir2/dir3/dir4/ds-2d2.b2nd")
     root = "@personal"
-    remote_root = cat2.Root(root, urlbase, dict(username=username, password=password))
+    remote_root = cat2.Root(root, urlbase, {"username": username, "password": password})
     remote_root.upload(localpath, remotepath)
     expected_paths = cat2.get_list(root, urlbase, auth_cookie)
     path = pathlib.Path(root + "/" + expected_paths[-1])
@@ -843,7 +846,7 @@ def test_c2context_demo_auth(cookie, sub_urlbase, sub_user, tmp_path):
         roots = cat2.get_roots()
         assert len(roots) == len(expected_roots)
         assert all(root_ in expected_roots for root_ in roots)
-        assert "Ok" == cat2.subscribe(expected_roots_list[-1])
+        assert cat2.subscribe(expected_roots_list[-1]) == "Ok"
         paths_list = cat2.get_list(root)
         assert paths_list == expected_paths
         info = cat2.get_info(path)

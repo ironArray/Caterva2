@@ -12,10 +12,8 @@ from collections.abc import Callable, Iterator, Mapping
 # Requirements
 import blosc2
 import h5py
-import hdf5plugin  # enable Blosc2 support in HDF5
 import msgpack
 import numpy
-
 
 """The registered identifier for Blosc2 in HDF5 filters."""
 BLOSC2_HDF5_FID = 32026
@@ -57,9 +55,9 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     if not h5dset_is_compatible(h5_dset):
         raise TypeError("HDF5 dataset is not compatible with Blosc2")
 
-    b2_args = dict(
-        chunks=h5_dset.chunks,  # None is ok (let Blosc2 decide)
-    )
+    b2_args = {
+        'chunks': h5_dset.chunks,  # None is ok (let Blosc2 decide)
+    }
 
     if (h5_dset.chunks is None
             or list(h5_dset._filters) != [f'{BLOSC2_HDF5_FID:#d}']
@@ -98,8 +96,8 @@ def _msgpack_h5attr(obj):
 
 def b2attrs_from_h5dset(
         h5_dset: h5py.Dataset,
-        attr_ok: Callable[[h5py.Dataset, str], None] = None,
-        attr_err: Callable[[h5py.Dataset, str, Exception], None] = None) -> (
+        attr_ok: Callable[[h5py.Dataset, str], None] | None = None,
+        attr_err: Callable[[h5py.Dataset, str, Exception], None] | None = None) -> (
             Mapping[str, object]):
     """Get msgpack-encoded attributes from the given HDF5 dataset.
 
@@ -211,7 +209,7 @@ def b2chunkers_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
         b2_schunk = getattr(b2_array, 'schunk', b2_array)
         # TODO: check if schunk is compatible with creation arguments
         if b2_schunk.nchunks < 1:
-            raise IOError(f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
+            raise OSError(f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
                           f"contains Blosc2 super-chunk with no chunks")
         if b2_schunk.nchunks > 1:
             # TODO: warn, check shape, re-compress as single chunk
@@ -271,7 +269,7 @@ def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
             raise IndexError(nchunk)
         chunk_start = h5_dset.id.get_chunk_info(nchunk).chunk_offset
         chunk_slice = tuple(slice(cst, cst + csz, 1)
-                            for (cst, csz) in zip(chunk_start, h5_dset.chunks))
+                            for (cst, csz) in zip(chunk_start, h5_dset.chunks, strict=False))
         return _b2getchunk_slice(chunk_slice)
 
     def _b2getchunk_slice(chunk_slice) -> bytes:

@@ -55,14 +55,12 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import httpx
 import pytest
 
 import caterva2 as cat2
-
-from pathlib import Path
-
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = '_caterva2'
@@ -81,7 +79,7 @@ def service_ep_getter(first):
         if first is not None:
             ep, first = first, None
             return ep
-        return 'localhost:%d' % next(local_port_iter)
+        return f'localhost:{next(local_port_iter)}'
     return get_service_ep
 
 
@@ -239,7 +237,7 @@ class ManagedServices(Services):
         return self._endpoints.get(service)
 
     def get_urlbase(self, service):
-        return 'http://%s' % self.get_endpoint(service)
+        return f'http://{self.get_endpoint(service)}'
 
 
 class ExternalServices(Services):
@@ -274,7 +272,7 @@ class ExternalServices(Services):
 
     def get_urlbase(self, service):
         ep = self.get_endpoint(service)
-        return 'http://%s' % ep if ep else None
+        return f'http://{ep}' if ep else None
 
 
 @pytest.fixture(scope='session')
@@ -316,7 +314,7 @@ def defers(func):
 
 @defers
 def main(defer):
-    from . import files, conf, sub_auth
+    from . import conf, files, sub_auth
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
     hdf5source = files.make_examples_hdf5()

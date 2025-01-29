@@ -22,6 +22,7 @@ import io
 import pathlib
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Collection, Iterator
+
 try:
     from typing import Self
 except ImportError:  # Python < 3.11

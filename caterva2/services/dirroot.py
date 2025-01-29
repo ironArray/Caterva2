@@ -11,11 +11,12 @@ import io
 import os
 import pathlib
 from collections.abc import AsyncIterator, Callable, Collection, Iterator
+
 try:
     from typing import Self
 except ImportError:  # Python < 3.11
     from typing import TypeVar
-    Self = TypeVar('Self', bound='PubRoot')
+    Self = TypeVar('Self', bound='PubRoot')    # noqa: F821
 
 # Requirements
 import blosc2
@@ -97,9 +98,9 @@ class DirectoryRoot:
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         async for changes in watchfiles.awatch(self.abspath):
-            relpaths = set(
+            relpaths = {
                 self.Path(pathlib.Path(abspath).relative_to(self.abspath))
-                for change, abspath in changes)
+                for change, abspath in changes}
             yield relpaths
 
 
@@ -145,7 +146,7 @@ def create_example_root(path):
     a["b"] = np.linspace(0, 1, 1000, dtype="float64")
     a["c"] = np.array([f"foobar{i}" for i in range(1000)], dtype="S10")
     # A field with random booleans
-    a["d"] = np.random.choice([True, False], 1000)
+    a["d"] = np.random.default_rng().choice([True, False], 1000)
     blosc2.asarray(a, chunks=(100,), blocks=(10,),
                    urlpath=path / "ds-1d-fields.b2nd", mode="w")
 
@@ -163,7 +164,7 @@ def create_example_root(path):
     # A scalar (string) with variable-length metalayers (user attributes).
     a = np.str_("foobar")
     b = blosc2.asarray(a, urlpath=path / "ds-sc-attr.b2nd", mode="w")
-    for k, v in dict(a=1, b="foo", c=123.456).items():
+    for k, v in {'a': 1, 'b': "foo", 'c': 123.456}.items():
         b.schunk.vlmeta[k] = v
 
     (path / "dir1").mkdir()

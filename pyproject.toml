@@ -140,17 +140,15 @@ ignore = [
     "B008",  # function call in default argument is normal in FastAPI
     "B028",
     "C901",  # Checks for functions with a high McCabe complexity
-    "PT004",  # deprecated
-    "PT005",  # deprecated
     "PT011",
+    "SIM103",
     "RET505",
     "RET508",
     "RUF005",
     "RUF015",
     "SIM108",
-    "UP027",  # deprecated
     "UP038",  # https://github.com/astral-sh/ruff/issues/7871
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**" = ["F841"]
+"caterva2/tests/**" = ["F841", "SIM115"]

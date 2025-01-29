@@ -33,11 +33,10 @@ import logging
 import os
 import pathlib
 import sys
+from collections.abc import Callable, Iterator
 
 import blosc2
 import h5py
-
-from collections.abc import Callable, Iterator, Mapping
 
 from .. import hdf5
 
