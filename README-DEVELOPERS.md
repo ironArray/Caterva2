@@ -52,6 +52,12 @@ This will start the daemons, run the tests, and shut the daemons down:
 pytest
 ```
 
+There is also a suite that tests authentication; you can run it with:
+
+```shell
+CATERVA2_SECRET=c2sikrit pytest -k auth
+```
+
 State files will be left in `_caterva2_tests`.
 
 ### With external daemons
