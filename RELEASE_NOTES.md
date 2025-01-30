@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 2025.01.30.1 to XXX
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 2025.01.30 to 2025.01.30.1
 
 * Generate description for the PyPI package.
