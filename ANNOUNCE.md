@@ -1,12 +1,10 @@
-Announcing Caterva2 #XXX version-specific blurb XXX#
-==============================
+Announcing Caterva2 2025.01.30.1
+================================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 data repositories.
 
-This is a major release that includes many new improvements on the
-web frontend and backend, as well as in the Python client API and
-other small fixes and improvements.
+This is a minor release that adds a description for the PyPI package.
 
 For more info, you can have a look at the release notes in:
 
