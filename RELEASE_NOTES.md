@@ -1,8 +1,8 @@
 # Release notes
 
-## Changes from 2024.07.01 to 2025.01.24
+## Changes from 2024.07.01 to 2025.01.30
 
-### Web client
+### Web frontend
 * Support for user registration and login.
 * New list/remove/move/copy commands in Prompt box.
 * User management commands (adduser/deluser/listusers) added to the Prompt box. Only superusers can use these commands.
@@ -19,21 +19,19 @@
 * Support for displaying image files.
 * When visualizing an image, resize it to fit the window.
 
-* TODO: Add better docs and video tutorials for the web client.
-
-### Client API
-* New upload/remove/move/copy commands in the subscriber.
-* New adduser/deluser/listusers APIs.
-* New c2context context manager to handle the connection to the server.
-* Support for new lazy expressions in Python-Blosc2 3.0 (with support for saving reductions).
-
-### Subscriber improvements
+### Web backend
 * Blosc2 Proxy class adoption. That allows the subscriber to fetch data from a publisher in chunks that are needed, instead of the whole dataset at once. This is useful for large datasets, where the subscriber may not have enough memory to hold the whole dataset.
 * New @personal and @shared areas in the server, where users can create new datasets and upload files accessible to them and to a group of users, respectively.
 * New @public area in the server, where users can publish datasets that are accessible to everyone.
 * Allow for the subscriber to run standalone, without a publisher.
 * New quota configuration in the server, to limit the amount of data that can be stored.
 * Support for Unix Domain Sockets.
+
+### Client API
+* New upload/remove/move/copy commands in the subscriber.
+* New adduser/deluser/listusers APIs.
+* New c2context context manager to handle the connection to the server.
+* Support for new lazy expressions in Python-Blosc2 3.0 (with support for saving reductions).
 
 ### Other improvements and fixes
 * Minimal version is Python 3.11 now.

@@ -1,10 +1,12 @@
-Announcing Caterva2 #XXX version-specific blurb XXX#
+Announcing Caterva2 2025.01.30
 ==============================
 
-Caterva2 is a high-performance storage and communication system for
-on-demand access to Blosc2 data repositories.
+Caterva2 is a high-performance storage and computation system for
+Blosc2 data repositories.
 
-This release is a minor release to fix the blosc2 version dependency to blosc2 3.0.0b1.
+This is a major release that includes many new improvements on the
+web frontend and backend, as well as in the Python client API and
+other small fixes and improvements.
 
 For more info, you can have a look at the release notes in:
 
