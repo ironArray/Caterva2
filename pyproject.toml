@@ -13,6 +13,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "caterva2"
+description = "A high-performance storage and computation system for Blosc2 datasets"
+long-description = "README.md"
 requires-python = ">=3.11"
 readme = "README.md"
 authors = [
