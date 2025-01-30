@@ -130,7 +130,7 @@ If the subscriber is to support user authentication (to restrict access, allow c
 env CATERVA2_SECRET=c2sikrit cat2sub
 ```
 
-Then users will need to register via the [Web client](Using-the-Web-client).
+Then users will need to register via the [Web backend](Using-the-Web-backend).
 
 Of course, use of HTTPS is very encouraged in this scenario, e.g. by placing the subscriber behind a reverse proxy, with a configuration like this:
 

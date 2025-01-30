@@ -9,7 +9,7 @@ maxdepth: 2
 launching-services
 API
 cli
-web-client
+web-frontend
 configuration
 independent-services
 ```

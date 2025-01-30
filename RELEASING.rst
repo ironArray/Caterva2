@@ -74,10 +74,9 @@ Check that the release is available at https://pypi.org/project/caterva2/ and te
   $ pip install caterva2[tests]
   $ python -m caterva2.tests -v
 
-- Go to ``Blosc/blogsite`` repo, then to "Actions", click on the most recent
-  workflow run (at the top of the list), and then click on the "Re-run all
-  jobs" button to regenerate the documentation and check that it has been
-  correctly updated in https://www.blosc.org.
+- Go to ``https://github.com/ironArray/website2`` repo, and follow instructions in README
+  to regenerate the documentation and check that it has been correctly updated in
+  https://ironarray.io/caterva2-doc.
 
 
 Announcing

@@ -2,7 +2,10 @@ Announcing Caterva2 #XXX version-specific blurb XXX#
 ==============================
 
 Caterva2 is a high-performance storage and computation system for
-Blosc2 data repositories.
+Blosc2 data repositories. It consists of a web backend, a frontend,
+a Python client and a command-line client.  It also allows an advanced
+mode, where different servers can share contents using a publish–subscribe
+messaging pattern.
 
 This is a major release that includes many new improvements on the
 web frontend and backend, as well as in the Python client API and

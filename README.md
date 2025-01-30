@@ -2,7 +2,13 @@
 
 ## What is it?
 
-Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets (either native or converted on-the-fly from HDF5) among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
+Caterva2 is a high-performance storage and computation system for [Blosc2][] data repositories. The data repository
+on a server can be accessed by multiple clients via a [web frontend](https://ironarray.io/caterva2-doc/tutorials/web-frontend.html). A [Python client API](https://ironarray.io/caterva2-doc/tutorials/API.html) and a [REST API](https://demo.caterva2.net/docs)
+are also available for programmatic access.  Finally, a [command-line client](https://ironarray.io/caterva2-doc/tutorials/cli.html) is available for quick access to the data.
+
+It also allows an advanced mode, where different servers can share contents using a [publish–subscribe][] messaging pattern. Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers (aka backend).
+
+In this documentation, we will use the terms "backend" and "subscriber" interchangeably, as they refer to the same component in the Caterva2 system.
 
 <img src="./doc/_static/Caterva2-PubSub.png" alt="Figure: Caterva2 publish-subscribe" width="95%"/>
 
@@ -64,7 +70,7 @@ In any case, if you intend to run Caterva2 services, client programs, or the tes
 - `clients` to use Caterva2 client programs (command-line or terminal)
 - `hdf5` to enable serving HDF5 files as Caterva2 roots at the publisher
 - `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
-- `plugins` to enable Web client features like the tomography display
+- `plugins` to enable web frontend features like the tomography display
 - `tools` for additional utilities like `cat2import` and `cat2export` (see below)
 - `tests` if you want to run the Caterva2 test suite
 
@@ -238,7 +244,7 @@ All the services mentioned above (and clients, to some limited extent) may get t
 
 ### Experimental user authentication
 
-The Caterva2 subscriber includes some initial and incomplete support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web client will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
+The Caterva2 subscriber includes some initial and incomplete support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web frontend will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
 
 To tell the command line client to authenticate against a subscriber, add the `--username` and `--password` options:
 
