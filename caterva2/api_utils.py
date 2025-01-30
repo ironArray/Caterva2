@@ -6,7 +6,6 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-import json
 import os
 import pathlib
 import re
@@ -14,10 +13,11 @@ import sys
 
 # Requirements
 import httpx
-import urllib3
 
 # Caterva2
 from caterva2 import utils
+
+from .urllib3_transport import Urllib3Transport
 
 # Optional requirements
 try:
@@ -174,19 +174,6 @@ def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None
 #
 
 
-# https://github.com/encode/httpx/discussions/2994
-class URLLib3Transport(httpx.BaseTransport):
-    def __init__(self):
-        self.pool = urllib3.PoolManager()
-
-    def handle_request(self, request: httpx.Request):
-        urllib3_response = self.pool.request("GET", str(request.url))  # Convert httpx.URL to string
-        content = json.loads(urllib3_response.data.decode("utf-8"))  # Decode the data and load as JSON
-        stream = httpx.ByteStream(json.dumps(content).encode("utf-8"))  # Convert back to JSON and encode
-        headers = [(b"content-type", b"application/json")]
-        return httpx.Response(200, headers=headers, stream=stream)
-
-
 def get_client_and_url(server, url, return_async_client=False):
     if return_async_client:
         client_class = httpx.AsyncClient
@@ -209,7 +196,7 @@ def get_client_and_url(server, url, return_async_client=False):
 
     # Make httpx work with pyodide
     if transport is None and sys.platform == "emscripten":
-        transport = URLLib3Transport()
+        transport = Urllib3Transport()
 
     client = client_class(transport=transport)
     return client, url

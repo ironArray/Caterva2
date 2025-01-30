@@ -35,7 +35,7 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "httpx",
+    "httpx<0.27.2",
     "numpy",
     "tomli>=2;python_version<\"3.11\"",
     "urllib3",  # Needed by pyodide
