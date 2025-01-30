@@ -2195,6 +2195,7 @@ async def jupyterlite_contents(
     if len(parts) == 0:
         rootdir = _get_rootdir(user, "@personal")
         if rootdir is not None:
+            rootdir.mkdir(exist_ok=True)
             content.append(directory(rootdir, "@personal"))
 
         rootdir = _get_rootdir(user, "@shared")
