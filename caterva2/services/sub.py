@@ -2118,9 +2118,10 @@ async def html_display(
         data = f"{url('api/preview/')}{path}"
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
     elif mimetype == "application/x-ipynb+json":
+        href = url(f"static/jupyterlite/notebooks/index.html?path={path}")
         src = f"{url('api/preview/')}{path}"
         return (
-            f'<a href="/static/jupyterlite/notebooks/index.html?path={path}" target="_blank">Run</a><br>'
+            f'<a href="{href}" target="_blank" class="btn btn-primary mb-1"><i class="fa-solid fa-gear"></i> Run</a>'
             f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
         )
     elif mimetype == "text/markdown":
