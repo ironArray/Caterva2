@@ -11,23 +11,24 @@ import os
 import httpx
 import pytest
 
-from caterva2.utils import add_user
+from caterva2.services import srv_utils
 
 
 def sub_auth_enabled():
-    return bool(os.environ.get('CATERVA2_SECRET'))
+    return bool(os.environ.get("CATERVA2_SECRET"))
 
 
 def make_sub_user(services):
     if not sub_auth_enabled():
         return None
 
-    state_dir = services.state_dir / 'subscriber'
-    return add_user('user@example.com', password='foobar11', is_superuser=True,
-                    state_dir=state_dir)
+    state_dir = services.state_dir / "subscriber"
+    return srv_utils.add_user(
+        "user@example.com", password="foobar11", is_superuser=True, state_dir=state_dir
+    )
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def sub_user(services):
     # TODO: This does not work with external services,
     # as their state directory is unknown.
@@ -35,15 +36,14 @@ def sub_user(services):
     return make_sub_user(services)
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def sub_jwt_cookie(sub_user, services):
     if not sub_user:
         return None
 
     username, password = sub_user
-    urlbase = services.get_urlbase('subscriber')
+    urlbase = services.get_urlbase("subscriber")
 
-    resp = httpx.post(f'{urlbase}/auth/jwt/login',
-                      data={'username': username, 'password': password})
+    resp = httpx.post(f"{urlbase}/auth/jwt/login", data={"username": username, "password": password})
     resp.raise_for_status()
-    return '='.join(list(resp.cookies.items())[0])
+    return "=".join(list(resp.cookies.items())[0])
