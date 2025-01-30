@@ -2357,7 +2357,7 @@ def main():
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
-    utils.uvicorn_run(app, args, root_path=root_path)
+    srv_utils.uvicorn_run(app, args, root_path=root_path)
 
 
 if __name__ == "__main__":

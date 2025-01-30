@@ -17,6 +17,7 @@ import blosc2
 import fastapi
 import fastapi_websocket_pubsub
 import safer
+import uvicorn
 
 # Project
 from caterva2 import models
@@ -205,6 +206,14 @@ def check_dset_path(proot, path):
     else:
         if not exists:
             raise_not_found()
+
+
+def uvicorn_run(app, args, root_path=""):
+    http = args.http
+    if http.uds:
+        uvicorn.run(app, uds=http.uds, root_path=root_path)
+    else:
+        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
 
 
 #

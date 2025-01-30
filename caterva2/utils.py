@@ -18,7 +18,6 @@ import pathlib
 import random
 import string
 
-import uvicorn
 from fastapi_users.exceptions import UserNotExists
 from sqlalchemy.future import select
 
@@ -133,19 +132,6 @@ def run_parser(parser):
 
 
 #
-# Web server related
-#
-
-
-def uvicorn_run(app, args, root_path=""):
-    http = args.http
-    if http.uds:
-        uvicorn.run(app, uds=http.uds, root_path=root_path)
-    else:
-        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
-
-
-#
 # Configuration file
 #
 
@@ -243,16 +229,19 @@ async def aadd_user(username, password, is_superuser, state_dir=None):
     sub_state.mkdir(parents=True, exist_ok=True)
     await sub_db.create_db_and_tables(sub_state)
     cx = contextlib.asynccontextmanager
-    async with (cx(sub_db.get_async_session)() as session,
-                cx(sub_db.get_user_db)(session) as udb,
-                cx(sub_users.get_user_manager)(udb) as umgr):
+    async with (
+        cx(sub_db.get_async_session)() as session,
+        cx(sub_db.get_user_db)(session) as udb,
+        cx(sub_users.get_user_manager)(udb) as umgr,
+    ):
         # Check that the user does not exist
         try:
             await umgr.get_by_email(user.username)
             return user
         except UserNotExists:
             schema = sub_schemas.UserCreate(
-                email = user.username, password = user.password, is_superuser = is_superuser)
+                email=user.username, password=user.password, is_superuser=is_superuser
+            )
             await umgr.create(schema)
 
     return user

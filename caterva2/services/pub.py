@@ -25,7 +25,7 @@ with contextlib.suppress(ImportError):
     import caterva2.services.hdf5root  # noqa: F401
 
 
-logger = logging.getLogger('pub')
+logger = logging.getLogger("pub")
 
 # Configuration
 broker = None
@@ -42,32 +42,32 @@ database = None  # <Database> instance
 async def worker(queue):
     while True:
         relpath = await queue.get()
-        with utils.log_exception(logger, 'Publication failed'):
+        with utils.log_exception(logger, "Publication failed"):
             assert isinstance(relpath, proot.Path)
             key = str(relpath)
             if proot.exists_dset(relpath):
-                print('UPDATE', relpath)
+                print("UPDATE", relpath)
                 # Load metadata
-                if relpath.suffix in {'.b2frame', '.b2nd'}:
+                if relpath.suffix in {".b2frame", ".b2nd"}:
                     metadata = proot.get_dset_meta(relpath)
                 else:
                     # Compress regular files in publisher's cache
                     with proot.open_dset_raw(relpath) as f:
                         data = f.read()
-                    b2path = cache / f'{relpath}.b2'
+                    b2path = cache / f"{relpath}.b2"
                     srv_utils.compress(data, b2path)
                     metadata = srv_utils.read_metadata(b2path)
 
                 # Publish
                 metadata = metadata.model_dump()
-                data = {'path': str(relpath), 'metadata': metadata}
+                data = {"path": str(relpath), "metadata": metadata}
                 await client.publish(name, data=data)
                 # Update database
                 database.etags[key] = proot.get_dset_etag(relpath)
                 database.save()
             else:
-                print('DELETE', relpath)
-                data = {'path': str(relpath)}
+                print("DELETE", relpath)
+                data = {"path": str(relpath)}
                 await client.publish(name, data=data)
                 # Update database
                 if key in database.etags:
@@ -99,14 +99,14 @@ async def watch_root(queue):
         for relpath in changes:
             queue.put_nowait(relpath)
 
-    print('THIS SHOULD BE PRINTED ON CTRL+C')
+    print("THIS SHOULD BE PRINTED ON CTRL+C")
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Connect to broker
     global client
-    client = srv_utils.start_client(f'ws://{broker}/pubsub')
+    client = srv_utils.start_client(f"ws://{broker}/pubsub")
 
     # Create queue and start workers
     queue = asyncio.Queue()
@@ -155,29 +155,29 @@ async def get_info(
     if if_none_match == etag:
         return Response(status_code=304)
 
-    if relpath.suffix in {'.b2frame', '.b2nd'}:
+    if relpath.suffix in {".b2frame", ".b2nd"}:
         meta = proot.get_dset_meta(relpath)
     else:
-        b2path = srv_utils.get_abspath(cache, f'{relpath}.b2')
+        b2path = srv_utils.get_abspath(cache, f"{relpath}.b2")
         meta = srv_utils.read_metadata(b2path)
 
     # Return
-    response.headers['Etag'] = etag
+    response.headers["Etag"] = etag
     return meta
 
 
 @app.get("/api/download/{path:path}")
 async def get_download(path: str, nchunk: int = -1):
     if nchunk < 0:
-        srv_utils.raise_bad_request('Chunk number required')
+        srv_utils.raise_bad_request("Chunk number required")
 
     relpath = proot.Path(path)
     srv_utils.check_dset_path(proot, relpath)
 
-    if relpath.suffix in {'.b2frame', '.b2nd'}:
+    if relpath.suffix in {".b2frame", ".b2nd"}:
         chunk = proot.get_dset_chunk(relpath, nchunk)
     else:
-        b2path = cache / (f'{relpath}.b2')
+        b2path = cache / (f"{relpath}.b2")
         schunk = blosc2.open(b2path)
         chunk = schunk.get_chunk(nchunk)
 
@@ -186,19 +186,20 @@ async def get_download(path: str, nchunk: int = -1):
 
 
 def main():
-    conf = utils.get_conf('publisher', allow_id=True)
-    _stdir = '_caterva2/pub' + (f'.{conf.id}' if conf.id else '')
-    parser = utils.get_parser(broker=conf.get('broker.http', 'localhost:8000'),
-                              http=conf.get('.http', 'localhost:8001'),
-                              loglevel=conf.get('.loglevel', 'warning'),
-                              statedir=conf.get('.statedir', _stdir),
-                              id=conf.id)
-    parser.add_argument('name', nargs='?', default=conf.get('.name'))
-    parser.add_argument('root', nargs='?', default=conf.get('.root', 'data'))
+    conf = utils.get_conf("publisher", allow_id=True)
+    _stdir = "_caterva2/pub" + (f".{conf.id}" if conf.id else "")
+    parser = utils.get_parser(
+        broker=conf.get("broker.http", "localhost:8000"),
+        http=conf.get(".http", "localhost:8001"),
+        loglevel=conf.get(".loglevel", "warning"),
+        statedir=conf.get(".statedir", _stdir),
+        id=conf.id,
+    )
+    parser.add_argument("name", nargs="?", default=conf.get(".name"))
+    parser.add_argument("root", nargs="?", default=conf.get(".root", "data"))
     args = utils.run_parser(parser)
     if args.name is None:  # because optional positional arg w/o conf default
-        raise RuntimeError(
-            "root name was not specified in configuration nor in arguments")
+        raise RuntimeError("root name was not specified in configuration nor in arguments")
 
     # Global configuration
     global broker, name, proot
@@ -209,21 +210,21 @@ def main():
     # Init cache
     global cache
     statedir = args.statedir.resolve()
-    cache = statedir / 'cache'
+    cache = statedir / "cache"
     cache.mkdir(exist_ok=True, parents=True)
 
     # Init database
     global database
     model = models.Publisher(etags={})
-    database = srv_utils.Database(statedir / 'db.json', model)
+    database = srv_utils.Database(statedir / "db.json", model)
 
     # Register
-    data = {'name': name, 'http': args.http}
-    api_utils.post('/api/roots', json=data, server=args.broker)
+    data = {"name": name, "http": args.http}
+    api_utils.post("/api/roots", json=data, server=args.broker)
 
     # Run
-    utils.uvicorn_run(app, args)
+    srv_utils.uvicorn_run(app, args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
