@@ -14,6 +14,7 @@ Contrarily to `cat2cli adduser`, this script does not require a running Caterva2
 """
 
 from caterva2 import utils
+from caterva2.services import srv_utils
 
 
 def main():
@@ -26,7 +27,7 @@ def main():
     args = utils.run_parser(parser)
 
     statedir = args.statedir.resolve()
-    user = utils.add_user(args.username, args.password, args.superuser, state_dir=statedir)
+    user = srv_utils.add_user(args.username, args.password, args.superuser, state_dir=statedir)
     print("Password:", user.password)
 
 

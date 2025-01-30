@@ -48,7 +48,7 @@ conf = ConnectionConfig(
 
 
 async def send_email(recipients, body):
-    from caterva2.services import settings  # ruff: noqa: I001
+    from caterva2.services import settings
 
     message = MessageSchema(
         subject="Reset password of your cat2.cloud account",

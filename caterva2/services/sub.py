@@ -1283,13 +1283,13 @@ if user_login_enabled():
             srv_utils.raise_unauthorized("Only superusers can add users")
 
         # Get the number of current users
-        users = await utils.alist_users()
+        users = await srv_utils.alist_users()
         # None or 0 means unlimited users
         if settings.maxusers and len(users) >= settings.maxusers:
             raise srv_utils.raise_bad_request(f"Only a maximum of {settings.maxusers} users are allowed")
 
         try:
-            await utils.aadd_user(
+            await srv_utils.aadd_user(
                 payload.username,
                 payload.password,
                 payload.superuser,
@@ -1326,8 +1326,8 @@ if user_login_enabled():
             srv_utils.raise_unauthorized("Only superusers can delete users")
 
         try:
-            users = await utils.alist_users(username)
-            await utils.adel_user(username)
+            users = await srv_utils.alist_users(username)
+            await srv_utils.adel_user(username)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
             raise srv_utils.raise_bad_request(f"Error in deleting {username}: {error_message}") from exc
@@ -1357,7 +1357,7 @@ if user_login_enabled():
         """
         if not user:
             raise srv_utils.raise_unauthorized("Listing users requires authentication")
-        return await utils.alist_users(username)
+        return await srv_utils.alist_users(username)
 
     # TODO: Support user verification
 
