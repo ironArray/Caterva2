@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 2025.01.30 to XXX
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 2024.07.01 to 2025.01.30
 
 ### Web frontend
