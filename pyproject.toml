@@ -36,6 +36,7 @@ dependencies = [
     "httpx",
     "numpy",
     "tomli>=2;python_version<\"3.11\"",
+    "urllib3",  # Needed by pyodide
 ]
 
 [tool.hatch.version]
@@ -48,7 +49,6 @@ base-services = [
     "fastapi_websocket_pubsub",
     "pydantic>=2",
     "safer",
-    "urllib3",  # Needed by pyodide
     "uvicorn",
     "watchfiles",
 ]
@@ -96,8 +96,6 @@ tests = [
     "caterva2[clients]",
     "caterva2[services]",
     "pytest<8",
-]
-plugins = [
 ]
 blosc2-plugins = [
     "blosc2-grok",
