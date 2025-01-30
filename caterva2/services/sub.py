@@ -1283,13 +1283,13 @@ if user_login_enabled():
             srv_utils.raise_unauthorized("Only superusers can add users")
 
         # Get the number of current users
-        users = await utils.alist_users()
+        users = await srv_utils.alist_users()
         # None or 0 means unlimited users
         if settings.maxusers and len(users) >= settings.maxusers:
             raise srv_utils.raise_bad_request(f"Only a maximum of {settings.maxusers} users are allowed")
 
         try:
-            await utils.aadd_user(
+            await srv_utils.aadd_user(
                 payload.username,
                 payload.password,
                 payload.superuser,
@@ -1326,8 +1326,8 @@ if user_login_enabled():
             srv_utils.raise_unauthorized("Only superusers can delete users")
 
         try:
-            users = await utils.alist_users(username)
-            await utils.adel_user(username)
+            users = await srv_utils.alist_users(username)
+            await srv_utils.adel_user(username)
         except Exception as exc:
             error_message = str(exc) if str(exc) else exc.__class__.__name__
             raise srv_utils.raise_bad_request(f"Error in deleting {username}: {error_message}") from exc
@@ -1357,7 +1357,7 @@ if user_login_enabled():
         """
         if not user:
             raise srv_utils.raise_unauthorized("Listing users requires authentication")
-        return await utils.alist_users(username)
+        return await srv_utils.alist_users(username)
 
     # TODO: Support user verification
 
@@ -2118,9 +2118,10 @@ async def html_display(
         data = f"{url('api/preview/')}{path}"
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
     elif mimetype == "application/x-ipynb+json":
+        href = url(f"static/jupyterlite/notebooks/index.html?path={path}")
         src = f"{url('api/preview/')}{path}"
         return (
-            f'<a href="/static/jupyterlite/notebooks/index.html?path={path}" target="_blank">Run</a><br>'
+            f'<a href="{href}" target="_blank" class="btn btn-primary mb-1"><i class="fa-solid fa-gear"></i> Run</a>'
             f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
         )
     elif mimetype == "text/markdown":
@@ -2194,6 +2195,7 @@ async def jupyterlite_contents(
     if len(parts) == 0:
         rootdir = _get_rootdir(user, "@personal")
         if rootdir is not None:
+            rootdir.mkdir(exist_ok=True)
             content.append(directory(rootdir, "@personal"))
 
         rootdir = _get_rootdir(user, "@shared")
@@ -2355,7 +2357,7 @@ def main():
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
-    utils.uvicorn_run(app, args, root_path=root_path)
+    srv_utils.uvicorn_run(app, args, root_path=root_path)
 
 
 if __name__ == "__main__":

@@ -8,28 +8,16 @@
 ###############################################################################
 
 import argparse
-import asyncio
-import collections
 import contextlib
 import datetime
 import logging
 import os
 import pathlib
-import random
-import string
-
-import uvicorn
-from fastapi_users.exceptions import UserNotExists
-from sqlalchemy.future import select
 
 try:
     import tomllib as toml
 except ImportError:
     import tomli as toml
-
-from caterva2.services.subscriber import db as sub_db
-from caterva2.services.subscriber import schemas as sub_schemas
-from caterva2.services.subscriber import users as sub_users
 
 #
 # Context managers
@@ -133,19 +121,6 @@ def run_parser(parser):
 
 
 #
-# Web server related
-#
-
-
-def uvicorn_run(app, args, root_path=""):
-    http = args.http
-    if http.uds:
-        uvicorn.run(app, uds=http.uds, root_path=root_path)
-    else:
-        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
-
-
-#
 # Configuration file
 #
 
@@ -224,71 +199,3 @@ def get_conf(prefix=None, allow_id=False):
             return Conf(conf, prefix=prefix, id=id_)
     except FileNotFoundError:
         return Conf({}, prefix=prefix, id=id_)
-
-
-#
-# Subscriber related
-#
-
-# <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
-UserAuth = collections.namedtuple("UserAuth", ["username", "password"])
-
-
-async def aadd_user(username, password, is_superuser, state_dir=None):
-    if password is None:
-        password = "".join([random.choice(string.ascii_letters) for i in range(8)])
-    user = UserAuth(username=username, password=password)
-
-    sub_state = state_dir
-    sub_state.mkdir(parents=True, exist_ok=True)
-    await sub_db.create_db_and_tables(sub_state)
-    cx = contextlib.asynccontextmanager
-    async with (cx(sub_db.get_async_session)() as session,
-                cx(sub_db.get_user_db)(session) as udb,
-                cx(sub_users.get_user_manager)(udb) as umgr):
-        # Check that the user does not exist
-        try:
-            await umgr.get_by_email(user.username)
-            return user
-        except UserNotExists:
-            schema = sub_schemas.UserCreate(
-                email = user.username, password = user.password, is_superuser = is_superuser)
-            await umgr.create(schema)
-
-    return user
-
-
-def add_user(username, password, is_superuser, state_dir=None):
-    return asyncio.run(aadd_user(username, password, is_superuser, state_dir=state_dir))
-
-
-async def adel_user(username: str):
-    async with (
-        contextlib.asynccontextmanager(sub_db.get_async_session)() as session,
-        contextlib.asynccontextmanager(sub_db.get_user_db)(session) as udb,
-        contextlib.asynccontextmanager(sub_users.get_user_manager)(udb) as umgr,
-    ):
-        user = await umgr.get_by_email(username)
-        if user:
-            await umgr.delete(user)
-
-
-def del_user(username):
-    return asyncio.run(adel_user(username))
-
-
-async def alist_users(username=None):
-    async with (
-        contextlib.asynccontextmanager(sub_db.get_async_session)() as session,
-        contextlib.asynccontextmanager(sub_db.get_user_db)(session) as udb,
-    ):
-        query = select(udb.user_table)
-        if username:
-            query = query.where(udb.user_table.email == username)
-        result = await session.execute(query)
-        # Return a list of dictionaries
-        return result.scalars().all()
-
-
-def list_users(username=None):
-    return asyncio.run(alist_users(username))
