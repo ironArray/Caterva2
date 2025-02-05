@@ -35,4 +35,3 @@ sub:
 lite:
 	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
 	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
-	cp 6941.cc0d6a3.js ./caterva2/services/static/jupyterlite/build/
