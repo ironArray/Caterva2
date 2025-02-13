@@ -59,7 +59,6 @@ logger = logging.getLogger("sub")
 clients = {}  # topic: <PubSubClient>
 locks = {}
 
-
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
 mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 
@@ -2231,7 +2230,7 @@ async def jupyterlite_contents(
                 mimetype = guess_type(relpath)
                 if mimetype == "application/x-ipynb+json":
                     content_type = "notebook"
-                    writable = False
+                    writable = True
                 else:
                     content_type = "file"
                     writable = False
