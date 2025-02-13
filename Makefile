@@ -34,5 +34,5 @@ sub:
 
 lite:
 	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
-	${BIN}/pip install git+ssh://git@github.com/ironArray/jupyter-cat2cloud.git
+	${BIN}/pip install git+https://github.com/ironArray/jupyter-cat2cloud
 	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
