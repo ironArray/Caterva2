@@ -36,7 +36,7 @@ from .api import (
 )
 from .api_utils import get_auth_cookie
 
-__version__ = "2025.01.30.1.dev0"
+__version__ = "2025.02.13"
 """The version in use of the Caterva2 package."""
 
 __all__ = [

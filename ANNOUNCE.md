@@ -1,5 +1,5 @@
-Announcing Caterva2 2025.01.30.1
-================================
+Announcing Caterva2 2025.02.13
+==============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 data repositories.

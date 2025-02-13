@@ -1,8 +1,10 @@
 # Release notes
 
-## Changes from 2025.01.30.1 to XXX
+## Changes from 2025.01.30.1 to 2025.02.13
 
-#XXX version-specific blurb XXX#
+* Better urllib3 transport to run caterva2 in pyodide
+* Better integration jupyter lite.
+* Support for jupyter menus in new extension jupyter-cat2cloud
 
 ## Changes from 2025.01.30 to 2025.01.30.1
 
