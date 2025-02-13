@@ -1525,6 +1525,7 @@ async def htmx_path_list(
         "search_url": search_url,
         "cmd_url": cmd_url,
         "user": user,
+        "commands": commands_list,
     }
     response = templates.TemplateResponse(request, "path_list.html", context)
 
@@ -1781,6 +1782,133 @@ async def htmx_path_view(
     return templates.TemplateResponse(request, "info_view.html", context)
 
 
+class AddUserCmd:
+    """Add a new user."""
+
+    names = ("adduser",)
+    expected = "adduser <username>"
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        if len(argv) != 2:
+            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
+        try:
+            userpl = models.AddUserPayload(username=argv[1], password=None, superuser=False)
+            message = await add_user(userpl, user)
+        except Exception as exc:
+            return htmx_error(request, f"Error adding user: {exc}")
+        return htmx_message(request, message)
+
+
+class DelUserCmd:
+    """Remove user."""
+
+    names = ("deluser",)
+    expected = "deluser <username>"
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        if len(argv) != 2:
+            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
+        try:
+            message = await del_user(argv[1], user)
+        except Exception as exc:
+            return htmx_error(request, f"Error deleting user: {exc}")
+        return htmx_message(request, message)
+
+
+class ListUsersCmd:
+    """List users."""
+
+    names = ("lsu", "listusers")
+    expected = "lsu/listusers"
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        if len(argv) != 1:
+            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
+        try:
+            lusers = await list_users()
+        except Exception as exc:
+            return htmx_error(request, f"Error listing users: {exc}")
+        # Get the list of users
+        users = [user.email for user in lusers]
+        return htmx_message(request, f"Users: {users}")
+
+
+class CopyCmd:
+    """Copy file."""
+
+    names = ("cp", "copy")
+    expected = "cp/copy <src> <dst>"
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        if len(argv) != 3:
+            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MoveCopyPayload(src=src, dst=dst)
+        try:
+            result_path = await copy(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f"Error copying file: {exc}")
+        result_path = await display_first(result_path, user)
+        # Redirect to display new dataset
+        url = make_url(request, "html_home", path=result_path)
+        return htmx_redirect(hx_current_url, url)
+
+
+class MoveCmd:
+    """Move or rename file."""
+
+    names = ("mv", "move")
+    expected = "mv/move <src> <dst>"
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        if len(argv) != 3:
+            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
+        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
+        payload = models.MoveCopyPayload(src=src, dst=dst)
+        try:
+            result_path = await move(payload, user)
+        except Exception as exc:
+            return htmx_error(request, f"Error moving file: {exc}")
+        result_path = await display_first(result_path, user)
+        # Redirect to display new dataset
+        url = make_url(request, "html_home", path=result_path)
+        return htmx_redirect(hx_current_url, url)
+
+
+class RemoveCmd:
+    """Remove file."""
+
+    names = ("rm", "remove")
+    expected = "rm/remove <path>"
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        if len(argv) != 2:
+            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
+        try:
+            # Nothing to show after removing, but anyway
+            await remove(path, user)
+        except Exception as exc:
+            return htmx_error(request, f"Error removing file: {exc}")
+
+
+commands_list = [AddUserCmd, DelUserCmd, ListUsersCmd, CopyCmd, MoveCmd, RemoveCmd]
+
+commands = {}
+for cmd in commands_list:
+    for name in cmd.names:
+        if name in commands:
+            raise ValueError(f'duplicated "{name}" command')
+        commands[name] = cmd
+
+
 @app.post("/htmx/command/", response_class=HTMLResponse)
 async def htmx_command(
     request: Request,
@@ -1812,7 +1940,7 @@ async def htmx_command(
         lazy = operator == "="
         try:
             result_name, expr = command.split(operator, maxsplit=1)
-            result_path = make_expr(result_name, expr, operands, user, lazy=lazy)
+            make_expr(result_name, expr, operands, user, lazy=lazy)
         except SyntaxError:
             return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
         except ValueError as exc:
@@ -1826,76 +1954,9 @@ async def htmx_command(
             return htmx_error(request, f"Runtime error: {exc}")
 
     # Commands
-
-    if argv[0] in {"adduser"}:
-        if len(argv) != 2:
-            return htmx_error(request, "Invalid syntax: expected adduser <username>")
-        try:
-            userpl = models.AddUserPayload(username=argv[1], password=None, superuser=False)
-            message = await add_user(userpl, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error adding user: {exc}")
-        return htmx_message(request, message)
-
-    if argv[0] in {"deluser"}:
-        if len(argv) != 2:
-            return htmx_error(request, "Invalid syntax: expected deluser <username>")
-        try:
-            message = await del_user(argv[1], user)
-        except Exception as exc:
-            return htmx_error(request, f"Error deleting user: {exc}")
-        return htmx_message(request, message)
-
-    # Where to display this in web interface?
-    if argv[0] in {"lsu", "listusers"}:
-        if len(argv) != 1:
-            return htmx_error(request, "Invalid syntax: expected lsu/listusers")
-        try:
-            lusers = await list_users()
-        except Exception as exc:
-            return htmx_error(request, f"Error listing users: {exc}")
-        # Get the list of users
-        users = [user.email for user in lusers]
-        return htmx_message(request, f"Users: {users}")
-
-    if argv[0] in {"cp", "copy"}:
-        if len(argv) != 3:
-            return htmx_error(request, "Invalid syntax: expected cp/copy <src> <dst>")
-        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
-        payload = models.MoveCopyPayload(src=src, dst=dst)
-        try:
-            result_path = await copy(payload, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error copying file: {exc}")
-        result_path = await display_first(result_path, user)
-        # Redirect to display new dataset
-        url = make_url(request, "html_home", path=result_path)
-        return htmx_redirect(hx_current_url, url)
-
-    if argv[0] in {"mv", "move"}:
-        if len(argv) != 3:
-            return htmx_error(request, "Invalid syntax: expected mv/move <src> <dst>")
-        src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
-        payload = models.MoveCopyPayload(src=src, dst=dst)
-        try:
-            result_path = await move(payload, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error moving file: {exc}")
-        result_path = await display_first(result_path, user)
-        # Redirect to display new dataset
-        url = make_url(request, "html_home", path=result_path)
-        return htmx_redirect(hx_current_url, url)
-
-    if argv[0] in {"rm", "remove"}:
-        if len(argv) != 2:
-            return htmx_error(request, "Invalid syntax: expected rm/remove <path>")
-        path = operands.get(argv[1], argv[1])
-        path = pathlib.Path(path)
-        try:
-            # Nothing to show after removing, but anyway
-            result_path = await remove(path, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error removing file: {exc}")
+    cmd = commands.get(argv[0])
+    if cmd is not None:
+        return await cmd.call(request, user, argv, operands, hx_current_url)
 
     # If the command is not recognized
     return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')

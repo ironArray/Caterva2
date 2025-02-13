@@ -2,14 +2,37 @@
 {% if user %}
 <form hx-post="{{ cmd_url }}" hx-include="#dataset-list input">
     <div class="d-flex">
-        <input class="form-control me-2" name="command" type="text"
-               placeholder="Prompt" aria-label="Prompt" value="">
+        <div class="input-group me-2">
+            <input class="form-control" name="command" type="text" placeholder="Prompt" aria-label="Prompt" value="">
+            <span class="input-group-text"
+                  role="button"
+                  data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"
+                >
+                <i class="fa-regular fa-question"></i>
+            </span>
+        </div>
         <button class="btn btn-outline-success" type="submit">GO</button>
     </div>
 </form>
-{% endif %}
 
 <hr>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel" style="width: 600px">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="offcanvasRightLabel">List of commands</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+      <dl class="row">
+          {% for command in commands %}
+            <dt class="col-sm-4">{{ command.expected }}</dt>
+            <dd class="col-sm-8">{{ command.__doc__ }}</dd>
+          {% endfor %}
+      </dl>
+  </div>
+</div>
+
+{% endif %}
 
 <h5>Datasets:</h5>
 
