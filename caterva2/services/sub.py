@@ -8,6 +8,7 @@
 ###############################################################################
 
 import asyncio
+import collections.abc
 import contextlib
 import functools
 import io
@@ -22,7 +23,6 @@ import string
 import tarfile
 import typing
 import zipfile
-from collections.abc import Awaitable, Callable
 
 # Requirements
 import blosc2
@@ -673,7 +673,7 @@ def abspath_and_dataprep(
     path: pathlib.Path, slice_: (tuple | None) = None, user: (db.User | None) = None, may_not_exist=False
 ) -> tuple[
     pathlib.Path,
-    Callable[[], Awaitable],
+    collections.abc.Callable[[], collections.abc.Awaitable],
 ]:
     """
     Get absolute path in local storage and data preparation operation.
@@ -1188,11 +1188,8 @@ async def remove(
     elif root == "@public":
         path2 = settings.public / pathlib.Path(*path.parts[1:])
     else:
-        # Only allow removing from the special roots
-        raise fastapi.HTTPException(
-            status_code=400,  # bad request
-            detail="Only removing from @personal or @shared or @public roots is allowed",
-        )
+        detail = "Only removing from @personal or @shared or @public roots is allowed"
+        raise fastapi.HTTPException(status_code=400, detail=detail)
 
     # If path2 is a directory, remove the contents of the directory
     if path2.is_dir():
@@ -1213,6 +1210,60 @@ async def remove(
                 ) from exc
 
     # Return the path
+    return path
+
+
+@app.post("/api/addnotebook/{path:path}")
+async def add_notebook(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Add a new notebook.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path where the notebook will be created.
+
+    Returns
+    -------
+    str
+        The path of the new notebook.
+    """
+
+    if not user:
+        raise srv_utils.raise_unauthorized("Authentication is required")
+
+    if path.suffix != ".ipynb":
+        detail = "Notebooks must end with the .ipynb extension"
+        raise fastapi.HTTPException(status_code=400, detail=detail)
+
+    # Replace the root with absolute path
+    root = path.parts[0]
+    if root == "@personal":
+        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
+    elif root == "@shared":
+        path2 = settings.shared / pathlib.Path(*path.parts[1:])
+    elif root == "@public":
+        path2 = settings.public / pathlib.Path(*path.parts[1:])
+    else:
+        detail = "Only @personal or @shared or @public roots can be modified"
+        raise fastapi.HTTPException(status_code=400, detail=detail)
+
+    # Check a file does not exist in the same path
+    path2 = pathlib.Path(f"{path2}.b2")
+    if path2.exists():
+        detail = "File exists at the given path"
+        raise fastapi.HTTPException(status_code=400, detail=detail)
+
+    # Create the new notebook at the given path
+    nb = nbformat.v4.new_notebook()
+    file = io.StringIO()
+    nbformat.write(nb, file)
+    data = file.getvalue().encode()
+    srv_utils.compress(data, dst=path2)
+
     return path
 
 
@@ -1787,16 +1838,12 @@ class AddUserCmd:
 
     names = ("adduser",)
     expected = "adduser <username>"
+    nargs = 2
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        if len(argv) != 2:
-            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
-        try:
-            userpl = models.AddUserPayload(username=argv[1], password=None, superuser=False)
-            message = await add_user(userpl, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error adding user: {exc}")
+        payload = models.AddUserPayload(username=argv[1], password=None, superuser=False)
+        message = await add_user(payload, user)
         return htmx_message(request, message)
 
 
@@ -1805,15 +1852,11 @@ class DelUserCmd:
 
     names = ("deluser",)
     expected = "deluser <username>"
+    nargs = 2
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        if len(argv) != 2:
-            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
-        try:
-            message = await del_user(argv[1], user)
-        except Exception as exc:
-            return htmx_error(request, f"Error deleting user: {exc}")
+        message = await del_user(argv[1], user)
         return htmx_message(request, message)
 
 
@@ -1822,16 +1865,11 @@ class ListUsersCmd:
 
     names = ("lsu", "listusers")
     expected = "lsu/listusers"
+    nargs = 1
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        if len(argv) != 1:
-            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
-        try:
-            lusers = await list_users()
-        except Exception as exc:
-            return htmx_error(request, f"Error listing users: {exc}")
-        # Get the list of users
+        lusers = await list_users()
         users = [user.email for user in lusers]
         return htmx_message(request, f"Users: {users}")
 
@@ -1841,19 +1879,15 @@ class CopyCmd:
 
     names = ("cp", "copy")
     expected = "cp/copy <src> <dst>"
+    nargs = 3
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        if len(argv) != 3:
-            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
         src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
         payload = models.MoveCopyPayload(src=src, dst=dst)
-        try:
-            result_path = await copy(payload, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error copying file: {exc}")
-        result_path = await display_first(result_path, user)
+        result_path = await copy(payload, user)
         # Redirect to display new dataset
+        result_path = await display_first(result_path, user)
         url = make_url(request, "html_home", path=result_path)
         return htmx_redirect(hx_current_url, url)
 
@@ -1863,19 +1897,15 @@ class MoveCmd:
 
     names = ("mv", "move")
     expected = "mv/move <src> <dst>"
+    nargs = 3
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        if len(argv) != 3:
-            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
         src, dst = operands.get(argv[1], argv[1]), operands.get(argv[2], argv[2])
         payload = models.MoveCopyPayload(src=src, dst=dst)
-        try:
-            result_path = await move(payload, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error moving file: {exc}")
-        result_path = await display_first(result_path, user)
+        result_path = await move(payload, user)
         # Redirect to display new dataset
+        result_path = await display_first(result_path, user)
         url = make_url(request, "html_home", path=result_path)
         return htmx_redirect(hx_current_url, url)
 
@@ -1885,21 +1915,34 @@ class RemoveCmd:
 
     names = ("rm", "remove")
     expected = "rm/remove <path>"
+    nargs = 2
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        if len(argv) != 2:
-            return htmx_error(request, f"Invalid syntax: expected {cls.expected}")
         path = operands.get(argv[1], argv[1])
         path = pathlib.Path(path)
-        try:
-            # Nothing to show after removing, but anyway
-            await remove(path, user)
-        except Exception as exc:
-            return htmx_error(request, f"Error removing file: {exc}")
+        await remove(path, user)
+        # Nothing to show after removing
 
 
-commands_list = [AddUserCmd, DelUserCmd, ListUsersCmd, CopyCmd, MoveCmd, RemoveCmd]
+class AddNotebookCmd:
+    """Add a new notebook."""
+
+    names = ("addnb",)
+    expected = "addnb <path>"
+    nargs = 2
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        path = pathlib.Path(argv[1])
+        path = await add_notebook(path, user)
+
+        # Redirect to display new dataset
+        url = make_url(request, "html_home", path=path)
+        return htmx_redirect(hx_current_url, url)
+
+
+commands_list = [AddUserCmd, DelUserCmd, ListUsersCmd, CopyCmd, MoveCmd, RemoveCmd, AddNotebookCmd]
 
 commands = {}
 for cmd in commands_list:
@@ -1956,7 +1999,13 @@ async def htmx_command(
     # Commands
     cmd = commands.get(argv[0])
     if cmd is not None:
-        return await cmd.call(request, user, argv, operands, hx_current_url)
+        if len(argv) != cmd.nargs:
+            return htmx_error(request, f"Invalid syntax: expected {cmd.expected}")
+
+        try:
+            return await cmd.call(request, user, argv, operands, hx_current_url)
+        except Exception as exc:
+            return htmx_error(request, f'Error in "{command}" command: {exc.detail}')
 
     # If the command is not recognized
     return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')

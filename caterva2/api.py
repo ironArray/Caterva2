@@ -10,9 +10,10 @@
 This module provides a Python API to Caterva2.
 """
 
+import contextlib
 import functools
 import pathlib
-from contextlib import contextmanager
+import sys
 
 from caterva2 import api_utils, utils
 
@@ -38,16 +39,22 @@ _subscriber_data = {
 
 def _format_paths(urlbase, path=None):
     if urlbase is None:
-        urlbase = _subscriber_data["urlbase"]
+        if sys.platform == "emscripten":
+            urlbase = ""
+        else:
+            urlbase = _subscriber_data["urlbase"]
+
     if isinstance(urlbase, pathlib.Path):
         urlbase = urlbase.as_posix()
     if urlbase.endswith("/"):
         urlbase = urlbase[:-1]
         urlbase = pathlib.Path(urlbase)
+
     if path is not None:
         p = path.as_posix() if isinstance(path, pathlib.Path) else path
         if p.startswith("/"):
             raise ValueError("path cannot start with a slash")
+
     return urlbase, path
 
 
@@ -1199,7 +1206,7 @@ class Dataset(File):
         return f"<Dataset: {self.path}>"
 
 
-@contextmanager
+@contextlib.contextmanager
 def c2context(
     *,
     urlbase: (str | None) = None,

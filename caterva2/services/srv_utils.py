@@ -38,6 +38,7 @@ def compress_file(path):
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         path2 = f"{path}.b2"
+
     with open(path2, "wb") as dst:
         dst.write(data)
 
