@@ -2340,7 +2340,7 @@ async def jupyterlite_contents(
                 mimetype = guess_type(relpath)
                 if mimetype == "application/x-ipynb+json":
                     content_type = "notebook"
-                    writable = True
+                    writable = False
                 else:
                     content_type = "file"
                     writable = False
