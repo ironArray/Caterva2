@@ -1,8 +1,12 @@
 # Release notes
 
-## Changes from 2025.02.13 to XXX
+## Changes from 2025.02.13 to 2025.02.20
 
-#XXX version-specific blurb XXX#
+* Use requests instead of httpx to avoid issues with Pyodide.
+* Avoid setting urlbase in Pyodide.
+* New addnb command in the Prompt box to add a Jupyter notebook to the server.
+* New help button for commands in the Prompt box.
+* Notebooks are in read-only mode for now (but upload to server is working).
 
 ## Changes from 2025.01.30.1 to 2025.02.13
 

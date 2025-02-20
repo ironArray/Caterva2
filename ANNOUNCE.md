@@ -1,10 +1,13 @@
-Announcing Caterva2 2025.02.13
+Announcing Caterva2 2025.02.20
 ==============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 data repositories.
 
-This is a minor release that adds a description for the PyPI package.
+This is a minor release that improves the use of Jupyter notebooks
+in the server.  Now, you can add a Jupyter notebook to the server
+using the new `addnb` command in the Prompt box.  Also, there is a
+new help button for commands in the Prompt box.
 
 For more info, you can have a look at the release notes in:
 
