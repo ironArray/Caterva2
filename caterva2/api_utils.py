@@ -13,11 +13,10 @@ import sys
 
 # Requirements
 import httpx
+import requests
 
 # Caterva2
 from caterva2 import utils
-
-from .urllib3_transport import Urllib3Transport
 
 # Optional requirements
 try:
@@ -26,6 +25,11 @@ try:
     blosc2_is_here = True
 except ImportError:
     blosc2_is_here = False
+
+
+USE_REQUESTS = os.environ.get("USE_REQUESTS", False)
+if sys.platform == "emscripten":
+    USE_REQUESTS = True
 
 
 def slice_to_string(slice_):
@@ -61,7 +65,7 @@ def parse_slice(string):
     return tuple(obj) if len(obj) > 1 else obj[0]
 
 
-def get_auth_cookie(urlbase, user_auth, server=None):
+def get_auth_cookie(urlbase, user_auth):
     """
     Authenticate to a subscriber as a user and get an authorization cookie.
 
@@ -90,7 +94,7 @@ def get_auth_cookie(urlbase, user_auth, server=None):
     PosixPath('@personal/attr.b2nd')
     """
     url = f"{urlbase}/auth/jwt/login"
-    client, url = get_client_and_url(server, url)
+    client, url = get_client_and_url(None, url)
 
     if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
         user_auth = user_auth._asdict()
@@ -99,8 +103,8 @@ def get_auth_cookie(urlbase, user_auth, server=None):
     return "=".join(list(resp.cookies.items())[0])
 
 
-def fetch_data(path, urlbase, params, auth_cookie=None, server=None):
-    response = _xget(f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, server=server)
+def fetch_data(path, urlbase, params, auth_cookie=None):
+    response = _xget(f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
     try:
@@ -133,8 +137,8 @@ def b2_unpack(filepath):
 _attachment_b2fname_rx = re.compile(r';\s*filename\*?\s*=\s*"([^"]+\.b2)"')
 
 
-def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None):
-    client, url = get_client_and_url(server, url)
+def download_url(url, localpath, try_unpack=True, auth_cookie=None):
+    client, url = get_client_and_url(None, url)
 
     localpath = pathlib.Path(localpath)
     localpath.parent.mkdir(parents=True, exist_ok=True)
@@ -143,24 +147,40 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None, server=None)
         localpath /= url.split("/")[-1]
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
-    with client.stream("GET", url, headers=headers) as r:
-        r.raise_for_status()
-        # Build the local filepath
-        cdisp = r.headers.get("content-disposition", "")
-        is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
-        if is_b2:
-            # Append '.b2' to the filename
-            localpath = localpath.with_suffix(localpath.suffix + ".b2")
-        with open(localpath, "wb") as f:
-            for data in r.iter_bytes():
-                f.write(data)
-        if is_b2 and try_unpack:
-            localpath = b2_unpack(localpath)
+    if USE_REQUESTS:
+        with client.get(url, headers=headers, stream=True) as r:
+            r.raise_for_status()
+            # Build the local filepath
+            cdisp = r.headers.get("content-disposition", "")
+            is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
+            if is_b2:
+                # Append '.b2' to the filename
+                localpath = localpath.with_suffix(localpath.suffix + ".b2")
+            with open(localpath, "wb") as f:
+                for data in r.iter_content():
+                    f.write(data)
+
+    else:
+        with client.stream("GET", url, headers=headers) as r:
+            r.raise_for_status()
+            # Build the local filepath
+            cdisp = r.headers.get("content-disposition", "")
+            is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
+            if is_b2:
+                # Append '.b2' to the filename
+                localpath = localpath.with_suffix(localpath.suffix + ".b2")
+            with open(localpath, "wb") as f:
+                for data in r.iter_bytes():
+                    f.write(data)
+
+    if is_b2 and try_unpack:
+        localpath = b2_unpack(localpath)
+
     return localpath
 
 
-def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None, server=None):
-    client, url = get_client_and_url(server, f"{urlbase}/api/upload/{remotepath}")
+def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None):
+    client, url = get_client_and_url(None, f"{urlbase}/api/upload/{remotepath}")
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     with open(localpath, "rb") as f:
@@ -175,6 +195,12 @@ def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None
 
 
 def get_client_and_url(server, url, return_async_client=False):
+    # Use requests instead of httpx (for pyodide)
+    if USE_REQUESTS and not return_async_client and server is None:
+        client = requests.Session()
+        return client, url
+
+    # When NOT called from pyodide
     if return_async_client:
         client_class = httpx.AsyncClient
         transport_class = httpx.AsyncHTTPTransport
@@ -193,10 +219,6 @@ def get_client_and_url(server, url, return_async_client=False):
             url = f"http://localhost{url}"
         else:
             url = f"http://{server}{url}"
-
-    # Make httpx work with pyodide
-    if transport is None and sys.platform == "emscripten":
-        transport = Urllib3Transport()
 
     client = client_class(transport=transport)
     return client, url

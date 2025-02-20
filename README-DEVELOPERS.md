@@ -60,6 +60,13 @@ There is also a suite that tests authentication; you can run it through:
 CATERVA2_SECRET=c2sikrit pytest
 ```
 
+To simulate a pyodide envirnment, set the `USE_REQUESTS` environment variable:
+
+```sh
+USE_REQUESTS=1 CATERVA2_SECRET=c2sikrit pytest
+```
+```
+
 ### With external daemons
 
 To have daemons running across several test runs (for faster testing), start the daemons:

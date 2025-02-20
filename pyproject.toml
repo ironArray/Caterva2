@@ -35,10 +35,10 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "httpx<0.27.2",
+    "httpx",
     "numpy",
+    "requests",  # For the client (works with pyodide too)
     "tomli>=2;python_version<\"3.11\"",
-    "urllib3",  # Needed by pyodide
 ]
 
 [tool.hatch.version]
