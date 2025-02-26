@@ -97,7 +97,7 @@ tools = [
 tests = [
     "caterva2[clients]",
     "caterva2[services]",
-    "pytest<8",
+    "pytest",
 ]
 blosc2-plugins = [
     "blosc2-grok",
