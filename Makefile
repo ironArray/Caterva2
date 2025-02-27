@@ -11,6 +11,8 @@ install:
 	${BIN}/pip install -e .[clients]
 	${BIN}/pip install -e .[tests]
 	${BIN}/pip install pre-commit
+	#${BIN}/pip install -e ../jupyterlite/py/jupyterlite-core
+	#${BIN}/pip install -e ../jupyterlite/py/jupyterlite
 
 assets:
 	rm caterva2/services/static/build/*
@@ -35,5 +37,5 @@ sub:
 lite:
 	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
 	#${BIN}/pip install git+https://github.com/ironArray/jupyter-cat2cloud
-	${BIN}/pip install -e ../jupyter-cat2cloud
+	#${BIN}/pip install -e ../jupyter-cat2cloud
 	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
