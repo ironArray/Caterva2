@@ -179,7 +179,7 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None):
     return localpath
 
 
-def upload_file(localpath, remotepath, urlbase, try_pack=False, auth_cookie=None):
+def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
     client, url = get_client_and_url(None, f"{urlbase}/api/upload/{remotepath}")
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None

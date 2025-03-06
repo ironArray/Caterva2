@@ -12,8 +12,11 @@ This module provides a Python API to Caterva2.
 
 import contextlib
 import functools
+import io
 import pathlib
 import sys
+
+import blosc2
 
 from caterva2 import api_utils, utils
 
@@ -356,7 +359,7 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     Returns
     -------
     Path
-        Path of the uploaded file on ther server.
+        Path of the uploaded file on the server.
 
     Examples
     --------
@@ -376,9 +379,57 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
         localpath,
         dataset,
         urlbase,
-        try_pack=api_utils.blosc2_is_here,
         auth_cookie=auth_cookie,
     )
+
+
+def append(ndarray, remotepath, urlbase=None, auth_cookie=None):
+    """
+    Appands the given blosc2.NDArray to the remote location.
+
+    Parameters
+    ----------
+    ndarray : blosc2.NDArray
+        NDArray object.
+    remotepath : Path
+        Remote path to upload the dataset to.
+    urlbase : str, optional
+        Base URL to query. Default to
+        :py:obj:`caterva2.sub_urlbase_default`.
+    auth_cookie : str, optional
+        HTTP cookie for authorization.
+        Must be provided unless already set in
+        a :py_obj:`caterva2.c2context`.
+
+    Returns
+    -------
+    Path
+        Path of the uploaded file on the server.
+
+    Examples
+    --------
+    >>> import caterva2 as cat2
+    >>> import numpy as np
+    >>> # To upload a file you need to be authenticated as an already registered used
+    >>> urlbase = 'https://cat2.cloud/demo'
+    >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+    >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> ndarray = blosc2.arange(0, 10)
+    >>> uploaded_path = cat2.append(ndarray, newpath, urlbase, auth_cookie)
+    >>> str(uploaded_path) == newpath
+    True
+    """
+    if not isinstance(ndarray, blosc2.NDArray):
+        raise TypeError(f"Expected blosc2.NDArray, got {type(ndarray)}")
+
+    cframe = ndarray.to_cframe()
+    file = io.BytesIO(cframe)
+
+    client, url = api_utils.get_client_and_url(None, f"{urlbase}/api/append/{remotepath}")
+    headers = {"Cookie": auth_cookie} if auth_cookie else None
+    response = client.post(url, files={"file": file}, headers=headers)
+    response.raise_for_status()
+    return pathlib.Path(response.json())
 
 
 def remove(path, urlbase=None, auth_cookie=None):

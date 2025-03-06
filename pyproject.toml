@@ -35,8 +35,8 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
+    "blosc2>=3.2.0",
     "httpx",
-    "numpy",
     "requests",  # For the client (works with pyodide too)
     "tomli>=2;python_version<\"3.11\"",
 ]
@@ -46,7 +46,6 @@ path = "caterva2/__init__.py"
 
 [project.optional-dependencies]
 base-services = [
-    "blosc2>=3.0.0",
     "fastapi>=0.109",
     "fastapi_websocket_pubsub",
     "pydantic>=2",
@@ -92,7 +91,6 @@ clients = [
 ]
 tools = [
     "caterva2[hdf5]",
-    "blosc2",
 ]
 tests = [
     "caterva2[clients]",

@@ -1140,8 +1140,8 @@ async def upload_file(
 
         total_size = get_disk_usage() - oldsize + newsize
         if total_size > settings.quota:
-            error = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(status_code=400, detail=error)
+            detail = "Upload failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
@@ -1152,6 +1152,76 @@ async def upload_file(
     # Write the file
     with open(abspath, "wb") as f:
         f.write(data)
+
+    # Return the urlpath
+    return str(path)
+
+
+@app.post("/api/append/{path:path}")
+async def append_file(
+    path: pathlib.Path,
+    file: UploadFile,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Append to dataset.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to dataset to append.
+    file : UploadFile
+        The dataset to append.
+
+    Returns
+    -------
+    str
+        The path of the uploaded file.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Uploading requires authentication")
+
+    # Replace the root with absolute path
+    root = path.parts[0]
+    if root == "@personal":
+        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
+    elif root == "@shared":
+        abspath = settings.shared / pathlib.Path(*path.parts[1:])
+    elif root == "@public":
+        abspath = settings.public / pathlib.Path(*path.parts[1:])
+    else:
+        detail = "Only uploading to @personal or @shared or @public roots is allowed"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # We may upload a new file, or replace an existing file
+    if not abspath.is_file():
+        detail = "Target file does not exist or is not a file"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    if abspath.suffix not in {".b2nd"}:
+        detail = "Target file must be a NDArray"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Check quota
+    # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
+    data = await file.read()
+    newsize = len(data)
+
+    if settings.quota:
+        oldsize = abspath.stat().st_size
+
+        total_size = get_disk_usage() + oldsize + newsize
+        if total_size > settings.quota:
+            detail = "Upload failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Write the file
+    orig = blosc2.open(abspath)
+    new = blosc2.from_cframe(data)
+    shape = "TODO"
+    orig.resize(shape)
+    slice = "TODO"
+    orig[slice] = new
 
     # Return the urlpath
     return str(path)
