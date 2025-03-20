@@ -249,7 +249,7 @@ def test_append(fields, sub_urlbase, sub_user, fill_public, examples_dir):
         data = [1, 2, 3]
     sfile = myshared[fname]
     new_shape = sfile.append(data)
-    assert new_shape == [len(data) + file.meta["shape"][0]]
+    assert new_shape == (len(data) + file.meta["shape"][0],)
 
     # Check the data
     fname = examples_dir / fname
