@@ -1984,7 +1984,9 @@ async def htmx_command(
         lazy = operator == "="
         try:
             result_name, expr = command.split(operator, maxsplit=1)
-            make_expr(result_name, expr, operands, user, lazy=lazy)
+            result_path = make_expr(result_name, expr, operands, user, lazy=lazy)
+            url = make_url(request, "html_home", path=result_path)
+            return htmx_redirect(hx_current_url, url)
         except SyntaxError:
             return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
         except ValueError as exc:
