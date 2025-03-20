@@ -120,8 +120,31 @@
       <ul>
           <li>
               <code>f1 &lt; 5</code>
-              <p>bla bla</p>
+              <p>This selects elements where the field <strong>f1</strong> is less than 5.</p>
           </li>
+          <li>
+              <code>f3</code>
+              <p>This selects elements where the field <strong>f1</strong> is true. Only for boolean fields.</p>
+          </li>
+          <li>
+              <code>f1 &lt; f3</code>
+              <p>This selects elements where the field <strong>f1</strong> is less than the field <strong>f3</strong>.</p>
+          </li>
+          <li>
+              <code>(f1 < 5) & (f2 > 3)</code>
+              <p>This selects elements where the field <strong>f1</strong> is less than 5 and the field <strong>f2</strong>
+                  is greater than 3. Note the parentheses around each condition.
+              </p>
+          </li>
+          <li>
+              <code>(f1 &lt; 5) | ((sin(f2) - log(f4)) &gt; 3) & (~f3)</code>
+              <p>This selects elements where the field <strong>f1</strong> is less than 5 or the result of the
+                  expression <strong>sin(f2) - log(f4)</strong> is greater than 3 and the field <strong>f3</strong> is
+                  false. Note the parentheses around each condition and the use of the
+                  negation operator <strong>~</strong>.
+              </p>
+          </li>
+
       </ul>
   </div>
 </div>
