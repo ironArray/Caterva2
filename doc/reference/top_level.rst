@@ -57,6 +57,7 @@ Utility functions
     copy
     move
     remove
+    append
 
 
 Evaluating expressions

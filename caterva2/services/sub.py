@@ -1146,8 +1146,8 @@ async def upload_file(
 
         total_size = get_disk_usage() - oldsize + newsize
         if total_size > settings.quota:
-            error = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(status_code=400, detail=error)
+            detail = "Upload failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
@@ -1161,6 +1161,83 @@ async def upload_file(
 
     # Return the urlpath
     return str(path)
+
+
+@app.post("/api/append/{path:path}")
+async def append_file(
+    path: pathlib.Path,
+    file: UploadFile,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Append to dataset (along the first axis).
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to dataset to append.
+    file : UploadFile
+        The dataset to append.
+
+    Returns
+    -------
+    tuple
+        The new shape of the dataset.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Uploading requires authentication")
+
+    # Replace the root with absolute path
+    root = path.parts[0]
+    if root == "@personal":
+        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
+    elif root == "@shared":
+        abspath = settings.shared / pathlib.Path(*path.parts[1:])
+    elif root == "@public":
+        abspath = settings.public / pathlib.Path(*path.parts[1:])
+    else:
+        detail = "Only uploading to @personal or @shared or @public roots is allowed"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # We may upload a new file, or replace an existing file
+    if not abspath.is_file():
+        detail = "Target file does not exist or is not a file"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    if abspath.suffix not in {".b2nd"}:
+        detail = "Target file must be a NDArray"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Check quota
+    # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
+    data = await file.read()
+    newsize = len(data)
+
+    if settings.quota:
+        oldsize = abspath.stat().st_size
+
+        total_size = get_disk_usage() + oldsize + newsize
+        if total_size > settings.quota:
+            detail = "Upload failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Append the data
+    # The original dataset
+    orig = blosc2.open(abspath)
+    # The data to append is a cframe
+    new = blosc2.ndarray_from_cframe(data)
+    # Check that the shapes are compatible
+    if orig.shape[1:] != new.shape[1:]:
+        detail = "The shapes of the original dataset and the data to append are not compatible"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+    # Compute the new shape and resize the original dataset
+    result_shape = (orig.shape[0] + new.shape[0],) + orig.shape[1:]
+    orig.resize(result_shape)
+    # Append the new data to orig along the first axis
+    orig[orig.shape[0] - new.shape[0] :] = new
+
+    # Return the new shape
+    return result_shape
 
 
 @app.post("/api/remove/{path:path}")
