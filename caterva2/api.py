@@ -417,7 +417,7 @@ def append(remotepath, data, urlbase=None, auth_cookie=None):
     >>> path = '@personal/ds-1d.b2nd'
     >>> ndarray = blosc2.arange(0, 10)
     >>> cat2.append(path, urlbase, auth_cookie)
-    (20,)
+    (1020,)
     """
     if not hasattr(data, "shape"):
         array = np.asarray(data)
@@ -432,7 +432,7 @@ def append(remotepath, data, urlbase=None, auth_cookie=None):
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     response = client.post(url, files={"file": file}, headers=headers)
     response.raise_for_status()
-    return response.json()
+    return tuple(response.json())
 
 
 def remove(path, urlbase=None, auth_cookie=None):
@@ -1278,10 +1278,12 @@ class Dataset(File):
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To append data to a dataset you need to be a registered user
-        >>> root = cat2.Root('@personal', 'https://cat2.cloud/demo')
-        >>> data = root['root-example/ds-1d.b2nd']
+        >>> urlbase = 'https://cat2.cloud/demo'
+        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> root = cat2.Root('@personal', urlbase, auth_cookie)
+        >>> data = root['ds-1d.b2nd']
         >>> data.append([1, 2, 3])
-        (13,)
+        (1003,)
         """
         return append(self.path, data, self.urlbase, auth_cookie=self.auth_cookie)
 
