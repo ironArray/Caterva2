@@ -1013,14 +1013,15 @@ async def move(
     destpath = pathlib.Path(payload.dst)
     abspath, _ = abspath_and_dataprep(namepath, user=user)
     dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
-    if abspath.suffix == ".b2" and dest_abspath.suffix != ".b2":
-        dest_abspath = pathlib.Path(f"{dest_abspath}.b2")
 
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she can add a '.b2' extension :-)
     if dest_abspath.is_dir() or not dest_abspath.suffix:
         dest_abspath /= abspath.name
         destpath /= namepath.name
+
+    if abspath.suffix == ".b2" and dest_abspath.suffix != ".b2":
+        dest_abspath = pathlib.Path(f"{dest_abspath}.b2")
 
     # Not sure if we should allow overwriting, but let's allow it for now
     # if dest_abspath.exists():
@@ -1062,14 +1063,15 @@ async def copy(
     namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
     abspath, _ = abspath_and_dataprep(namepath, user=user)
     dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
-    if abspath.suffix == ".b2" and dest_abspath.suffix != ".b2":
-        dest_abspath = pathlib.Path(f"{dest_abspath}.b2")
 
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she should add a '.b2' extension
     if dest_abspath.is_dir() or not dest_abspath.suffix:
         dest_abspath /= abspath.name
         destpath /= namepath.name
+
+    if abspath.suffix == ".b2" and dest_abspath.suffix != ".b2":
+        dest_abspath = pathlib.Path(f"{dest_abspath}.b2")
 
     # Not sure if we should allow overwriting, but let's allow it for now
     # if dest_abspath.exists():
