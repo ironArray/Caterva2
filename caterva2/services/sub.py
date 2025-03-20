@@ -1164,7 +1164,7 @@ async def append_file(
     user: db.User = Depends(current_active_user),
 ):
     """
-    Append to dataset.
+    Append to dataset (along the first axis).
 
     Parameters
     ----------
@@ -1215,13 +1215,20 @@ async def append_file(
             detail = "Upload failed because quota limit has been exceeded."
             raise fastapi.HTTPException(detail=detail, status_code=400)
 
-    # Write the file
+    # Append the data
+    # The original dataset
     orig = blosc2.open(abspath)
-    new = blosc2.from_cframe(data)
-    shape = "TODO"
-    orig.resize(shape)
-    slice = "TODO"
-    orig[slice] = new
+    # The data to append is a cframe
+    new = blosc2.ndarray_from_cframe(data)
+    # Check that the shapes are compatible
+    if orig.shape[1:] != new.shape[1:]:
+        detail = "The shapes of the original dataset and the data to append are not compatible"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+    # Compute the new shape and resize the original dataset
+    result_shape = (orig.shape[0] + new.shape[0],) + orig.shape[1:]
+    orig.resize(result_shape)
+    # Append the new data to orig along the first axis
+    orig[orig.shape[0] - new.shape[0] :] = new
 
     # Return the urlpath
     return str(path)

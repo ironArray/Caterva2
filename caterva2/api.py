@@ -385,7 +385,7 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
 
 def append(ndarray, remotepath, urlbase=None, auth_cookie=None):
     """
-    Appands the given blosc2.NDArray to the remote location.
+    Appends the given blosc2.NDArray to the remote location.
 
     Parameters
     ----------
