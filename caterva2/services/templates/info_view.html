@@ -62,8 +62,14 @@
     </div>
 
     {% if cols %}
-    <input type="text" class="form-control" placeholder="Filter" name="filter" value="{{ filter }}"
-           hx-post="{{ view_url }}">
+    <div class="input-group me-2">
+        <input type="text" class="form-control" placeholder="Filter" name="filter" value="{{ filter }}"
+               hx-post="{{ view_url }}">
+        <span class="input-group-text" role="button" data-bs-toggle="offcanvas"
+              data-bs-target="#offcanvasFilterHelp" aria-controls="offcanvasFilterHelp">
+            <i class="fa-regular fa-question"></i>
+        </span>
+    </div>
     {% endif %}
 </form>
 
@@ -102,3 +108,20 @@
     {% endif %}
     </tbody>
 </table>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasFilterHelp" aria-labelledby="offcanvasFilterHelpLabel" style="width: 600px">
+  <div class="offcanvas-header">
+    <h4 class="offcanvas-title" id="offcanvasFilterHelpLabel">Filter Help</h4>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+      <p>The content filter must be a boolean expression.</p>
+      <p>Examples:</p>
+      <ul>
+          <li>
+              <code>f1 &lt; 5</code>
+              <p>bla bla</p>
+          </li>
+      </ul>
+  </div>
+</div>

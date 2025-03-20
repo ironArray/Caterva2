@@ -4,10 +4,8 @@
     <div class="d-flex">
         <div class="input-group me-2">
             <input class="form-control" name="command" type="text" placeholder="Prompt" aria-label="Prompt" value="">
-            <span class="input-group-text"
-                  role="button"
-                  data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"
-                >
+            <span class="input-group-text" role="button" data-bs-toggle="offcanvas"
+                  data-bs-target="#offcanvasPromptHelp" aria-controls="offcanvasPromptHelp">
                 <i class="fa-regular fa-question"></i>
             </span>
         </div>
@@ -17,18 +15,37 @@
 
 <hr>
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel" style="width: 600px">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasPromptHelp"
+     aria-labelledby="offcanvasPromptHelpLabel" style="width: 600px">
   <div class="offcanvas-header">
-    <h5 class="offcanvas-title" id="offcanvasRightLabel">List of commands</h5>
+    <h4 class="offcanvas-title" id="offcanvasPromptHelpLabel">Prompt Help</h4>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
   </div>
   <div class="offcanvas-body">
+      <h5>List of commands</h5>
       <dl class="row">
           {% for command in commands %}
             <dt class="col-sm-4">{{ command.expected }}</dt>
             <dd class="col-sm-8">{{ command.__doc__ }}</dd>
           {% endfor %}
       </dl>
+      <h5>Expressions</h5>
+      <pre>x = &lt;Expression&gt;</pre>
+      <p>
+      Where <strong>x</strong> will be the name of the new file, and
+      <strong>Expression</strong> will be a mathematical expression including
+      variables that reference other datasets.
+      <p>Examples:</p>
+      <ul>
+          <li>
+              <code>x = 0 + arange(10)</code>
+              <p>Here x bla bla</p>
+          </li>
+          <li>
+              <code>x = a + b * 2</code>
+              <p>Here x and a and b</p>
+          </li>
+      </ul>
   </div>
 </div>
 
