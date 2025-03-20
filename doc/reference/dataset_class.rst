@@ -11,6 +11,7 @@ A dataset is a Blosc2-encoded file on a root repository (thus a :ref:`File <ref-
 
     Dataset
     Dataset.__getitem__
+    Dataset.append
     Dataset.get_download_url
     Dataset.fetch
     Dataset.download

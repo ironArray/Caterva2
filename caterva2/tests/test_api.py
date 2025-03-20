@@ -45,7 +45,7 @@ def sub_urlbase(services):
 @pytest.fixture
 def fill_public(examples_dir, sub_urlbase, sub_user):
     # Manually copy some files to the public area (TEST_STATE_DIR)
-    fnames = ["README.md", "ds-1d.b2nd", "dir1/ds-2d.b2nd"]
+    fnames = ["README.md", "ds-1d.b2nd", "ds-1d-fields.b2nd", "dir1/ds-2d.b2nd"]
     for fname in fnames:
         orig = examples_dir / fname
         data = orig.read_bytes()
@@ -121,7 +121,7 @@ def test_list_public(fill_public, sub_urlbase):
     assert set(mypublic.file_list) == set(fnames)
     # Test toplevel list
     flist = cat2.get_list("@public", sub_urlbase)
-    assert len(flist) == 3
+    assert len(flist) == 4
     for fname in flist:
         assert fname in fnames
     # Test directory list
@@ -227,25 +227,32 @@ def test_copy(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
     return None
 
 
-def test_append(sub_urlbase, sub_user, fill_public, examples_dir):
+@pytest.mark.parametrize("fields", [True, False])
+def test_append(fields, sub_urlbase, sub_user, fill_public, examples_dir):
     if not sub_user:
         return pytest.skip("authentication support needed")
 
     fnames, mypublic = fill_public
     myshared = cat2.Root("@shared", sub_urlbase, sub_user)
+    fname = "ds-1d.b2nd" if not fields else "ds-1d-fields.b2nd"
     # Copy a 1d dataset to the shared area
-    file = mypublic["ds-1d.b2nd"]
-    newpath = file.copy("@shared/ds-1d.b2nd")
-    assert newpath == myshared["ds-1d.b2nd"].path
+    file = mypublic[fname]
+    newpath = file.copy(f"@shared/{fname}")
+    assert newpath == myshared[fname].path
     # Append to the dataset
-    data = [1, 2, 3]
-    sfile = myshared["ds-1d.b2nd"]
+    if fields:
+        data = np.asarray(
+            [(1000, 1.0, b"foobar1000", False), (1001, 2.0, b"foobar1001", True)],
+            dtype=[("a", "<i4"), ("b", "<f8"), ("c", "S10"), ("d", "?")],
+        )
+    else:
+        data = [1, 2, 3]
+    sfile = myshared[fname]
     new_shape = sfile.append(data)
-    # print(f"file.meta: {file.meta}")
     assert new_shape == [len(data) + file.meta["shape"][0]]
 
     # Check the data
-    fname = examples_dir / "ds-1d.b2nd"
+    fname = examples_dir / fname
     a = blosc2.open(fname)
     b = np.concatenate([a[:], data])
     return np.testing.assert_array_equal(sfile[:], b)
