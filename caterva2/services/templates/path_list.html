@@ -30,20 +30,30 @@
           {% endfor %}
       </dl>
       <h5>Expressions</h5>
-      <pre>x = &lt;Expression&gt;</pre>
+      <pre>x = &lt;expression&gt;</pre>
       <p>
-      Where <strong>x</strong> will be the name of the new file, and
-      <strong>Expression</strong> will be a mathematical expression including
+      Where <strong>x</strong> is the name of the new file, and
+      <strong>expression</strong> is a mathematical expression including
       variables that reference other datasets.
       <p>Examples:</p>
       <ul>
           <li>
-              <code>x = 0 + arange(10)</code>
-              <p>Here x bla bla</p>
+              <code>x = a + b * 2</code>
+              <p>Here <strong>x</strong> will be a lazy expression with
+                  <strong>a</strong> and <strong>b</strong> as operands.
+                  That means that <strong>x</strong> will not be evaluated until it is needed.
+              </p>
           </li>
           <li>
-              <code>x = a + b * 2</code>
-              <p>Here x and a and b</p>
+              <code>x := a + b * 2</code>
+              <p>Here <strong>x</strong> will eagerly execute the expression with
+                  <strong>a</strong> and <strong>b</strong> as operands.
+                  That means that <strong>x</strong> will be evaluated immediately and stored.
+              </p>
+          </li>
+          <li>
+              <code>x = arange(10)</code>
+              <p>Here <strong>x</strong> will be a lazy array, with int64 elements, from 0 to 9 (included).</p>
           </li>
       </ul>
   </div>
