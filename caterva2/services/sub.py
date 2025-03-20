@@ -1771,6 +1771,13 @@ def get_filtered_array(abspath, path, filter, sortby):
 
     # Filter rows only for NDArray with fields
     if filter:
+        # Check whether filter is the name of a field
+        if filter in arr.fields:
+            if arr.dtype.fields[filter][0] == bool:  # noqa: E721
+                # If boolean, give the filter a boolean expression
+                filter = f"{filter} == True"
+            else:
+                raise IndexError("Filter should be a boolean expression")
         # Let's create a LazyExpr with the filter
         larr = arr[filter]
         # TODO: do some benchmarking to see if this is worth it
