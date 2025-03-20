@@ -227,6 +227,30 @@ def test_copy(dirpath, final_dir, sub_urlbase, sub_user, fill_public):
     return None
 
 
+def test_append(sub_urlbase, sub_user, fill_public, examples_dir):
+    if not sub_user:
+        return pytest.skip("authentication support needed")
+
+    fnames, mypublic = fill_public
+    myshared = cat2.Root("@shared", sub_urlbase, sub_user)
+    # Copy a 1d dataset to the shared area
+    file = mypublic["ds-1d.b2nd"]
+    newpath = file.copy("@shared/ds-1d.b2nd")
+    assert newpath == myshared["ds-1d.b2nd"].path
+    # Append to the dataset
+    data = [1, 2, 3]
+    sfile = myshared["ds-1d.b2nd"]
+    new_shape = sfile.append(data)
+    # print(f"file.meta: {file.meta}")
+    assert new_shape == [len(data) + file.meta["shape"][0]]
+
+    # Check the data
+    fname = examples_dir / "ds-1d.b2nd"
+    a = blosc2.open(fname)
+    b = np.concatenate([a[:], data])
+    return np.testing.assert_array_equal(sfile[:], b)
+
+
 @pytest.mark.parametrize(
     "slice_",
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(10, 20, 1)],

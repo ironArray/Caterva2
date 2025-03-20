@@ -17,6 +17,7 @@ import pathlib
 import sys
 
 import blosc2
+import numpy as np
 
 from caterva2 import api_utils, utils
 
@@ -383,16 +384,16 @@ def upload(localpath, dataset, urlbase=None, auth_cookie=None):
     )
 
 
-def append(ndarray, remotepath, urlbase=None, auth_cookie=None):
+def append(remotepath, data, urlbase=None, auth_cookie=None):
     """
-    Appends the given blosc2.NDArray to the remote location.
+    Appends data to the remote location.
 
     Parameters
     ----------
-    ndarray : blosc2.NDArray
-        NDArray object.
     remotepath : Path
-        Remote path to upload the dataset to.
+        Remote path of the dataset to enlarge.
+    data : blosc2.NDArray, np.ndarray, sequence
+        The data to append.
     urlbase : str, optional
         Base URL to query. Default to
         :py:obj:`caterva2.sub_urlbase_default`.
@@ -403,8 +404,8 @@ def append(ndarray, remotepath, urlbase=None, auth_cookie=None):
 
     Returns
     -------
-    Path
-        Path of the uploaded file on the server.
+    tuple
+        The new shape of the dataset.
 
     Examples
     --------
@@ -413,15 +414,17 @@ def append(ndarray, remotepath, urlbase=None, auth_cookie=None):
     >>> # To upload a file you need to be authenticated as an already registered used
     >>> urlbase = 'https://cat2.cloud/demo'
     >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
-    >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
+    >>> path = '@personal/ds-1d.b2nd'
     >>> ndarray = blosc2.arange(0, 10)
-    >>> uploaded_path = cat2.append(ndarray, newpath, urlbase, auth_cookie)
-    >>> str(uploaded_path) == newpath
-    True
+    >>> cat2.append(path, urlbase, auth_cookie)
+    (20,)
     """
-    if not isinstance(ndarray, blosc2.NDArray):
-        raise TypeError(f"Expected blosc2.NDArray, got {type(ndarray)}")
+    if not hasattr(data, "shape"):
+        array = np.asarray(data)
+    else:
+        array = data
 
+    ndarray = blosc2.asarray(array)
     cframe = ndarray.to_cframe()
     file = io.BytesIO(cframe)
 
@@ -429,7 +432,7 @@ def append(ndarray, remotepath, urlbase=None, auth_cookie=None):
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     response = client.post(url, files={"file": file}, headers=headers)
     response.raise_for_status()
-    return pathlib.Path(response.json())
+    return response.json()
 
 
 def remove(path, urlbase=None, auth_cookie=None):
@@ -817,7 +820,7 @@ class Root:
 
         Returns
         -------
-        File
+        File, Dataset
             An instance of :class:`File` or :class:`Dataset`.
 
         Examples
@@ -1255,6 +1258,32 @@ class Dataset(File):
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
         return f"<Dataset: {self.path}>"
+
+    def append(self, data):
+        """
+        Appends data to the dataset.
+
+        Parameters
+        ----------
+        data : blosc2.NDArray, numpy.ndarray, sequence
+            The data to append to the dataset.
+
+        Returns
+        -------
+        tuple
+            The new shape of the dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # To append data to a dataset you need to be a registered user
+        >>> root = cat2.Root('@personal', 'https://cat2.cloud/demo')
+        >>> data = root['root-example/ds-1d.b2nd']
+        >>> data.append([1, 2, 3])
+        (13,)
+        """
+        return append(self.path, data, self.urlbase, auth_cookie=self.auth_cookie)
 
 
 @contextlib.contextmanager

@@ -1175,8 +1175,8 @@ async def append_file(
 
     Returns
     -------
-    str
-        The path of the uploaded file.
+    tuple
+        The new shape of the dataset.
     """
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
@@ -1230,8 +1230,8 @@ async def append_file(
     # Append the new data to orig along the first axis
     orig[orig.shape[0] - new.shape[0] :] = new
 
-    # Return the urlpath
-    return str(path)
+    # Return the new shape
+    return result_shape
 
 
 @app.post("/api/remove/{path:path}")
