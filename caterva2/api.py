@@ -992,7 +992,7 @@ class File:
         self.root = root
         self.name = name
         self.urlbase = urlbase
-        self.path = pathlib.Path(f"{self.root}/{self.name}")
+        self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
         self.auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
         self.meta = api_utils.get(f"{urlbase}/api/info/{self.path}", auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
