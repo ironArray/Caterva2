@@ -55,7 +55,8 @@ def _format_paths(urlbase, path=None):
         urlbase = pathlib.Path(urlbase)
 
     if path is not None:
-        p = path.as_posix() if isinstance(path, pathlib.Path) else path
+        # Ensure path is a string before checking startswith
+        p = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if p.startswith("/"):
             raise ValueError("path cannot start with a slash")
 
@@ -830,7 +831,7 @@ class Root:
         >>> root['ds-1d.b2nd']
         <Dataset: example/ds-1d.b2nd>
         """
-        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
             return Dataset(path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
         else:
@@ -857,7 +858,7 @@ class Root:
         >>> 'ds-1d.b2nd' in root
         True
         """
-        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         return path in self.file_list
 
     def __iter__(self):
@@ -992,7 +993,7 @@ class File:
         self.root = root
         self.name = name
         self.urlbase = urlbase
-        self.path = pathlib.Path(f"{self.root}/{self.name}")
+        self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
         self.auth_cookie = auth_cookie or _subscriber_data["auth_cookie"]
         self.meta = api_utils.get(f"{urlbase}/api/info/{self.path}", auth_cookie=self.auth_cookie)
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
