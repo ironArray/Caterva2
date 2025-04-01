@@ -55,7 +55,8 @@ def _format_paths(urlbase, path=None):
         urlbase = pathlib.Path(urlbase)
 
     if path is not None:
-        p = path.as_posix() if isinstance(path, pathlib.Path) else path
+        # Ensure path is a string before checking startswith
+        p = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if p.startswith("/"):
             raise ValueError("path cannot start with a slash")
 
@@ -830,7 +831,7 @@ class Root:
         >>> root['ds-1d.b2nd']
         <Dataset: example/ds-1d.b2nd>
         """
-        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
             return Dataset(path, root=self.name, urlbase=self.urlbase, auth_cookie=self.auth_cookie)
         else:
@@ -857,7 +858,7 @@ class Root:
         >>> 'ds-1d.b2nd' in root
         True
         """
-        path = path.as_posix() if isinstance(path, pathlib.Path) else path
+        path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         return path in self.file_list
 
     def __iter__(self):
