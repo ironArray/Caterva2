@@ -1260,6 +1260,22 @@ class Dataset(File):
         # TODO: add more info about dims, types, etc.
         return f"<Dataset: {self.path}>"
 
+    @property
+    def shape(self):
+        return self.meta.get('shape', None)
+
+    @property
+    def dtype(self):
+        return self.meta.get('dtype', None)
+
+    @property
+    def blocks(self):
+        return self.meta.get('blocks', None)
+
+    @property
+    def chunks(self):
+        return self.meta.get('chunks', None)
+
     def append(self, data):
         """
         Appends data to the dataset.

@@ -155,6 +155,16 @@ def test_file_public(sub_urlbase, fill_public):
         assert file.name == fname
         assert file.urlbase == sub_urlbase
 
+def test_dataset_info(sub_urlbase, fill_public):
+    fnames, mypublic = fill_public
+    for fname in fnames:
+        if type(mypublic[fname]) is cat2.Dataset: #files cannot be expected t
+            info=cat2.get_info('@public/' + fname, urlbase=sub_urlbase)
+            data=mypublic[fname]
+            assert data.shape == info['shape']
+            assert data.dtype == info['dtype']
+            assert data.blocks == info['blocks']
+            assert data.chunks == info['chunks']
 
 @pytest.mark.parametrize("dirpath", [None, "dir1", "dir2", "dir2/dir3/dir4"])
 @pytest.mark.parametrize("final_dir", [True, False])
