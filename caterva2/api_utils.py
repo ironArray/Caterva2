@@ -109,11 +109,10 @@ def fetch_data(path, urlbase, params, auth_cookie=None):
     # Try different deserialization methods
     try:
         data = blosc2.ndarray_from_cframe(data)
-        data = data[:] if data.ndim == 1 else data[()]
     except RuntimeError:
         data = blosc2.schunk_from_cframe(data)
-        data = data[:]
-    return data
+    return data[()]
+
 
 
 def get_download_url(path, urlbase):
