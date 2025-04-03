@@ -8,7 +8,6 @@
 ###############################################################################
 import os
 
-import httpx
 import pytest
 
 from caterva2.services import srv_utils
@@ -34,16 +33,3 @@ def sub_user(services):
     # as their state directory is unknown.
     # One would need to register a new user via the API there.
     return make_sub_user(services)
-
-
-@pytest.fixture(scope="session")
-def sub_jwt_cookie(sub_user, services):
-    if not sub_user:
-        return None
-
-    username, password = sub_user
-    urlbase = services.get_urlbase("subscriber")
-
-    resp = httpx.post(f"{urlbase}/auth/jwt/login", data={"username": username, "password": password})
-    resp.raise_for_status()
-    return "=".join(list(resp.cookies.items())[0])

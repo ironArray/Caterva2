@@ -9,62 +9,14 @@
 
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
 
-from .api import (
-    Dataset,
-    File,
-    Root,
-    adduser,
-    append,
-    bro_host_default,
-    c2context,
-    copy,
-    deluser,
-    download,
-    fetch,
-    get_chunk,
-    get_info,
-    get_list,
-    get_roots,
-    lazyexpr,
-    listusers,
-    move,
-    pub_host_default,
-    remove,
-    sub_host_default,
-    sub_urlbase_default,
-    subscribe,
-    upload,
-)
-from .api_utils import get_auth_cookie
+from .client import Client, Dataset, sub_urlbase_default
 
 __version__ = "2025.02.20"
 """The version in use of the Caterva2 package."""
 
 __all__ = [
+    "Client",
     "Dataset",
-    "File",
-    "Root",
-    "adduser",
-    "append",
-    "bro_host_default",
-    "c2context",
-    "copy",
-    "deluser",
-    "download",
-    "fetch",
-    "get_auth_cookie",
-    "get_chunk",
-    "get_info",
-    "get_list",
-    "get_roots",
-    "lazyexpr",
-    "listusers",
-    "move",
-    "pub_host_default",
-    "remove",
-    "sub_host_default",
     "sub_urlbase_default",
-    "subscribe",
-    "upload",
 ]
 """List of symbols exported by the Caterva2 package."""
