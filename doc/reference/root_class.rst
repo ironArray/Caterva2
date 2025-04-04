@@ -5,11 +5,11 @@ Root class
 
 A root is a remote repository that can be subscribed to.
 
-.. currentmodule:: caterva2
+.. currentmodule:: caterva2.client
 .. autosummary::
     :toctree: autofiles
 
-    Root
+    Root.__init__
     Root.__getitem__
     Root.__contains__
     Root.__iter__

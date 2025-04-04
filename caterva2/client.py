@@ -494,30 +494,36 @@ class File:
 
 
 class Dataset(File):
-    """
-    Represents a dataset as a Blosc2 container within a file.
+    def __init__(self, root, path):
+        """
+        Represents a dataset within a Blosc2 container.
 
-    This class is not intended to be instantiated directly; it should be accessed through a
-    :class:`Root` instance.
+        This class is not intended to be instantiated directly; it should be accessed through a
+        :class:`Root` instance.
 
-    Parameters
-    ----------
-    name : str
-        The name of the dataset.
-    root : str
-        The name of the root repository.
+        Parameters
+        ----------
+        root : str
+            The name of the root repository.
+        path : str
+            The path of the dataset.
 
-    Examples
-    --------
-    >>> import caterva2 as cat2
-    >>> client = cat2.Client('https://demo.caterva2.net')
-    >>> root = client.get_root('example')
-    >>> ds = root['ds-1d.b2nd']
-    >>> ds.name
-    'ds-1d.b2nd'
-    >>> ds[1:10]
-    array([1, 2, 3, 4, 5, 6, 7, 8, 9])
-    """
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.shape
+        (1000,)
+        >>> ds.dtype
+        dtype('int32')
+        >>> ds.blocks
+        1000
+        >>> ds.chunks
+        1000
+        """
+        super().__init__(root, path)
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
@@ -937,7 +943,6 @@ class Client:
         ----------
         path : Path
             Path of the dataset or directory to remove.
-            a :py_obj:`caterva2.c2context`.
 
         Returns
         -------

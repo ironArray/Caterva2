@@ -1,7 +1,7 @@
 (cat2export)=
 # `cat2export` -- Convert Caterva2 roots to HDF5 files
 
-As a complementary tool to [`cat2import`](cat2import) for exchanging data in the wider Caterva2 ecosystem, it is possible to export a whole Caterva2 root (with its datasets) to a single HDF5 file, using `cat2export`.  Still in its early stages of development, it also needs the `tools` extra to be installed:
+As a complementary tool to :std:doc:`cat2import` for exchanging data in the wider Caterva2 ecosystem, it is possible to export a whole Caterva2 root (with its datasets) to a single HDF5 file, using `cat2export`.  Still in its early stages of development, it also needs the `tools` extra to be installed:
 
 ```sh
 python -m pip install caterva2[tools]

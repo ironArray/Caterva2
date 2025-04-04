@@ -9,7 +9,7 @@ A dataset is a Blosc2-encoded file on a root repository (thus a :ref:`File <ref-
 .. autosummary::
     :toctree: autofiles
 
-    Dataset
+    Dataset.__init__
     Dataset.__getitem__
     Dataset.append
     Dataset.get_download_url
