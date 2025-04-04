@@ -39,7 +39,7 @@ def client(services):  # noqa: F811
 
 @pytest.fixture(scope="session")
 def auth_client(services, sub_user):  # noqa: F811
-    if not auth_client:
+    if not sub_user:
         return None
 
     urlbase = services.get_urlbase("subscriber")

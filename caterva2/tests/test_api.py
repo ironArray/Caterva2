@@ -56,6 +56,8 @@ def fill_public(client, examples_dir):
 
 @pytest.fixture
 def fill_auth(auth_client, fill_public):
+    if not auth_client:
+        return None
     fnames, _ = fill_public
     return fnames, auth_client.get_root("@public")
 
@@ -73,7 +75,8 @@ def test_subscribe(client, auth_client):
 
 
 def test_roots(pub_host, client, auth_client):
-    roots = auth_client.get_roots()
+    client = auth_client if auth_client else client
+    roots = client.get_roots()
     assert roots[TEST_CATERVA2_ROOT]["name"] == TEST_CATERVA2_ROOT
     assert roots[TEST_CATERVA2_ROOT]["http"] == pub_host
     assert roots["@public"]["name"] == "@public"
@@ -522,12 +525,12 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
             assert "Not Found" in str(e_info.value)
 
 
-def test_upload_public_unauthorized(auth_client, examples_dir, tmp_path):
+def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path):
     if auth_client:
         pytest.skip("not authentication needed")
 
-    remote_root = auth_client.get_root("@public")
-    myroot = auth_client.get_root(TEST_CATERVA2_ROOT)
+    remote_root = client.get_root("@public")
+    myroot = client.get_root(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -714,7 +717,7 @@ def test_adduser_maxexceeded(auth_client, configuration):
     assert len(data) == 1
 
 
-def test_adduser_unauthorized(auth_client):
+def test_adduser_unauthorized(client, auth_client):
     if auth_client:
         pytest.skip("not authentication needed")
 
@@ -722,7 +725,7 @@ def test_adduser_unauthorized(auth_client):
     password = "testpassword"
     is_superuser = False
     with pytest.raises(Exception) as e_info:
-        _ = auth_client.adduser(username, password, is_superuser)
+        _ = client.adduser(username, password, is_superuser)
     assert "Not Found" in str(e_info)
 
 
@@ -744,13 +747,13 @@ def test_deluser(auth_client):
     assert "Bad Request" in str(e_info)
 
 
-def test_deluser_unauthorized(auth_client):
+def test_deluser_unauthorized(client, auth_client):
     if auth_client:
         pytest.skip("not authentication needed")
 
     username = "test@user.com"
     with pytest.raises(Exception) as e_info:
-        _ = auth_client.deluser(username)
+        _ = client.deluser(username)
     assert "Not Found" in str(e_info)
 
 
@@ -774,10 +777,10 @@ def test_listusers(auth_client):
     assert username not in [user["email"] for user in data]
 
 
-def test_listusers_unauthorized(auth_client):
+def test_listusers_unauthorized(client, auth_client):
     if auth_client:
         pytest.skip("not authentication needed")
 
     with pytest.raises(Exception) as e_info:
-        _ = auth_client.listusers()
+        _ = client.listusers()
     assert "Not Found" in str(e_info)
