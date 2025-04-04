@@ -186,7 +186,7 @@ def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
     with open(localpath, "rb") as f:
         response = client.post(url, files={"file": f}, headers=headers)
         response.raise_for_status()
-    return pathlib.Path(response.json())
+    return pathlib.PurePosixPath(response.json())
 
 
 #

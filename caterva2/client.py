@@ -20,7 +20,7 @@ def _format_paths(urlbase, path=None):
         urlbase = urlbase.as_posix()
     if urlbase.endswith("/"):
         urlbase = urlbase[:-1]
-        urlbase = pathlib.Path(urlbase)
+        urlbase = pathlib.PurePosixPath(urlbase)
 
     if path is not None:
         # Ensure path is a string before checking startswith
@@ -32,31 +32,25 @@ def _format_paths(urlbase, path=None):
 
 
 class Root:
-    """
-    Represents a remote repository that can be subscribed to.
-
-    Parameters
-    ----------
-    root : str
-        Name of the root to subscribe to.
-    urlbase : str, optional
-        Base URL to query. Defaults to
-        :py:obj:`caterva2.sub_urlbase_default`.
-    user_auth : dict, optional
-        Mapping of fields and values for user authentication. This is
-        used to post data for obtaining an authorization token for further
-        requests. For some actions, this must be provided unless already
-        specified in a :py_obj:`caterva2.c2context`.
-
-    Examples
-    --------
-    >>> import caterva2 as cat2
-    >>> root = cat2.Root('example', 'https://demo.caterva2.net')
-    >>> root.file_list[-3:]
-    ['dir2/ds-4d.b2nd', 'dir1/ds-3d.b2nd', 'dir1/ds-2d.b2nd']
-    """
-
     def __init__(self, client, name):
+        """
+        Represents a remote repository that can be subscribed to.
+
+        Parameters
+        ----------
+        client : Client
+            The client used to interact with the remote repository.
+        name : str
+            Name of the root to subscribe to.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client("https://demo.caterva2.net")
+        >>> root = client.get_root("example")
+        >>> root.file_list[-3:]
+        ['ds-sc-attr.b2nd', 'lung-jpeg2000_10x.b2nd', 'tomo-guess-test.b2nd']
+        """
         self.client = client
         urlbase, name = _format_paths(client.urlbase, name)
         self.name = name
@@ -96,7 +90,8 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> root['ds-1d.b2nd']
         <Dataset: example/ds-1d.b2nd>
         """
@@ -123,7 +118,8 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> 'ds-1d.b2nd' in root
         True
         """
@@ -142,21 +138,22 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> for file in root:
         ...     print(file)
-        ds-2d-fields.b2nd
-        lung-jpeg2000_10x.b2nd
+        README.md
+        dir1/ds-2d.b2nd
+        dir1/ds-3d.b2nd
+        dir2/ds-4d.b2nd
+        ds-1d-b.b2nd
         ds-1d-fields.b2nd
         ds-1d.b2nd
+        ds-2d-fields.b2nd
         ds-hello.b2frame
         ds-sc-attr.b2nd
-        README.md
-        ds-1d-b.b2nd
+        lung-jpeg2000_10x.b2nd
         tomo-guess-test.b2nd
-        dir2/ds-4d.b2nd
-        dir1/ds-3d.b2nd
-        dir1/ds-2d.b2nd
         """
         return iter(self.file_list)
 
@@ -167,7 +164,8 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> len(root)
         12
         """
@@ -176,17 +174,17 @@ class Root:
     def __str__(self):
         return self.name
 
-    def upload(self, localpath, dataset=None):
+    def upload(self, localpath, remotepath=None):
         """
-        Uploads a local dataset to this root.
+        Uploads a local file to this root.
 
         Parameters
         ----------
         localpath : Path
-            Path of the local dataset to upload.
-        dataset : Path, optional
-            Remote path where the dataset will be uploaded.  If not provided, the
-            dataset will be uploaded to the top level of this root.
+            Path of the local file to upload.
+        remotepath : Path, optional
+            Remote path where the file will be uploaded.  If not provided, the
+            file will be uploaded to the top level of this root.
 
         Returns
         -------
@@ -198,58 +196,58 @@ class Root:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To upload a file you must be registered as a user.
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client("https://cat2.cloud/demo", username="joedoe@example.com", password="foobar")
+        >>> root = client.get_root('@personal')
         >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
         <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
         >>> 'root-example/dir2/ds-4d.b2nd' in root
         True
         """
-        if dataset is None:
+        if remotepath is None:
             # localpath cannot be absolute in this case (too much prone to errors)
-            if pathlib.Path(localpath).is_absolute():
+            if pathlib.PurePosixPath(localpath).is_absolute():
                 raise ValueError("When `dataset` is not specified, `localpath` must be a relative path")
-            dataset = pathlib.Path(self.name) / localpath
+            remotepath = pathlib.PurePosixPath(self.name) / localpath
         else:
-            dataset = pathlib.Path(self.name) / pathlib.Path(dataset)
-        uploadpath = self.client.upload(localpath, dataset)
+            remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
+        uploadpath = self.client.upload(localpath, remotepath)
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
 
 class File:
-    """
-    Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
-
-    This class is not intended for direct instantiation; it should be accessed through a
-    :class:`Root` instance.
-
-    Parameters
-    ----------
-    path : str
-        The path of the file.
-    root : str
-        The name of the root repository.
-
-    Examples
-    --------
-    >>> import caterva2 as cat2
-    >>> root = cat2.Root('example', 'https://demo.caterva2.net')
-    >>> file = root['README.md']
-    >>> file
-    <File: example/README.md>
-    >>> file.name
-    'README.md'
-    >>> file.urlbase
-    'https://demo.caterva2.net'
-    >>> file.path
-    PosixPath('example/README.md')
-    >>> file.meta['contiguous']
-    True
-    """
-
     def __init__(self, root, path):
+        """
+        Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
+
+        This class is not intended for direct instantiation; it should be accessed through a
+        :class:`Root` instance.
+
+        Parameters
+        ----------
+        root : str
+            The name of the root repository.
+        path : str
+            The path of the file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
+        >>> file = root['README.md']
+        >>> file
+        <File: example/README.md>
+        >>> file.name
+        'README.md'
+        >>> file.urlbase
+        'https://demo.caterva2.net'
+        >>> file.path
+        PurePosixPath('example/README.md')
+        >>> file.meta['contiguous']
+        True
+        """
         self.root = root
         _, name = _format_paths(root.urlbase, path)
         _, root = _format_paths(root.urlbase, root.name)
@@ -283,7 +281,8 @@ class File:
         associated with the file.
 
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
         {'a': 1, 'b': 'foo', 'c': 123.456}
@@ -303,7 +302,8 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
         'https://demo.caterva2.net/api/fetch/example/ds-1d.b2nd'
@@ -327,7 +327,8 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> ds = root['ds-1d.b2nd']
         >>> ds[1]
         array(1)
@@ -357,7 +358,8 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> ds = root['ds-1d.b2nd']
         >>> ds.fetch(1)
         array(1)
@@ -385,7 +387,8 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> root = cat2.Root('example', 'https://demo.caterva2.net')
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get_root('example')
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
         PosixPath('example/ds-1d.b2nd')
@@ -415,13 +418,13 @@ class File:
         --------
         >>> import caterva2 as cat2
         >>> # For moving a file you need to be a registered user
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client("https://cat2.cloud/demo", username="joedoe@example.com", password="foobar")
+        >>> root = client.get_root('@personal')
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
         <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
         >>> file = root['root-example/dir2/ds-4d.b2nd']
         >>> file.move('@personal/root-example/dir1/ds-4d-moved.b2nd')
-        PosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
+        PurePosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
         >>> 'root-example/dir2/ds-4d.b2nd' in root
         False
         >>> 'root-example/dir1/ds-4d-moved.b2nd' in root
@@ -448,14 +451,13 @@ class File:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # For copying a file you need to be a registered user
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client("https://cat2.cloud/demo", username="joedoe@example.com", password="foobar")
+        >>> root = client.get_root('@personal')
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
         <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
-        >>> file = cat2.File('root-example/dir2/ds-4d.b2nd', '@personal', urlbase, auth_cookie)
+        >>> file = root['root-example/dir2/ds-4d.b2nd']
         >>> file.copy('@personal/root-example/dir2/ds-4d-copy.b2nd')
-        PosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
+        PurePosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
         >>> 'root-example/dir2/ds-4d.b2nd' in root
         True
         >>> 'root-example/dir2/ds-4d-copy.b2nd' in root
@@ -477,13 +479,12 @@ class File:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To remove a file you need to be a registered user
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> root = cat2.Root('@personal', urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
+        >>> root = client.get_root('@personal')
         >>> path = 'root-example/dir2/ds-4d.b2nd'
         >>> root.upload(path)
         <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
-        >>> file = cat2.File(path, '@personal', urlbase, auth_cookie)
+        >>> file = root[path]
         >>> file.remove()
         '@personal/root-example/dir2/ds-4d.b2nd'
         >>> path in root
@@ -509,7 +510,9 @@ class Dataset(File):
     Examples
     --------
     >>> import caterva2 as cat2
-    >>> ds = cat2.Dataset('ds-1d.b2nd', 'example', 'https://demo.caterva2.net')
+    >>> client = cat2.Client('https://demo.caterva2.net')
+    >>> root = client.get_root('example')
+    >>> ds = root['ds-1d.b2nd']
     >>> ds.name
     'ds-1d.b2nd'
     >>> ds[1:10]
@@ -555,11 +558,10 @@ class Dataset(File):
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To append data to a dataset you need to be a registered user
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
-        >>> root = cat2.Root('@personal', urlbase, auth_cookie)
-        >>> data = root['ds-1d.b2nd']
-        >>> data.append([1, 2, 3])
+        >>> client = cat2.Client("https://cat2.cloud/demo", username="joedoe@example.com", password="foobar")
+        >>> data = client.copy('@public/examples/ds-1d.b2nd', '@personal/ds-1d.b2nd')
+        >>> dataset = client.get_root('@personal')['ds-1d.b2nd']
+        >>> dataset.append([1, 2, 3])
         (1003,)
         """
         return self.client.append(self.path, data)
@@ -608,6 +610,8 @@ class Client:
 
         Examples
         --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
         >>> roots_dict = client.get_roots()
         >>> sorted(roots_dict.keys())
         ['@public', 'b2tests', 'example', 'h5example', 'h5lung_j2k', 'h5numbers_j2k']
@@ -657,6 +661,8 @@ class Client:
 
         Examples
         --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
         >>> root_name = 'h5numbers_j2k'
         >>> client.subscribe(root_name)
         'Ok'
@@ -682,10 +688,12 @@ class Client:
 
         Examples
         --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
         >>> client.subscribe('example')
         'Ok'
         >>> client.get_list('example')[:3]
-        ['ds-2d-fields.b2nd', 'lung-jpeg2000_10x.b2nd', 'ds-1d-fields.b2nd']
+        ['README.md', 'dir1/ds-2d.b2nd', 'dir1/ds-3d.b2nd']
         """
         urlbase, path = _format_paths(self.urlbase, path)
         return api_utils.get(f"{self.urlbase}/api/list/{path}", auth_cookie=self.cookie)
@@ -706,12 +714,14 @@ class Client:
 
         Examples
         --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
         >>> client.subscribe('example')
         'Ok'
         >>> path = 'example/ds-2d-fields.b2nd'
         >>> info = client.get_info(path)
         >>> info.keys()
-        dict_keys(['shape', 'chunks', 'blocks', 'dtype', 'schunk'])
+        dict_keys(['shape', 'chunks', 'blocks', 'dtype', 'schunk', 'mtime'])
         >>> info['shape']
         [100, 200]
         """
@@ -743,10 +753,8 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> urlbase = 'https://demo.caterva2.net'
-        >>> cat2.subscribe('example', urlbase)
-        'Ok'
-        >>> cat2.fetch('example/ds-2d-fields.b2nd', urlbase, "0:2, 0:2")
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client.fetch('example/ds-2d-fields.b2nd', "0:2, 0:2")
         array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
@@ -772,14 +780,16 @@ class Client:
 
         Examples
         --------
-        >>> client.subscribe('example', urlbase)
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client.subscribe('example')
         'Ok'
         >>> info_schunk = client.get_info('example/ds-2d-fields.b2nd')['schunk']
         >>> info_schunk['nchunks']
         1
         >>> info_schunk['cratio']
         6.453000645300064
-        >>> chunk = cat2.get_chunk('example/ds-2d-fields.b2nd', 0)
+        >>> chunk = client.get_chunk('example/ds-2d-fields.b2nd', 0)
         >>> info_schunk['chunksize'] / len(chunk)
         6.453000645300064
         """
@@ -812,18 +822,17 @@ class Client:
 
         Examples
         --------
-        >>> import pathlib
+        >>> import caterva2 as cat2
         >>> path = 'example/ds-2d-fields.b2nd'
-        >>> client.subscribe('example')
-        'Ok'
-        >>> client.download(pathlib.Path(path))
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client.download(path)
         PosixPath('example/ds-2d-fields.b2nd')
         """
         urlbase, dataset = _format_paths(self.urlbase, dataset)
         url = api_utils.get_download_url(dataset, urlbase)
         localpath = pathlib.Path(localpath) if localpath else None
         if localpath is None:
-            path = "." / dataset
+            path = "." / pathlib.Path(dataset)
         elif localpath.is_dir():
             path = localpath / dataset.name
         else:
@@ -857,10 +866,10 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To upload a file you need to be authenticated as an already registered used
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
+        >>> root = client.get_root('@personal')
         >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-        >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', newpath, urlbase, auth_cookie)
+        >>> uploaded_path = client.upload('root-example/dir2/ds-4d.b2nd', newpath)
         >>> str(uploaded_path) == newpath
         True
         """
@@ -893,12 +902,13 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To upload a file you need to be authenticated as an already registered used
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> path = '@personal/ds-1d.b2nd'
+        >>> client.copy('@public/examples/ds-1d.b2nd', path)
+        PurePosixPath('@personal/ds-1d.b2nd')
         >>> ndarray = blosc2.arange(0, 10)
-        >>> cat2.append(path, urlbase, auth_cookie)
-        (1020,)
+        >>> client.append(path, ndarray)
+        (1010,)
         """
         if not hasattr(data, "shape"):
             array = np.asarray(data)
@@ -939,11 +949,10 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To remove a file you need to be a registered used
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-        >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase, auth_cookie)
-        >>> removed_path = cat2.remove(path, urlbase, auth_cookie)
+        >>> uploaded_path = client.upload('root-example/dir2/ds-4d.b2nd', path)
+        >>> removed_path = client.remove(path)
         >>> removed_path == path
         True
         """
@@ -971,15 +980,14 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To move a file you need to be a registered used
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-        >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', path, urlbase, auth_cookie)
+        >>> uploaded_path = client.upload('root-example/dir2/ds-4d.b2nd', path)
         >>> newpath = f'@personal/dir{np.random.randint(0, 100)}/ds-4d-moved.b2nd'
-        >>> moved_path = cat2.move(path, newpath, urlbase, auth_cookie)
+        >>> moved_path = client.move(path, newpath)
         >>> str(moved_path) == newpath
         True
-        >>> path.replace('@personal/', '') in cat2.get_list('@personal', urlbase, auth_cookie)
+        >>> path.replace('@personal/', '') in client.get_list('@personal')
         False
         """
         urlbase, _ = _format_paths(self.urlbase)
@@ -988,7 +996,7 @@ class Client:
             {"src": str(src), "dst": str(dst)},
             auth_cookie=self.cookie,
         )
-        return pathlib.Path(result)
+        return pathlib.PurePosixPath(result)
 
     def copy(self, src, dst):
         """
@@ -1011,15 +1019,14 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To copy a file you need to be a registered used
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-        >>> uploaded_path = cat2.upload('root-example/dir2/ds-4d.b2nd', src_path, urlbase, auth_cookie)
+        >>> uploaded_path = client.upload('root-example/dir2/ds-4d.b2nd', src_path)
         >>> copy_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d-copy.b2nd'
-        >>> copied_path = cat2.copy(src_path, copy_path, urlbase, auth_cookie)
+        >>> copied_path = client.copy(src_path, copy_path)
         >>> str(copied_path) == copy_path
         True
-        >>> datasets = cat2.get_list('@personal', urlbase, auth_cookie)
+        >>> datasets = client.get_list('@personal')
         >>> src_path.replace('@personal/', '') in datasets
         True
         >>> copy_path.replace('@personal/', '') in datasets
@@ -1029,7 +1036,7 @@ class Client:
         result = api_utils.post(
             f"{self.urlbase}/api/copy/", {"src": str(src), "dst": str(dst)}, auth_cookie=self.cookie
         )
-        return pathlib.Path(result)
+        return pathlib.PurePosixPath(result)
 
     def lazyexpr(self, name, expression, operands):
         """
@@ -1057,13 +1064,12 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To create a lazyexpr you need to be a registered used
-        >>> urlbase = 'https://cat2.cloud/demo'
-        >>> auth_cookie = cat2.get_auth_cookie(urlbase, dict(username='user@example.com', password='foo'))
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-        >>> path = cat2.upload('root-example/dir1/ds-2d.b2nd', src_path, urlbase, auth_cookie)
-        >>> cat2.lazyexpr('example-expr', 'a + a', {'a': path}, urlbase, auth_cookie)
-        PosixPath('@personal/example-expr.b2nd')
-        >>> 'example-expr.b2nd' in cat2.get_list('@personal', urlbase, auth_cookie)
+        >>> path = client.upload('root-example/dir1/ds-2d.b2nd', src_path)
+        >>> client.lazyexpr('example-expr', 'a + a', {'a': path})
+        PurePosixPath('@personal/example-expr.b2nd')
+        >>> 'example-expr.b2nd' in client.get_list('@personal')
         True
         """
         urlbase, _ = _format_paths(self.urlbase)
@@ -1071,7 +1077,7 @@ class Client:
         operands = {k: str(v) for k, v in operands.items()}
         expr = {"name": name, "expression": expression, "operands": operands}
         dataset = api_utils.post(f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie)
-        return pathlib.Path(dataset)
+        return pathlib.PurePosixPath(dataset)
 
     def adduser(self, newuser, password=None, superuser=False):
         """
@@ -1096,11 +1102,9 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To add a user you need to be a superuser
-        >>> # This example is intended to work when the subscriber is running locally
-        >>> super_user = {'username': 'superuser@example.com', 'password': 'foo'}
-        >>> super_auth = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=super_user)
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> username = f'user{np.random.randint(0, 100)}@example.com'
-        >>> message = cat2.adduser(username, 'foo', auth_cookie=super_auth)
+        >>> message = client.adduser(username, 'foo')
         >>> f"User added: username='{username}' password='foo' superuser=False" == message
         True
         """
@@ -1130,12 +1134,10 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To delete a user you need to be a superuser
-        >>> # This example is intended to work when the subscriber is running locally
-        >>> super_user = {'username': 'superuser@example.com', 'password': 'foo'}
-        >>> super_auth = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=super_user)
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
         >>> username = f'user{np.random.randint(0, 100)}@example.com'
-        >>> _ = cat2.adduser(username, 'foo', auth_cookie=super_auth)
-        >>> message = cat2.deluser(username, auth_cookie=super_auth)
+        >>> _ = client.adduser(username, 'foo')
+        >>> message = client.deluser(username)
         >>> message == f"User deleted: {username}"
         True
         """
@@ -1161,21 +1163,19 @@ class Client:
         >>> import caterva2 as cat2
         >>> import numpy as np
         >>> # To list the users you need to be a superuser
-        >>> # This example is intended to work when the subscriber is running locally
-        >>> super_user = {'username': 'superuser@example.com', 'password': 'foo'}
-        >>> super_auth = cat2.get_auth_cookie(cat2.sub_urlbase_default, user_auth=super_user)
-        >>> users = cat2.listusers(auth_cookie=super_auth)
+        >>> client = cat2.Client('https://cat2.cloud/demo', username="joedoe@example.com", password="foobar")
+        >>> users = client.listusers()
         >>> sorted(users[0].keys())
         ['email', 'hashed_password', 'id', 'is_active', 'is_superuser', 'is_verified']
         >>> username = f'user{np.random.randint(0, 100)}@example.com'
-        >>> _ = cat2.adduser(username, 'foo', auth_cookie=super_auth)
-        >>> updated_users = cat2.listusers(auth_cookie=super_auth)
+        >>> _ = client.adduser(username, 'foo')
+        >>> updated_users = client.listusers()
         >>> len(users) + 1 == len(updated_users)
         True
-        >>> user_info = cat2.listusers(username, auth_cookie=super_auth)
+        >>> user_info = client.listusers(username)
         >>> user_info[0]['is_superuser']
         False
-        >>> superuser_info = cat2.listusers('superuser@example.com', auth_cookie=super_auth)
+        >>> superuser_info = client.listusers('superuser@example.com')
         >>> superuser_info[0]['is_superuser']
         True
         """
