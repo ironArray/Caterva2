@@ -60,17 +60,15 @@ from pathlib import Path
 import httpx
 import pytest
 
-import caterva2 as cat2
-
 BASE_DIR = pathlib.Path(__file__).resolve().parent
-DEFAULT_STATE_DIR = '_caterva2'
-TEST_STATE_DIR = DEFAULT_STATE_DIR + '_tests'
-TEST_DEFAULT_ROOT = 'foo'
+DEFAULT_STATE_DIR = "_caterva2"
+TEST_STATE_DIR = DEFAULT_STATE_DIR + "_tests"
+TEST_DEFAULT_ROOT = "foo"
 TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
-TEST_HDF5_ROOT = 'hdf5root'
+TEST_HDF5_ROOT = "hdf5root"
 
 local_port_iter = itertools.count(8100)
-logger = logging.getLogger('tests')
+logger = logging.getLogger("tests")
 
 
 def service_ep_getter(first):
@@ -79,48 +77,47 @@ def service_ep_getter(first):
         if first is not None:
             ep, first = first, None
             return ep
-        return f'localhost:{next(local_port_iter)}'
+        return f"localhost:{next(local_port_iter)}"
+
     return get_service_ep
 
 
-get_bro_ep = service_ep_getter(cat2.bro_host_default)
-get_pub_ep = service_ep_getter(cat2.pub_host_default)
-get_sub_ep = service_ep_getter(cat2.sub_host_default)
+get_bro_ep = service_ep_getter("localhost:8000")
+get_pub_ep = service_ep_getter("localhost:8001")
+get_sub_ep = service_ep_getter("localhost:8002")
 
 
-def make_get_http(host, path='/'):
+def make_get_http(host, path="/"):
     def check():
-        url = f'http://{host}{path}'
+        url = f"http://{host}{path}"
         try:
             r = httpx.get(url, timeout=0.5)
             return 100 <= r.status_code < 500  # not internal errors
         except httpx.ConnectError:
             return False
-    check.__name__ = f'get_http_{host}'  # more descriptive
+
+    check.__name__ = f"get_http_{host}"  # more descriptive
     check.host = host  # to get final value
     return check
 
 
 def http_service_check(conf, conf_sect, def_host, path):
-    return make_get_http(conf.get(f'{conf_sect}.http', def_host), path)
+    return make_get_http(conf.get(f"{conf_sect}.http", def_host), path)
 
 
 def bro_check(conf):
-    return http_service_check(conf, 'broker',
-                              get_bro_ep(), '/api/roots')
+    return http_service_check(conf, "broker", get_bro_ep(), "/api/roots")
 
 
 def pub_check(id_, conf):
-    return http_service_check(conf, f'publisher.{id_}',
-                              get_pub_ep(), '/api/list')
+    return http_service_check(conf, f"publisher.{id_}", get_pub_ep(), "/api/list")
 
 
 def sub_check(conf):
-    return http_service_check(conf, 'subscriber',
-                              get_sub_ep(), '/api/roots')
+    return http_service_check(conf, "subscriber", get_sub_ep(), "/api/roots")
 
 
-TestRoot = collections.namedtuple('TestRoot', ['name', 'source'])
+TestRoot = collections.namedtuple("TestRoot", ["name", "source"])
 
 
 class Services:
@@ -129,8 +126,7 @@ class Services:
 
 
 class ManagedServices(Services):
-    def __init__(self, state_dir, reuse_state=True,
-                 roots=None, configuration=None):
+    def __init__(self, state_dir, reuse_state=True, roots=None, configuration=None):
         super().__init__()
 
         self.state_dir = Path(state_dir).resolve()
@@ -145,13 +141,14 @@ class ManagedServices(Services):
     def _start_proc(self, name, *args, check=None):
         if check is not None and check():
             raise RuntimeError(
-                f"check for service \"{name}\" succeeded before start"
-                f" (external service running?): {check.__name__}")
+                f'check for service "{name}" succeeded before start'
+                f" (external service running?): {check.__name__}"
+            )
 
-        if os.environ.get('CATERVA2_SECRET'):
-            conf_file = 'caterva2-login.toml'
+        if os.environ.get("CATERVA2_SECRET"):
+            conf_file = "caterva2-login.toml"
         else:
-            conf_file = 'caterva2-nologin.toml'
+            conf_file = "caterva2-nologin.toml"
 
         popen_args = [
             sys.executable,
@@ -159,10 +156,10 @@ class ManagedServices(Services):
             f"--conf={BASE_DIR / conf_file}",
             f"--statedir={self.state_dir / name}",
             *([f"--http={check.host}"] if check else []),
-            *args
+            *args,
         ]
         popen = subprocess.Popen(popen_args, stdout=sys.stdout, stderr=sys.stderr)
-        command_line = ' '.join(str(x) for x in popen_args)
+        command_line = " ".join(str(x) for x in popen_args)
         self._procs[name] = popen
 
         if check is None:
@@ -176,20 +173,18 @@ class ManagedServices(Services):
             returncode = popen.poll()
             if returncode is not None:
                 raise RuntimeError(
-                    f"service {name} failed with returncode={returncode}, "
-                    f"command = {command_line}"
+                    f"service {name} failed with returncode={returncode}, " f"command = {command_line}"
                 )
             time.sleep(start_sleep_secs)
             if check():
                 break
         else:
             raise RuntimeError(
-                f"service {name} timeout after {start_timeout_secs} seconds, "
-                f"command = {command_line}"
+                f"service {name} timeout after {start_timeout_secs} seconds, " f"command = {command_line}"
             )
 
     def _get_data_path(self, root):
-        return self.state_dir / f'data.{root.name}'
+        return self.state_dir / f"data.{root.name}"
 
     def _setup(self):
         if self._setup_done:
@@ -213,12 +208,15 @@ class ManagedServices(Services):
     def start_all(self):
         self._setup()
 
-        self._start_proc('broker', check=bro_check(self.configuration))
+        self._start_proc("broker", check=bro_check(self.configuration))
         for root in self.roots:
-            self._start_proc(f'publisher.{root.name}',
-                             root.name, self._get_data_path(root),
-                             check=pub_check(root.name, self.configuration))
-        self._start_proc('subscriber', check=sub_check(self.configuration))
+            self._start_proc(
+                f"publisher.{root.name}",
+                root.name,
+                self._get_data_path(root),
+                check=pub_check(root.name, self.configuration),
+            )
+        self._start_proc("subscriber", check=sub_check(self.configuration))
 
     def stop_all(self):
         for proc in self._procs.values():
@@ -237,7 +235,7 @@ class ManagedServices(Services):
         return self._endpoints.get(service)
 
     def get_urlbase(self, service):
-        return f'http://{self.get_endpoint(service)}'
+        return f"http://{self.get_endpoint(service)}"
 
 
 class ExternalServices(Services):
@@ -247,17 +245,15 @@ class ExternalServices(Services):
         self.configuration = conf = configuration
 
         self._checks = checks = {}
-        checks['broker'] = bro_check(conf)
+        checks["broker"] = bro_check(conf)
         for root in roots:
-            checks[f'publisher.{root.name}'] = pub_check(root.name, conf)
-        checks['subscriber'] = sub_check(conf)
+            checks[f"publisher.{root.name}"] = pub_check(root.name, conf)
+        checks["subscriber"] = sub_check(conf)
 
     def start_all(self):
-        failed = [check.__name__ for check in self._checks.values()
-                  if not check()]
+        failed = [check.__name__ for check in self._checks.values() if not check()]
         if failed:
-            raise RuntimeError("failed checks for external services: "
-                               + ' '.join(failed))
+            raise RuntimeError("failed checks for external services: " + " ".join(failed))
 
     def stop_all(self):
         pass
@@ -272,10 +268,10 @@ class ExternalServices(Services):
 
     def get_urlbase(self, service):
         ep = self.get_endpoint(service)
-        return f'http://{ep}' if ep else None
+        return f"http://{ep}" if ep else None
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def services(configuration, examples_dir, examples_hdf5):
     # TODO: Consider using a temporary directory to avoid
     # polluting the current directory with test files
@@ -286,9 +282,8 @@ def services(configuration, examples_dir, examples_hdf5):
 
     srvs = (
         ExternalServices(roots=roots, configuration=configuration)
-        if os.environ.get('CATERVA2_USE_EXTERNAL', '0') == '1'
-        else ManagedServices(TEST_STATE_DIR, reuse_state=False,
-                             roots=roots, configuration=configuration)
+        if os.environ.get("CATERVA2_USE_EXTERNAL", "0") == "1"
+        else ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=configuration)
     )
 
     try:
@@ -309,6 +304,7 @@ def defers(func):
         finally:
             for f in reversed(deferred):
                 f()
+
     return wrapper
 
 
@@ -319,36 +315,33 @@ def main(defer):
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
     hdf5source = files.make_examples_hdf5()
     if hdf5source:
-        defer(lambda: (hdf5source.parent.is_dir()
-                       and shutil.rmtree(hdf5source.parent)))
+        defer(lambda: (hdf5source.parent.is_dir() and shutil.rmtree(hdf5source.parent)))
         roots.append(TestRoot(TEST_HDF5_ROOT, hdf5source))
 
-    if '--help' in sys.argv:
-        rspecs = ' '.join(f'"{r.name}={r.source}"' for r in roots)
-        print(f"Usage: {sys.argv[0]} "
-              f"[STATE_DIRECTORY=\"{DEFAULT_STATE_DIR}\" [ROOTS={rspecs}]]")
+    if "--help" in sys.argv:
+        rspecs = " ".join(f'"{r.name}={r.source}"' for r in roots)
+        print(f"Usage: {sys.argv[0]} " f'[STATE_DIRECTORY="{DEFAULT_STATE_DIR}" [ROOTS={rspecs}]]')
         return
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
     if len(sys.argv) >= 3:
         roots = []  # user-provided roots
     rnames = {r.name for r in roots}
-    rarg_rx = re.compile(r'(?:(.+?)=)?(.+)')  # ``[name=]source``
+    rarg_rx = re.compile(r"(?:(.+?)=)?(.+)")  # ``[name=]source``
     for rarg in sys.argv[2:]:
         rname, rsource = rarg_rx.match(rarg).groups()
         rname = rname if rname else TEST_DEFAULT_ROOT
         if rname in rnames:
-            raise ValueError(f"root name {rname!r} already in use; "
-                             f"please set a different name for {rsource!r}")
+            raise ValueError(
+                f"root name {rname!r} already in use; " f"please set a different name for {rsource!r}"
+            )
         root = TestRoot(rname, Path(rsource))
         roots.append(root)
         rnames.add(root.name)
 
     # TODO: Consider allowing path to configuration file, pass here.
     configuration = conf.get_configuration()
-    srvs = ManagedServices(state_dir, reuse_state=True,
-                           roots=roots,
-                           configuration=configuration)
+    srvs = ManagedServices(state_dir, reuse_state=True, roots=roots, configuration=configuration)
     try:
         srvs.start_all()
         sub_auth.make_sub_user(srvs)
@@ -357,5 +350,5 @@ def main(defer):
         srvs.stop_all()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

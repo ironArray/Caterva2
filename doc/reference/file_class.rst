@@ -5,11 +5,11 @@ File class
 
 A file is either a Blosc2 dataset or a regular file on a root repository.
 
-.. currentmodule:: caterva2
+.. currentmodule:: caterva2.client
 .. autosummary::
     :toctree: autofiles
 
-    File
+    File.__init__
     File.__getitem__
     File.get_download_url
     File.fetch

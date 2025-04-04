@@ -7,7 +7,6 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-import functools
 import json
 import pathlib
 import random
@@ -39,18 +38,6 @@ def handle_errors(func):
     return wrapper
 
 
-def with_auth_cookie(func):
-    @functools.wraps(func)
-    def wrapper(args):
-        auth_cookie = None
-        if args.username and args.password:
-            user_auth = {"username": args.username, "password": args.password}
-            auth_cookie = api_utils.get_auth_cookie(args.urlbase, user_auth)
-        return func(args, auth_cookie=auth_cookie)
-
-    return wrapper
-
-
 def dataset_with_slice(path):
     match = re.match("(.*)\\[(.*)]", path)
     if match is None:
@@ -63,9 +50,8 @@ def dataset_with_slice(path):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_roots(args, auth_cookie):
-    data = cat2.get_roots(args.urlbase, auth_cookie=auth_cookie)
+def cmd_roots(client, args):
+    data = client.get_roots()
     if args.json:
         print(json.dumps(data))
         return
@@ -78,9 +64,8 @@ def cmd_roots(args, auth_cookie):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_subscribe(args, auth_cookie):
-    data = cat2.subscribe(args.root, args.urlbase, auth_cookie=auth_cookie)
+def cmd_subscribe(client, args):
+    data = client.subscribe(args.root)
     if args.json:
         print(json.dumps(data))
         return
@@ -89,9 +74,8 @@ def cmd_subscribe(args, auth_cookie):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_list(args, auth_cookie):
-    data = cat2.get_list(args.root, args.urlbase, auth_cookie=auth_cookie)
+def cmd_list(client, args):
+    data = client.get_list(args.root)
     if args.json:
         print(json.dumps(data))
         return
@@ -101,8 +85,7 @@ def cmd_list(args, auth_cookie):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_url(args, auth_cookie):
+def cmd_url(client, args):
     data = api_utils.get_download_url(args.dataset, args.urlbase)
     if args.json:
         print(json.dumps(data))
@@ -111,10 +94,9 @@ def cmd_url(args, auth_cookie):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_info(args, auth_cookie):
+def cmd_info(client, args):
     print(f"Getting info for {args.dataset}")
-    data = cat2.get_info(args.dataset, args.urlbase, auth_cookie=auth_cookie)
+    data = client.get_info(args.dataset)
 
     # Print
     if args.json:
@@ -124,11 +106,10 @@ def cmd_info(args, auth_cookie):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_show(args, auth_cookie):
+def cmd_show(client, args):
     path, params = args.dataset
     slice_ = params.get("slice_", None)
-    data = cat2.fetch(path, args.urlbase, slice_=slice_, auth_cookie=auth_cookie)
+    data = client.fetch(path, slice_=slice_)
 
     # Display
     if isinstance(data, bytes):
@@ -143,65 +124,55 @@ def cmd_show(args, auth_cookie):
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_move(args, auth_cookie):
-    moved = cat2.move(args.dataset, args.dest, args.urlbase, auth_cookie=auth_cookie)
+def cmd_move(client, args):
+    moved = client.move(args.dataset, args.dest)
     print(f"Dataset {args.dataset} moved to {moved}")
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_copy(args, auth_cookie):
-    copied = cat2.copy(args.dataset, args.dest, args.urlbase, auth_cookie=auth_cookie)
+def cmd_copy(client, args):
+    copied = client.copy(args.dataset, args.dest)
     print(f"Dataset {args.dataset} copied to {copied}")
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_download(args, auth_cookie):
-    path = cat2.download(args.dataset, args.localpath, args.urlbase, auth_cookie=auth_cookie)
+def cmd_download(client, args):
+    path = client.download(args.dataset, args.localpath)
     print(f"Dataset saved to {path}")
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_upload(args, auth_cookie):
-    path = cat2.upload(args.localpath, args.dataset, args.urlbase, auth_cookie=auth_cookie)
+def cmd_upload(client, args):
+    path = client.upload(args.localpath, args.dataset)
     print(f"Dataset stored in {path}")
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_remove(args, auth_cookie):
-    removed = cat2.remove(args.dataset, args.urlbase, auth_cookie=auth_cookie)
+def cmd_remove(client, args):
+    removed = client.remove(args.dataset)
     print(f"Dataset (or directory contents) removed: {removed}")
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_adduser(args, auth_cookie):
+def cmd_adduser(client, args):
     newpass = args.newpass or "".join(random.choice(string.ascii_letters) for _ in range(8))
-    message = cat2.adduser(
+    message = client.adduser(
         args.newuser,
         newpass,
         args.superuser,
-        args.urlbase,
-        auth_cookie=auth_cookie,
     )
     print(message)
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_deluser(args, auth_cookie):
-    message = cat2.deluser(args.user, args.urlbase, auth_cookie=auth_cookie)
+def cmd_deluser(client, args):
+    message = client.deluser(args.user)
     print(message)
 
 
 @handle_errors
-@with_auth_cookie
-def cmd_listusers(args, auth_cookie):
-    data = cat2.listusers(args.user, args.urlbase, auth_cookie=auth_cookie)
+def cmd_listusers(client, args):
+    data = client.listusers(args.user)
     if args.json:
         print(json.dumps(data))
         return
@@ -322,7 +293,8 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    args.func(args)
+    client = cat2.Client(args.urlbase, username=args.username, password=args.password)
+    args.func(client, args)
 
 
 if __name__ == "__main__":
