@@ -109,12 +109,13 @@ def fetch_data(path, urlbase, params, auth_cookie=None):
     # Try different deserialization methods
     try:
         data = blosc2.ndarray_from_cframe(data)
-        data = data[:] if data.ndim == 1 else data[()]
     except RuntimeError:
         data = blosc2.schunk_from_cframe(data)
-        data = data[:]
-    return data
-
+    if hasattr(data, 'ndim'): #if b2nd or b2frame
+        #catch 0d case where [:] fails
+        return data[()] if data.ndim == 0 else data[:]
+    else:
+        return data[:]
 
 def get_download_url(path, urlbase):
     return f"{urlbase}/api/fetch/{path}"
