@@ -22,7 +22,7 @@ def sub_urlbase(services):
 
 @pytest.fixture
 def api_root(client):
-    return client.get_root(TEST_HDF5_ROOT)
+    return client.get(TEST_HDF5_ROOT)
 
 
 def test_not_unsupported(api_root):

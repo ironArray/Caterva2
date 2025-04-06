@@ -51,7 +51,7 @@ def fill_public(client, examples_dir):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
     # We need a user here in case we want to remove files from @public
-    return fnames, client.get_root("@public")
+    return fnames, client.get("@public")
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ def fill_auth(auth_client, fill_public):
     if not auth_client:
         return None
     fnames, _ = fill_public
-    return fnames, auth_client.get_root("@public")
+    return fnames, auth_client.get("@public")
 
 
 def test_subscribe(client, auth_client):
@@ -89,32 +89,48 @@ def test_roots(pub_host, client, auth_client):
         assert roots["@shared"]["http"] == ""
 
 
-def test_root(client, auth_client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+def test_get_root(client, auth_client):
+    myroot = client.get(TEST_CATERVA2_ROOT)
     assert myroot.name == TEST_CATERVA2_ROOT
     assert myroot.urlbase == client.urlbase
-    mypublic = client.get_root("@public")
+    mypublic = client.get("@public")
     assert mypublic.name == "@public"
     assert mypublic.urlbase == client.urlbase
     if auth_client:
-        mypersonal = auth_client.get_root("@personal")
+        mypersonal = auth_client.get("@personal")
         assert mypersonal.name == "@personal"
         assert mypersonal.urlbase == auth_client.urlbase
-        myshared = auth_client.get_root("@shared")
+        myshared = auth_client.get("@shared")
         assert myshared.name == "@shared"
         assert myshared.urlbase == auth_client.urlbase
 
 
+def test_get_file(client):
+    myfile = client.get(TEST_CATERVA2_ROOT + "/README.md")
+    assert myfile.name == "README.md"
+
+
+def test_get_dataset(client):
+    myds = client.get(TEST_CATERVA2_ROOT + "/ds-1d.b2nd")
+    assert myds.name == "ds-1d.b2nd"
+    assert isinstance(myds, cat2.Dataset)
+    assert myds.shape == (1000,)
+    assert myds.dtype == np.dtype("int64")
+    assert myds.chunks == (100,)
+    assert myds.blocks == (10,)
+    assert myds.urlbase == client.urlbase
+
+
 def test_list(client, auth_client, examples_dir):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     example = examples_dir
     files = {str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file()}
     assert set(myroot.file_list) == files
     if auth_client:
-        mypersonal = auth_client.get_root("@personal")
+        mypersonal = auth_client.get("@personal")
         # In previous tests we have created some files in the personal area
         assert len(mypersonal.file_list) >= 0
-        myshared = auth_client.get_root("@shared")
+        myshared = auth_client.get("@shared")
         assert set(myshared.file_list) == set()
 
 
@@ -144,7 +160,7 @@ def test_list_public(client, fill_public):
 
 
 def test_file(client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     file = myroot["README.md"]
     assert file.name == "README.md"
     assert file.urlbase == client.urlbase
@@ -164,10 +180,10 @@ def test_dataset_info(client, fill_public):
         if type(mypublic[fname]) is cat2.Dataset:  # files cannot be expected t
             info = client.get_info("@public/" + fname)
             data = mypublic[fname]
-            assert data.shape == info["shape"]
             assert data.dtype == info["dtype"]
-            assert data.blocks == info["blocks"]
-            assert data.chunks == info["chunks"]
+            assert data.shape == tuple(info["shape"])
+            assert data.blocks == tuple(info["blocks"])
+            assert data.chunks == tuple(info["chunks"])
 
 
 @pytest.mark.parametrize("dirpath", [None, "dir1", "dir2", "dir2/dir3/dir4"])
@@ -177,7 +193,7 @@ def test_move(auth_client, dirpath, final_dir, fill_auth):
         return pytest.skip("authentication support needed")
 
     fnames, mypublic = fill_auth
-    myshared = auth_client.get_root("@shared")
+    myshared = auth_client.get("@shared")
     for fname in fnames:
         file = mypublic[fname]
         if final_dir:
@@ -220,7 +236,7 @@ def test_copy(auth_client, dirpath, final_dir, fill_auth):
         return pytest.skip("authentication support needed")
 
     fnames, mypublic = fill_auth
-    myshared = auth_client.get_root("@shared")
+    myshared = auth_client.get("@shared")
     for fname in fnames:
         file = mypublic[fname]
         if final_dir:
@@ -246,7 +262,7 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
         return pytest.skip("authentication support needed")
 
     fnames, mypublic = fill_auth
-    myshared = auth_client.get_root("@shared")
+    myshared = auth_client.get("@shared")
     fname = "ds-1d.b2nd" if not fields else "ds-1d-fields.b2nd"
     # Copy a 1d dataset to the shared area
     file = mypublic[fname]
@@ -276,7 +292,7 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(10, 20, 1)],
 )
 def test_index_dataset_frame(slice_, examples_dir, client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-hello.b2frame"]
     assert ds.name == "ds-hello.b2frame"
     assert ds.urlbase == client.urlbase
@@ -293,7 +309,7 @@ def test_index_dataset_frame(slice_, examples_dir, client):
 
 def test_dataset_step_diff_1(client):
     # XXX This should fail with anonymous client, because the root is not @public
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-hello.b2frame"]
     assert ds.name == "ds-hello.b2frame"
     assert ds.urlbase == client.urlbase
@@ -308,7 +324,7 @@ def test_dataset_step_diff_1(client):
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
 )
 def test_index_dataset_1d(slice_, examples_dir, client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-1d.b2nd"]
     assert ds.name == "ds-1d.b2nd"
     assert ds.urlbase == client.urlbase
@@ -333,7 +349,7 @@ def test_index_dataset_1d(slice_, examples_dir, client):
 )
 @pytest.mark.parametrize("name", ["dir1/ds-2d.b2nd", "dir2/ds-4d.b2nd"])
 def test_index_dataset_nd(slice_, name, examples_dir, client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
@@ -346,7 +362,7 @@ def test_index_dataset_nd(slice_, name, examples_dir, client):
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
 )
 def test_index_regular_file(slice_, examples_dir, client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
 
     # Data contents
@@ -362,7 +378,7 @@ def test_index_regular_file(slice_, examples_dir, client):
 
 @pytest.mark.parametrize("name", ["ds-1d.b2nd", "dir1/ds-2d.b2nd"])
 def test_download_b2nd(name, examples_dir, tmp_path, client, auth_client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -384,7 +400,7 @@ def test_download_b2nd(name, examples_dir, tmp_path, client, auth_client):
 
 
 def test_download_b2frame(examples_dir, tmp_path, client, auth_client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-hello.b2frame"]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -416,7 +432,7 @@ def test_download_b2frame(examples_dir, tmp_path, client, auth_client):
     ],
 )
 def test_download_localpath(fnames, examples_dir, tmp_path, client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     name, localpath = fnames
     ds = myroot[name]
     with chdir_ctxt(tmp_path):
@@ -438,7 +454,7 @@ def test_download_localpath(fnames, examples_dir, tmp_path, client):
 
 
 def test_download_regular_file(examples_dir, tmp_path, client, auth_client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -496,8 +512,8 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
         pytest.skip("authentication support needed")
 
     localpath, remotepath = fnames
-    remote_root = auth_client.get_root(root)
-    myroot = auth_client.get_root(TEST_CATERVA2_ROOT)
+    remote_root = auth_client.get(root)
+    myroot = auth_client.get(TEST_CATERVA2_ROOT)
     ds = myroot[localpath]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -529,8 +545,8 @@ def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path)
     if auth_client:
         pytest.skip("not authentication needed")
 
-    remote_root = client.get_root("@public")
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    remote_root = client.get("@public")
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
     with chdir_ctxt(tmp_path):
         path = ds.download()
@@ -542,14 +558,14 @@ def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path)
 
 @pytest.mark.parametrize("name", ["ds-1d.b2nd", "ds-hello.b2frame", "README.md"])
 def test_vlmeta(client, name):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
     schunk_meta = ds.meta.get("schunk", ds.meta)
     assert ds.vlmeta is schunk_meta["vlmeta"]
 
 
 def test_vlmeta_data(client):
-    myroot = client.get_root(TEST_CATERVA2_ROOT)
+    myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-sc-attr.b2nd"]
     assert ds.vlmeta == {"a": 1, "b": "foo", "c": 123.456}
 
