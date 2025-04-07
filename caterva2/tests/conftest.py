@@ -43,5 +43,4 @@ def auth_client(services, sub_user):  # noqa: F811
         return None
 
     urlbase = services.get_urlbase("subscriber")
-    username, password = sub_user
-    return cat2.Client(urlbase, username=username, password=password)
+    return cat2.Client(urlbase, sub_user)

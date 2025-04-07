@@ -7,6 +7,7 @@ A client is a remote repository that can be subscribed to. It is the main entry 
 
 .. currentmodule:: caterva2.client
 
+
 Constructor
 ----------
 
@@ -16,17 +17,16 @@ Constructor
     Client.__init__
 
 
-Getting roots, subscribing and listing datasets
------------------------------------------------
+Getting roots, files, datasets, subscribing...
+----------------------------------------------
 
 .. autosummary::
     :toctree: autofiles
 
+    Client.get
     Client.get_roots
-    Client.subscribe
     Client.get_list
-    Client.get_info
-
+    Client.subscribe
 
 
 Fetch / download / upload datasets
@@ -40,6 +40,7 @@ Fetch / download / upload datasets
     Client.download
     Client.upload
 
+
 User management
 ---------------
 
@@ -51,16 +52,17 @@ User management
     Client.listusers
 
 
-Utility functions
------------------
+Utility methods
+---------------
 
 .. autosummary::
     :toctree: autofiles
 
+    Client.append
     Client.copy
     Client.move
     Client.remove
-    Client.append
+    Client.get_info
 
 
 Evaluating expressions
