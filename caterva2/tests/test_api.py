@@ -321,7 +321,7 @@ def test_dataset_step_diff_1(client):
 
 @pytest.mark.parametrize(
     "slice_",
-    [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
+    [0, 1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
 )
 def test_index_dataset_1d(slice_, examples_dir, client):
     myroot = client.get(TEST_CATERVA2_ROOT)

@@ -782,7 +782,7 @@ async def fetch_data(
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
-    if slice_:
+    if slice_ is not None:
         if array is not None:
             array = container[slice_] if array.ndim > 0 else container[()]
         else:
@@ -795,7 +795,7 @@ async def fetch_data(
     # * a serialized NDArray
     # * a compressed SChunk (bytes, via blosc2.compress2)
     data = array if array is not None else schunk
-    if not slice_:
+    if slice_ is None:
         # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
         data = data[()] if array is not None else data[:]
 
