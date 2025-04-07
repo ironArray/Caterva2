@@ -784,7 +784,25 @@ async def fetch_data(
 
     if slice_ is not None:
         if array is not None:
-            array = container[slice_] if array.ndim > 0 else container[()]
+            # Simple fast path when the slice is a single chunk of the array
+            if isinstance(slice_, int) and array.chunks == (1,) and isinstance(array, blosc2.NDArray):
+                print("Meec!")
+                # Get the compressed chunk
+                chunk = array.schunk.get_chunk(slice_)
+                # Create a new ndarray from the single chunk
+                # In this case, we don't need to decompress and compress again
+                b = blosc2.empty(
+                    array.chunks,
+                    dtype=array.dtype,
+                    chunks=array.chunks,
+                    cparams=blosc2.CParams(
+                        codec=array.cparams.codec, clevel=array.cparams.clevel, filters=array.cparams.filters
+                    ),
+                )
+                b.schunk.update_chunk(0, chunk)
+                data = b.to_cframe()
+                downloader = srv_utils.iterchunk(data)
+                return responses.StreamingResponse(downloader, media_type="application/octet-stream")
         else:
             if isinstance(slice_, int):
                 # TODO: make SChunk support integer as slice
