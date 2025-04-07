@@ -9,12 +9,13 @@
 
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
 
-from .client import Client, Dataset, sub_urlbase_default
+from .client import BasicAuth, Client, Dataset, sub_urlbase_default
 
 __version__ = "2025.02.20"
 """The version in use of the Caterva2 package."""
 
 __all__ = [
+    "BasicAuth",
     "Client",
     "Dataset",
     "sub_urlbase_default",

@@ -293,7 +293,7 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    client = cat2.Client(args.urlbase, username=args.username, password=args.password)
+    client = cat2.Client(args.urlbase, (args.username, args.password))
     args.func(client, args)
 
 
