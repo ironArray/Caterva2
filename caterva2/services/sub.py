@@ -784,7 +784,12 @@ async def fetch_data(
 
     if slice_ is not None:
         if array is not None:
-            array = container[slice_] if array.ndim > 0 else container[()]
+            # Using NDArray.slice() allows a fast path when it is aligned with the chunks
+            data = array.slice(slice_)
+            data = data.to_cframe()
+            # We are done, just stream the data
+            downloader = srv_utils.iterchunk(data)
+            return responses.StreamingResponse(downloader, media_type="application/octet-stream")
         else:
             if isinstance(slice_, int):
                 # TODO: make SChunk support integer as slice
