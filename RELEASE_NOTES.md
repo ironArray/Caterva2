@@ -1,5 +1,24 @@
 # Release notes
 
+## Changes from 2025.02.20 to 2025.04.09
+
+### API changes
+* New `caterva2.Client` class to handle the connection to the server.
+  See examples in docs: https://ironarray.io/caterva2-doc/reference/client_class.html
+  The previous way to authenticate and connect to the server has been removed,
+  so you need to migrate your code to use the new Client class.
+* New `Dataset.slice()` method to slice a dataset.  This returns
+  either a `blosc2.NDArray` or a `blosc2.Schunk` object, depending on the
+  underlying data object.
+* New `Dataset.append()` method to append data to a dataset.  This is
+  useful for datasets that enlarge over time.
+
+### Others
+* Several fixes and improvements in the Web UI.
+* Fixed a bug when asking for the first index (0) of a dataset.
+* Optimized the fetch of the dataset in the web client.
+
+
 ## Changes from 2025.02.13 to 2025.02.20
 
 * Use requests instead of httpx to avoid issues with Pyodide.
