@@ -785,7 +785,9 @@ async def fetch_data(
     if slice_ is not None:
         if array is not None:
             # Using NDArray.slice() allows a fast path when it is aligned with the chunks
-            # As we are going to serialize the slice, we can save some time by using a contiguous one
+            # As we are going to serialize the slice right away, it is not clear in which
+            # situations a contiguous slice is faster than a non-contiguous one.
+            # Let's just use the contiguous one for now, until more testing is done.
             data = array.slice(slice_, contiguous=True).to_cframe()
             # We are done, just stream the data
             downloader = srv_utils.iterchunk(data)
