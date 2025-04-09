@@ -259,9 +259,9 @@ def compress(data, dst=None):
     return schunk
 
 
-def iterchunk(chunk):
-    # TODO Yield block by block
-    yield chunk
+def iterchunk(data: bytes, chunk_size=2**20):
+    for i in range(0, len(data), chunk_size):
+        yield data[i : i + chunk_size]
 
 
 #
