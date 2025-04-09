@@ -2,9 +2,11 @@ import functools
 import io
 import pathlib
 import sys
+from collections.abc import Sequence
 
 import blosc2
 import numpy as np
+from blosc2 import NDArray, SChunk
 
 from . import api_utils, utils
 
@@ -368,6 +370,42 @@ class File:
         """
         slice_ = api_utils.slice_to_string(slice_)
         return api_utils.fetch_data(self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie)
+
+    def slice(self, key: int | slice | Sequence[slice]) -> NDArray | SChunk:
+        """Get a slice as a new Blosc2 objects (`NDArray` or `SChunk`).
+
+        Parameters
+        ----------
+        key : int, slice, or sequence of slices
+            The slice to retrieve.  If a single slice is provided, it will be
+            applied to the first dimension.  If a sequence of slices is
+            provided, each slice will be applied to the corresponding
+            dimension.
+
+        Returns
+        -------
+        NDArray or SChunk
+            A new Blosc2 object containing the requested slice.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get('example')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.slice(1)
+        <blosc2.ndarray.NDArray object at 0x10747efd0>
+        >>> ds.slice(1)[()]
+        array(1)
+        >>> ds.slice(slice(0, 10))[:]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        # Convert slices to strings
+        slice_ = api_utils.slice_to_string(key)
+        # Fetch and return the data as an NDArray
+        return api_utils.fetch_data(
+            self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=True
+        )
 
     def download(self, localpath=None):
         """

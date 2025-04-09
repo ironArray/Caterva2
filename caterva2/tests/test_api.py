@@ -291,7 +291,7 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
     "slice_",
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(10, 20, 1)],
 )
-def test_index_dataset_frame(slice_, examples_dir, client):
+def test_dataset_getitem_fetch(slice_, examples_dir, client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-hello.b2frame"]
     assert ds.name == "ds-hello.b2frame"
@@ -323,7 +323,7 @@ def test_dataset_step_diff_1(client):
     "slice_",
     [0, 1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
 )
-def test_index_dataset_1d(slice_, examples_dir, client):
+def test_getitem_dataset_1d(slice_, examples_dir, client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-1d.b2nd"]
     assert ds.name == "ds-1d.b2nd"
@@ -348,7 +348,7 @@ def test_index_dataset_1d(slice_, examples_dir, client):
     ],
 )
 @pytest.mark.parametrize("name", ["dir1/ds-2d.b2nd", "dir2/ds-4d.b2nd"])
-def test_index_dataset_nd(slice_, name, examples_dir, client):
+def test_getitem_dataset_nd(slice_, name, examples_dir, client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
     example = examples_dir / ds.name
@@ -359,9 +359,32 @@ def test_index_dataset_nd(slice_, name, examples_dir, client):
 
 @pytest.mark.parametrize(
     "slice_",
+    [
+        1,
+        slice(None, 1),
+        slice(0, 10),
+        slice(10, 20),
+        slice(None),
+        slice(1, 5, 1),
+        (slice(None, 10), slice(None, 20)),
+    ],
+)
+@pytest.mark.parametrize("name", ["dir1/ds-2d.b2nd", "dir2/ds-4d.b2nd"])
+def test_slice_dataset_nd(slice_, name, examples_dir, client):
+    myroot = client.get(TEST_CATERVA2_ROOT)
+    ds = myroot[name]
+    example = examples_dir / ds.name
+    a = blosc2.open(example)[:]
+    arr = ds.slice(slice_)
+    assert isinstance(arr, blosc2.NDArray)
+    np.testing.assert_array_equal(arr[()], a[slice_])
+
+
+@pytest.mark.parametrize(
+    "slice_",
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
 )
-def test_index_regular_file(slice_, examples_dir, client):
+def test_getitem_regular_file(slice_, examples_dir, client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
 

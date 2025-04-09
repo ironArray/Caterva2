@@ -103,7 +103,7 @@ def get_auth_cookie(urlbase, user_auth):
     return "=".join(list(resp.cookies.items())[0])
 
 
-def fetch_data(path, urlbase, params, auth_cookie=None):
+def fetch_data(path, urlbase, params, auth_cookie=None, as_blosc2=False):
     response = _xget(f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie)
     data = response.content
     # Try different deserialization methods
@@ -111,11 +111,14 @@ def fetch_data(path, urlbase, params, auth_cookie=None):
         data = blosc2.ndarray_from_cframe(data)
     except RuntimeError:
         data = blosc2.schunk_from_cframe(data)
-    if hasattr(data, 'ndim'): #if b2nd or b2frame
-        #catch 0d case where [:] fails
+    if as_blosc2:
+        return data
+    if hasattr(data, "ndim"):  # if b2nd or b2frame
+        # catch 0d case where [:] fails
         return data[()] if data.ndim == 0 else data[:]
     else:
         return data[:]
+
 
 def get_download_url(path, urlbase):
     return f"{urlbase}/api/fetch/{path}"
