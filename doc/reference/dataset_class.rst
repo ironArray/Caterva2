@@ -5,14 +5,32 @@ Dataset class
 
 A dataset is a Blosc2-encoded file on a root repository (thus a :ref:`File <ref-API-File>`) representing either a flat string of bytes or an n-dimensional array.
 
-.. currentmodule:: caterva2
+.. currentmodule:: caterva2.client.Dataset
+
+
+Methods
+-------
+
+.. autosummary::
+    :toctree: autofiles
+    :nosignatures:
+
+    __init__
+    __getitem__
+    fetch
+    slice
+    append
+    get_download_url
+    download
+    vlmeta
+
+Attributes
+----------
+
 .. autosummary::
     :toctree: autofiles
 
-    Dataset.__init__
-    Dataset.__getitem__
-    Dataset.append
-    Dataset.get_download_url
-    Dataset.fetch
-    Dataset.download
-    Dataset.vlmeta
+    shape
+    chunks
+    blocks
+    dtype

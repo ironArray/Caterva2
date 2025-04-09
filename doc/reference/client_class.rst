@@ -5,7 +5,7 @@ Client class
 
 A client is a remote repository that can be subscribed to. It is the main entry point for using the Caterva2 API.
 
-.. currentmodule:: caterva2.client
+.. currentmodule:: caterva2
 
 
 Constructor
