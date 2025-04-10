@@ -1,99 +1,120 @@
 # Using the client APIs
 
-To follow these instructions, make sure that you have started test Caterva2 services (see [](Launching-Caterva2-services)).
+To follow these instructions, make sure that you have installed ``caterva2`` and ``blosc2``.
 
 ## The client API
 
-Let's try Caterva2's client API (fully described in [](ref-API-Client)) against the default subscriber at `http://localhost:8002` (you may specify a different one via the `urlbase` argument) .  Run your Python interpreter and enter:
+Let's try Caterva2's client API using the demo at `https://cat2.cloud/demo` (you may specify a different one via the `urlbase` argument).  First import the necessary packages in your Python interpreter:
 
 ```python
-import caterva2
-
-roots = caterva2.get_roots()
+import caterva2 as cat2
 ```
 
-**Note:** If the subscriber requires user authentication (and you get a `401 Unauthorized` error), you may first get an authorization cookie with `caterva2.api_utils.get_auth_cookie()`, then pass the returned cookie to API functions as the `auth_cookie` keyword argument.  For instance:
+One must access to a server, either local or remote, to use the client API. Here we're going to use the demo server, available at `https://cat2.cloud/demo`. One may obtain (read-only) access without authentication to the `@public` root
 
 ```python
-cookie = caterva2.api_utils.get_auth_cookie(
-    "http://localhost:8002", {"username": "user@example.com", "password": "foobar11"}
-)
-roots = caterva2.get_roots(auth_cookie=cookie)
+client = cat2.Client("https://cat2.cloud/demo")
+client.get_roots()
+# {'@public': {'name': '@public', 'http': '', 'subscribed': True}}
 ```
-
-We just connected to the subscriber and asked about all roots known by the broker.  If you print `roots` you'll see a dictionary with a `foo` entry:
+or, if one has created a user, using the user credentials
+```python
+client = cat2.Client("https://cat2.cloud/demo",("user@example.com","password1")
+client.get_roots()
+#{'@public': {'name': '@public', 'http': '', 'subscribed': True},
+# '@personal': {'name': '@personal', 'http': '', 'subscribed': True},
+# '@shared': {'name': '@shared', 'http': '', 'subscribed': True}}
+```
+which gives (read/write) access to three roots (`@public`, `@personal` and `@shared`).
+We may get a list of datasets in the `@public` root for `client` via `client.get_list("@public")`
 
 ```python
-{"foo": {"name": "foo", "http": "localhost:8001", "subscribed": None}}
+datasets = client.get_list("@public")
+print(datasets)
+#['examples/README.md', 'examples/Wutujing-River.jpg',..., 'examples/tomo-guess-test.b2nd']
 ```
-
-Besides its name, it contains the address of the publisher providing it, and an indication that we're not subscribed to it.  Getting a list of datasets in that root with `caterva2.get_list('foo')` will fail with `404 Not Found`.  So let's try again by first subscribing to it:
+We can also introduce a local variable pointing to the dataset hosted on the server - without actually downloading any data - via the following command
 
 ```python
-caterva2.subscribe("foo")
-datasets = caterva2.get_list("foo")
+client.get("@public/examples/tomo-guess-test.b2nd")
+#<Dataset: @public/examples/tomo-guess-test.b2nd>
 ```
-
-If you print `datasets` you'll see a list of datasets in the `foo` root:
+Note how we identify the dataset by using a slash `/` to concatenate the root name with the dataset name in that root (which may contain slashes itself). We may access metadata about the dataset via
+```python
+metadata = client.get_info("@public/examples/tomo-guess-test.b2nd")
+```
+The `metadata` dictionary contains assorted dataset attributes
 
 ```python
-[
-    "ds-1d.b2nd",
-    "ds-hello.b2frame",
-    "ds-1d-b.b2nd",
-    "README.md",
-    "dir1/ds-3d.b2nd",
-    "dir1/ds-2d.b2nd",
-    "dir2/ds-4d.b2nd",
-]
+print(metadata)
+#{'shape': [10, 100, 100], 'chunks': [10, 100, 100], 'blocks': [2, 100, 100], 'dtype': 'uint16', 
+ #'schunk': {...}, 'mtime': '2025-04-06T22:00:03.912156Z'}
 ```
-
-(If you repeat the call to `caterva2.get_roots()` you'll see that `foo` has `subscribed=True` now.)
-
-We can get some information about a dataset without downloading it:
+So `@public/examples/tomo-guess-test.b2nd` is a `(10,100,100)` dataset of 16-bit unsigned integers. The `schunk` field contains information about the compression of the data. We can get the whole dataset (or just a part of it) and decompress it to a `numpy` array like so:
 
 ```python
-metadata = caterva2.get_info("foo/dir1/ds-2d.b2nd")
+myslice = client.fetch("@public/examples/tomo-guess-test.b2nd", slice_  = "5, 10:12, 3")
+print(myslice)
+#array([51003, 51103], dtype=uint16)
 ```
-
-Note how we identify the dataset by using a slash `/` to concatenate the root name with the dataset name in that root (which may contain slashes itself).  The `metadata` dictionary contains assorted dataset attributes:
+Finally, one may download and save a file locally, or upload a local file to the server, using the `download` and `upload`commands
 
 ```python
-{
-    "dtype": "uint16",
-    "ndim": 2,
-    "shape": [10, 20],
-    # ...
-    "schunk": {  # ...
-        "cparams": {
-            "codec": 5,  # ...
-        },
-        # ...
-    },
-    # ...
-    "size": 400,
-}
+client.download("@public/examples/tomo-guess-test.b2nd", "mylocalfile.b2nd") #saves local file as mylocalfile.b2nd
+client.upload("mylocalfile.b2nd", "@public/uploadedfile.b2nd") #uploads local file to @public/uploadedfile.b2nd
 ```
 
-So `foo/dir1/ds-2d.b2nd` is a 10x20 dataset of 16-bit unsigned integers.  With `caterva2.fetch()` we can get as a NumPy array the whole dataset or just a part of it (passing a string representation of the slice that we would use between brackets as the `slice_` argument):
+## The object-oriented client API
+
+The top level client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (fully described in [](ref-API-Root), [](ref-API-File) and  [](ref-API-Dataset)), similar to that of h5py.
+
+First, let's create a `caterva2.Root` instance defining a local variable pointing to the root, using the `client` object we created above, which has already been authenticated. We can then print out the list of datasets in the root using `.file_list`:
+```python
+myroot = client.get("@public")
+print(myroot.file_list)
+#['examples/README.md', 'examples/Wutujing-River.jpg',..., 'examples/tomo-guess-test.b2nd']
+```
+
+Indexing the `Root` instance with the name of the dataset results in a `Dataset` instance (or `File`, as we'll see below).  The instance offers easy access to its metadata via the `meta` attribute:
 
 ```python
-caterva2.fetch("foo/dir1/ds-2d.b2nd", slice_="0:2, 4:8")
+ds = myroot["examples/tomo-guess-test.b2nd"]
+ds.meta
+#{'shape': [10, 100, 100], 'chunks': [10, 100, 100], 'blocks': [2, 100, 100], 'dtype': 'uint16', 
+ #'schunk': {...}, 'mtime': '2025-04-06T22:00:03.912156Z'}
 ```
 
-This returns just the requested slice:
+Getting data from the dataset is very concise, as `caterva2.Dataset` instances support slicing notation, so this expression
 
 ```python
-array([[4, 5, 6, 7], [24, 25, 26, 27]], dtype=uint16)
+myslice = ds[5, 10:12, 3]
+#array([51003, 51103], dtype=uint16)
+```
+results in the same slice as the (much more verbose) `client.fetch()` call in the previous section.
+Alternatively, to avoid decompressing the data, one may use the `.slice` command in the following way
+```python
+ds.slice((slice(5), slice(10, 12), slice(3)))
+#<blosc2.ndarray.NDArray at 0x7fba88180950>
+```
+returning a `blosc2.NDArray` or `blosc2.SChunk` depending on the original file type.
+Finally, you may download and upload files in the following way
+```python
+ds.download("mylocalfile.b2nd") #saves local file as mylocalfile.b2nd
+myroot.upload("mylocalfile.b2nd", "uploadedfile.b2nd") #uploads local file to @public/uploadedfile.b2nd
 ```
 
-Finally, you may want to save the whole dataset locally:
+### On datasets and files
+
+The type of instance that you get from indexing a `Root` instance depends on the kind of the named dataset: for datasets whose name ends in `.b2nd` (`n`-dimensional `blosc2.NDArray`) or `.b2frame` (byte string in a `blosc2` frame) you'll get a `Dataset`, while otherwise you'll get a `File` (non-``blosc2`` data).  Both classes support the same operations, with slicing only supporting one dimension for `blosc2` frames and other files:
 
 ```python
-caterva2.download("foo/dir1/ds-2d.b2nd")
+print(type(ds[0:2, 4:8]))  # -> <class 'numpy.ndarray'>
+print(type(ds.slice((slice(0,2), slice(4,8)))))  # -> <class 'blosc2.ndarray.NDArray'>
+print(type(myroot["examples/ds-hello.b2frame"][:10]))  # -> <class 'bytes'>
+print(type(myroot["examples/ds-hello.b2frame"].slice(slice(0,10))))  # -> <class 'blosc2.schunk.SChunk'>
+print(type(myroot["examples/README.md"][:10]))  # -> <class 'bytes'>
+print(type(myroot["examples/README.md"].slice(slice(0,10))))  # -> <class 'blosc2.schunk.SChunk'>
 ```
-
-The call downloads the dataset as a file and returns its local path `PosixPath('foo/dir1/ds-2d.b2nd')`, which should be similar to the dataset name.
 
 ### Evaluating expressions
 
@@ -113,81 +134,3 @@ The path of the new dataset is returned: `@personal/plusone.b2nd`.  Now you can 
 caterva2.fetch("@personal/plusone.b2nd", slice_="0:2, 4:8", auth_cookie=...)
 ```
 
-## The object-oriented client API
-
-The top level client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (fully described in [](ref-API-Root), [](ref-API-File) and  [](ref-API-Dataset)), similar to that of h5py.
-
-First, let's create a `caterva2.Root` instance for the `foo` root (using the default subscriber -- remember to start your Caterva2 services first):
-
-```python
-foo = caterva2.Root("foo")
-```
-
-**Note:** If the subscriber requires user authentication, you may provide credentials to the `Root` constructor with the `user_auth` keyword argument, to get authorization for further access.  For instance:
-
-```python
-foo = caterva2.Root(
-    "foo", user_auth={"username": "user@example.com", "password": "foobar"}
-)
-```
-
-This also takes care of subscribing to `foo` if it hasn't been done yet.  To get the list of datasets in the root, just access `foo.file_list`:
-
-```python
-[
-    "ds-1d.b2nd",
-    "ds-hello.b2frame",
-    "ds-1d-b.b2nd",
-    "README.md",
-    "dir1/ds-3d.b2nd",
-    "dir1/ds-2d.b2nd",
-    "dir2/ds-4d.b2nd",
-]
-```
-
-Indexing the `Root` instance with the name of the dataset results in a `Dataset` instance (or `File`, as we'll see below).  The instance offers easy access to its metadata via the `meta` attribute:
-
-```python
-ds2d = foo["dir1/ds-2d.b2nd"]
-ds2d.meta
-```
-
-We get the dataset metadata:
-
-```python
-{
-    "dtype": "uint16",
-    "ndim": 2,
-    "shape": [10, 20],
-    # ...
-    "size": 400,
-}
-```
-
-Getting data from the dataset is very concise, as `caterva2.Dataset` instances support slicing notation, so this expression:
-
-```python
-ds2d[0:2, 4:8]
-```
-
-Results in the same slice as the (much more verbose) `caterva2.fetch()` call in the previous section:
-
-```python
-array([[4, 5, 6, 7], [24, 25, 26, 27]], dtype=uint16)
-```
-
-Slicing like this automatically uses Blosc2 for the transfer when available.  Finally, you may download the whole dataset like this, which also returns the path of the resulting local file:
-
-```python
-ds2d.download()  # -> PosixPath('foo/dir1/ds-2d.b2nd')
-```
-
-### On datasets and files
-
-The type of instance that you get from indexing a `Root` instance depends on the kind of the named dataset: for datasets whose name ends in `.b2nd` (n-dimensional Blosc2 array) or `.b2frame` (byte string in a Blosc2 frame) you'll get a `Dataset`, while otherwise you'll get a `File` (non-Blosc2 data).  Both classes support the same operations, with slicing only supporting one dimension and always returning a byte string for Blosc2 frames and other files:
-
-```python
-type(ds2d[0:2, 4:8])  # -> <class 'numpy.ndarray'>
-type(foo["ds-hello.b2frame"][:10])  # -> <class 'bytes'>
-type(foo["README.md"][:10])  # -> <class 'bytes'>
-```
