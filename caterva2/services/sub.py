@@ -763,9 +763,12 @@ async def fetch_data(
     else:
         # SChunk
         array = None
-        schunk = container
+        schunk = container  # blosc2.SChunk
         typesize = schunk.typesize
         shape = (len(schunk),)
+        if isinstance(slice_, int):
+            # TODO: make SChunk support integer as slice
+            slice_ = slice(slice_, slice_ + 1)
 
     whole = slice_ is None or slice_ == ()
     if not whole and isinstance(slice_, tuple):
@@ -777,44 +780,30 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and not isinstance(container, blosc2.LazyExpr):
+    if whole and not isinstance(array, blosc2.LazyExpr):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
-    if slice_ is not None:
-        if array is not None:
-            # Using NDArray.slice() allows a fast path when it is aligned with the chunks
-            # As we are going to serialize the slice right away, it is not clear in which
-            # situations a contiguous slice is faster than a non-contiguous one.
-            # Let's just use the contiguous one for now, until more testing is done.
-            data = array.slice(slice_, contiguous=True).to_cframe()
-            # We are done, just stream the data
-            downloader = srv_utils.iterchunk(data)
-            return responses.StreamingResponse(downloader, media_type="application/octet-stream")
-        else:
-            if isinstance(slice_, int):
-                # TODO: make SChunk support integer as slice
-                slice_ = slice(slice_, slice_ + 1)
-            schunk = container[slice_]
-
-    # Serialization can be done either as:
-    # * a serialized NDArray
-    # * a compressed SChunk (bytes, via blosc2.compress2)
-    data = array if array is not None else schunk
-    if slice_ is None:
-        # data is still a SChunk, so we need to get either a NumPy array, or a bytes object
-        data = data[()] if array is not None else data[:]
-
-    if isinstance(data, np.ndarray):
+    if isinstance(array, blosc2.LazyExpr):
+        # LazyExpr
+        data = array[slice_ or ()]
         data = blosc2.asarray(data)
         data = data.to_cframe()
-    elif isinstance(data, bytes):
+    elif isinstance(array, blosc2.NDArray):
+        # Using NDArray.slice() allows a fast path when it is aligned with the chunks
+        # As we are going to serialize the slice right away, it is not clear in which
+        # situations a contiguous slice is faster than a non-contiguous one.
+        # Let's just use the contiguous one for now, until more testing is done.
+        data = array.slice(slice_, contiguous=True).to_cframe()
+    else:
+        # SChunk
+        data = schunk[slice_]  # SChunck => bytes
         # A bytes object can still be compressed as a SChunk
         schunk = blosc2.SChunk(data=data, cparams={"typesize": typesize})
         data = schunk.to_cframe()
-    downloader = srv_utils.iterchunk(data)
 
+    downloader = srv_utils.iterchunk(data)
     return responses.StreamingResponse(downloader, media_type="application/octet-stream")
 
 
