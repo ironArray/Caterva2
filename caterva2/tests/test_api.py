@@ -177,7 +177,7 @@ def test_file_public(client, fill_public):
 def test_dataset_info(client, fill_public):
     fnames, mypublic = fill_public
     for fname in fnames:
-        if type(mypublic[fname]) is cat2.Dataset:  # files cannot be expected t
+        if type(mypublic[fname]) is cat2.Dataset:  # Files cannot be expected to have attributes
             info = client.get_info("@public/" + fname)
             data = mypublic[fname]
             assert data.dtype == info["dtype"]

@@ -569,19 +569,31 @@ class Dataset(File):
 
     @property
     def dtype(self):
-        return self.meta.get("dtype", None)
+        try:
+            return self.meta["dtype"]
+        except KeyError:
+            raise AttributeError("'Dataset' object has no attribute 'dtype'.")
 
     @property
     def shape(self):
-        return tuple(self.meta.get("shape", None))
+        try:
+            return tuple(self.meta["shape"])
+        except KeyError:
+            raise AttributeError("'Dataset' object has no attribute 'shape'.")
 
     @property
     def chunks(self):
-        return tuple(self.meta.get("chunks", None))
+        try:
+            return tuple(self.meta["chunks"])
+        except KeyError:
+            raise AttributeError("'Dataset' object has no attribute 'chunks'.")
 
     @property
     def blocks(self):
-        return tuple(self.meta.get("blocks", None))
+        try:
+            return tuple(self.meta["blocks"])
+        except KeyError:
+            raise AttributeError("'Dataset' object has no attribute 'blocks'.")
 
     def append(self, data):
         """
