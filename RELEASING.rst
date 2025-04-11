@@ -14,6 +14,8 @@ Preliminaries
     $ git commit -a -m "Getting ready for release X.Y.Z"
     $ git push
 
+For the release number, use the current date, but do not use 0's
+(e.g. 2025.4.9, 2025.12.1, etc.).
 
 Testing
 -------
@@ -29,11 +31,11 @@ installing the wheel, then test it::
 Check that the examples in docstrings are up to date. You will
 need to register a user in https://cat2.cloud/demo/ with
 username 'user@example.com' and password 'foo'. Then, copy
-the content of `caterva2-standalone.sample.toml` to `caterva2.toml`
+the content of ``caterva2-standalone.sample.toml`` to ``caterva2.toml``
 and run the following commands::
 
   $ rm -r _caterva2/
-  $ cat2adduser superuser@example.com foo -S
+  $ cat2adduser superuser@example.com foobarfoo -S
   $ CATERVA2_SECRET="123" cat2sub
   $ python -m doctest  caterva2/api.py
   $ python -m doctest  caterva2/api_utils.py
@@ -71,7 +73,7 @@ Tagging and releasing
 
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::
 
-  $ pip install caterva2[tests]
+  $ pip install caterva2[tests] -U
   $ python -m caterva2.tests -v
 
 - Go to ``Blosc/blogsite`` repo, then to "Actions", click on the most recent
