@@ -872,7 +872,7 @@ class Client:
         --------
         >>> import caterva2 as cat2
         >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> client.fetch('example/ds-2d-fields.b2nd', "0:2, 0:2")
+        >>> client.fetch('example/ds-2d-fields.b2nd', (slice(0, 2), slice(0, 2))
         array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])

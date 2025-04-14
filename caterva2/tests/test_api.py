@@ -399,6 +399,52 @@ def test_getitem_regular_file(slice_, examples_dir, client):
         assert ds.fetch(slice_) == a[slice_]
 
 
+@pytest.mark.parametrize(
+    "slice_",
+    [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
+)
+def test_getitem_client_regular_file(slice_, examples_dir, client):
+    # Data contents
+    example = examples_dir / "README.md"
+    a = open(example).read().encode()
+    if isinstance(slice_, int):
+        assert ord(client.fetch(TEST_CATERVA2_ROOT + "/" + "README.md", slice_=slice_)) == a[slice_]
+    else:
+        assert client.fetch(TEST_CATERVA2_ROOT + "/" + "README.md", slice_=slice_) == a[slice_]
+
+
+@pytest.mark.parametrize(
+    "slice_",
+    [0, 1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
+)
+def test_getitem_client_1d(slice_, examples_dir, client):
+    example = examples_dir / "ds-1d.b2nd"
+    a = blosc2.open(example)[:]
+    np.testing.assert_array_equal(
+        client.fetch(TEST_CATERVA2_ROOT + "/" + "ds-1d.b2nd", slice_=slice_), a[slice_]
+    )
+
+
+@pytest.mark.parametrize(
+    "slice_",
+    [
+        1,
+        slice(None, 1),
+        slice(0, 10),
+        slice(10, 20),
+        slice(None),
+        slice(1, 5, 1),
+        (slice(None, 10), slice(None, 20)),
+    ],
+)
+@pytest.mark.parametrize("name", ["dir1/ds-2d.b2nd", "dir2/ds-4d.b2nd"])
+def test_getitem_client_nd(slice_, name, examples_dir, client):
+    example = examples_dir / name
+    a = blosc2.open(example)[:]
+    arr = client.fetch(TEST_CATERVA2_ROOT + "/" + name, slice_=slice_)
+    np.testing.assert_array_equal(arr, a[slice_])
+
+
 @pytest.mark.parametrize("name", ["ds-1d.b2nd", "dir1/ds-2d.b2nd"])
 def test_download_b2nd(name, examples_dir, tmp_path, client, auth_client):
     myroot = client.get(TEST_CATERVA2_ROOT)
