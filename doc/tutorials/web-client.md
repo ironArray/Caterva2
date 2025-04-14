@@ -34,7 +34,7 @@ Searching for datasets
 
 ## Accessing a dataset
 
-Click on `@public/examples/tomo-guess-test.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
+Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
 
 ```{figure} images/web-main.png
 ---
@@ -100,6 +100,7 @@ The `@personal` root is offered to each user.  It allows the user to store priva
 
 
  `@shared` and `@personal` are by default empty. Note the display now has an extra input box. Let's see the new stuff that you can do with write permissions!
+```
 
 ```{figure} images/web-user.png
 ---

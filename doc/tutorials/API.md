@@ -10,14 +10,14 @@ Let's try Caterva2's client API using the demo at `https://cat2.cloud/demo` (you
 import caterva2 as cat2
 ```
 
-One must access to a server, either local or remote, to use the client API. Here we're going to use the demo server, available at `https://cat2.cloud/demo`. One may obtain (read-only) access without authentication to the `@public` root
+One must access to a server, either local or remote, to use the client API. Here we're going to use the demo server, available at `https://cat2.cloud/demo`. One may obtain (read-only) access without authentication to the `@public` root:
 
 ```python
 client = cat2.Client("https://cat2.cloud/demo")
 client.get_roots()
 # {'@public': {'name': '@public', 'http': '', 'subscribed': True}}
 ```
-or, if one has created a user, using the user credentials
+or, if one has created a user, using the user credentials:
 
 ```python
 client = cat2.Client("https://cat2.cloud/demo", ("user@example.com", "password1"))
@@ -27,24 +27,24 @@ client.get_roots()
 # '@shared': {'name': '@shared', 'http': '', 'subscribed': True}}
 ```
 which gives (read/write) access to three roots (`@public`, `@personal` and `@shared`).
-We may get a list of datasets in the `@public` root for `client` via `client.get_list("@public")`
+We may get a list of datasets in the `@public` root for `client` via `client.get_list("@public")`:
 
 ```python
 datasets = client.get_list("@public")
 print(datasets)
 # ['examples/README.md', 'examples/Wutujing-River.jpg',..., 'examples/tomo-guess-test.b2nd']
 ```
-We can also introduce a local variable pointing to the dataset hosted on the server - without actually downloading any data - via the following command
+We can also introduce a local variable pointing to the dataset hosted on the server - without actually downloading any data - via the following command:
 
 ```python
 client.get("@public/examples/tomo-guess-test.b2nd")
 # <Dataset: @public/examples/tomo-guess-test.b2nd>
 ```
-Note how we identify the dataset by using a slash `/` to concatenate the root name with the dataset name in that root (which may contain slashes itself). We may access metadata about the dataset via
+Note how we identify the dataset by using a slash `/` to concatenate the root name with the dataset name in that root (which may contain slashes itself). We may access metadata about the dataset via:
 ```python
 metadata = client.get_info("@public/examples/tomo-guess-test.b2nd")
 ```
-The `metadata` dictionary contains assorted dataset attributes
+The `metadata` dictionary contains assorted dataset attributes:
 
 ```python
 print(metadata)
@@ -60,7 +60,7 @@ myslice = client.fetch(
 print(myslice)
 # array([51003, 51103], dtype=uint16)
 ```
-Finally, one may download and save a file locally, or upload a local file to the server, using the `download` and `upload`commands
+Finally, one may download and save a file locally, or upload a local file to the server, using the `download` and `upload`commands:
 
 ```python
 client.download(
@@ -92,21 +92,21 @@ ds.meta
 # 'schunk': {...}, 'mtime': '2025-04-06T22:00:03.912156Z'}
 ```
 
-Getting data from the dataset is very concise, as `caterva2.Dataset` instances support slicing notation, so this expression
+Getting data from the dataset is very concise, as `caterva2.Dataset` instances support slicing notation, so this expression:
 
 ```python
 myslice = ds[5, 10:12, 3]
 # array([51003, 51103], dtype=uint16)
 ```
 results in the same slice as the (much more verbose) `client.fetch()` call in the previous section.
-Alternatively, to avoid decompressing the data, one may use the `.slice` command in the following way
+Alternatively, to avoid decompressing the data, one may use the `.slice` command in the following way:
 
 ```python
 ds.slice((slice(5), slice(10, 12), slice(3)))
 # <blosc2.ndarray.NDArray at 0x7fba88180950>
 ```
 returning a `blosc2.NDArray` or `blosc2.SChunk` depending on the original file type.
-Finally, you may download and upload files in the following way
+Finally, you may download and upload files in the following way:
 
 ```python
 ds.download("mylocalfile.b2nd")  # saves local file as mylocalfile.b2nd
@@ -117,7 +117,7 @@ myroot.upload(
 
 ### On datasets and files
 
-The type of instance that you get from indexing a `Root` depends on the kind of the named dataset: for datasets whose name ends in `.b2nd` (`n`-dimensional `blosc2.NDArray`) or `.b2frame` (byte string in a `blosc2` frame) you'll get a `Dataset`, while otherwise you'll get a `File` (non-``blosc2`` data).  Both classes support the same indexing operations
+The type of instance that you get from indexing a `Root` depends on the kind of the named dataset: for datasets whose name ends in `.b2nd` (`n`-dimensional `blosc2.NDArray`) or `.b2frame` (byte string in a `blosc2` frame) you'll get a `Dataset`, while otherwise you'll get a `File` (non-``blosc2`` data).  Both classes support the same indexing operations:
 
 ```python
 print(type(ds[0:2, 4:8]))  # -> <class 'numpy.ndarray'>
@@ -132,7 +132,7 @@ print(
 )  # -> <class 'blosc2.schunk.SChunk'>
 ```
 
-In addition, `Dataset` supports direct access to `dtype`, `blocks`, `chunks` and `shape` attributes via the dot notation (`File' instances do not possess these attributes).
+In addition, `Dataset` supports direct access to `dtype`, `blocks`, `chunks` and `shape` attributes via the dot notation (`File' instances do not possess these attributes):
 ```python
 ds.shape  # -> (10, 100, 100)
 ```
@@ -141,7 +141,7 @@ Caterva2 also allows you to create so-called "lazy expressions" (`blosc2.LazyExp
 
 Lazy expressions are very cheap to create as, on creation, they merely check the metadata of the involved operands to determine if the expression is valid.  The result is not computed on creation of the `LazyExpr``, and rather only executes server-side when the data itself is accessed (e.g. via fetch or download operations). In addition, if only a portion of the data is requested, the expression is only computed for the relevant slice.
 
-This code creates a lazy expression named `plusone` from the 2D dataset used above and stores it in thee `@personal` root.
+This code creates a lazy expression named `plusone` from the 2D dataset used above and stores it in the `@personal` root.
 
 ```python
 client.lazyexpr(
