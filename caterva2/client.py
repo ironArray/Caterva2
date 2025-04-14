@@ -571,29 +571,29 @@ class Dataset(File):
     def dtype(self):
         try:
             return self.meta["dtype"]
-        except KeyError:
-            raise AttributeError("'Dataset' object has no attribute 'dtype'.")
+        except KeyError as e:
+            raise AttributeError("'Dataset' object has no attribute 'dtype'.") from e
 
     @property
     def shape(self):
         try:
             return tuple(self.meta["shape"])
-        except KeyError:
-            raise AttributeError("'Dataset' object has no attribute 'shape'.")
+        except KeyError as e:
+            raise AttributeError("'Dataset' object has no attribute 'shape'.") from e
 
     @property
     def chunks(self):
         try:
             return tuple(self.meta["chunks"])
-        except KeyError:
-            raise AttributeError("'Dataset' object has no attribute 'chunks'.")
+        except KeyError as e:
+            raise AttributeError("'Dataset' object has no attribute 'chunks'.") from e
 
     @property
     def blocks(self):
         try:
             return tuple(self.meta["blocks"])
-        except KeyError:
-            raise AttributeError("'Dataset' object has no attribute 'blocks'.")
+        except KeyError as e:
+            raise AttributeError("'Dataset' object has no attribute 'blocks'.") from e
 
     def append(self, data):
         """
@@ -858,9 +858,8 @@ class Client:
         urlbase : str, optional
             Base URL to query. Defaults to
             :py:obj:`caterva2.sub_urlbase_default`.
-        slice_ : str, optional
-            Slice of the dataset to retrieve. Fetches the entire dataset if
-            not provided.
+        slice_ : int, slice, tuple of ints and slices, or None
+            Specifies the slice to fetch. Fetches whole dataset if not defined.
         auth_cookie : str, optional
             HTTP cookie for authorization.
 
@@ -873,12 +872,13 @@ class Client:
         --------
         >>> import caterva2 as cat2
         >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> client.fetch('example/ds-2d-fields.b2nd', "0:2, 0:2")
+        >>> client.fetch('example/ds-2d-fields.b2nd', (slice(0, 2), slice(0, 2))
         array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
         urlbase, path = _format_paths(self.urlbase, path)
+        slice_ = api_utils.slice_to_string(slice_)  # convert to string
         return api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie)
 
     def get_chunk(self, path, nchunk):
