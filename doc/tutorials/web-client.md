@@ -13,7 +13,8 @@ First, via a Web browser, go to <https://cat2.cloud/demo>. You will see a list o
 ```{figure} images/web-initial-view.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 Initial view of the roots known to the user
@@ -26,7 +27,8 @@ Entering a string in the search box allows you to narrow the list of datasets do
 ```{figure} images/web-dataset-search.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 Searching for datasets
@@ -39,7 +41,8 @@ Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full n
 ```{figure} images/web-main.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 Viewing metadata
@@ -50,7 +53,8 @@ Depending on the dataset, you will also get "Data" and other tabs next to the "M
 ```{figure} images/web-data.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 Viewing data
@@ -60,7 +64,8 @@ Other tabs render certain files and datasets according to their declared or gues
 ```{figure} images/web-tomograph.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 Viewing tomography
@@ -71,7 +76,8 @@ Now try entering `.md` in the search box, and click on `@public/README.md`, then
 ```{figure} images/web-display-md.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 Displaying Markdown text
@@ -86,7 +92,8 @@ Up until now we've just seen the read-only operations that may be performed on t
 ```{figure} images/web-login.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 The login screen
@@ -105,7 +112,8 @@ The `@personal` root is offered to each user.  It allows the user to store priva
 ```{figure} images/web-user.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 The main screen showing new user features
@@ -119,7 +127,8 @@ Uploading a local file `localfile.b2nd` to `@personal` means that a new dataset 
 ```{figure} images/web-upload.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 A newly uploaded dataset
@@ -133,7 +142,8 @@ We turn now to the input box that appeared below the search box upon authenticat
 ```{figure} images/web-prompt.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 A cheat sheet of commands
@@ -147,7 +157,8 @@ Let's create an expression that adds them together into a new dataset that we'll
 ```{figure} images/web-lazyexpr.png
 ---
 class: with-border
-scale: 50%
+
+[//]: # (scale: 50%)
 ---
 
 The newly created lazy expression
