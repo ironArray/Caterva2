@@ -10,7 +10,7 @@ First, via a Web browser, go to <https://cat2.cloud/demo>. You will see a list o
 <!-- For image options, see # (https://myst-parser.readthedocs.io/en/latest/syntax/images_and_figures.html)
 -->
 
-```{figure} images/web-initial-view.png
+```{figure} images/web-initial-view.webp
 ---
 class: with-border
 
@@ -24,7 +24,7 @@ Check `@public`, and you will be able to see the list of datasets in the root, a
 
 Entering a string in the search box allows you to narrow the list of datasets down to those whose name contains that string, which is especially useful if you have many datasets.  Try entering `ds-` and clicking on "Search" to limit the list to example datasets (tip: entering `.b2` may help filtering out non-Blosc2 datasets).
 
-```{figure} images/web-dataset-search.png
+```{figure} images/web-dataset-search.webp
 ---
 class: with-border
 
@@ -38,7 +38,7 @@ Searching for datasets
 
 Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
 
-```{figure} images/web-main.png
+```{figure} images/web-main.webp
 ---
 class: with-border
 
@@ -50,7 +50,7 @@ Viewing metadata
 
 Depending on the dataset, you will also get "Data" and other tabs next to the "Main" tab that we just saw.  Click on the "Data" tab to see values in the dataset as a table where you can limit ranges in each dimension and select type fields.
 
-```{figure} images/web-data.png
+```{figure} images/web-data.webp
 ---
 class: with-border
 
@@ -61,7 +61,7 @@ Viewing data
 ```
 
 Other tabs render certain files and datasets according to their declared or guessed content type - in this case, since the data is a tomograph, one has an additional "Tomography" tab. Tomographies are stacks of images stored as 3D (greyscale) or 4D (color) arrays of unsigned integers.
-```{figure} images/web-tomograph.png
+```{figure} images/web-tomograph.webp
 ---
 class: with-border
 
@@ -73,7 +73,7 @@ Viewing tomography
 
 Now try entering `.md` in the search box, and click on `@public/README.md`, then on the "Display" tab.  The dataset is recognised as a text file with Markdown-formatted content, which is rendered as shown.
 
-```{figure} images/web-display-md.png
+```{figure} images/web-display-md.webp
 ---
 class: with-border
 
@@ -89,7 +89,7 @@ Display support for other kinds of datasets, such as jpg files, is also supporte
 Up until now we've just seen the read-only operations that may be performed on the cat2cloud server.  However, as an authenticated user one may perform several write operations that we'll see next.
  Returning to <https://cat2.cloud/demo>, click on "Sign in" and you will be taken to the login screen. First create a user via the "Sign up" link, and the sign in with the same credentials and click on "Login".
 
-```{figure} images/web-login.png
+```{figure} images/web-login.webp
 ---
 class: with-border
 
@@ -103,13 +103,13 @@ The main Web client screen has some changes now: besides the indication of the l
 
 The `@personal` root is offered to each user.  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own personal space. The `@shared` root is accessible to all the users in a project (in this case `demo`).  It allows the users to share (i.e. both upload and download) datasets with other team members who form part of the same project. As we have seen, the `@public` root is (read-only) accessible to even unauthenticated users.
 
-```{figure} images/web-roots.png
+```{figure} images/web-roots.webp
 
 
  `@shared` and `@personal` are by default empty. Note the display now has an extra input box. Let's see the new stuff that you can do with write permissions!
 ```
 
-```{figure} images/web-user.png
+```{figure} images/web-user.webp
 ---
 class: with-border
 
@@ -124,7 +124,7 @@ The upload icon beside each root allows you to upload new datasets to them, by c
 
 Uploading a local file `localfile.b2nd` to `@personal` means that a new dataset appears in the (previously empty) `@personal` root as `@personal/localfile.b2nd`, in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your personal space (after asking for confirmation).
 
-```{figure} images/web-upload.png
+```{figure} images/web-upload.webp
 ---
 class: with-border
 
@@ -139,7 +139,7 @@ You may now use the uploaded dataset as a normal one: download it, view its data
 ## Computing expressions on datasets
 
 We turn now to the input box that appeared below the search box upon authentication. It allows you to send commands to be executed by the server. A helpful summary of commands is available by clicking the question mark in the prompt.
-```{figure} images/web-prompt.png
+```{figure} images/web-prompt.webp
 ---
 class: with-border
 
@@ -154,7 +154,7 @@ First, let's select the dataset `@personal/localfile.b2nd` that we uploaded and 
 
 Let's create an expression that adds them together into a new dataset that we'll call `sum_of_arrays`.  The command box accepts Python-like expressions, and we refer to the added datasets acting as operands using the tag that appears next to their name in the dataset list.  In our case, `@personal/localfile.b2nd` is tagged as `a`, and `@personal/ds-1d.b2nd` as `j`, thus the command to be entered in the command box is `sum_of_arrays = a + j`.  Entering the command and clicking on "GO" creates a new dataset (a `LazyExpr`) `@personal/sum_of_arrays.b2nd` which should be shown instantly.
 
-```{figure} images/web-lazyexpr.png
+```{figure} images/web-lazyexpr.webp
 ---
 class: with-border
 
