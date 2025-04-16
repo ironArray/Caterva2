@@ -34,6 +34,52 @@ class: with-border
 Searching for datasets
 ```
 
+## User authentication and personal space
+
+Up until now we've just seen the read-only operations that may be performed on the cat2cloud server.  However, as an authenticated user one may perform several write operations that we'll see next.
+ Returning to <https://cat2.cloud/demo>, click on "Sign in" and you will be taken to the login screen. First create a user via the "Sign up" link, and the sign in with the same credentials and click on "Login".
+
+```{figure} images/web-login.webp
+---
+class: with-border
+
+scale: 75%
+---
+
+The login screen
+```
+
+The main Web client screen has some changes now: besides the indication of the logged in user, one has access to two additional roots called `@personal` and `@shared`. In addition, an upload button has appeared beside each of the three roots, and a prompt box has appeared above the datasets section:
+
+```{figure} images/web-roots.webp
+---
+class: with-border
+
+scale: 75%
+---
+
+The main screen showing new user features
+```
+
+The `@personal` root is offered to each user.  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own personal space. The `@shared` root is accessible to all the users in a project (in this case `demo`).  It allows the users to share (i.e. both upload and download) datasets with other team members who form part of the same project. As we have seen, the `@public` root is (read-only) accessible to even unauthenticated users.
+
+## Uploading and downloading datasets
+The upload icon beside each root allows you to upload new datasets to them, by clicking it and choosing a file.
+
+Uploading a local file `localfile.b2nd` to `@personal` means that a new dataset appears in the (previously empty) `@personal` root as `@personal/localfile.b2nd`, in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your personal space (after asking for confirmation).
+
+```{figure} images/web-upload.webp
+---
+class: with-border
+
+[//]: # (scale: 50%)
+---
+
+A newly uploaded dataset
+```
+
+You may now use the uploaded dataset as a normal one: download it, view its data and metadata, and display it if it is of a supported file type. In addition, uploading it to the `@shared` root allows other project users to also have access to it.
+
 ## Accessing a dataset
 
 Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
@@ -83,62 +129,6 @@ class: with-border
 Displaying Markdown text
 ```
 Display support for other kinds of datasets, such as jpg files, is also supported.
-
-## User authentication and personal space
-
-Up until now we've just seen the read-only operations that may be performed on the cat2cloud server.  However, as an authenticated user one may perform several write operations that we'll see next.
- Returning to <https://cat2.cloud/demo>, click on "Sign in" and you will be taken to the login screen. First create a user via the "Sign up" link, and the sign in with the same credentials and click on "Login".
-
-```{figure} images/web-login.webp
----
-class: with-border
-
-scale: 50%
----
-
-The login screen
-```
-
-The main Web client screen has some changes now: besides the indication of the logged in user, one has access to two additional roots called `@personal` and `@shared`. In addition, an upload button has appeared beside each of the three roots.
-
-The `@personal` root is offered to each user.  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own personal space. The `@shared` root is accessible to all the users in a project (in this case `demo`).  It allows the users to share (i.e. both upload and download) datasets with other team members who form part of the same project. As we have seen, the `@public` root is (read-only) accessible to even unauthenticated users.
-
-```{figure} images/web-roots.webp
----
-class: with-border
-
-scale: 50%
----
-
- `@shared` and `@personal` are by default empty. Note the display now has an extra input box. Let's see the new stuff that you can do with write permissions!
-```
-
-```{figure} images/web-user.webp
----
-class: with-border
-
-scale: 50%
----
-
-The main screen showing new user features
-```
-
-## Uploading and downloading datasets
-The upload icon beside each root allows you to upload new datasets to them, by clicking it and choosing a file.
-
-Uploading a local file `localfile.b2nd` to `@personal` means that a new dataset appears in the (previously empty) `@personal` root as `@personal/localfile.b2nd`, in the list of datasets, and its information will be shown.  Close to its "Download" link you'll see a "Delete" link, which will remove the dataset from your personal space (after asking for confirmation).
-
-```{figure} images/web-upload.webp
----
-class: with-border
-
-[//]: # (scale: 50%)
----
-
-A newly uploaded dataset
-```
-
-You may now use the uploaded dataset as a normal one: download it, view its data and metadata, and display it if it is of a supported file type. In addition, uploading it to the `@shared` root allows other project users to also have access to it.
 
 ## Computing expressions on datasets
 
