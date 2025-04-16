@@ -28,7 +28,7 @@ Entering a string in the search box allows you to narrow the list of datasets do
 ---
 class: with-border
 
-[//]: # (scale: 50%)
+scale: 75%
 ---
 
 Searching for datasets
