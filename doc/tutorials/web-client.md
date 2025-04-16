@@ -14,7 +14,7 @@ First, via a Web browser, go to <https://cat2.cloud/demo>. You will see a list o
 ---
 class: with-border
 
-[//]: # (scale: 50%)
+scale: 75%
 ---
 
 Initial view of the roots known to the user
@@ -93,7 +93,7 @@ Up until now we've just seen the read-only operations that may be performed on t
 ---
 class: with-border
 
-[//]: # (scale: 50%)
+scale: 50%
 ---
 
 The login screen
@@ -104,7 +104,11 @@ The main Web client screen has some changes now: besides the indication of the l
 The `@personal` root is offered to each user.  It allows the user to store private datasets for their use (as we'll see below), and each user can only see and access their own personal space. The `@shared` root is accessible to all the users in a project (in this case `demo`).  It allows the users to share (i.e. both upload and download) datasets with other team members who form part of the same project. As we have seen, the `@public` root is (read-only) accessible to even unauthenticated users.
 
 ```{figure} images/web-roots.webp
+---
+class: with-border
 
+scale: 50%
+---
 
  `@shared` and `@personal` are by default empty. Note the display now has an extra input box. Let's see the new stuff that you can do with write permissions!
 ```
@@ -113,7 +117,7 @@ The `@personal` root is offered to each user.  It allows the user to store priva
 ---
 class: with-border
 
-[//]: # (scale: 50%)
+scale: 50%
 ---
 
 The main screen showing new user features
