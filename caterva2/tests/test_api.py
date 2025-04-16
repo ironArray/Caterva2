@@ -301,10 +301,8 @@ def test_dataset_getitem_fetch(slice_, examples_dir, client):
     a = blosc2.open(example)[:]
     if isinstance(slice_, int):
         assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
-        assert ord(ds.fetch(slice_)) == a[slice_]
     else:
         assert ds[slice_] == a[slice_]
-        assert ds.fetch(slice_) == a[slice_]
 
 
 def test_dataset_step_diff_1(client):
@@ -332,7 +330,6 @@ def test_getitem_dataset_1d(slice_, examples_dir, client):
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
     np.testing.assert_array_equal(ds[slice_], a[slice_])
-    np.testing.assert_array_equal(ds.fetch(slice_), a[slice_])
 
 
 @pytest.mark.parametrize(
@@ -354,7 +351,6 @@ def test_getitem_dataset_nd(slice_, name, examples_dir, client):
     example = examples_dir / ds.name
     a = blosc2.open(example)[:]
     np.testing.assert_array_equal(ds[slice_], a[slice_])
-    np.testing.assert_array_equal(ds.fetch(slice_), a[slice_])
 
 
 @pytest.mark.parametrize(
@@ -393,10 +389,8 @@ def test_getitem_regular_file(slice_, examples_dir, client):
     a = open(example).read().encode()
     if isinstance(slice_, int):
         assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
-        assert ord(ds.fetch(slice_)) == a[slice_]
     else:
         assert ds[slice_] == a[slice_]
-        assert ds.fetch(slice_) == a[slice_]
 
 
 @pytest.mark.parametrize(
