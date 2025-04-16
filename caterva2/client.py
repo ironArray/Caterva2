@@ -378,7 +378,7 @@ class File:
         """
         # Convert slices to strings
         slice_ = api_utils.slice_to_string(key)
-        # Fetch and return the data as a NumPy array
+        # Fetch and return the data as a Blosc2 object / NumPy array
         return api_utils.fetch_data(
             self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
         )
