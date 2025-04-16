@@ -312,13 +312,13 @@ class File:
         """
         return api_utils.get_download_url(self.path, self.urlbase)
 
-    def __getitem__(self, slice_):
+    def __getitem__(self, key):
         """
         Retrieves a slice of the dataset.
 
         Parameters
         ----------
-        slice_ : int, slice, tuple of ints and slices, or None
+        key : int, slice, tuple of ints and slices, or None
             Specifies the slice to fetch.
 
         Returns
@@ -339,40 +339,12 @@ class File:
         >>> ds[0:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        return self.fetch(slice_=slice_)
+        return self.slice(key, as_blosc2=False)
 
-    def fetch(self, slice_=None):
-        """
-        Fetches a slice of the dataset.
-
-        This method is equivalent to `__getitem__()`.
-
-        Parameters
-        ----------
-        slice_ : int, slice, tuple of ints and slices, or None
-            Specifies the slice to fetch.
-
-        Returns
-        -------
-        numpy.ndarray
-            The requested slice of the dataset.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> root = client.get('example')
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds.fetch(1)
-        array(1)
-        >>> ds.fetch(slice(0, 10))
-        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        """
-        slice_ = api_utils.slice_to_string(slice_)
-        return api_utils.fetch_data(self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie)
-
-    def slice(self, key: int | slice | Sequence[slice]) -> NDArray | SChunk:
-        """Get a slice as a new Blosc2 objects (`NDArray` or `SChunk`).
+    def slice(
+        self, key: int | slice | Sequence[slice], as_blosc2: bool = True
+    ) -> NDArray | SChunk | np.ndarray:
+        """Get a slice of a File/Dataset.
 
         Parameters
         ----------
@@ -381,10 +353,14 @@ class File:
             applied to the first dimension.  If a sequence of slices is
             provided, each slice will be applied to the corresponding
             dimension.
+        as_blosc2 : bool
+            If True (default), the result will be returned as a Blosc2 object
+            (either a `SChunk` or `NDArray`).  If False, it will be returned
+            as a NumPy array (equivalent to `self[key]`).
 
         Returns
         -------
-        NDArray or SChunk
+        NDArray or SChunk or numpy.ndarray
             A new Blosc2 object containing the requested slice.
 
         Examples
@@ -402,9 +378,9 @@ class File:
         """
         # Convert slices to strings
         slice_ = api_utils.slice_to_string(key)
-        # Fetch and return the data as an NDArray
+        # Fetch and return the data as a NumPy array
         return api_utils.fetch_data(
-            self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=True
+            self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
         )
 
     def download(self, localpath=None):
@@ -849,7 +825,7 @@ class Client:
 
     def fetch(self, path, slice_=None):
         """
-        Retrieves a specified slice (or the entire content) of a dataset.
+        Retrieves the entire content (or a specified slice) of a dataset.
 
         Parameters
         ----------
@@ -859,9 +835,7 @@ class Client:
             Base URL to query. Defaults to
             :py:obj:`caterva2.sub_urlbase_default`.
         slice_ : int, slice, tuple of ints and slices, or None
-            Specifies the slice to fetch. Fetches whole dataset if not defined.
-        auth_cookie : str, optional
-            HTTP cookie for authorization.
+            Specifies the slice to fetch. If None, the whole dataset is fetched.
 
         Returns
         -------

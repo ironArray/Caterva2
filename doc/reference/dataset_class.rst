@@ -17,7 +17,6 @@ Methods
 
     __init__
     __getitem__
-    fetch
     slice
     append
     get_download_url
