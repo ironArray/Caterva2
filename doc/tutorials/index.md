@@ -6,10 +6,10 @@
 maxdepth: 2
 ---
 
-launching-services
 API
-cli
 web-client
+cli
 configuration
+launching-services
 independent-services
 ```
