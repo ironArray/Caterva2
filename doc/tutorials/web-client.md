@@ -37,7 +37,7 @@ Searching for datasets
 ## User authentication and personal space
 
 Up until now we've just seen the read-only operations that may be performed on the cat2cloud server.  However, as an authenticated user one may perform several write operations that we'll see next.
- Returning to <https://cat2.cloud/demo>, click on "Sign in" and you will be taken to the login screen. First create a user via the "Sign up" link, and the sign in with the same credentials and click on "Login".
+ Returning to <https://cat2.cloud/demo>, click on "Sign in" and you will be taken to the login screen. First create a user via the "Sign up" link, and then sign in with the same credentials and click on "Login".
 
 ```{figure} images/web-login.webp
 ---
@@ -49,7 +49,7 @@ scale: 75%
 The login screen
 ```
 
-The main Web client screen has some changes now: besides the indication of the logged in user, one has access to two additional roots called `@personal` and `@shared`. In addition, an upload button has appeared beside each of the three roots, and a prompt box has appeared above the datasets section:
+The main Web client screen has some changes now: besides the indication of the logged-in user, one has access to two additional roots called `@personal` and `@shared`. In addition, an upload button has appeared beside each of the three roots, and a prompt box has appeared above the datasets section:
 
 ```{figure} images/web-roots.webp
 ---
@@ -82,7 +82,7 @@ You may now use the uploaded dataset as a normal one: download it, view its data
 
 ## Accessing a dataset
 
-Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default one shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
+Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full name (path) of the dataset and a set of tabs.  The default tab shows the main information of the dataset, including a download link for you to save the whole dataset to your computer, plus the metadata that we got from clients in previous sections, all in a nicely formatted table.
 
 ```{figure} images/web-main.webp
 ---
@@ -128,7 +128,7 @@ class: with-border
 
 Displaying Markdown text
 ```
-Display support for other kinds of datasets, such as jpg files, is also supported.
+Other kinds of datasets, such as jpg files, also have display support.
 
 ## Computing expressions on datasets
 
@@ -146,7 +146,7 @@ The most powerful set of commands are those implemented via "lazy expressions", 
 
 First, let's select the dataset `@personal/localfile.b2nd` that we uploaded and view its data. Now select the dataset `@personal/ds-1d.b2nd`, an array of the same shape. In fact, lazy expressions support broadcasting, so the two datasets can be of different shapes, as long as they are compatible.
 
-Let's create an expression that adds them together into a new dataset that we'll call `sum_of_arrays`.  The command box accepts Python-like expressions, and we refer to the added datasets acting as operands using the tag that appears next to their name in the dataset list.  In our case, `@personal/localfile.b2nd` is tagged as `a`, and `@personal/ds-1d.b2nd` as `j`, thus the command to be entered in the command box is `sum_of_arrays = a + j`.  Entering the command and clicking on "GO" creates a new dataset (a `LazyExpr`) `@personal/sum_of_arrays.b2nd` which should be shown instantly.
+Let's create an expression that adds them together into a new dataset that we'll call `out`.  The command box accepts Python-like expressions, and we refer to the datasets acting as operands using the tag that appears next to their name in the dataset list.  In our case, `@personal/localfile.b2nd` is tagged as `a`, and `@personal/ds-1d.b2nd` as `h`, thus the command to be entered in the command box is `out = a + h`.  Entering the command and clicking on "GO" creates a new dataset (a `LazyExpr`) `@personal/sum_of_arrays.b2nd` which should be shown instantly.
 
 ```{figure} images/web-lazyexpr.webp
 ---
@@ -158,9 +158,9 @@ class: with-border
 The newly created lazy expression
 ```
 
-The dataset has very reduced metadata that just describes its shape, type, expression and operands.  However, you may still use it as any other dataset, e.g. to view its data (which will be computed on-the-fly), have it participate in other lazy expressions, or download it (with fully computed data) to your device. Naturally, it can also be deleted.
+The dataset has very reduced metadata that just describes its shape, type, expression and operands.  However, it will behave like any other server-hosted dataset, and you may e.g. view its data (which will be computed on-the-fly), have it participate in other lazy expressions, or download it (with fully computed data) to your device. Naturally, it can also be deleted.
 
-Lazy expressions are a very versatile tool to have complex computations performed by a powerful and well-connected machine (the server), and get the result to your device once satisfied with the result.  Many [arithmetic and reduction operations][b2-lazyexpr] are supported, just play with them and find out!
+Lazy expressions are a very versatile tool. Using them, one may perform complex computations on a powerful and well-connected machine (the server), and download the result to your device once satisfied with the operations.  Many [arithmetic and reduction operations][b2-lazyexpr] are supported, just play around with them and find out!
 
 [b2-lazyexpr]: https://www.blosc.org/python-blosc2/getting_started/tutorials/02.lazyarray-expressions.html
     "LazyArray: Expressions containing NDArray objects (and others) (Python-Blosc2 documentation)"
