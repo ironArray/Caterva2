@@ -2009,7 +2009,9 @@ class RemoveCmd:
         path = operands.get(argv[1], argv[1])
         path = pathlib.Path(path)
         await remove(path, user)
-        # Nothing to show after removing
+        response = responses.Response(status_code=204)
+        response.headers["HX-Refresh"] = "true"
+        return response
 
 
 class AddNotebookCmd:
