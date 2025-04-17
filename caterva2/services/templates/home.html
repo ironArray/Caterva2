@@ -68,7 +68,10 @@
 
 <!-- Main section -->
 <div id="page">
-    <div hx-get="{{ roots_url }}" hx-trigger="load"></div>
+    <div id="root-list-wrapper" hx-get="{{ roots_url }}" hx-trigger="load"></div>
+    <div id="prompt-wrapper">
+        {% include "includes/prompt.html" %}
+    </div>
     <div id="path-list-wrapper">
         {% include 'includes/loading.html' %}
         <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>

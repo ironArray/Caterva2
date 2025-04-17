@@ -1526,6 +1526,9 @@ async def html_home(
         "username": user.email if user else None,
         # Disk usage
         "usage_total": custom_filesizeformat(size),
+        # Prompt
+        "cmd_url": make_url(request, "htmx_command"),
+        "commands": commands_list,
     }
 
     context["config"] = {}
@@ -1648,15 +1651,12 @@ async def htmx_path_list(
         dataset["name"] = next(names)
 
     # Render template
-    cmd_url = make_url(request, "htmx_command")
     search_url = make_url(request, "htmx_path_list", {"roots": roots})
     context = {
         "datasets": datasets,
         "search_text": search,
         "search_url": search_url,
-        "cmd_url": cmd_url,
         "user": user,
-        "commands": commands_list,
     }
     response = templates.TemplateResponse(request, "path_list.html", context)
 

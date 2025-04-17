@@ -18,6 +18,9 @@ body {
     #page {
         grid-template-columns: 10rem auto;
     }
+    #root-list-wrapper {
+        grid-row: 1 / span 2;
+    }
     #meta-wrapper {
         grid-column: 1 / span 2;
     }
@@ -26,6 +29,12 @@ body {
 @media (min-width: 1300px) {
     #page {
         grid-template-columns: 10rem 30rem auto;
+    }
+    #root-list-wrapper {
+        grid-row: 1 / span 2;
+    }
+    #prompt-wrapper {
+        grid-column: 2 / span 2;
     }
 }
 
