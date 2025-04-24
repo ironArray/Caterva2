@@ -733,6 +733,31 @@ def test_expr_from_expr(auth_client):
     np.testing.assert_array_equal((a[:] + 1) * 2, c[:])
 
 
+def test_expr_no_operand(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    expression = "linspace(0, 10)"
+    lxname = "my_expr"
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+    lxpath = auth_client.lazyexpr(lxname, expression)
+    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    c = auth_client.get(lxpath)
+    a = blosc2.linspace(0, 10)
+    np.testing.assert_array_equal(a[:], c[:])
+
+    # Check error when operand should be present but isnt
+    opnm = "ds"
+    oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    expression = "ds + linspace(0, 10)"
+    lxname = "my_expr"
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+    with pytest.raises(Exception) as e_info:
+        lxpath = auth_client.lazyexpr(lxname, expression)
+
+
 # User management
 
 
