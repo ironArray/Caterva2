@@ -1130,7 +1130,7 @@ class Client:
         )
         return pathlib.PurePosixPath(result)
 
-    def lazyexpr(self, name, expression, operands=None):
+    def lazyexpr(self, name, expression, operands=None, compute=False):
         """
         Creates a lazy expression dataset in personal space.
 
@@ -1145,6 +1145,10 @@ class Client:
             Expression to be evaluated, which must yield a lazy expression.
         operands : dict
             Mapping of variables in the expression to their corresponding dataset paths.
+        compute : bool, optional
+            If false, generate lazyexpr and do not compute anything.
+            If true, compute lazy expression on creation and save (full) result.
+            Default false.
 
         Returns
         -------
@@ -1173,7 +1177,7 @@ class Client:
                 "User has not provided operands for the LazyExpression. Proceeding with empty operands arg"
             )
             operands = {}
-        expr = {"name": name, "expression": expression, "operands": operands}
+        expr = {"name": name, "expression": expression, "operands": operands, "lazy": not compute}
         dataset = api_utils.post(f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie)
         return pathlib.PurePosixPath(dataset)
 
