@@ -747,7 +747,7 @@ def test_expr_no_operand(auth_client):
     a = blosc2.linspace(0, 10)
     np.testing.assert_array_equal(a[:], c[:])
 
-    # Check error when operand should be present but isnt
+    # Check error when operand should be present but isn't
     opnm = "ds"
     oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
     expression = "ds + linspace(0, 10)"
@@ -758,9 +758,29 @@ def test_expr_no_operand(auth_client):
         lxpath = auth_client.lazyexpr(lxname, expression)
 
 
+def test_expr_force_compute(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    expression = "linspace(0, 10)"
+    lxname = "my_expr"
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+
+    # Uncomputed lazyexpr is a blosc2 lazyexpr
+    lxpath = auth_client.lazyexpr(lxname, expression, compute=False)
+    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    c = auth_client.get(lxpath)
+    assert c.meta["expression"] == expression
+
+    # Computed lazyexpr is a blosc2 array
+    lxpath = auth_client.lazyexpr(lxname, expression, compute=True)
+    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    c = auth_client.get(lxpath)
+    assert c.meta.get("expression", None) is None
+
+
 # User management
-
-
 def test_adduser(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
