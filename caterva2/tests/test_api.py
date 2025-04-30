@@ -655,7 +655,7 @@ def test_lazyexpr(auth_client):
     lxinfo = auth_client.get_info(lxpath)
     assert lxinfo["shape"] == opinfo["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"]
-    assert lxinfo["expression"] == f"{expression}"
+    assert lxinfo["expression"] == f"({expression})"
     assert lxinfo["operands"] == operands
 
     # Check result data.
@@ -720,8 +720,8 @@ def test_expr_from_expr(auth_client):
     lxinfo2 = auth_client.get_info(lxpath2)
     assert lxinfo["shape"] == opinfo["shape"] == lxinfo2["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"] == lxinfo2["dtype"]
-    assert lxinfo["expression"] == f"{expression}"
-    assert lxinfo2["expression"] == f"{expression2}"
+    assert lxinfo["expression"] == f"({expression})"
+    assert lxinfo2["expression"] == f"({expression2})"
     assert lxinfo["operands"] == operands
     assert lxinfo2["operands"] == operands2
 
