@@ -1,6 +1,5 @@
 import functools
 import io
-import logging
 import pathlib
 import sys
 from collections.abc import Sequence
@@ -1173,11 +1172,8 @@ class Client:
         if operands is not None:
             operands = {k: str(v) for k, v in operands.items()}
         else:
-            logging.warning(
-                "User has not provided operands for the LazyExpression. Proceeding with empty operands arg"
-            )
             operands = {}
-        expr = {"name": name, "expression": expression, "operands": operands, "lazy": not compute}
+        expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
         dataset = api_utils.post(f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie)
         return pathlib.PurePosixPath(dataset)
 

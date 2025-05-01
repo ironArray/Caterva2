@@ -878,7 +878,7 @@ async def get_chunk(
     return responses.StreamingResponse(downloader)
 
 
-def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, lazy: bool = True) -> str:
+def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, compute: bool = False) -> str:
     """
     Create a lazy expression dataset in personal space.
 
@@ -938,10 +938,10 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, laz
     path = settings.personal / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     urlpath = f"{path / name}.b2nd"
-    if lazy:
-        arr.save(urlpath=urlpath, mode="w")
-    else:
+    if compute:
         arr.compute(urlpath=urlpath, mode="w")
+    else:
+        arr.save(urlpath=urlpath, mode="w")
 
     return f"@personal/{name}.b2nd"
 
@@ -969,7 +969,7 @@ async def lazyexpr(
         return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
 
     try:
-        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.lazy)
+        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise error(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
@@ -2069,10 +2069,10 @@ async def htmx_command(
 
     elif nargs > 1 and argv[1] in {"=", ":="}:
         operator = argv[1]
-        lazy = operator == "="
+        compute = operator == ":="
         try:
             result_name, expr = command.split(operator, maxsplit=1)
-            result_path = make_expr(result_name, expr, operands, user, lazy=lazy)
+            result_path = make_expr(result_name, expr, operands, user, compute=compute)
             url = make_url(request, "html_home", path=result_path)
             return htmx_redirect(hx_current_url, url)
         except SyntaxError:
