@@ -500,9 +500,20 @@ def url(path: str) -> str:
     return f"{settings.urlbase}/{path}"
 
 
+def brand_logo():
+    path = "media/brand/logo.webp"
+    if (BASE_DIR / path).exists():
+        return url(path)
+
+    return url("static/logo-caterva2-horizontal-small.webp")
+
+
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["filesizeformat"] = custom_filesizeformat
 templates.env.globals["url"] = url
+templates.env.globals["brand"] = {
+    "logo": brand_logo(),
+}
 
 
 # Add CSS/JS to templates namespace
@@ -2492,6 +2503,7 @@ async def jupyter_heartbeat():
 #
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.mount("/media", StaticFiles(directory=BASE_DIR / "media"), name="media")
 
 
 #
