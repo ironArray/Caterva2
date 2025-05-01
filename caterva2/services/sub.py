@@ -501,19 +501,16 @@ def url(path: str) -> str:
 
 
 def brand_logo():
-    path = "media/brand/logo.webp"
-    if (BASE_DIR / path).exists():
-        return url(path)
+    path = "media/logo.webp"
+    if not (settings.statedir / path).exists():
+        path = "static/logo-caterva2-horizontal-small.webp"
 
-    return url("static/logo-caterva2-horizontal-small.webp")
+    return url(path)
 
 
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["filesizeformat"] = custom_filesizeformat
 templates.env.globals["url"] = url
-templates.env.globals["brand"] = {
-    "logo": brand_logo(),
-}
 
 
 # Add CSS/JS to templates namespace
@@ -2503,7 +2500,6 @@ async def jupyter_heartbeat():
 #
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-app.mount("/media", StaticFiles(directory=BASE_DIR / "media"), name="media")
 
 
 #
@@ -2566,6 +2562,14 @@ def main():
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(abspath_and_dataprep, settings.urlbase)
+
+    # Mount media
+    media = settings.statedir / "media"
+    media.mkdir(exist_ok=True, parents=True)
+    app.mount("/media", StaticFiles(directory=media), name="media")
+    templates.env.globals["brand"] = {
+        "logo": brand_logo(),
+    }
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
