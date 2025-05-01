@@ -655,7 +655,7 @@ def test_lazyexpr(auth_client):
     lxinfo = auth_client.get_info(lxpath)
     assert lxinfo["shape"] == opinfo["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"]
-    assert lxinfo["expression"] == f"{expression}"
+    assert lxinfo["expression"] == f"({expression})"
     assert lxinfo["operands"] == operands
 
     # Check result data.
@@ -720,8 +720,8 @@ def test_expr_from_expr(auth_client):
     lxinfo2 = auth_client.get_info(lxpath2)
     assert lxinfo["shape"] == opinfo["shape"] == lxinfo2["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"] == lxinfo2["dtype"]
-    assert lxinfo["expression"] == f"{expression}"
-    assert lxinfo2["expression"] == f"{expression2}"
+    assert lxinfo["expression"] == f"({expression})"
+    assert lxinfo2["expression"] == f"({expression2})"
     assert lxinfo["operands"] == operands
     assert lxinfo2["operands"] == operands2
 
@@ -733,9 +733,54 @@ def test_expr_from_expr(auth_client):
     np.testing.assert_array_equal((a[:] + 1) * 2, c[:])
 
 
+def test_expr_no_operand(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    expression = "linspace(0, 10)"
+    lxname = "my_expr"
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+    lxpath = auth_client.lazyexpr(lxname, expression)
+    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    c = auth_client.get(lxpath)
+    a = blosc2.linspace(0, 10)
+    np.testing.assert_array_equal(a[:], c[:])
+
+    # Check error when operand should be present but isn't
+    opnm = "ds"
+    oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    expression = "ds + linspace(0, 10)"
+    lxname = "my_expr"
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+    with pytest.raises(Exception) as e_info:
+        lxpath = auth_client.lazyexpr(lxname, expression)
+
+
+def test_expr_force_compute(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    expression = "linspace(0, 10)"
+    lxname = "my_expr"
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+
+    # Uncomputed lazyexpr is a blosc2 lazyexpr
+    lxpath = auth_client.lazyexpr(lxname, expression, compute=False)
+    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    c = auth_client.get(lxpath)
+    assert c.meta["expression"] == expression
+
+    # Computed lazyexpr is a blosc2 array
+    lxpath = auth_client.lazyexpr(lxname, expression, compute=True)
+    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    c = auth_client.get(lxpath)
+    assert c.meta.get("expression", None) is None
+
+
 # User management
-
-
 def test_adduser(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")

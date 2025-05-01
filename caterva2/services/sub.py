@@ -969,7 +969,7 @@ async def lazyexpr(
         return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
 
     try:
-        result_path = make_expr(expr.name, expr.expression, expr.operands, user)
+        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.lazy)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise error(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:

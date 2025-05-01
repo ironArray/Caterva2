@@ -65,6 +65,7 @@ class NewLazyExpr(pydantic.BaseModel):
     name: str
     expression: str
     operands: dict[str, str]
+    lazy: bool
 
 
 class MoveCopyPayload(pydantic.BaseModel):
