@@ -137,11 +137,40 @@ function openTab(id) {
     }
 }
 
+function disable(ev) {
+    ev.preventDefault();
+}
+
+function handleSubmit() {
+    let form = event.target;
+    let btn = event.submitter;
+
+    btn.addEventListener('click', disable);
+    if (! btn.hidden) {
+        btn.innerHTML_bak = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+    }
+
+    form.btn = btn;
+}
+
+function resetForm(event, form) {
+    let btn = form.btn;
+    btn.innerHTML = btn.innerHTML_bak;
+    btn.removeEventListener('click', disable);
+
+    if (event.detail.xhr.status < 400)
+        form.reset();
+}
+
 window.activate = activate;
 window.clearContent = clearContent;
 window.openTab = openTab;
 window.showAlert = showAlert;
 window.submitForm = submitForm;
 window.submitFormAsJSON = submitFormAsJSON;
+
+window.handleSubmit = handleSubmit;
+window.resetForm = resetForm;
 
 export {bootstrap};

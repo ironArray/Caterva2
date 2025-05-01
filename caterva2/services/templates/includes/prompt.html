@@ -1,6 +1,7 @@
 {% if username %}
 <form hx-post="{{ cmd_url }}" hx-include="#dataset-list input"
-      hx-on::after-request="if(event.detail.xhr.status < 400) this.reset()"
+      hx-on::after-request="resetForm(event, this)"
+      onsubmit="handleSubmit()"
 >
     <div class="d-flex">
         <div class="input-group me-2">
