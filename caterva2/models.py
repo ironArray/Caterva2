@@ -54,10 +54,10 @@ class Metadata(pydantic.BaseModel):
 
 
 class LazyArray(pydantic.BaseModel):
-    shape: tuple
+    shape: tuple | None
     dtype: str
     expression: str
-    operands: dict[str, str]
+    operands: dict[str, str | None]
     mtime: datetime.datetime | None
 
 

@@ -288,6 +288,8 @@ def open_b2(abspath, path):
             # Open the operands properly
             operands = container.operands
             for key, value in operands.items():
+                if value is None:
+                    raise ValueError(f'Missing operand "{key}"')
                 if "proxy-source" in value.schunk.meta:
                     # Save operand as Proxy, see blosc2.open doc for more info
                     relpath = srv_utils.get_relpath(
@@ -1704,12 +1706,9 @@ async def htmx_path_info(
 
     # Read metadata
     abspath, _ = abspath_and_dataprep(path, user=user)
-    try:
-        meta = srv_utils.read_metadata(
-            abspath, settings.cache, settings.personal, settings.shared, settings.public
-        )
-    except FileNotFoundError as exc:
-        return htmx_error(request, f"FileNotFoundError: {exc} (missing operand?)")
+    meta = srv_utils.read_metadata(
+        abspath, settings.cache, settings.personal, settings.shared, settings.public
+    )
 
     vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
     contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)
@@ -1833,7 +1832,12 @@ async def htmx_path_view(
                 f"Invalid filter: {exc}." f" Only expressions can be used as filters, not field names.",
             )
     else:
-        arr = open_b2(abspath, path)
+        try:
+            arr = open_b2(abspath, path)
+        except ValueError:
+            return htmx_error(
+                request, "Cannot open array; if it's a lazy expression, maybe an operand is missing."
+            )
         idx = None
 
     # Local variables

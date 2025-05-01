@@ -155,7 +155,10 @@ def get_relpath(ndarr, cache, personal, shared, public):
 
 
 def operands_as_paths(operands, cache, personal, shared, public):
-    return {nm: str(get_relpath(op, cache, personal, shared, public)) for (nm, op) in operands.items()}
+    return {
+        nm: None if op is None else str(get_relpath(op, cache, personal, shared, public))
+        for (nm, op) in operands.items()
+    }
 
 
 #

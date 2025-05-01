@@ -44,6 +44,8 @@ def guess(path: pathlib.Path, meta) -> bool:
         return False  # not an array
 
     dtype = meta.dtype
+    if dtype is None:
+        return False
 
     # Structured dtype
     if isinstance(dtype, str) and dtype.startswith("["):
