@@ -1,18 +1,18 @@
-Announcing Caterva2 2025.04.09
+Announcing Caterva2 2025.05.02
 ==============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 data repositories.
 
 This is a minor release that includes several bug fixes and
-improvements in the web UI.  It also includes a new `Client` class
-to handle the connection to the server, and a new `Dataset.slice()`
-and `Dataset.append()` methods to slice and append data to a dataset.
+improvements in the web UI.  In particular, the `Client.lazyexpr`
+method has made the `operands` parameter optional (it was required),
+and it gained a new `compute` parameter, which allows to compute the
+lazy expression immediately, if desired.
 
-Important: this release includes a breaking change in the API.  The
-previous way to authenticate and connect to the server has been
-removed, so you need to migrate your code to use the new `Client`.
-See the release notes for more details.
+Important: this release includes a breaking change in the client server
+communication, so your will need to update the client package to
+version 2025.5.2 or later for a smoother experience.
 
 For more info, you can have a look at the release notes in:
 

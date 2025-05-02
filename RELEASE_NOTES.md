@@ -1,5 +1,30 @@
 # Release notes
 
+## Changes from 2025.04.09 to 2025.5.2
+
+### API changes
+
+* The `Client.lazyexpr` method has made `operands` param optional
+  (it was required).  This allows to create lazy expressions without
+  operands, which is useful for creating empty datasets.  It also gained
+
+* Also, the `Client.lazyexpr` method a new `compute` parameter,
+  which allows to compute the lazy expression immediately.  The default is
+  `False`, which means that the lazy expression is created but not computed.
+
+### Others
+
+* Lazy expressions are more tolerant now when an operand disappears
+  (e.g. when a dataset is deleted).  The lazy expression cannot be used,
+  but can still be introspected.
+
+* Now it is possible to make the logo configurable for the web client.  The
+  logo can be dropped in `[statedir]/media/logo.png`, in the `[subscriber]`
+  section of the config file.  The logo must be a PNG/JPEG/WEBP file, and it
+  will be resized to fit the header.
+
+* The Prompt box has more space now.
+
 ## Changes from 2025.02.20 to 2025.04.09
 
 ### API changes
