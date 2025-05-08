@@ -56,7 +56,14 @@ On demand access to remote Blosc2 data repositories.
       :color: dark
       :click-parent:
 
-      To the API reference
+      To the Python API reference
+
+    .. button-ref:: reference/rest_api
+      :expand:
+      :color: dark
+      :click-parent:
+
+      To the REST API reference
 
   .. grid-item-card::
     :img-top: _static/index_contribute.svg
@@ -83,7 +90,8 @@ On demand access to remote Blosc2 data repositories.
 
     Getting Started <getting_started/index>
     Tutorials <tutorials/index>
-    API Reference <reference/index>
+    Python API Reference <reference/index>
+    REST API Reference <reference/rest_api>
     Utilities <utilities/index>
     Development <development/index>
     Release Notes <release_notes/index>
