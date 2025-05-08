@@ -54,8 +54,9 @@ class Metadata(pydantic.BaseModel):
 
 
 class LazyArray(pydantic.BaseModel):
+    # When an operand is missing some attributes will be None
     shape: tuple | None
-    dtype: str
+    dtype: str | None
     expression: str
     operands: dict[str, str | None]
     mtime: datetime.datetime | None

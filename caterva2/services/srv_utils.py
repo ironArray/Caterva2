@@ -14,6 +14,7 @@ import json
 import pathlib
 import random
 import string
+import types
 import typing
 
 # Requirements
@@ -78,11 +79,25 @@ def get_model_from_obj(obj, model_class, **kwargs):
             except AttributeError:
                 continue
 
-            if info.annotation is str:
+            # Problem is when a dtype is a numpy type, because it can be either a np.dtype
+            # instance a class like numpy.dtypes.Int64DType
+            # The workaround is to convert the dtype to a string and then in the pydantic
+            # model tell to expect str.
+            # TODO The correct solution would be to define pydantic custom validators
+            # (field_validator).
+            annotation = info.annotation
+            if value is None:
+                pass
+            elif annotation is str or (
+                isinstance(annotation, types.UnionType)
+                and typing.get_args(annotation) == (str, types.NoneType)
+            ):
                 value = str(value)
 
             data[key] = value
 
+    # from pprint import pprint
+    # pprint(data)
     return model_class(**data)
 
 
