@@ -14,6 +14,11 @@ import blosc2
 import pydantic
 
 
+class Corrupt(pydantic.BaseModel):
+    mtime: datetime.datetime | None = None
+    error: str
+
+
 class CParams(pydantic.BaseModel, extra="allow"):
     codec: blosc2.Codec
     codec_meta: int
@@ -38,7 +43,7 @@ class SChunk(pydantic.BaseModel, extra="allow"):
     #   dparams
     #   meta
     nbytes: int
-    urlpath: str
+    urlpath: str | None
     vlmeta: dict = {}
     nchunks: int
     mtime: datetime.datetime | None = None
@@ -54,8 +59,9 @@ class Metadata(pydantic.BaseModel):
 
 
 class LazyArray(pydantic.BaseModel):
+    # When an operand is missing some attributes will be None
     shape: tuple | None
-    dtype: str
+    dtype: str | None
     expression: str
     operands: dict[str, str | None]
     mtime: datetime.datetime | None

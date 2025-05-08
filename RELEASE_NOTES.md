@@ -146,7 +146,7 @@
 ## Initial 0.1 release
 
 * First public release.
-* Implemented many of the functionality in the [specifications](SPECS.md) file.
+* Implemented many of the functionality in the specifications file (``SPECS.md``).
 * Simple API for creating new clients.
 * Tests for both clients and servers.
 * Simple web client.

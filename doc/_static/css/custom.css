@@ -121,3 +121,13 @@ html[data-theme=dark] h1 {
 html[data-theme=dark] h3 {
   color: #0a6774;
 }
+
+.left-button {
+  float: left;
+  width: 48%;
+}
+
+.right-button {
+  float: right;
+  width: 48%;
+}

@@ -12,7 +12,7 @@ On demand access to remote Blosc2 data repositories.
     Getting Started
     ^^^^^^^^^^^^^^^
 
-    New to Caterva2? Check out the getting started guides. They contain an
+    New to Caterva2? Check out the getting started guide. They contain an
     introduction to Caterva2 main concepts.
 
     +++
@@ -22,7 +22,7 @@ On demand access to remote Blosc2 data repositories.
       :color: dark
       :click-parent:
 
-      To the getting started guide
+      Get started!
 
   .. grid-item-card::
     :img-top: _static/index_user_guide.svg
@@ -51,12 +51,12 @@ On demand access to remote Blosc2 data repositories.
 
     +++
 
-    .. button-ref:: reference/index
-      :expand:
-      :color: dark
-      :click-parent:
+    .. raw:: html
 
-      To the API reference
+       <div class="button-container">
+         <a class="sd-btn sd-btn-dark left-button" href="reference/index.html">Python API</a>
+         <a class="sd-btn sd-btn-dark right-button" href="reference/rest_api.html">REST API</a>
+       </div>
 
   .. grid-item-card::
     :img-top: _static/index_contribute.svg
@@ -83,7 +83,8 @@ On demand access to remote Blosc2 data repositories.
 
     Getting Started <getting_started/index>
     Tutorials <tutorials/index>
-    API Reference <reference/index>
+    Python API Reference <reference/index>
+    REST API Reference <reference/rest_api>
     Utilities <utilities/index>
     Development <development/index>
     Release Notes <release_notes/index>
