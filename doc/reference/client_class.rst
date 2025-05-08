@@ -9,7 +9,7 @@ A client is a remote repository that can be subscribed to. It is the main entry 
 
 
 Constructor
-----------
+-----------
 
 .. autosummary::
     :toctree: autofiles

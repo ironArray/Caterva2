@@ -71,8 +71,6 @@ Uploading a local file `localfile.b2nd` to `@personal` means that a new dataset 
 ```{figure} images/web-upload.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 A newly uploaded dataset
@@ -87,8 +85,6 @@ Click on `@public/examples/lung-jpeg2000_10x.b2nd`, and you shall get the full n
 ```{figure} images/web-main.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 Viewing metadata
@@ -99,8 +95,6 @@ Depending on the dataset, you will also get "Data" and other tabs next to the "M
 ```{figure} images/web-data.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 Viewing data
@@ -110,8 +104,6 @@ Other tabs render certain files and datasets according to their declared or gues
 ```{figure} images/web-tomograph.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 Viewing tomography
@@ -122,8 +114,6 @@ Now try entering `.md` in the search box, and click on `@public/README.md`, then
 ```{figure} images/web-display-md.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 Displaying Markdown text
@@ -136,8 +126,6 @@ We turn now to the input box that appeared below the search box upon authenticat
 ```{figure} images/web-prompt.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 A cheat sheet of commands
@@ -151,8 +139,6 @@ Let's create an expression that adds them together into a new dataset that we'll
 ```{figure} images/web-lazyexpr.webp
 ---
 class: with-border
-
-[//]: # (scale: 50%)
 ---
 
 The newly created lazy expression
