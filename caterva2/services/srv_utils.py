@@ -109,9 +109,12 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
             raise FileNotFoundError(f'File "{path}" does not exist or is a directory')
 
         assert path.suffix in {".b2frame", ".b2nd", ".b2"}
-        obj = blosc2.open(path)
         stat = path.stat()
         mtime = stat.st_mtime
+        try:
+            obj = blosc2.open(path)
+        except RuntimeError:
+            return get_model_from_obj(obj, models.Corrupt, mtime=mtime, error="Unrecognized format")
     else:
         mtime = None
 

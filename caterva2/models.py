@@ -14,6 +14,11 @@ import blosc2
 import pydantic
 
 
+class Corrupt(pydantic.BaseModel):
+    mtime: datetime.datetime | None = None
+    error: str
+
+
 class CParams(pydantic.BaseModel, extra="allow"):
     codec: blosc2.Codec
     codec_meta: int
