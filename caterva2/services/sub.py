@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import ast
 import asyncio
 import collections.abc
 import contextlib
@@ -911,7 +912,6 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     str
         The path of the newly created (or overwritten) dataset.
     """
-
     if not user:
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
@@ -936,9 +936,11 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
             abspath = settings.public / pathlib.Path(*path.parts[1:])
         else:
             abspath = settings.cache / path
+        print(abspath)
         var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
+    print(expr, var_dict)
     arr = blosc2.lazyexpr(expr, var_dict)
     if not isinstance(arr, blosc2.LazyExpr):
         cname = type(arr).__name__
@@ -2084,6 +2086,11 @@ async def htmx_command(
         compute = operator == ":="
         try:
             result_name, expr = command.split(operator, maxsplit=1)
+            if "#" in expr:  # get alternative operands
+                expr, alt_ops = expr.split("#", maxsplit=1)
+                alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
+                for k, v in alt_ops.items():
+                    operands[k] = v  # overwrite or add operands if necessary
             result_path = make_expr(result_name, expr, operands, user, compute=compute)
             url = make_url(request, "html_home", path=result_path)
             return htmx_redirect(hx_current_url, url)
