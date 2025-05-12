@@ -936,11 +936,9 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
             abspath = settings.public / pathlib.Path(*path.parts[1:])
         else:
             abspath = settings.cache / path
-        print(abspath)
         var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
-    print(expr, var_dict)
     arr = blosc2.lazyexpr(expr, var_dict)
     if not isinstance(arr, blosc2.LazyExpr):
         cname = type(arr).__name__

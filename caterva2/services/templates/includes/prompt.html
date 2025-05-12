@@ -30,12 +30,12 @@
           {% endfor %}
       </dl>
       <h5>Expressions</h5>
-      <pre>x = &lt;expression&gt; # optionaldict</pre>
+      <pre>x = &lt;expression&gt; # locals</pre>
       <p>
       Where <strong>x</strong> is the name of the new file and <strong>expression</strong> is a mathematical expression
           including variables that references datasets. These variables may either refer to
           aliases for files displayed for the selected roots, or to elements in
-          <strong>optionaldict</strong>, which is of the form
+          <strong>locals</strong>, which is of the form
           <code>{"var1": "filename",...}</code> where var1 appears in the expression.
 
       <p>Examples:</p>
@@ -60,8 +60,8 @@
           </li>
           <li>
               <code>x = a + b # {"a" :"@personal/afile.b2nd"}</code>
-              <p>Here the lazy expression will be computed using the provided file in the optionaldict in place of
-              <code>a</code>, and the file aliased by <code>b</code>.</p>
+              <p>Here the lazy expression will be computed using the provided file in the <code>locals</code> dictionary
+                  in place of <code>a</code>, and the file aliased by <code>b</code>.</p>
           </li>
       </ul>
   </div>
