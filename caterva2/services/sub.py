@@ -43,7 +43,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Project
-from caterva2 import api_utils, models, utils
+from caterva2 import api_utils, hdf5, models, utils
 from caterva2.services import settings, srv_utils
 from caterva2.services.subscriber import db, schemas, users
 
@@ -297,6 +297,9 @@ def open_b2(abspath, path):
                     )
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
+        # Check if this is a file of a special type
+        elif "ftype" in container.schunk.vlmeta and container.schunk.vlmeta["_ftype"] == "hdf5":
+            return hdf5.HDF5Proxy(container)
         else:
             return container
 
@@ -2227,6 +2230,22 @@ async def htmx_upload(
         first_member = next((m for m in new_members), None)
         path = f"{name}/{first_member}"
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
+
+    if suffix in [".h5", ".hdf5"]:
+        # Save file
+        fpath = path / filename
+        with open(fpath, "wb") as dst:
+            dst.write(data)
+        # HDF5 file; create proxies for each dataset
+        all = list(hdf5.create_hdf5_proxies(path, filename))
+        if len(all) == 0:
+            return htmx_error(request, "No arrays found in HDF5 file")
+        # Show the first dataset in the list
+        fproxy = all[0]
+        # dirname will be the name of the file without extension
+        dirname = fpath.stem
+        dsetname = f"{name}/{dirname}/{fproxy.dsetname}" + ".b2nd"
+        return htmx_redirect(hx_current_url, make_url(request, "html_home", path=dsetname), root=name)
 
     if filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)

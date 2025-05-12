@@ -6,7 +6,7 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-
+import os
 from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
@@ -14,6 +14,7 @@ import blosc2
 import h5py
 import msgpack
 import numpy
+import numpy as np
 
 """The registered identifier for Blosc2 in HDF5 filters."""
 BLOSC2_HDF5_FID = 32026
@@ -21,11 +22,9 @@ BLOSC2_HDF5_FID = 32026
 
 # Warning: Keep the reference to the returned result.
 # Losing the reference to the array may result in a segmentation fault.
-def b2_from_h5chunk(h5_dset: h5py.Dataset,
-                    chunk_index: int) -> (blosc2.NDArray | blosc2.SChunk):
+def b2_from_h5chunk(h5_dset: h5py.Dataset, chunk_index: int) -> blosc2.NDArray | blosc2.SChunk:
     h5chunk_info = h5_dset.id.get_chunk_info(chunk_index)
-    return blosc2.open(h5_dset.file.filename, mode='r',
-                       offset=h5chunk_info.byte_offset)
+    return blosc2.open(h5_dset.file.filename, mode="r", offset=h5chunk_info.byte_offset)
 
 
 def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
@@ -33,12 +32,12 @@ def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
     shape = h5_dset.shape
     if shape is None:
         return False  # empty dataspace (``H5S_NULL``)
-    if len(shape) > getattr(blosc2, 'MAX_DIM', 8):
+    if len(shape) > getattr(blosc2, "MAX_DIM", 8):
         return False  # too many dimensions
     dtype = h5_dset.dtype
     if dtype.ndim != 0 or dtype.fields is not None:
         return False  # array or compound dtype
-    if dtype.kind in ['O']:  # other kinds may be missing
+    if dtype.kind in ["O"]:  # other kinds may be missing
         return False
     return True
 
@@ -56,33 +55,35 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
         raise TypeError("HDF5 dataset is not compatible with Blosc2")
 
     b2_args = {
-        'chunks': h5_dset.chunks,  # None is ok (let Blosc2 decide)
+        "chunks": h5_dset.chunks,  # None is ok (let Blosc2 decide)
     }
 
-    if (h5_dset.chunks is None
-            or list(h5_dset._filters) != [f'{BLOSC2_HDF5_FID:#d}']
-            or h5_dset.id.get_num_chunks() < 1):
+    if (
+        h5_dset.chunks is None
+        or list(h5_dset._filters) != [f"{BLOSC2_HDF5_FID:#d}"]
+        or h5_dset.id.get_num_chunks() < 1
+    ):
         return b2_args
 
     # Blosc2 is the sole filter, direct chunk copy is possible.
     # Get Blosc2 arguments from the first schunk.
     # HDF5 filter parameters are less reliable than these.
     b2_array = b2_from_h5chunk(h5_dset, 0)
-    b2_schunk = getattr(b2_array, 'schunk', b2_array)
-    if hasattr(b2_array, 'blocks'):  # rely on cparams blocksize otherwise
-        b2_args['blocks'] = b2_array.blocks
-    b2_args['cparams'] = b2_schunk.cparams
-    b2_args['dparams'] = b2_schunk.dparams
+    b2_schunk = getattr(b2_array, "schunk", b2_array)
+    if hasattr(b2_array, "blocks"):  # rely on cparams blocksize otherwise
+        b2_args["blocks"] = b2_array.blocks
+    b2_args["cparams"] = b2_schunk.cparams
+    b2_args["dparams"] = b2_schunk.dparams
 
     return b2_args
 
 
 def _msgpack_h5attr(obj):
     if isinstance(obj, tuple):  # ad hoc Blosc2 tuple handling
-        return ['__tuple__', *obj]
+        return ["__tuple__", *obj]
 
     if isinstance(obj, h5py.Empty):
-        if obj.dtype.kind not in ['S', 'U']:  # not strings
+        if obj.dtype.kind not in ["S", "U"]:  # not strings
             # This drops object type but is probably less dangerous
             # than using an actual zero value.
             return None
@@ -95,10 +96,10 @@ def _msgpack_h5attr(obj):
 
 
 def b2attrs_from_h5dset(
-        h5_dset: h5py.Dataset,
-        attr_ok: Callable[[h5py.Dataset, str], None] | None = None,
-        attr_err: Callable[[h5py.Dataset, str, Exception], None] | None = None) -> (
-            Mapping[str, object]):
+    h5_dset: h5py.Dataset,
+    attr_ok: Callable[[h5py.Dataset, str], None] | None = None,
+    attr_err: Callable[[h5py.Dataset, str, Exception], None] | None = None,
+) -> Mapping[str, object]:
     """Get msgpack-encoded attributes from the given HDF5 dataset.
 
     NumPy and empty attribute values are first translated into native Python
@@ -108,15 +109,14 @@ def b2attrs_from_h5dset(
     error, respectively.
     """
     b2_attrs = {}
-    for (aname, avalue) in h5_dset.attrs.items():
+    for aname, avalue in h5_dset.attrs.items():
         try:
             # This workaround allows NumPy objects
             # and converts them to similar native Python objects
             # which can be encoded by plain msgpack.
             # Of course, some typing information is lost in the process,
             # but the result is portable.
-            pvalue = msgpack.packb(avalue, default=_msgpack_h5attr,
-                                   strict_types=True)
+            pvalue = msgpack.packb(avalue, default=_msgpack_h5attr, strict_types=True)
         except Exception as e:
             if attr_err:
                 attr_err(h5_dset, aname, e)
@@ -140,20 +140,17 @@ def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
     extracted anew from the HDF5 dataset (which may be an expensive operation
     depending on the case).
     """
-    def _b2make_from_h5dset(h5_dset: h5py.Dataset,
-                            b2_args=None, b2_attrs=None,
-                            **kwds) -> blosc2.NDArray:
-        b2_args = (b2_args if b2_args is not None
-                   else b2args_from_h5dset(h5_dset))
-        b2_attrs = (b2_attrs if b2_attrs is not None
-                    else b2attrs_from_h5dset(h5_dset))
 
-        b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype,
-                          **(b2_args | kwds))
+    def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args=None, b2_attrs=None, **kwds) -> blosc2.NDArray:
+        b2_args = b2_args if b2_args is not None else b2args_from_h5dset(h5_dset)
+        b2_attrs = b2_attrs if b2_attrs is not None else b2attrs_from_h5dset(h5_dset)
+
+        b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype, **(b2_args | kwds))
         b2_vlmeta = b2_array.schunk.vlmeta
-        for (aname, avalue) in b2_attrs.items():
+        for aname, avalue in b2_attrs.items():
             b2_vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
         return b2_array
+
     return _b2make_from_h5dset
 
 
@@ -161,9 +158,9 @@ b2empty_from_h5dset = _b2maker_from_h5dset(blosc2.empty)
 b2uninit_from_h5dset = _b2maker_from_h5dset(blosc2.uninit)
 
 
-def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args=None) -> (
-        Callable[[int], bytes],
-        Callable[[], Iterator[bytes]]):
+def b2chunkers_from_h5dset(
+    h5_dset: h5py.Dataset, b2_args=None
+) -> (Callable[[int], bytes], Callable[[], Iterator[bytes]]):
     """Get by-index and iterator chunkers for the given dataset.
 
     The first returned value (``getchunk``) can be called with an integer
@@ -184,9 +181,9 @@ def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args=None) -> (
     """
     b2_args = b2_args or b2args_from_h5dset(h5_dset)
 
-    if b2_args['chunks'] is None:
+    if b2_args["chunks"] is None:
         b2chunkers_from_dataset = b2chunkers_from_nonchunked
-    elif 'cparams' in b2_args:
+    elif "cparams" in b2_args:
         b2chunkers_from_dataset = b2chunkers_from_blosc2
     else:
         b2chunkers_from_dataset = b2chunkers_from_chunked
@@ -194,9 +191,9 @@ def b2chunkers_from_h5dset(h5_dset: h5py.Dataset, b2_args=None) -> (
     return b2chunkers_from_dataset(h5_dset, b2_args)
 
 
-def b2chunkers_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
-        Callable[[int], bytes],
-        Callable[[], Iterator[bytes]]):
+def b2chunkers_from_blosc2(
+    h5_dset: h5py.Dataset, b2_args: Mapping
+) -> (Callable[[int], bytes], Callable[[], Iterator[bytes]]):
     # Blosc2-compressed dataset, just pass chunks as they are.
     # Support both Blosc2 arrays and frames as HDF5 chunks.
     def b2getchunk_blosc2(nchunk: int) -> bytes:
@@ -206,16 +203,19 @@ def b2chunkers_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
 
     def _b2getchunk_nchunk(nchunk: int) -> bytes:
         b2_array = b2_from_h5chunk(h5_dset, nchunk)
-        b2_schunk = getattr(b2_array, 'schunk', b2_array)
+        b2_schunk = getattr(b2_array, "schunk", b2_array)
         # TODO: check if schunk is compatible with creation arguments
         if b2_schunk.nchunks < 1:
-            raise OSError(f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
-                          f"contains Blosc2 super-chunk with no chunks")
+            raise OSError(
+                f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
+                f"contains Blosc2 super-chunk with no chunks"
+            )
         if b2_schunk.nchunks > 1:
             # TODO: warn, check shape, re-compress as single chunk
             raise NotImplementedError(
                 f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
-                f"contains Blosc2 super-chunk with several chunks")
+                f"contains Blosc2 super-chunk with several chunks"
+            )
         return b2_schunk.get_chunk(0)
 
     def b2iterchunks_blosc2() -> Iterator[bytes]:
@@ -225,15 +225,15 @@ def b2chunkers_from_blosc2(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
     return b2getchunk_blosc2, b2iterchunks_blosc2
 
 
-def b2chunkers_from_nonchunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
-        Callable[[int], bytes],
-        Callable[[], Iterator[bytes]]):
+def b2chunkers_from_nonchunked(
+    h5_dset: h5py.Dataset, b2_args: Mapping
+) -> (Callable[[int], bytes], Callable[[], Iterator[bytes]]):
     # Contiguous or compact dataset,
     # slurp into Blosc2 array and get chunks from it.
     # Hopefully the data is small enough to be loaded into memory.
     b2_array = blosc2.asarray(
         numpy.asanyarray(h5_dset[()]),  # ok for arrays & scalars
-        **b2_args
+        **b2_args,
     )
 
     def b2getchunk_nonchunked(nchunk: int) -> bytes:
@@ -251,25 +251,27 @@ def b2chunkers_from_nonchunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
     return b2getchunk_nonchunked, b2iterchunks_nonchunked
 
 
-def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
-        Callable[[int], bytes],
-        Callable[[], Iterator[bytes]]):
+def b2chunkers_from_chunked(
+    h5_dset: h5py.Dataset, b2_args: Mapping
+) -> (Callable[[int], bytes], Callable[[], Iterator[bytes]]):
     # Non-Blosc2 chunked dataset,
     # load each HDF5 chunk into chunk 0 of compatible Blosc2 array,
     # then get the resulting compressed chunk.
     # Thus, only one chunk worth of data is kept in memory.
-    assert h5_dset.chunks == b2_args['chunks']
+    assert h5_dset.chunks == b2_args["chunks"]
     b2_array = blosc2.empty(
-        shape=h5_dset.chunks, dtype=h5_dset.dtype,  # array shape is chunkshape
-        **b2_args
+        shape=h5_dset.chunks,
+        dtype=h5_dset.dtype,  # array shape is chunkshape
+        **b2_args,
     )
 
     def b2getchunk_chunked(nchunk: int) -> bytes:
         if not (0 <= nchunk < h5_dset.id.get_num_chunks()):
             raise IndexError(nchunk)
         chunk_start = h5_dset.id.get_chunk_info(nchunk).chunk_offset
-        chunk_slice = tuple(slice(cst, cst + csz, 1)
-                            for (cst, csz) in zip(chunk_start, h5_dset.chunks, strict=False))
+        chunk_slice = tuple(
+            slice(cst, cst + csz, 1) for (cst, csz) in zip(chunk_start, h5_dset.chunks, strict=False)
+        )
         return _b2getchunk_slice(chunk_slice)
 
     def _b2getchunk_slice(chunk_slice) -> bytes:
@@ -284,3 +286,170 @@ def b2chunkers_from_chunked(h5_dset: h5py.Dataset, b2_args: Mapping) -> (
             yield _b2getchunk_slice(chunk_slice)
 
     return b2getchunk_chunked, b2iterchunks_chunked
+
+
+class HDF5Proxy(blosc2.Operand):
+    """
+    Simple proxy for an HDF5 array (or similar) that can be used with the Blosc2 compute engine.
+
+    This only supports the __getitem__ method. No caching is performed.
+    """
+
+    def __init__(self, b2arr, h5file, dsetname):
+        if b2arr is not None:
+            # The file has been opened already, so we just need to set the filename and dataset name
+            self.fname = b2arr.vlmeta["_fname"]
+            self.dsetname = b2arr.vlmeta["_dsetname"]
+            self.h5file = h5py.File(self.fname, "r")
+            self.dset = self.h5file[self.dsetname]
+            self.b2arr = b2arr
+            return
+
+        self.dset = h5file[dsetname]
+        if not hasattr(self.dset, "shape") or not hasattr(self.dset, "dtype"):
+            # If the source is not a proper HDF5 Dataset, return without doing anything
+            # This is useful for HDF5 groups or other objects
+            return
+        self.fname = h5file.filename
+        self.dsetname = dsetname
+
+        # Store the Blosc2 array below a fake HDF5 hierarchy
+        # First, create the necessary directories in the filesystem
+        # these will start with the name of the HDF5 file without the extension
+        dirname = self.fname.rsplit(".", 1)[0]
+        # urlpath = os.path.join(dirname, dsetname)
+        # Use a .b2nd extension for now
+        urlpath = os.path.join(dirname, dsetname + ".b2nd")
+
+        # Create the directory if it doesn't exist
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        # Create any necessary subdirectories
+        subdirs = self.dsetname.split("/")
+        for subdir in subdirs[:-1]:
+            dirname = os.path.join(dirname, subdir)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname)
+
+        # Create an empty Blosc2 array with the same shape and dtype as the HDF5 dataset
+        cparams = blosc2.CParams()
+        print(f"Creating Blosc2 array with shape {self.dset.shape} and dtype {self.dset.dtype}")
+        try:
+            self.b2arr = blosc2.empty(
+                shape=self.dset.shape,
+                dtype=self.dset.dtype,
+                cparams=cparams,
+                urlpath=urlpath,
+                mode="w",
+            )
+        except Exception as e:
+            print(f"Error creating Blosc2 array: {e}")
+            # Remove the attributes and the possible urlpath file and return
+            del self.dset
+            del self.fname
+            del self.dsetname
+            if os.path.exists(urlpath):
+                os.remove(urlpath)
+            return
+
+        # Mark file as special type, and store fname and dsetname in the Blosc2 array's metadata
+        self.b2arr.vlmeta["_ftype"] = "hdf5"
+        self.b2arr.vlmeta["_fname"] = self.fname
+        self.b2arr.vlmeta["_dsetname"] = self.dsetname
+        # Use the dset attrs to populate the Blosc2 array's vlmeta
+        b2attrs = b2attrs_from_h5dset(self.dset)
+        self.b2arr.vlmeta.update(b2attrs)
+
+    def __getitem__(self, item: slice | list[slice]) -> np.ndarray:
+        """
+        Get a slice as a numpy.ndarray from the HDF5 dataset.
+
+        Parameters
+        ----------
+        item
+
+        Returns
+        -------
+        out: numpy.ndarray
+            An array with the data slice.
+        """
+        return self.dset[item]
+
+    def __del__(self):
+        # Close the HDF5 file when the proxy is deleted
+        if hasattr(self, "h5file"):
+            self.h5file.close()
+
+    def get_chunk(self, chunk_index: int) -> bytes:
+        """
+        Get a chunk from the HDF5 dataset, compressed via Blosc2.
+
+        Parameters
+        ----------
+        chunk_index
+
+        Returns
+        -------
+        out: bytes
+            The chunk data.
+        """
+        h5chunk_info = self.dset.id.get_chunk_info(chunk_index)
+        # Compute the slice corresponding to the chunk
+        chunk_slice = tuple(
+            slice(cst, cst + csz, 1)
+            for (cst, csz) in zip(h5chunk_info.chunk_offset, self.dset.chunks, strict=False)
+        )
+        # Now, get the chunk data from the HDF5 dataset (uncompressed)
+        chunk_data = self.dset[chunk_slice]
+        # Compress the chunk data using Blosc2
+        return blosc2.compress2(
+            chunk_data.tobytes(),
+            cparams=self.b2arr.cparams,
+        )
+
+    def remove(self):
+        # Remove the Blosc2 array from the filesystem
+        if hasattr(self, "b2arr"):
+            os.remove(self.b2arr.urlpath)
+
+
+def create_hdf5_proxies(
+    path: str | os.PathLike,
+    h5fname: str | os.PathLike,
+    b2_args=None,
+) -> Iterator[HDF5Proxy]:
+    """Create a generator of HDF5 proxies from the given HDF5 file."""
+    if b2_args is None:
+        b2_args = {}
+    fname = os.path.join(path, h5fname)
+    print("Creating HDF5 proxies for file:", fname)
+    h5file = h5py.File(fname, "r")
+
+    # Recursive function to visit all groups and datasets
+    def visit_group(group):
+        for name, obj in group.items():
+            full_path = f"{group.name}/{name}".lstrip("/")
+            print("Visiting item:", full_path, "of type", type(obj))
+
+            if isinstance(obj, h5py.Dataset):
+                print("Creating proxy for dataset:", full_path)
+                yield HDF5Proxy(None, h5file, full_path)
+            elif isinstance(obj, h5py.Group):
+                # Recursively visit subgroups
+                yield from visit_group(obj)
+
+    # Start from the root group
+    yield from visit_group(h5file)
+
+    h5file.close()
+    print("Finished creating HDF5 proxies for file:", fname)
+
+
+# def remove_hdf5_proxies(
+#     h5fname: str,
+# ) -> None:
+#     """Remove the HDF5 proxies from the given HDF5 file.
+#
+#     The proxies will be removed for each dataset in the file.
+#     """
+#     # TODO
