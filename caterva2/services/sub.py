@@ -912,6 +912,7 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     str
         The path of the newly created (or overwritten) dataset.
     """
+
     if not user:
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
