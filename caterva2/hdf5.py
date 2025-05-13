@@ -298,8 +298,21 @@ class HDF5Proxy(blosc2.Operand):
     def __init__(self, b2arr, h5file=None, dsetname=None):
         if b2arr is not None:
             # The file has been opened already, so we just need to set the filename and dataset name
-            self.fname = b2arr.vlmeta["_fname"]
             self.dsetname = b2arr.vlmeta["_dsetname"]
+            # Build the fname from the dsetname, using a relative path
+            nlevels = self.dsetname.count("/")
+            # Now, get the filename from the HDF5 file by going up nlevels
+            fname = os.path.abspath(os.path.dirname(b2arr.urlpath) + "/.." * nlevels)
+            # Add the proper extension
+            if os.path.exists(fname + ".h5"):
+                fname += ".h5"
+            elif os.path.exists(fname + ".hdf5"):
+                fname += ".hdf5"
+            else:
+                # We only support .h5 and .hdf5 extensions for now
+                raise ValueError(f"File {fname} does not exist with .h5 or .hdf5 extension")
+            # Convert to absolute path, and add the extension
+            self.fname = fname
             self.h5file = h5py.File(self.fname, "r")
             self.dset = self.h5file[self.dsetname]
             self.b2arr = b2arr
@@ -354,7 +367,6 @@ class HDF5Proxy(blosc2.Operand):
 
         # Mark file as special type, and store fname and dsetname in the Blosc2 array's metadata
         self.b2arr.vlmeta["_ftype"] = "hdf5"
-        self.b2arr.vlmeta["_fname"] = self.fname
         self.b2arr.vlmeta["_dsetname"] = self.dsetname
         # Use the dset attrs to populate the Blosc2 array's vlmeta
         b2attrs = b2attrs_from_h5dset(self.dset)
@@ -440,17 +452,14 @@ def create_hdf5_proxies(
     if b2_args is None:
         b2_args = {}
     fname = os.path.join(path, h5fname)
-    print("Creating HDF5 proxies for file:", fname)
     h5file = h5py.File(fname, "r")
 
     # Recursive function to visit all groups and datasets
     def visit_group(group):
         for name, obj in group.items():
             full_path = f"{group.name}/{name}".lstrip("/")
-            print("Visiting item:", full_path, "of type", type(obj))
 
             if isinstance(obj, h5py.Dataset):
-                print("Creating proxy for dataset:", full_path)
                 yield HDF5Proxy(None, h5file, full_path)
             elif isinstance(obj, h5py.Group):
                 # Recursively visit subgroups
@@ -460,7 +469,6 @@ def create_hdf5_proxies(
     yield from visit_group(h5file)
 
     h5file.close()
-    print("Finished creating HDF5 proxies for file:", fname)
 
 
 # def remove_hdf5_proxies(

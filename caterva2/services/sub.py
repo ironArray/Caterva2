@@ -1842,9 +1842,7 @@ async def htmx_path_view(
         try:
             arr = open_b2(abspath, path)
         except ValueError:
-            return htmx_error(
-                request, "Cannot open array; if it's a lazy expression, maybe an operand is missing."
-            )
+            return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
         idx = None
 
     # Local variables
