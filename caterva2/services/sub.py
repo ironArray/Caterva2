@@ -409,7 +409,10 @@ optional_user = (
 
 
 def _setup_plugin_globals():
-    from . import plugins
+    try:
+        from . import plugins  # When used as a module
+    except ImportError:
+        import plugins  # When used as a script
 
     # These need to be available for plugins at import time.
     plugins.current_active_user = current_active_user
@@ -2580,8 +2583,11 @@ def main():
     model = models.Subscriber(roots={}, etags={})
     settings.database = srv_utils.Database(settings.statedir / "db.json", model)
 
-    # Register display plugins
-    from .plugins import tomography  # delay module load
+    # Register display plugins (delay module load)
+    try:
+        from .plugins import tomography  # When used as module
+    except ImportError:
+        from caterva2.services.plugins import tomography  # When used as script
 
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
