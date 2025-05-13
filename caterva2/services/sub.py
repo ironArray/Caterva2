@@ -1099,6 +1099,39 @@ async def copy(
     return str(destpath)
 
 
+def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
+    """
+    Convert a path with special root to an absolute path that can be written to.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path with special root (@personal, @shared, @public)
+    user : db.User
+        The authenticated user
+
+    Returns
+    -------
+    pathlib.Path
+        The absolute path in the filesystem
+
+    Raises
+    ------
+    fastapi.HTTPException
+        If the path is not in a writable root
+    """
+    root = path.parts[0]
+    if root == "@personal":
+        return settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
+    elif root == "@shared":
+        return settings.shared / pathlib.Path(*path.parts[1:])
+    elif root == "@public":
+        return settings.public / pathlib.Path(*path.parts[1:])
+    else:
+        detail = "Only @personal or @shared or @public roots can be modified"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+
 @app.post("/api/upload/{path:path}")
 async def upload_file(
     path: pathlib.Path,
@@ -1123,20 +1156,8 @@ async def upload_file(
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        abspath = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        abspath = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        raise fastapi.HTTPException(
-            status_code=400,  # bad request
-            detail="Only uploading to @personal or @shared or @public roots is allowed",
-        )
-
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
     # We may upload a new file, or replace an existing file
     if abspath.is_dir():
         abspath /= file.filename
@@ -1200,17 +1221,8 @@ async def append_file(
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        abspath = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        abspath = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only uploading to @personal or @shared or @public roots is allowed"
-        raise fastapi.HTTPException(detail=detail, status_code=400)
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
 
     # We may upload a new file, or replace an existing file
     if not abspath.is_file():
@@ -1275,30 +1287,21 @@ async def remove(
     if not user:
         raise srv_utils.raise_unauthorized("Removing files requires authentication")
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        path2 = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        path2 = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only removing from @personal or @shared or @public roots is allowed"
-        raise fastapi.HTTPException(status_code=400, detail=detail)
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
 
-    # If path2 is a directory, remove the contents of the directory
-    if path2.is_dir():
-        shutil.rmtree(path2)
+    # If abspath is a directory, remove the contents of the directory
+    if abspath.is_dir():
+        shutil.rmtree(abspath)
     else:
         # Try to unlink the file
         try:
-            path2.unlink()
+            abspath.unlink()
         except FileNotFoundError:
             # Try adding a .b2 extension
-            path2 = path2.with_suffix(path2.suffix + ".b2")
+            abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
-                path2.unlink()
+                abspath.unlink()
             except FileNotFoundError as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
@@ -1335,21 +1338,12 @@ async def add_notebook(
         detail = "Notebooks must end with the .ipynb extension"
         raise fastapi.HTTPException(status_code=400, detail=detail)
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        path2 = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        path2 = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only @personal or @shared or @public roots can be modified"
-        raise fastapi.HTTPException(status_code=400, detail=detail)
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
 
     # Check a file does not exist in the same path
-    path2 = pathlib.Path(f"{path2}.b2")
-    if path2.exists():
+    abspath = pathlib.Path(f"{abspath}.b2")
+    if abspath.exists():
         detail = "File exists at the given path"
         raise fastapi.HTTPException(status_code=400, detail=detail)
 
@@ -1358,7 +1352,7 @@ async def add_notebook(
     file = io.StringIO()
     nbformat.write(nb, file)
     data = file.getvalue().encode()
-    srv_utils.compress(data, dst=path2)
+    srv_utils.compress(data, dst=abspath)
 
     return path
 
