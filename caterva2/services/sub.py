@@ -284,6 +284,7 @@ def open_b2(abspath, path):
     """
     if pathlib.Path(path).parts[0] in {"@personal", "@shared", "@public"}:
         container = blosc2.open(abspath)
+        vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
         if isinstance(container, blosc2.LazyExpr):
             # Open the operands properly
             operands = container.operands
@@ -298,7 +299,7 @@ def open_b2(abspath, path):
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
         # Check if this is a file of a special type
-        elif "ftype" in container.schunk.vlmeta and container.schunk.vlmeta["_ftype"] == "hdf5":
+        elif "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
             return hdf5.HDF5Proxy(container)
         else:
             return container

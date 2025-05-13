@@ -295,7 +295,7 @@ class HDF5Proxy(blosc2.Operand):
     This only supports the __getitem__ method. No caching is performed.
     """
 
-    def __init__(self, b2arr, h5file, dsetname):
+    def __init__(self, b2arr, h5file=None, dsetname=None):
         if b2arr is not None:
             # The file has been opened already, so we just need to set the filename and dataset name
             self.fname = b2arr.vlmeta["_fname"]
@@ -360,6 +360,23 @@ class HDF5Proxy(blosc2.Operand):
         b2attrs = b2attrs_from_h5dset(self.dset)
         self.b2arr.vlmeta.update(b2attrs)
 
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return self.dset.shape
+
+    @property
+    def dtype(self) -> numpy.dtype:
+        return self.dset.dtype
+
+    @property
+    def fields(self) -> Mapping[str, numpy.dtype]:
+        return self.b2arr.fields
+
+    # TODO: would that be useful?
+    # @property
+    # def chunks(self) -> tuple[int, ...]:
+    #     return self.dset.chunks
+
     def __getitem__(self, item: slice | list[slice]) -> np.ndarray:
         """
         Get a slice as a numpy.ndarray from the HDF5 dataset.
@@ -380,32 +397,33 @@ class HDF5Proxy(blosc2.Operand):
         if hasattr(self, "h5file"):
             self.h5file.close()
 
-    def get_chunk(self, chunk_index: int) -> bytes:
-        """
-        Get a chunk from the HDF5 dataset, compressed via Blosc2.
-
-        Parameters
-        ----------
-        chunk_index
-
-        Returns
-        -------
-        out: bytes
-            The chunk data.
-        """
-        h5chunk_info = self.dset.id.get_chunk_info(chunk_index)
-        # Compute the slice corresponding to the chunk
-        chunk_slice = tuple(
-            slice(cst, cst + csz, 1)
-            for (cst, csz) in zip(h5chunk_info.chunk_offset, self.dset.chunks, strict=False)
-        )
-        # Now, get the chunk data from the HDF5 dataset (uncompressed)
-        chunk_data = self.dset[chunk_slice]
-        # Compress the chunk data using Blosc2
-        return blosc2.compress2(
-            chunk_data.tobytes(),
-            cparams=self.b2arr.cparams,
-        )
+    # TODO: would that be useful?
+    # def get_chunk(self, chunk_index: int) -> bytes:
+    #     """
+    #     Get a chunk from the HDF5 dataset, compressed via Blosc2.
+    #
+    #     Parameters
+    #     ----------
+    #     chunk_index
+    #
+    #     Returns
+    #     -------
+    #     out: bytes
+    #         The chunk data.
+    #     """
+    #     h5chunk_info = self.dset.id.get_chunk_info(chunk_index)
+    #     # Compute the slice corresponding to the chunk
+    #     chunk_slice = tuple(
+    #         slice(cst, cst + csz, 1)
+    #         for (cst, csz) in zip(h5chunk_info.chunk_offset, self.dset.chunks, strict=False)
+    #     )
+    #     # Now, get the chunk data from the HDF5 dataset (uncompressed)
+    #     chunk_data = self.dset[chunk_slice]
+    #     # Compress the chunk data using Blosc2
+    #     return blosc2.compress2(
+    #         chunk_data.tobytes(),
+    #         cparams=self.b2arr.cparams,
+    #     )
 
     def remove(self):
         # Remove the Blosc2 array from the filesystem
