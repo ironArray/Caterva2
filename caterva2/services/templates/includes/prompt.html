@@ -30,11 +30,14 @@
           {% endfor %}
       </dl>
       <h5>Expressions</h5>
-      <pre>x = &lt;expression&gt;</pre>
+      <pre>x = &lt;expression&gt; # locals</pre>
       <p>
-      Where <strong>x</strong> is the name of the new file, and
-      <strong>expression</strong> is a mathematical expression including
-      variables that reference other datasets.
+      Where <strong>x</strong> is the name of the new file and <strong>expression</strong> is a mathematical expression
+          including variables that references datasets. These variables may either refer to
+          aliases for files displayed for the selected roots, or to elements in
+          <strong>locals</strong>, which is of the form
+          <code>{"var1": "filename",...}</code> where var1 appears in the expression.
+
       <p>Examples:</p>
       <ul>
           <li>
@@ -54,6 +57,11 @@
           <li>
               <code>x = arange(10)</code>
               <p>Here <strong>x</strong> will be a lazy array, with int64 elements, from 0 to 9 (included).</p>
+          </li>
+          <li>
+              <code>x = a + b # {"a" :"@personal/afile.b2nd"}</code>
+              <p>Here the lazy expression will be computed using the provided file in the <code>locals</code> dictionary
+                  in place of <code>a</code>, and the file aliased by <code>b</code>.</p>
           </li>
       </ul>
   </div>

@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
+import ast
 import asyncio
 import collections.abc
 import contextlib
@@ -2084,6 +2085,11 @@ async def htmx_command(
         compute = operator == ":="
         try:
             result_name, expr = command.split(operator, maxsplit=1)
+            if "#" in expr:  # get alternative operands
+                expr, alt_ops = expr.split("#", maxsplit=1)
+                alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
+                for k, v in alt_ops.items():
+                    operands[k] = v  # overwrite or add operands if necessary
             result_path = make_expr(result_name, expr, operands, user, compute=compute)
             url = make_url(request, "html_home", path=result_path)
             return htmx_redirect(hx_current_url, url)
