@@ -1,3 +1,4 @@
+import ast
 import pathlib
 
 # Requirements
@@ -51,11 +52,15 @@ def guess(path: pathlib.Path, meta) -> bool:
     if isinstance(dtype, str) and dtype.startswith("["):
         dtype = eval(dtype)  # TODO Make it safer
 
-    dtype = numpy.dtype(dtype)
-    shape = tuple(meta.shape)
+    # Sometimes dtype is a tuple (e.g. ('<f8', (10,))), and this seems a safe way to handle it
+    try:
+        dtype = numpy.dtype(dtype)
+    except (ValueError, TypeError):
+        dtype = numpy.dtype(ast.literal_eval(dtype))
     if dtype.kind != "u":
         return False
 
+    shape = tuple(meta.shape)
     if len(shape) == 3:
         return True  # grayscale
 
