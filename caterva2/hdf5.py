@@ -344,19 +344,17 @@ class HDF5Proxy(blosc2.Operand):
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
 
-        # Create an empty Blosc2 array with the same shape and dtype as the HDF5 dataset
         cparams = blosc2.CParams()
-        print(f"Creating Blosc2 array with shape {self.dset.shape} and dtype {self.dset.dtype}")
         try:
             self.b2arr = blosc2.empty(
-                shape=self.dset.shape,
+                shape=self.dset.shape or (),  # empty datasets have no shape
                 dtype=self.dset.dtype,
                 cparams=cparams,
                 urlpath=urlpath,
                 mode="w",
             )
         except Exception as e:
-            print(f"Error creating Blosc2 array: {e}")
+            print(f"Error creating Blosc2 array from {self.fname}/{self.dsetname}: {e}")
             # Remove the attributes and the possible urlpath file and return
             del self.dset
             del self.fname
@@ -366,11 +364,14 @@ class HDF5Proxy(blosc2.Operand):
             return
 
         # Mark file as special type, and store fname and dsetname in the Blosc2 array's metadata
-        self.b2arr.vlmeta["_ftype"] = "hdf5"
-        self.b2arr.vlmeta["_dsetname"] = self.dsetname
+        b2vlmeta = self.b2arr.schunk.vlmeta
+        b2vlmeta["_ftype"] = "hdf5"
+        b2vlmeta["_dsetname"] = self.dsetname
         # Use the dset attrs to populate the Blosc2 array's vlmeta
         b2attrs = b2attrs_from_h5dset(self.dset)
-        self.b2arr.vlmeta.update(b2attrs)
+        # Update the Blosc2 array's vlmeta with the HDF5 dataset's attributes
+        for aname, avalue in b2attrs.items():
+            b2vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -445,14 +446,12 @@ class HDF5Proxy(blosc2.Operand):
 
 def create_hdf5_proxies(
     path: str | os.PathLike,
-    h5fname: str | os.PathLike,
     b2_args=None,
 ) -> Iterator[HDF5Proxy]:
     """Create a generator of HDF5 proxies from the given HDF5 file."""
     if b2_args is None:
         b2_args = {}
-    fname = os.path.join(path, h5fname)
-    h5file = h5py.File(fname, "r")
+    h5file = h5py.File(path, "r")
 
     # Recursive function to visit all groups and datasets
     def visit_group(group):

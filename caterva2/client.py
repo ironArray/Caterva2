@@ -3,6 +3,7 @@ import io
 import pathlib
 import sys
 from collections.abc import Sequence
+from pathlib import PurePosixPath
 
 import blosc2
 import numpy as np
@@ -413,6 +414,26 @@ class File:
             self.path,
             localpath=localpath,
         )
+
+    def unfold(self):
+        """
+        Unfolds the file in a remote directory.
+
+        Returns
+        -------
+        Path
+            The path to the unfolded directory.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get('example')
+        >>> file = root['ds-1d.h5']
+        >>> file.unfold()
+        PurePosixPath('example/ds-1d.h5')
+        """
+        return self.client.unfold(self.path)
 
     def move(self, dst):
         """
@@ -1017,6 +1038,36 @@ class Client:
         response.raise_for_status()
         return tuple(response.json())
 
+    def unfold(self, remotepath):
+        """
+        Unfolds a dataset in the remote repository.
+
+        The container is always unfolded into a directory with the same name as the
+        container, but without the extension.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Path of the dataset to unfold.
+
+        Returns
+        -------
+        Path
+            The path of the unfolded dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # To unfold a file you need to be a registered user
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> client.unfold('@personal/dir/data.h5')
+        PurePosixPath('@personal/dir/data')
+        """
+        urlbase, path = _format_paths(self.urlbase, remotepath)
+        result = api_utils.post(f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie)
+        return PurePosixPath(result)
+
     def remove(self, path):
         """
         Removes a dataset or the contents of a directory from a remote repository.
@@ -1032,7 +1083,7 @@ class Client:
 
         Returns
         -------
-        str
+        Path
             The path that was removed.
 
         Examples
@@ -1048,7 +1099,8 @@ class Client:
         True
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        return api_utils.post(f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie)
+        result = api_utils.post(f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie)
+        return pathlib.PurePosixPath(result)
 
     def move(self, src, dst):
         """
@@ -1063,7 +1115,7 @@ class Client:
 
         Returns
         -------
-        str
+        Path
             New path of the moved dataset or directory.
 
         Examples
@@ -1102,7 +1154,7 @@ class Client:
 
         Returns
         -------
-        str
+        Path
             New path of the copied dataset or directory.
 
         Examples

@@ -1185,7 +1185,7 @@ async def upload_file(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1263,6 +1263,69 @@ async def append_file(
 
     # Return the new shape
     return result_shape
+
+
+@app.post("/api/unfold/{path:path}")
+async def unfold_file(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Unfold a container (zip, tar, hdf5, etc.) into a directory.
+
+    The container is always unfolded into a directory with the same name as the
+    container, but without the extension.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to dataset to unfold.
+
+    Returns
+    -------
+    str
+        The path of the directory where the datasets have been unfolded.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Unfolding requires authentication")
+
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
+
+    if not abspath.is_file():
+        detail = "Target file does not exist or is not a file"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Unfold the container
+    dirname = None
+    if abspath.suffix in {".h5", ".hdf5"}:
+        # Create proxies for each dataset in HDF5 file
+        all_dsets = list(hdf5.create_hdf5_proxies(abspath))
+        if len(all_dsets) == 0:
+            detail = "No arrays found in HDF5 file"
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+        dirname = abspath.with_suffix("")
+    else:
+        detail = "Target file must be a zip, tar or hdf5 container"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Check quota
+    if settings.quota:
+        # Get the size of the datasets (proxies) in new directory
+        newsize = 0
+        if os.path.exists(dirname):
+            # Traverse the directory and get the size for all files
+            for _, relpath in utils.walk_files(dirname):
+                newsize += os.path.getsize(relpath)
+        total_size = get_disk_usage() + newsize
+        if total_size > settings.quota:
+            # Remove the directory if it exists
+            shutil.rmtree(dirname)
+            detail = "Unfold failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Return the new directory name
+    return path.stem
 
 
 @app.post("/api/remove/{path:path}")
@@ -2232,12 +2295,12 @@ async def htmx_upload(
         fpath = path / filename
         with open(fpath, "wb") as dst:
             dst.write(data)
-        # HDF5 file; create proxies for each dataset
-        all = list(hdf5.create_hdf5_proxies(path, filename))
-        if len(all) == 0:
+        # Create proxies for each dataset in HDF5 file
+        all_dsets = list(hdf5.create_hdf5_proxies(fpath))
+        if len(all_dsets) == 0:
             return htmx_error(request, "No arrays found in HDF5 file")
         # Show the first dataset in the list
-        fproxy = all[0]
+        fproxy = all_dsets[0]
         # dirname will be the name of the file without extension
         dirname = fpath.stem
         dsetname = f"{name}/{dirname}/{fproxy.dsetname}" + ".b2nd"
