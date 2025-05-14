@@ -656,8 +656,10 @@ def test_lazyexpr(auth_client):
     lxinfo = auth_client.get_info(lxpath)
     assert lxinfo["shape"] == opinfo["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"]
-    tempexp = re.sub(rf"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]['o0'], lxinfo["expression"]) # ds -> o0 automatically
-    assert tempexp == f"({re.sub(rf"ds", operands['ds'], expression)})"
+    tempexp = re.sub(
+        r"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]["o0"], lxinfo["expression"]
+    )  # ds -> o0 automatically
+    assert tempexp == f"({re.sub(r'ds', operands['ds'], expression)})"
 
     # Check result data.
     a = auth_client.fetch(oppt)
@@ -722,16 +724,16 @@ def test_expr_from_expr(auth_client):
     assert lxinfo["shape"] == opinfo["shape"] == lxinfo2["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"] == lxinfo2["dtype"]
 
-    tempexp = re.sub(rf"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]['o0'], lxinfo["expression"]) # ds -> o0 automatically
-    assert tempexp == f"({re.sub(rf"ds", operands['ds'], expression)})"
+    tempexp = re.sub(
+        r"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]["o0"], lxinfo["expression"]
+    )  # ds -> o0 automatically
+    assert tempexp == f"({re.sub(r'ds', operands['ds'], expression)})"
 
-    i=0
     tempexp = lxinfo2["expression"]
-    for op, f in lxinfo2["operands"].items():
+    for i, (_op, f) in enumerate(lxinfo2["operands"].items()):
         tempexp = re.sub(rf"(?<=\s)o{i}|(?<=\()o{i}", f, tempexp)
-        i+=1
-    step1 = f"({re.sub(rf"ds", f"({expression})", expression2)})"
-    step2 = f"{re.sub(rf"ds", operands['ds'], step1)}"
+    step1 = f"({re.sub(r'ds', f'({expression})', expression2)})"
+    step2 = f"{re.sub(r'ds', operands['ds'], step1)}"
     assert tempexp == step2
 
     # Check result data.
@@ -828,6 +830,7 @@ def test_adduser_maxexceeded(auth_client, configuration):
     maxusers = 5
     # Add maxusers users; we already have one user, so the next loop should fail
     # when reaching the creation of last user
+    n = 0
     for n in range(maxusers):
         # This should work fine for n < maxusers
         username = f"test{n}@user.com"
