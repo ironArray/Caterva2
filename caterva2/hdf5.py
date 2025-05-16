@@ -12,6 +12,9 @@ from collections.abc import Callable, Iterator, Mapping
 # Requirements
 import blosc2
 import h5py
+
+# For dynamic import of external HDF5 filters in hdf5plugin module
+import hdf5plugin  # noqa: F401
 import msgpack
 import numpy
 import numpy as np
@@ -377,11 +380,11 @@ class HDF5Proxy(blosc2.Operand):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return self.dset.shape
+        return self.b2arr.shape
 
     @property
     def dtype(self) -> numpy.dtype:
-        return self.dset.dtype
+        return self.b2arr.dtype
 
     @property
     def fields(self) -> Mapping[str, numpy.dtype]:

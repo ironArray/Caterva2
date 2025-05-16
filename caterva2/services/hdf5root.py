@@ -212,7 +212,6 @@ def create_example_root(path):
             ds.attrs[k] = v
 
         h5f.create_dataset("/arrays/empty", data=h5py.Empty("float64"))
-        h5f.create_dataset("/arrays/vlstring", data="Hello world!")
 
         h5f.create_dataset("/arrays/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
 
@@ -220,6 +219,9 @@ def create_example_root(path):
 
         a = numpy.arange(1, dtype="uint8").reshape((1,) * 23)
         h5f.create_dataset("/unsupported/too-many-dimensions", data=a)
+
+        # TODO: This could be supported by mapping the vlstring dataset to an NDArray with shape=() and dtype="u1"
+        h5f.create_dataset("/unsupported/vlstring", data="Hello world!")
 
         h5f["/unsupported/soft-link"] = h5py.SoftLink("/arrays/1d-raw")
 
