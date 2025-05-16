@@ -12,7 +12,6 @@ from collections.abc import Callable, Iterator, Mapping
 # Requirements
 import blosc2
 import h5py
-import hdf5plugin  # important for external HDF5 filters
 import msgpack
 import numpy
 import numpy as np
@@ -32,12 +31,11 @@ def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:
     """Is the HDF5 dataset compatible with a Blosc2 dataset?"""
     shape = h5_dset.shape
     if shape is None:
-        return False  # empty dataspace (``H5S_NULL``)
+        # Empty dataset (``H5S_NULL``) shape is represented as () in NumPy/Blosc2
+        shape = ()
     if len(shape) > getattr(blosc2, "MAX_DIM", 8):
         return False  # too many dimensions
     dtype = h5_dset.dtype
-    if dtype.ndim != 0 or dtype.fields is not None:
-        return False  # array or compound dtype
     if dtype.kind in ["O"]:  # other kinds may be missing
         return False
     return True
@@ -53,7 +51,9 @@ def b2args_from_h5dset(h5_dset: h5py.Dataset) -> Mapping[str, object]:
     its metadata (so as to return the exact same arguments).
     """
     if not h5dset_is_compatible(h5_dset):
-        raise TypeError("HDF5 dataset is not compatible with Blosc2")
+        raise TypeError(
+            f"HDF5 dataset {h5_dset} in file {h5_dset.file.filename} is not compatible with Blosc2"
+        )
 
     b2_args = {
         "chunks": h5_dset.chunks,  # None is ok (let Blosc2 decide)
@@ -145,8 +145,9 @@ def _b2maker_from_h5dset(b2make: Callable[..., blosc2.NDArray]):
     def _b2make_from_h5dset(h5_dset: h5py.Dataset, b2_args=None, b2_attrs=None, **kwds) -> blosc2.NDArray:
         b2_args = b2_args if b2_args is not None else b2args_from_h5dset(h5_dset)
         b2_attrs = b2_attrs if b2_attrs is not None else b2attrs_from_h5dset(h5_dset)
-
-        b2_array = b2make(shape=h5_dset.shape, dtype=h5_dset.dtype, **(b2_args | kwds))
+        # Empty dataset (``H5S_NULL``) shape is represented as () in NumPy/Blosc2
+        shape = h5_dset.shape if h5_dset.shape is not None else ()
+        b2_array = b2make(shape=shape, dtype=h5_dset.dtype, **(b2_args | kwds))
         b2_vlmeta = b2_array.schunk.vlmeta
         for aname, avalue in b2_attrs.items():
             b2_vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
@@ -345,8 +346,8 @@ class HDF5Proxy(blosc2.Operand):
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
 
-        b2args = b2args_from_h5dset(self.dset)
         try:
+            b2args = b2args_from_h5dset(self.dset)
             self.b2arr = blosc2.empty(
                 shape=self.dset.shape or (),  # empty datasets have no shape
                 dtype=self.dset.dtype,

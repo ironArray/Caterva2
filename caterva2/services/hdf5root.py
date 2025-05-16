@@ -18,7 +18,8 @@ try:
     from typing import Self
 except ImportError:  # Python < 3.11
     from typing import TypeVar
-    Self = TypeVar('Self', bound='PubRoot')    # noqa: F821
+
+    Self = TypeVar("Self", bound="PubRoot")  # noqa: F821
 
 # Requirements
 import h5py
@@ -47,7 +48,7 @@ class HDF5Root:
         return lambda: cls(path)
 
     def __init__(self, path: pathlib.Path):
-        self.h5file = h5py.File(path, mode='r')
+        self.h5file = h5py.File(path, mode="r")
 
     # There must be one cached function per instance,
     # so that it can be reset individually.
@@ -60,6 +61,7 @@ class HDF5Root:
         @functools.cache  # TODO: limit size?
         def _getb2args(dset: h5py.Dataset) -> Mapping[str, object]:
             return hdf5.b2args_from_h5dset(dset)
+
         return _getb2args
 
     @functools.cached_property
@@ -67,16 +69,16 @@ class HDF5Root:
         @functools.cache  # TODO: limit size?
         def _getb2attrs(dset: h5py.Dataset) -> Mapping[str, object]:
             return hdf5.b2attrs_from_h5dset(dset)
+
         return _getb2attrs
 
     @functools.cached_property
     def _b2chunkers_from_h5dset(self):
         @functools.lru_cache(maxsize=_MAX_CACHED_CHUNKERS)  # only hot datasets
-        def _getb2chunkers(dset: h5py.Dataset) -> (
-                Callable[[int], bytes],
-                Callable[[], Iterator[bytes]]):
+        def _getb2chunkers(dset: h5py.Dataset) -> (Callable[[int], bytes], Callable[[], Iterator[bytes]]):
             b2_args = self._b2args_from_h5dset(dset)
             return hdf5.b2chunkers_from_h5dset(dset, b2_args)
+
         return _getb2chunkers
 
     def _clear_caches(self):
@@ -95,13 +97,13 @@ class HDF5Root:
                     warn("skipping incompatible HDF5 dataset: %r", name)
                 return
             # TODO: handle array / frame / (compressed) file distinctly
-            dsets.append(self.Path(f'{name}.b2nd'))
+            dsets.append(self.Path(f"{name}.b2nd"))
 
         self.h5file.visititems(visitor)
         yield from iter(dsets)
 
     def _path_to_dset(self, relpath: Path) -> h5py.Dataset:
-        name = re.sub(r'\.b2(nd|frame)?$', '', str(relpath))
+        name = re.sub(r"\.b2(nd|frame)?$", "", str(relpath))
         node = self.h5file.get(name)
         if node is None or not _is_dataset(node):
             raise pubroot.NoSuchDatasetError(relpath)
@@ -119,7 +121,7 @@ class HDF5Root:
         # All datasets have the modification time of their file.
         h5path = pathlib.Path(self.h5file.filename)
         stat = h5path.stat()
-        return f'{stat.st_mtime}:{dset.nbytes}'
+        return f"{stat.st_mtime}:{dset.nbytes}"
 
     def get_dset_meta(self, relpath: Path) -> pydantic.BaseModel:
         dset = self._path_to_dset(relpath)
@@ -138,8 +140,7 @@ class HDF5Root:
 
     def open_dset_raw(self, relpath: Path) -> io.RawIOBase:
         # TODO: handle array / frame / (compressed) file distinctly
-        raise NotImplementedError(
-            "cannot read raw contents of array dataset")
+        raise NotImplementedError("cannot read raw contents of array dataset")
 
     async def awatch_dsets(self) -> AsyncIterator[Collection[Path]]:
         h5path = self.h5file.filename
@@ -147,7 +148,7 @@ class HDF5Root:
         async for _ in watchfiles.awatch(h5path):
             self._clear_caches()
             self.h5file.close()
-            self.h5file = h5py.File(h5path, mode='r')
+            self.h5file = h5py.File(h5path, mode="r")
             # All datasets are supposed to change along with their file.
             cur_dsets = set(self.walk_dsets())
             # Old datasets are included in case any of them disappeared.
@@ -160,7 +161,7 @@ pubroot.register_root_class(HDF5Root)
 
 def _is_dataset(node: h5py.Group | h5py.Dataset) -> bool:
     return isinstance(node, h5py.Dataset) and hdf5.h5dset_is_compatible(node)
-
+
 
 def create_example_root(path):
     """Create an example HDF5 file to be used as a root."""
@@ -168,62 +169,65 @@ def create_example_root(path):
     import numpy
     from hdf5plugin import Blosc2 as B2Comp
 
-    with h5py.File(path, 'x') as h5f:
-        h5f.create_dataset('/scalar', data=123.456)
-        h5f.create_dataset('/string', data=numpy.bytes_("Hello world!"))
+    with h5py.File(path, "x") as h5f:
+        h5f.create_dataset("/scalar", data=123.456)
+        h5f.create_dataset("/string", data=numpy.bytes_("Hello world!"))
 
-        a = numpy.arange(100, dtype='uint8')
-        h5f.create_dataset('/arrays/1d-raw', data=a)
+        a = numpy.arange(100, dtype="uint8")
+        h5f.create_dataset("/arrays/1d-raw", data=a)
 
-        a = numpy.array([b'foobar'] * 100)
-        h5f.create_dataset('/arrays/1ds-blosc2', data=a, chunks=(50,),
-                           **B2Comp())
+        a = numpy.array([b"foobar"] * 100)
+        h5f.create_dataset("/arrays/1ds-blosc2", data=a, chunks=(50,), **B2Comp())
 
-        a = numpy.arange(100, dtype='complex128').reshape(10, 10)
-        a = a + a*1j
-        h5f.create_dataset('/arrays/2d-nochunks', data=a, chunks=None)
+        a = numpy.arange(100, dtype="complex128").reshape(10, 10)
+        a = a + a * 1j
+        h5f.create_dataset("/arrays/2d-nochunks", data=a, chunks=None)
 
-        a = numpy.arange(100, dtype='complex128').reshape(10, 10)
-        a = a + a*1j
-        h5f.create_dataset('/arrays/2d-gzip', data=a, chunks=(4, 4),
-                           compression='gzip')
+        a = numpy.arange(100, dtype="complex128").reshape(10, 10)
+        a = a + a * 1j
+        h5f.create_dataset("/arrays/2d-gzip", data=a, chunks=(4, 4), compression="gzip")
 
-        a = numpy.arange(1000, dtype='uint8').reshape(10, 10, 10)
-        h5f.create_dataset('/arrays/3d-blosc2', data=a, chunks=(4, 10, 10),
-                           **B2Comp(cname='lz4', clevel=7,
-                                    filters=B2Comp.BITSHUFFLE))
+        a = numpy.arange(1000, dtype="uint8").reshape(10, 10, 10)
+        h5f.create_dataset(
+            "/arrays/3d-blosc2",
+            data=a,
+            chunks=(4, 10, 10),
+            **B2Comp(cname="lz4", clevel=7, filters=B2Comp.BITSHUFFLE),
+        )
 
-        ds = h5f.create_dataset('/attrs', data=0)
-        a = numpy.arange(4, dtype='uint8').reshape(2, 2)
-        for k, v in {'Int': 42, 'IntT': numpy.int16(42),
-                         'Bin': b"foo", 'BinT': numpy.bytes_(b"foo"),
-                         'Str': "bar", # StrT=numpy.str_("bar"),
-                         'Arr': a.tolist(), 'ArrT': a,
-                         'NilBin': h5py.Empty('|S4'),
-                         # NilStr=h5py.Empty('|U4'),
-                         'NilInt': h5py.Empty('uint8')}.items():
+        ds = h5f.create_dataset("/attrs", data=0)
+        a = numpy.arange(4, dtype="uint8").reshape(2, 2)
+        for k, v in {
+            "Int": 42,
+            "IntT": numpy.int16(42),
+            "Bin": b"foo",
+            "BinT": numpy.bytes_(b"foo"),
+            "Str": "bar",  # StrT=numpy.str_("bar"),
+            "Arr": a.tolist(),
+            "ArrT": a,
+            "NilBin": h5py.Empty("|S4"),
+            # NilStr=h5py.Empty('|U4'),
+            "NilInt": h5py.Empty("uint8"),
+        }.items():
             ds.attrs[k] = v
 
-        h5f.create_dataset('/unsupported/empty', data=h5py.Empty('float64'))
-        h5f.create_dataset('/unsupported/vlstring', data="Hello world!")
+        h5f.create_dataset("/arrays/empty", data=h5py.Empty("float64"))
+        h5f.create_dataset("/arrays/vlstring", data="Hello world!")
 
-        a = numpy.arange(1, dtype='uint8').reshape((1,) * 23)
-        h5f.create_dataset('/unsupported/too-many-dimensions', data=a)
+        h5f.create_dataset("/arrays/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
 
-        h5f.create_dataset('/unsupported/array-dtype',
-                           dtype=numpy.dtype(('float64', (4,))),
-                           shape=(10,))
+        h5f.create_dataset("/arrays/compound-dtype", dtype=numpy.dtype("uint8,float64"), shape=(10,))
 
-        h5f.create_dataset('/unsupported/compound-dtype',
-                           dtype=numpy.dtype('uint8,float64'),
-                           shape=(10,))
+        a = numpy.arange(1, dtype="uint8").reshape((1,) * 23)
+        h5f.create_dataset("/unsupported/too-many-dimensions", data=a)
 
-        h5f['/unsupported/soft-link'] = h5py.SoftLink('/arrays/1d-raw')
+        h5f["/unsupported/soft-link"] = h5py.SoftLink("/arrays/1d-raw")
 
 
 def main():
     import os
     import sys
+
     try:
         _, h5fpath = sys.argv
     except ValueError:
@@ -234,5 +238,5 @@ def main():
     print(f"Created example HDF5 root: {h5fpath!r}", file=sys.stderr)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

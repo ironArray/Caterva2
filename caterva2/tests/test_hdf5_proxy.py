@@ -46,7 +46,6 @@ def test_unfold(fnames, remove, root, examples_dir, tmp_path, auth_client):
     # First, choose an HDF5 dataset
     localpath, remotepath = fnames
     remote_root = auth_client.get(root)
-    # myroot = auth_client.get(TEST_CATERVA2_ROOT)
     with chdir_ctxt(tmp_path):
         if localpath is None:
             # Create a temporary HDF5 file

@@ -2,7 +2,7 @@ import ast
 import pathlib
 
 # Requirements
-import numpy
+import numpy as np
 import PIL.Image
 from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
@@ -54,9 +54,9 @@ def guess(path: pathlib.Path, meta) -> bool:
 
     # Sometimes dtype is a tuple (e.g. ('<f8', (10,))), and this seems a safe way to handle it
     try:
-        dtype = numpy.dtype(dtype)
+        dtype = np.dtype(dtype)
     except (ValueError, TypeError):
-        dtype = numpy.dtype(ast.literal_eval(dtype))
+        dtype = np.dtype(ast.literal_eval(dtype))
     if dtype.kind != "u":
         return False
 

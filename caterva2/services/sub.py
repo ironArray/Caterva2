@@ -6,7 +6,7 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-
+import ast
 import asyncio
 import collections.abc
 import contextlib
@@ -83,11 +83,12 @@ class PubSourceDataset:
                 self._chunks = metadata.chunks
                 self._blocks = metadata.blocks
                 dtype = metadata.dtype
-                if metadata.dtype.startswith("["):
-                    # TODO: eval is dangerous, but we mostly trust the metadata
-                    # This is a list, so we need to convert it to a string
-                    dtype = eval(dtype)
-                self._dtype = np.dtype(dtype)
+                # Sometimes dtype is a tuple (e.g. ('<f8', (10,))), and this seems a safe way to handle it
+                try:
+                    dtype = np.dtype(dtype)
+                except (ValueError, TypeError):
+                    dtype = np.dtype(ast.literal_eval(dtype))
+                self._dtype = dtype
                 self._cparams = dict(metadata.schunk.cparams)
             else:
                 if suffix == ".b2frame":
