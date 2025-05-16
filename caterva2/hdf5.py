@@ -406,6 +406,10 @@ class HDF5Proxy(blosc2.Operand):
         """
         return self.dset[item]
 
+    def to_cframe(self) -> bytes:
+        # Convert the HDF5 dataset to a Blosc2 CFrame
+        return blosc2.asarray(self.dset, cparams=self.b2arr.cparams).to_cframe()
+
     def __del__(self):
         # Close the HDF5 file when the proxy is deleted
         if hasattr(self, "h5file"):
