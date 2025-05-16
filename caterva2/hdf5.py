@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator, Mapping
 # Requirements
 import blosc2
 import h5py
+import hdf5plugin  # important for external HDF5 filters
 import msgpack
 import numpy
 import numpy as np
