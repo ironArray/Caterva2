@@ -345,14 +345,14 @@ class HDF5Proxy(blosc2.Operand):
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
 
-        cparams = blosc2.CParams()
+        b2args = b2args_from_h5dset(self.dset)
         try:
             self.b2arr = blosc2.empty(
                 shape=self.dset.shape or (),  # empty datasets have no shape
                 dtype=self.dset.dtype,
-                cparams=cparams,
                 urlpath=urlpath,
                 mode="w",
+                **b2args,
             )
         except Exception as e:
             print(f"Error creating Blosc2 array from {self.fname}/{self.dsetname}: {e}")
