@@ -215,12 +215,12 @@ def create_example_root(path):
 
         h5f.create_dataset("/arrays/empty", data=h5py.Empty("float64"))
 
-        h5f.create_dataset("/arrays/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
-
         h5f.create_dataset("/arrays/compound-dtype", dtype=numpy.dtype("uint8,float64"), shape=(10,))
 
         a = numpy.arange(1, dtype="uint8").reshape((1,) * 23)
         h5f.create_dataset("/unsupported/too-many-dimensions", data=a)
+
+        h5f.create_dataset("/unsupported/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
 
         # TODO: This could be supported by mapping the vlstring dataset to an NDArray with shape=() and dtype="u1"
         h5f.create_dataset("/unsupported/vlstring", data="Hello world!")

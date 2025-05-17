@@ -395,7 +395,7 @@ class HDF5Proxy(blosc2.Operand):
     # def chunks(self) -> tuple[int, ...]:
     #     return self.dset.chunks
 
-    def __getitem__(self, item: slice | list[slice]) -> np.ndarray:
+    def __getitem__(self, item: slice | list[slice] | tuple | None) -> np.ndarray:
         """
         Get a slice as a numpy.ndarray from the HDF5 dataset.
 
@@ -408,11 +408,17 @@ class HDF5Proxy(blosc2.Operand):
         out: numpy.ndarray
             An array with the data slice.
         """
-        return self.dset[item]
+        result = self.dset[item]
+        # If the result is Empty, return it as a numpy array
+        if isinstance(result, h5py.Empty):
+            result = np.empty(self.shape, dtype=self.dtype)
+        return result
 
-    def to_cframe(self) -> bytes:
+    def to_cframe(self, item=()) -> bytes:
         # Convert the HDF5 dataset to a Blosc2 CFrame
-        return blosc2.asarray(self.dset, cparams=self.b2arr.cparams).to_cframe()
+        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5 and item == ()
+        data = self[item]
+        return blosc2.asarray(data, cparams=self.b2arr.cparams).to_cframe()
 
     def __del__(self):
         # Close the HDF5 file when the proxy is deleted

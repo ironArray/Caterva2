@@ -773,9 +773,9 @@ async def fetch_data(
     if isinstance(container, blosc2.Proxy):
         container = container._cache
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr):
+    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy):
         array = container
-        schunk = getattr(array, "schunk", None)
+        schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
     else:
@@ -798,13 +798,14 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and not isinstance(array, blosc2.LazyExpr):
+    if whole and not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
-    if isinstance(array, blosc2.LazyExpr):
-        # LazyExpr
+    if isinstance(array, hdf5.HDF5Proxy):
+        data = array.to_cframe(slice_ or ())
+    elif isinstance(array, blosc2.LazyExpr):
         data = array[slice_ or ()]
         data = blosc2.asarray(data)
         data = data.to_cframe()
