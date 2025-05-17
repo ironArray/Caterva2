@@ -172,11 +172,14 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
             b2f = blosc2.open(local_file)
             # print(b2f.info)
             file_noext = file_.replace(".b2nd", "")
-            assert b2f.dtype == h5f[file_noext].dtype
-            assert b2f.shape == (h5f[file_noext].shape or ())
+            h5ds = h5f[file_noext]
+            assert b2f.dtype == h5ds.dtype
+            assert b2f.shape == (h5ds.shape or ())
             if b2f.shape == ():
                 continue
-            if b2f.dtype.kind in ["f", "i", "u"]:
-                np.testing.assert_allclose(b2f[()], h5f[file_noext][()])
+            if h5ds.chunks:
+                assert b2f.chunks == h5ds.chunks
+            if np.issubdtype(b2f.dtype, np.number):
+                np.testing.assert_allclose(b2f[()], h5ds[()])
             else:
-                assert b2f[()].tobytes() == h5f[file_noext][()].tobytes()
+                assert b2f[()].tobytes() == h5ds[()].tobytes()

@@ -383,6 +383,14 @@ class HDF5Proxy(blosc2.Operand):
         return self.b2arr.shape
 
     @property
+    def chunks(self):
+        return self.b2arr.chunks
+
+    @property
+    def blocks(self):
+        return self.b2arr.blocks
+
+    @property
     def dtype(self) -> numpy.dtype:
         return self.b2arr.dtype
 
@@ -418,7 +426,9 @@ class HDF5Proxy(blosc2.Operand):
         # Convert the HDF5 dataset to a Blosc2 CFrame
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5 and item == ()
         data = self[item]
-        return blosc2.asarray(data, cparams=self.b2arr.cparams).to_cframe()
+        return blosc2.asarray(
+            data, cparams=self.b2arr.cparams, chunks=self.chunks, blocks=self.blocks
+        ).to_cframe()
 
     def __del__(self):
         # Close the HDF5 file when the proxy is deleted
