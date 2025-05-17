@@ -170,9 +170,13 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
             assert local_file.is_file()
             # Check that the file has the same contents as the original file
             b2f = blosc2.open(local_file)
-            # print(b2f.info)
             file_noext = file_.replace(".b2nd", "")
             h5ds = h5f[file_noext]
+            if hasattr(h5ds.dtype, "shape") and h5ds.shape:
+                # Shape in ndim dtypes is handled differently in HDF5Proxy and h5py
+                # but the values for the array are essentially the same
+                assert b2f[()].tobytes() == h5ds[()].tobytes()
+                continue
             assert b2f.dtype == h5ds.dtype
             assert b2f.shape == (h5ds.shape or ())
             if b2f.shape == ():
@@ -185,7 +189,8 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
                 assert b2f[()].tobytes() == h5ds[()].tobytes()
 
 
-def test_unfold_fetch(examples_dir, tmp_path, auth_client):
+@pytest.mark.parametrize("fetch_or_slice", [True, False])
+def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
@@ -205,9 +210,18 @@ def test_unfold_fetch(examples_dir, tmp_path, auth_client):
             remote_file = remote_dir / file_
             assert remote_file in remote_root
             # Fetch items of the file
-            remote_path = root / remote_file
             item = slice(2, 4)
-            slice_ = auth_client.fetch(remote_path, item)
+            b2ds = remote_root[remote_file]
+            if hasattr(h5ds.dtype, "shape") and h5ds.shape:
+                # Shape in ndim dtypes is handled differently in HDF5Proxy and h5py
+                # but the values for the array are essentially the same
+                assert b2ds[item].tobytes() == h5ds[item].tobytes()
+                continue
+            if fetch_or_slice:
+                slice_ = b2ds[item]
+            else:
+                # Fetch a slice of the file
+                slice_ = b2ds.slice(item)
             assert slice_.dtype == h5ds.dtype
             assert slice_.shape == h5ds[item].shape
             if np.issubdtype(slice_.dtype, np.number):

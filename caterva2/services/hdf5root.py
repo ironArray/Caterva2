@@ -197,6 +197,8 @@ def create_example_root(path):
             **B2Comp(cname="lz4", clevel=7, filters=B2Comp.BITSHUFFLE),
         )
 
+        h5f.create_dataset("/arrays/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
+
         ds = h5f.create_dataset("/attrs", data=0)
         a = numpy.arange(4, dtype="uint8").reshape(2, 2)
         for k, v in {
@@ -219,8 +221,6 @@ def create_example_root(path):
 
         a = numpy.arange(1, dtype="uint8").reshape((1,) * 23)
         h5f.create_dataset("/unsupported/too-many-dimensions", data=a)
-
-        h5f.create_dataset("/unsupported/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
 
         # TODO: This could be supported by mapping the vlstring dataset to an NDArray with shape=() and dtype="u1"
         h5f.create_dataset("/unsupported/vlstring", data="Hello world!")

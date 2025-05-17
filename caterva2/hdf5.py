@@ -426,7 +426,7 @@ class HDF5Proxy(blosc2.Operand):
         # Convert the HDF5 dataset to a Blosc2 CFrame
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5 and item == ()
         data = self[item]
-        if not item:
+        if not item and not hasattr(self.dset.dtype, "shape"):
             # For the whole thing, lets specify chunks and blocks
             array = blosc2.asarray(data, cparams=self.b2arr.cparams, chunks=self.chunks, blocks=self.blocks)
         else:
