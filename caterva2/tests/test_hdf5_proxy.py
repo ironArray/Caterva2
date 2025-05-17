@@ -183,3 +183,34 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
                 np.testing.assert_allclose(b2f[()], h5ds[()])
             else:
                 assert b2f[()].tobytes() == h5ds[()].tobytes()
+
+
+def test_unfold_fetch(examples_dir, tmp_path, auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    root = pathlib.Path("@shared")
+    remote_root = auth_client.get(root)
+    with chdir_ctxt(tmp_path):
+        hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
+        h5f = h5py.File(hdf5_path, "r")
+        for file_ in file_list:
+            if "unsupported" in file_:
+                continue
+            file_noext = file_.replace(".b2nd", "")
+            h5ds = h5f[file_noext]
+            if not h5ds.shape:
+                # We cannot fetch an item from a scalar
+                continue
+            remote_file = remote_dir / file_
+            assert remote_file in remote_root
+            # Fetch items of the file
+            remote_path = root / remote_file
+            item = slice(2, 4)
+            slice_ = auth_client.fetch(remote_path, item)
+            assert slice_.dtype == h5ds.dtype
+            assert slice_.shape == h5ds[item].shape
+            if np.issubdtype(slice_.dtype, np.number):
+                np.testing.assert_allclose(slice_, h5ds[item])
+            else:
+                assert slice_.tobytes() == h5ds[item].tobytes()

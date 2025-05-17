@@ -359,7 +359,7 @@ class HDF5Proxy(blosc2.Operand):
                 **b2args,
             )
         except Exception as e:
-            print(f"Error creating Blosc2 array from {self.fname}/{self.dsetname}: {e}")
+            print(f"Unable to create Blosc2 array from {self.fname}/{self.dsetname}: {e}")
             # Remove the attributes and the possible urlpath file and return
             del self.dset
             del self.fname
@@ -426,9 +426,13 @@ class HDF5Proxy(blosc2.Operand):
         # Convert the HDF5 dataset to a Blosc2 CFrame
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5 and item == ()
         data = self[item]
-        return blosc2.asarray(
-            data, cparams=self.b2arr.cparams, chunks=self.chunks, blocks=self.blocks
-        ).to_cframe()
+        if not item:
+            # For the whole thing, lets specify chunks and blocks
+            array = blosc2.asarray(data, cparams=self.b2arr.cparams, chunks=self.chunks, blocks=self.blocks)
+        else:
+            # If item is a slice, we better not specify chunks and blocks
+            array = blosc2.asarray(data, cparams=self.b2arr.cparams)
+        return array.to_cframe()
 
     def __del__(self):
         # Close the HDF5 file when the proxy is deleted
