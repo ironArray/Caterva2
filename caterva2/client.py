@@ -377,12 +377,8 @@ class File:
         >>> ds.slice(slice(0, 10))[:]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        # Convert slices to strings
-        slice_ = api_utils.slice_to_string(key)
         # Fetch and return the data as a Blosc2 object / NumPy array
-        return api_utils.fetch_data(
-            self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
-        )
+        return self.client.get_slice(self.path, key, as_blosc2)
 
     def download(self, localpath=None):
         """
@@ -875,6 +871,43 @@ class Client:
         urlbase, path = _format_paths(self.urlbase, path)
         slice_ = api_utils.slice_to_string(slice_)  # convert to string
         return api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie)
+
+    def get_slice(self, path, key=None, as_blosc2=True):
+        """Get a slice of a File/Dataset.
+
+        Parameters
+        ----------
+        key : int, slice, or sequence of slices
+            The slice to retrieve.  If a single slice is provided, it will be
+            applied to the first dimension.  If a sequence of slices is
+            provided, each slice will be applied to the corresponding
+            dimension.
+        as_blosc2 : bool
+            If True (default), the result will be returned as a Blosc2 object
+            (either a `SChunk` or `NDArray`).  If False, it will be returned
+            as a NumPy array (equivalent to `self[key]`).
+
+        Returns
+        -------
+        NDArray or SChunk or numpy.ndarray
+            A new Blosc2 object containing the requested slice.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client.get_slice('example/ds-2d-fields.b2nd', (slice(0, 2), slice(0, 2))[:]
+        array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
+               [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
+              dtype=[('a', '<f4'), ('b', '<f8')])
+        """
+        urlbase, path = _format_paths(self.urlbase, path)
+        # Convert slices to strings
+        slice_ = api_utils.slice_to_string(key)
+        # Fetch and return the data as a Blosc2 object / NumPy array
+        return api_utils.fetch_data(
+            path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+        )
 
     def get_chunk(self, path, nchunk):
         """
