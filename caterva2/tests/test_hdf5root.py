@@ -49,6 +49,21 @@ def test_string(api_root):
     assert v == b"Hello world!"
 
 
+def test_1d_raw(api_root):
+    ds = api_root["arrays/1d-raw.b2nd"]
+    v = ds[()]
+    assert v.dtype.kind == "u"
+    np.testing.assert_array_equal(v, np.arange(100, dtype="uint8"))
+
+
+@pytest.mark.skip("Softlink not supported in this context yet")
+def test_softlink(api_root):
+    ds = api_root["arrays/soft-link.b2nd"]  # TODO: this fails here
+    v = ds[()]
+    assert v.dtype.kind == "u"
+    np.testing.assert_array_equal(v, np.arange(100, dtype="uint8"))
+
+
 def test_nonchunked(api_root):
     ds = api_root["arrays/2d-nochunks.b2nd"]
     ds_chunks = ds.meta["chunks"]

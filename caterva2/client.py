@@ -3,6 +3,7 @@ import io
 import pathlib
 import sys
 from collections.abc import Sequence
+from pathlib import PurePosixPath
 
 import blosc2
 import numpy as np
@@ -376,12 +377,8 @@ class File:
         >>> ds.slice(slice(0, 10))[:]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        # Convert slices to strings
-        slice_ = api_utils.slice_to_string(key)
         # Fetch and return the data as a Blosc2 object / NumPy array
-        return api_utils.fetch_data(
-            self.path, self.urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
-        )
+        return self.client.get_slice(self.path, key, as_blosc2)
 
     def download(self, localpath=None):
         """
@@ -413,6 +410,26 @@ class File:
             self.path,
             localpath=localpath,
         )
+
+    def unfold(self):
+        """
+        Unfolds the file in a remote directory.
+
+        Returns
+        -------
+        Path
+            The path to the unfolded directory.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> root = client.get('example')
+        >>> file = root['ds-1d.h5']
+        >>> file.unfold()
+        PurePosixPath('example/ds-1d.h5')
+        """
+        return self.client.unfold(self.path)
 
     def move(self, dst):
         """
@@ -855,6 +872,43 @@ class Client:
         slice_ = api_utils.slice_to_string(slice_)  # convert to string
         return api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie)
 
+    def get_slice(self, path, key=None, as_blosc2=True):
+        """Get a slice of a File/Dataset.
+
+        Parameters
+        ----------
+        key : int, slice, or sequence of slices
+            The slice to retrieve.  If a single slice is provided, it will be
+            applied to the first dimension.  If a sequence of slices is
+            provided, each slice will be applied to the corresponding
+            dimension.
+        as_blosc2 : bool
+            If True (default), the result will be returned as a Blosc2 object
+            (either a `SChunk` or `NDArray`).  If False, it will be returned
+            as a NumPy array (equivalent to `self[key]`).
+
+        Returns
+        -------
+        NDArray or SChunk or numpy.ndarray
+            A new Blosc2 object containing the requested slice.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client.get_slice('example/ds-2d-fields.b2nd', (slice(0, 2), slice(0, 2))[:]
+        array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
+               [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
+              dtype=[('a', '<f4'), ('b', '<f8')])
+        """
+        urlbase, path = _format_paths(self.urlbase, path)
+        # Convert slices to strings
+        slice_ = api_utils.slice_to_string(key)
+        # Fetch and return the data as a Blosc2 object / NumPy array
+        return api_utils.fetch_data(
+            path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+        )
+
     def get_chunk(self, path, nchunk):
         """
         Retrieves a specified compressed chunk from a file.
@@ -1017,6 +1071,36 @@ class Client:
         response.raise_for_status()
         return tuple(response.json())
 
+    def unfold(self, remotepath):
+        """
+        Unfolds a dataset in the remote repository.
+
+        The container is always unfolded into a directory with the same name as the
+        container, but without the extension.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Path of the dataset to unfold.
+
+        Returns
+        -------
+        Path
+            The path of the unfolded dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # To unfold a file you need to be a registered user
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> client.unfold('@personal/dir/data.h5')
+        PurePosixPath('@personal/dir/data')
+        """
+        urlbase, path = _format_paths(self.urlbase, remotepath)
+        result = api_utils.post(f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie)
+        return PurePosixPath(result)
+
     def remove(self, path):
         """
         Removes a dataset or the contents of a directory from a remote repository.
@@ -1032,7 +1116,7 @@ class Client:
 
         Returns
         -------
-        str
+        Path
             The path that was removed.
 
         Examples
@@ -1048,7 +1132,8 @@ class Client:
         True
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        return api_utils.post(f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie)
+        result = api_utils.post(f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie)
+        return pathlib.PurePosixPath(result)
 
     def move(self, src, dst):
         """
@@ -1063,7 +1148,7 @@ class Client:
 
         Returns
         -------
-        str
+        Path
             New path of the moved dataset or directory.
 
         Examples
@@ -1102,7 +1187,7 @@ class Client:
 
         Returns
         -------
-        str
+        Path
             New path of the copied dataset or directory.
 
         Examples

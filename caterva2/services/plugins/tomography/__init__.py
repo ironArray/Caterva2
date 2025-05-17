@@ -1,7 +1,8 @@
+import ast
 import pathlib
 
 # Requirements
-import numpy
+import numpy as np
 import PIL.Image
 from fastapi import Depends, FastAPI, Request, responses
 from fastapi.responses import HTMLResponse
@@ -51,11 +52,15 @@ def guess(path: pathlib.Path, meta) -> bool:
     if isinstance(dtype, str) and dtype.startswith("["):
         dtype = eval(dtype)  # TODO Make it safer
 
-    dtype = numpy.dtype(dtype)
-    shape = tuple(meta.shape)
+    # Sometimes dtype is a tuple (e.g. ('<f8', (10,))), and this seems a safe way to handle it
+    try:
+        dtype = np.dtype(dtype)
+    except (ValueError, TypeError):
+        dtype = np.dtype(ast.literal_eval(dtype))
     if dtype.kind != "u":
         return False
 
+    shape = tuple(meta.shape)
     if len(shape) == 3:
         return True  # grayscale
 

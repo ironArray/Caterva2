@@ -8,6 +8,7 @@
 ###############################################################################
 import contextlib
 import pathlib
+import re
 
 import blosc2
 import httpx
@@ -655,8 +656,10 @@ def test_lazyexpr(auth_client):
     lxinfo = auth_client.get_info(lxpath)
     assert lxinfo["shape"] == opinfo["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"]
-    assert lxinfo["expression"] == f"({expression})"
-    assert lxinfo["operands"] == operands
+    tempexp = re.sub(
+        r"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]["o0"], lxinfo["expression"]
+    )  # ds -> o0 automatically
+    assert tempexp == f"({re.sub(r'ds', operands['ds'], expression)})"
 
     # Check result data.
     a = auth_client.fetch(oppt)
@@ -720,10 +723,18 @@ def test_expr_from_expr(auth_client):
     lxinfo2 = auth_client.get_info(lxpath2)
     assert lxinfo["shape"] == opinfo["shape"] == lxinfo2["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"] == lxinfo2["dtype"]
-    assert lxinfo["expression"] == f"({expression})"
-    assert lxinfo2["expression"] == f"({expression2})"
-    assert lxinfo["operands"] == operands
-    assert lxinfo2["operands"] == operands2
+
+    tempexp = re.sub(
+        r"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]["o0"], lxinfo["expression"]
+    )  # ds -> o0 automatically
+    assert tempexp == f"({re.sub(r'ds', operands['ds'], expression)})"
+
+    tempexp = lxinfo2["expression"]
+    for i, (_op, f) in enumerate(lxinfo2["operands"].items()):
+        tempexp = re.sub(rf"(?<=\s)o{i}|(?<=\()o{i}", f, tempexp)
+    step1 = f"({re.sub(r'ds', f'({expression})', expression2)})"
+    step2 = f"{re.sub(r'ds', operands['ds'], step1)}"
+    assert tempexp == step2
 
     # Check result data.
     a = auth_client.fetch(oppt)
@@ -737,20 +748,20 @@ def test_expr_no_operand(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
-    expression = "linspace(0, 10)"
+    expression = "linspace(0, 10, num=50)"
     lxname = "my_expr"
 
     auth_client.subscribe(TEST_CATERVA2_ROOT)
     lxpath = auth_client.lazyexpr(lxname, expression)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
     c = auth_client.get(lxpath)
-    a = blosc2.linspace(0, 10)
+    a = blosc2.linspace(0, 10, num=50)
     np.testing.assert_array_equal(a[:], c[:])
 
     # Check error when operand should be present but isn't
     opnm = "ds"
     oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
-    expression = "ds + linspace(0, 10)"
+    expression = "ds + linspace(0, 10, num=50)"
     lxname = "my_expr"
 
     auth_client.subscribe(TEST_CATERVA2_ROOT)
@@ -762,7 +773,7 @@ def test_expr_force_compute(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
-    expression = "linspace(0, 10)"
+    expression = "linspace(0, 10, num=50)"
     lxname = "my_expr"
 
     auth_client.subscribe(TEST_CATERVA2_ROOT)
@@ -819,6 +830,7 @@ def test_adduser_maxexceeded(auth_client, configuration):
     maxusers = 5
     # Add maxusers users; we already have one user, so the next loop should fail
     # when reaching the creation of last user
+    n = 0
     for n in range(maxusers):
         # This should work fine for n < maxusers
         username = f"test{n}@user.com"

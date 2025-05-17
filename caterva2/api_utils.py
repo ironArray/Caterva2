@@ -193,6 +193,15 @@ def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
     return pathlib.PurePosixPath(response.json())
 
 
+def unfold_file(remotepath, urlbase, auth_cookie=None):
+    client, url = get_client_and_url(None, f"{urlbase}/api/unfold/{remotepath}")
+
+    headers = {"Cookie": auth_cookie} if auth_cookie else None
+    response = client.post(url, headers=headers)
+    response.raise_for_status()
+    return pathlib.PurePosixPath(response.json())
+
+
 #
 # HTTP client helpers
 #
