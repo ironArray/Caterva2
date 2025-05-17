@@ -176,6 +176,8 @@ def create_example_root(path):
         a = numpy.arange(100, dtype="uint8")
         h5f.create_dataset("/arrays/1d-raw", data=a)
 
+        h5f["/arrays/soft-link"] = h5py.SoftLink("/arrays/1d-raw")
+
         a = numpy.array([b"foobar"] * 100)
         h5f.create_dataset("/arrays/1ds-blosc2", data=a, chunks=(50,), **B2Comp())
 
@@ -222,8 +224,6 @@ def create_example_root(path):
 
         # TODO: This could be supported by mapping the vlstring dataset to an NDArray with shape=() and dtype="u1"
         h5f.create_dataset("/unsupported/vlstring", data="Hello world!")
-
-        h5f["/unsupported/soft-link"] = h5py.SoftLink("/arrays/1d-raw")
 
 
 def main():

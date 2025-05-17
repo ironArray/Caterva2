@@ -28,6 +28,19 @@ except AttributeError:  # Python < 3.11
         os.chdir(cwd)
 
 
+def get_all_datasets(f, prefix=""):
+    """Recursively get all datasets in an HDF5 file."""
+    datasets = []
+    for name, item in f.items():
+        path = f"{prefix}/{name}".lstrip("/")
+        if isinstance(item, h5py.Dataset):
+            datasets.append(path)
+        elif isinstance(item, h5py.Group):
+            # Recursively get datasets in subgroups
+            datasets.extend(get_all_datasets(item, path))
+    return datasets
+
+
 @pytest.mark.parametrize(
     "fnames",
     [
@@ -68,8 +81,10 @@ def test_unfold(fnames, remove, root, examples_dir, tmp_path, auth_client):
         # Get the list of datasets in HDF5 file using h5py
         with h5py.File(path, "r") as f:
             # Get the list of *datasets* in the HDF5 file
-            file_list = [name + ".b2nd" for name in f if isinstance(f[name], h5py.Dataset)]
+            file_list = [name + ".b2nd" for name in get_all_datasets(f)]
         for file_ in file_list:
+            if "unsupported" in file_:
+                continue
             remote_file = remote_dir / file_
             assert remote_file in remote_root
             # Check removing the file
