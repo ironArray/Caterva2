@@ -10,17 +10,11 @@ import os
 from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
-# We cannot just use `hdf5plugin.auto` because it fails on things like:
-# a = numpy.array([b"foobar"] * 100)
-# h5f.create_dataset("/arrays/1ds-blosc2", data=a, chunks=(50,), **B2Comp())
-# See below for details.
-# import b2h5py.auto  # noqa: F401A
-import b2h5py
+import b2h5py.auto  # noqa: F401A
 import blosc2
 import h5py
 
 # For dynamic import of external HDF5 filters in hdf5plugin module
-import hdf5plugin
 import msgpack
 import numpy
 import numpy as np
@@ -326,12 +320,10 @@ class HDF5Proxy(blosc2.Operand):
             self.fname = fname
             self.h5file = h5py.File(self.fname, "r")
             self.dset = self.h5file[self.dsetname]
-            self.b2dset = b2h5py.B2Dataset(self.dset)
             self.b2arr = b2arr
             return
 
         self.dset = h5file[dsetname]
-        self.b2dset = b2h5py.B2Dataset(self.dset)
         if not hasattr(self.dset, "shape") or not hasattr(self.dset, "dtype"):
             # If the source is not a proper HDF5 Dataset, return without doing anything
             # This is useful for HDF5 groups or other objects
@@ -424,15 +416,7 @@ class HDF5Proxy(blosc2.Operand):
         out: numpy.ndarray
             An array with the data slice.
         """
-        # Workaround for a bug (possibly in hdf5filter) that prevents a dataset like:
-        # a = numpy.array([b"foobar"] * 100)
-        # h5f.create_dataset("/arrays/1ds-blosc2", data=a, chunks=(50,), **B2Comp())
-        # (<HDF5 dataset "1ds-blosc2": shape (100,), type "|S6">)
-        # from being read correctly.
-        try:
-            result = self.b2dset[item]
-        except:
-            result = self.dset[item]
+        result = self.dset[item]
         # If the result is Empty, return it as a numpy array
         if isinstance(result, h5py.Empty):
             result = np.empty(self.shape, dtype=self.dtype)
