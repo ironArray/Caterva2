@@ -416,11 +416,52 @@ class HDF5Proxy(blosc2.Operand):
         out: numpy.ndarray
             An array with the data slice.
         """
+        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
         result = self.dset[item]
         # If the result is Empty, return it as a numpy array
         if isinstance(result, h5py.Empty):
             result = np.empty(self.shape, dtype=self.dtype)
         return result
+
+    def indices(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
+        """
+        Get the indices of the HDF5 dataset.
+
+        Parameters
+        ----------
+        order: str | list[str] | None
+            The order of the indices. If None, use the default order.
+        kwargs: Any
+            Additional arguments to pass to the Blosc2 array.
+
+        Returns
+        -------
+        out: NDArray
+            An array with the indices.
+        """
+        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
+        nda = blosc2.asarray(self.dset[:], cparams=self.b2arr.cparams, **kwargs)
+        return nda.indices(order=order, **kwargs)
+
+    def sort(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
+        """
+        Sort the HDF5 dataset.
+
+        Parameters
+        ----------
+        order: str | list[str] | None
+            The order of the indices. If None, use the default order.
+        kwargs: Any
+            Additional arguments to pass to the Blosc2 array.
+
+        Returns
+        -------
+        out: NDArray
+            An array with the sorted data.
+        """
+        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
+        nda = blosc2.asarray(self.dset[:], cparams=self.b2arr.cparams, **kwargs)
+        return nda.sort(order=order, **kwargs)
 
     def to_cframe(self, item=()) -> bytes:
         # Convert the HDF5 dataset to a Blosc2 CFrame
