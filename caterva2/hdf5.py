@@ -442,8 +442,27 @@ class HDF5Proxy(blosc2.Operand):
         result = self.dset[item]
         # If the result is Empty, return it as a numpy array
         if isinstance(result, h5py.Empty):
-            result = np.zeros(self.shape, dtype=self.dtype)
+            result = np.zeros((), dtype=self.dtype)
         return result
+
+    def slice(self, item: slice | list[slice] | tuple | None) -> blosc2.NDArray:
+        """
+        Get a slice as a Blosc2 array from the HDF5 dataset.
+
+        Parameters
+        ----------
+        item
+
+        Returns
+        -------
+        out: NDArray
+            An array with the data slice.
+        """
+        result = self.dset[item]
+        # If the result is Empty, return it an empty array
+        if isinstance(result, h5py.Empty):
+            result = blosc2.empty((), dtype=self.dtype)
+        return blosc2.asarray(result, cparams=self.b2arr.cparams)
 
     def indices(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
         """
