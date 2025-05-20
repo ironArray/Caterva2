@@ -304,7 +304,7 @@ class HDF5Proxy(blosc2.Operand):
     """
 
     def __init__(self, b2arr, h5file=None, dsetname=None):
-        attrs_dsetname = "!_attrs_"
+        attrs_dsetname = "!_attrs_"  # the Blosc2 dataset name for the Group attributes in HDF5
         if b2arr is not None:
             # The file has been opened already, so we just need to set the filename and dataset name
             self.dsetname = b2arr.vlmeta["_dsetname"]
@@ -322,23 +322,25 @@ class HDF5Proxy(blosc2.Operand):
                 raise ValueError(f"File {fname} does not exist with .h5 or .hdf5 extension")
             # Convert to absolute path, and add the extension
             self.fname = fname
-            self.h5file = h5py.File(self.fname, "r")
+            # print("Opening HDF5 file", self.fname)
+            h5file = h5py.File(self.fname, "r")
             if attrs_dsetname in self.dsetname:
                 dsetname = self.dsetname[:self.dsetname.index(attrs_dsetname)]
             else:
                 dsetname = self.dsetname
-            self.dset = self.h5file[dsetname]
+            # print("h5file, dsetname", h5file, dsetname)
+            self.dset = h5file[dsetname] if dsetname else h5file
             self.b2arr = b2arr
             return
 
         # print("Creating HDF5Proxy from", h5file, dsetname)
-        self.dset = h5file[dsetname]
+        self.dset = h5file[dsetname] if dsetname else h5file
         self.fname = h5file.filename
         if not hasattr(self.dset, "shape") or not hasattr(self.dset, "dtype"):
             # This is probably a Group
             shape = ()
             dtype = numpy.dtype("u1")
-            b2dsetname = dsetname + "/" + attrs_dsetname
+            b2dsetname = (dsetname + "/" + attrs_dsetname) if dsetname else attrs_dsetname
         else:
             shape = self.dset.shape or ()   # empty datasets have no shape
             dtype = self.dset.dtype
@@ -389,6 +391,7 @@ class HDF5Proxy(blosc2.Operand):
         b2vlmeta["_dsetname"] = self.dsetname
         # Use the dset attrs to populate the Blosc2 array's vlmeta
         b2attrs = b2attrs_from_h5dset(self.dset)
+        # print("b2attrs", b2attrs)
         # Update the Blosc2 array's vlmeta with the HDF5 dataset's attributes
         for aname, avalue in b2attrs.items():
             b2vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
@@ -431,15 +434,15 @@ class HDF5Proxy(blosc2.Operand):
         out: numpy.ndarray
             An array with the data slice.
         """
-        if isinstance(self.dset, h5py.Group):
-            # If the dataset is a group, just return an empty array
-            # return np.empty(self.shape, dtype=self.dtype)
-            return self.b2arr[item]
+        if isinstance(self.dset, h5py.Group | h5py.File):
+            # If the dataset is a group, return an empty array
+            return np.zeros(self.shape, dtype=self.dtype)
+            # return self.b2arr[item]
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
         result = self.dset[item]
         # If the result is Empty, return it as a numpy array
         if isinstance(result, h5py.Empty):
-            result = np.empty(self.shape, dtype=self.dtype)
+            result = np.zeros(self.shape, dtype=self.dtype)
         return result
 
     def indices(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
@@ -544,8 +547,7 @@ def create_hdf5_proxies(
 
     # Recursive function to visit all groups and datasets
     def visit_group(group):
-        # TODO: see how to handle the root group
-        # yield HDF5Proxy(None, h5file, "")
+        yield HDF5Proxy(None, h5file, "")
         for name, obj in group.items():
             full_path = f"{group.name}/{name}".lstrip("/")
 
