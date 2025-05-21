@@ -2108,7 +2108,32 @@ class AddNotebookCmd:
         return htmx_redirect(hx_current_url, url)
 
 
-commands_list = [AddUserCmd, DelUserCmd, ListUsersCmd, CopyCmd, MoveCmd, RemoveCmd, AddNotebookCmd]
+class UnfoldCmd:
+    """Unfold archive file (e.g. HDF5)."""
+
+    names = ("unfold",)
+    expected = "unfold <path>"
+    nargs = 2
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        path = pathlib.Path(argv[1])
+        _ = await unfold_file(path, user)
+        # Redirect to display the achive file (the unfolded directory will be next to it)
+        url = make_url(request, "html_home", path=path)
+        return htmx_redirect(hx_current_url, url)
+
+
+commands_list = [
+    AddUserCmd,
+    DelUserCmd,
+    ListUsersCmd,
+    CopyCmd,
+    MoveCmd,
+    RemoveCmd,
+    AddNotebookCmd,
+    UnfoldCmd,
+]
 
 commands = {}
 for cmd in commands_list:
