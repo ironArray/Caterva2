@@ -46,7 +46,7 @@ from fastapi.templating import Jinja2Templates
 # Project
 from caterva2 import api_utils, hdf5, models, utils
 from caterva2.services import settings, srv_utils
-from caterva2.services.subscriber import db, schemas, users
+from caterva2.services.subscriber import db, schemas, users, ncores
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -302,9 +302,11 @@ def open_b2(abspath, path):
             return container
         # Check if this is a file of a special type
         elif "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
-            return hdf5.HDF5Proxy(container)
-        else:
-            return container
+            container = hdf5.HDF5Proxy(container)
+        # Set the number of threads for compression and decompression
+        container.cparams.nthreads = ncores
+        container.dparams.nthreads = ncores
+        return container
 
     # Return Proxy
     dataset = PubDataset(abspath, path)

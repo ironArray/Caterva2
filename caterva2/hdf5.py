@@ -18,6 +18,8 @@ import h5py
 import msgpack
 import numpy
 import numpy as np
+from caterva2.services.subscriber import ncores
+
 
 """The registered identifier for Blosc2 in HDF5 filters."""
 BLOSC2_HDF5_FID = 32026
@@ -345,7 +347,6 @@ class HDF5Proxy(blosc2.Operand):
             shape = self.dset.shape or ()   # empty datasets have no shape
             dtype = self.dset.dtype
             b2dsetname = dsetname
-        # print("setting dsetname to", b2dsetname)
         self.dsetname = b2dsetname
 
         # Store the Blosc2 array below a fake HDF5 hierarchy
@@ -411,6 +412,14 @@ class HDF5Proxy(blosc2.Operand):
     @property
     def dtype(self) -> numpy.dtype:
         return self.b2arr.dtype
+
+    @property
+    def cparams(self):
+        return self.b2arr.cparams
+
+    @property
+    def dparams(self):
+        return self.b2arr.dparams
 
     @property
     def fields(self) -> Mapping[str, numpy.dtype]:
