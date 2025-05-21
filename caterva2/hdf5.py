@@ -18,8 +18,6 @@ import h5py
 import msgpack
 import numpy
 import numpy as np
-from caterva2.services.subscriber import ncores
-
 
 """The registered identifier for Blosc2 in HDF5 filters."""
 BLOSC2_HDF5_FID = 32026
@@ -327,7 +325,7 @@ class HDF5Proxy(blosc2.Operand):
             # print("Opening HDF5 file", self.fname)
             h5file = h5py.File(self.fname, "r")
             if attrs_dsetname in self.dsetname:
-                dsetname = self.dsetname[:self.dsetname.index(attrs_dsetname)]
+                dsetname = self.dsetname[: self.dsetname.index(attrs_dsetname)]
             else:
                 dsetname = self.dsetname
             # print("h5file, dsetname", h5file, dsetname)
@@ -344,7 +342,7 @@ class HDF5Proxy(blosc2.Operand):
             dtype = numpy.dtype("u1")
             b2dsetname = (dsetname + "/" + attrs_dsetname) if dsetname else attrs_dsetname
         else:
-            shape = self.dset.shape or ()   # empty datasets have no shape
+            shape = self.dset.shape or ()  # empty datasets have no shape
             dtype = self.dset.dtype
             b2dsetname = dsetname
         self.dsetname = b2dsetname
@@ -517,12 +515,7 @@ class HDF5Proxy(blosc2.Operand):
         # Convert the HDF5 dataset to a Blosc2 CFrame
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5 and item == ()
         data = self[item]
-        if not item and not hasattr(self.dset.dtype, "shape"):
-            # For the whole thing, lets specify chunks and blocks
-            array = blosc2.asarray(data, cparams=self.b2arr.cparams, chunks=self.chunks, blocks=self.blocks)
-        else:
-            # If item is a slice, we better not specify chunks and blocks
-            array = blosc2.asarray(data, cparams=self.b2arr.cparams)
+        array = blosc2.asarray(data, cparams=self.b2arr.cparams, chunks=self.chunks, blocks=self.blocks)
         return array.to_cframe()
 
     def __del__(self):
