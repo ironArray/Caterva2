@@ -298,6 +298,222 @@ def b2chunkers_from_chunked(
     return b2getchunk_chunked, b2iterchunks_chunked
 
 
+def get_slice_info(item, shape, chunks):
+    """
+    Get both the resulting shape after a slice operation and the affected chunks.
+
+    Parameters
+    ----------
+    item : int, slice, tuple
+        The slicing specification (same as used in array[item])
+    shape : tuple
+        Shape of the array
+    chunks : tuple
+        Chunk shape of the array (can be None for non-chunked arrays)
+
+    Returns
+    -------
+    tuple
+        (result_shape, affected_chunks)
+        - result_shape: tuple representing shape after slicing
+        - affected_chunks: list of chunk indices (in C-order) if slice aligns with chunks,
+          or None if the slice can't be made of entire chunks or chunks is None
+    """
+    # Return shape info for non-chunked arrays
+    if chunks is None:
+        # Handle empty shape specially
+        if not shape:
+            return (), None
+
+        # Convert single integer or slice to tuple for uniform handling
+        if isinstance(item, (int, slice)):
+            item = (item,)
+
+        # If item is empty tuple or None, return original shape
+        if not item:
+            return shape, None
+
+        # Normalize item to handle Ellipsis
+        ndim = len(shape)
+        norm_item = [slice(None)] * ndim
+
+        # Handle Ellipsis if present
+        ell_idx = None
+        for i, s in enumerate(item):
+            if s is Ellipsis:
+                ell_idx = i
+                break
+
+        if ell_idx is not None:
+            # Replace Ellipsis with appropriate number of slices
+            before = item[:ell_idx]
+            after = item[ell_idx + 1 :]
+            middle = [slice(None)] * (ndim - len(before) - len(after))
+            item = before + middle + after
+
+        # Fill normalized item (up to the original dimensionality)
+        for i, s in enumerate(item[:ndim]):
+            norm_item[i] = s
+
+        # Calculate resulting shape
+        result_shape = []
+        for i, (s, dim_size) in enumerate(zip(norm_item, shape)):
+            # Integer index reduces dimensionality
+            if isinstance(s, int):
+                continue
+
+            # Handle slice
+            elif isinstance(s, slice):
+                start = s.start if s.start is not None else 0
+                stop = s.stop if s.stop is not None else dim_size
+                step = s.step if s.step is not None else 1
+
+                # Handle negative indices
+                if start < 0:
+                    start += dim_size
+                if stop < 0:
+                    stop += dim_size
+
+                # Clamp to valid range
+                start = max(0, min(start, dim_size))
+                stop = max(start, min(stop, dim_size))
+
+                # Calculate size of this dimension after slicing
+                slice_size = max(0, (stop - start + (step - 1)) // step)
+                result_shape.append(slice_size)
+
+            # Handle tuple/list of indices for fancy indexing
+            elif isinstance(s, (list, tuple, np.ndarray)):
+                if hasattr(s, "shape"):  # NumPy array
+                    result_shape.append(len(s))
+                else:
+                    result_shape.append(len(s))
+
+        return tuple(result_shape), None
+
+    # For chunked arrays, handle both shape and chunks
+    # Convert single integer or slice to tuple for uniform handling
+    if isinstance(item, (int, slice)):
+        item = (item,)
+
+    # If shape is scalar or empty, handle specially
+    if not shape:
+        result_shape = ()
+        affected_chunks = [0] if not item or item == (Ellipsis,) else None
+        return result_shape, affected_chunks
+
+    # Normalize item to full dimensionality
+    ndim = len(shape)
+    norm_item = [slice(None)] * ndim
+
+    # Handle Ellipsis if present
+    ell_idx = None
+    for i, s in enumerate(item):
+        if s is Ellipsis:
+            ell_idx = i
+            break
+
+    if ell_idx is not None:
+        # Replace Ellipsis with appropriate number of slices
+        before = item[:ell_idx]
+        after = item[ell_idx + 1 :]
+        middle = [slice(None)] * (ndim - len(before) - len(after))
+        item = before + middle + after
+
+    # Fill normalized item
+    for i, s in enumerate(item[:ndim]):
+        norm_item[i] = s
+
+    # Track whether chunks are perfectly aligned
+    chunks_aligned = True
+    chunk_ranges = []
+    result_shape = []
+
+    # Check each dimension
+    for i, (s, dim_size, chunk_size) in enumerate(zip(norm_item, shape, chunks)):
+        # Handle integer index
+        if isinstance(s, int):
+            # Convert negative indices
+            if s < 0:
+                s += dim_size
+
+            # Integer indexing reduces dimensionality (don't add to result_shape)
+
+            # Check if this index is at a chunk boundary for chunk alignment
+            if s % chunk_size != 0 and s % chunk_size != chunk_size - 1:
+                chunks_aligned = False
+
+            # For integer index, we'll have a single chunk in this dimension
+            chunk_idx = s // chunk_size
+            chunk_ranges.append([chunk_idx])
+
+        # Handle slice
+        elif isinstance(s, slice):
+            # Normalize slice
+            start = s.start if s.start is not None else 0
+            stop = s.stop if s.stop is not None else dim_size
+            step = s.step if s.step is not None else 1
+
+            # Convert negative indices
+            if start < 0:
+                start += dim_size
+            if stop < 0:
+                stop += dim_size
+
+            # Clamp to valid range for shape calculation
+            start_clamped = max(0, min(start, dim_size))
+            stop_clamped = max(start_clamped, min(stop, dim_size))
+
+            # Calculate size of this dimension after slicing
+            slice_size = max(0, (stop_clamped - start_clamped + (step - 1)) // step)
+            result_shape.append(slice_size)
+
+            # Non-unit step can't be aligned with chunks
+            if step != 1:
+                chunks_aligned = False
+
+            # Check alignment with chunk boundaries
+            if start % chunk_size != 0:
+                chunks_aligned = False
+            if stop % chunk_size != 0 and stop != dim_size:
+                chunks_aligned = False
+
+            # Calculate chunk indices for this dimension
+            if chunks_aligned:
+                start_chunk = start // chunk_size
+                stop_chunk = (stop + chunk_size - 1) // chunk_size
+                chunk_ranges.append(list(range(start_chunk, stop_chunk)))
+
+        else:
+            # Fancy indexing
+            result_shape.append(len(s) if hasattr(s, "__len__") else 1)
+            chunks_aligned = False  # Fancy indexing not supported for chunk alignment
+
+    if not chunks_aligned:
+        return tuple(result_shape), None
+
+    # Generate all combinations of chunk indices (in C-order)
+    affected_chunks = []
+
+    # Calculate strides for C-order chunk indices
+    chunk_counts = [(dim_size + chunk_size - 1) // chunk_size for dim_size, chunk_size in zip(shape, chunks)]
+    strides = [1]
+    for i in range(ndim - 1, 0, -1):
+        strides.insert(0, strides[0] * chunk_counts[i])
+
+    # Helper function to recursively generate combinations
+    def generate_combinations(dimension, current_index):
+        if dimension == ndim:
+            affected_chunks.append(current_index)
+            return
+
+        for chunk_idx in chunk_ranges[dimension]:
+            generate_combinations(dimension + 1, current_index + chunk_idx * strides[dimension])
+
+    generate_combinations(0, 0)
+    return tuple(result_shape), affected_chunks
+
+
 class HDF5Proxy(blosc2.Operand):
     """
     Simple proxy for an HDF5 array (or similar) that can be used with the Blosc2 compute engine.
@@ -448,7 +664,19 @@ class HDF5Proxy(blosc2.Operand):
             return np.zeros(self.shape, dtype=self.dtype)
             # return self.b2arr[item]
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        result = self.dset[item]
+        if False:
+            result_shape, chunk_list = get_slice_info(item, self.shape, self.chunks)
+            if chunk_list is None:
+                result = self.dset[item]
+            else:
+                # Build the resulting array as empty
+                result = blosc2.empty(
+                    shape=result_shape,
+                    dtype=self.dtype,
+                    chunks=self.chunks,
+                )
+                # Get the chunks from the HDF5 dataset
+                # TODO: it is probably better to use the b2h5py package for this
         # If the result is Empty, return it as a numpy array
         if isinstance(result, h5py.Empty):
             result = np.zeros((), dtype=self.dtype)
