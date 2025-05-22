@@ -1789,7 +1789,7 @@ async def htmx_path_info(
         "tabs": tabs,
     }
 
-    # Tabs: Display
+    # Tabs: Display (b2)
     mimetype = guess_type(path)
     known_mimetypes = {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
     if mimetype and (mimetype in known_mimetypes or mimetype.startswith("image/")):
@@ -1801,26 +1801,26 @@ async def htmx_path_info(
             }
         )
 
-    # Tabs: Main
-    tabs.append(
-        {
-            "name": "main",
-            "label": "Main",
-            "include": "includes/info_metadata.html",
-        }
-    )
-
-    # Tabs: Data
+    # Tabs: Display (b2nd)
     if hasattr(meta, "shape"):
         context["data_url"] = make_url(request, "htmx_path_view", path=path)
         context["shape"] = meta.shape
         tabs.append(
             {
                 "name": "data",
-                "label": "Data",
+                "label": "Display",
                 "include": "includes/info_data.html",
             }
         )
+
+    # Tabs: Main
+    tabs.append(
+        {
+            "name": "main",
+            "label": "Meta",
+            "include": "includes/info_metadata.html",
+        }
+    )
 
     # Tabs: plugin defined
     vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
