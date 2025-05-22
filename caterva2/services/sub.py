@@ -46,7 +46,7 @@ from fastapi.templating import Jinja2Templates
 # Project
 from caterva2 import api_utils, hdf5, models, utils
 from caterva2.services import settings, srv_utils
-from caterva2.services.subscriber import db, schemas, users, ncores
+from caterva2.services.subscriber import db, ncores, schemas, users
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 

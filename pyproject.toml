@@ -71,6 +71,7 @@ subscriber = [
 ]
 services = [
     "caterva2[base-services]",
+    "caterva2[hdf5]",
     "caterva2[subscriber]",
 ]
 dev = [
