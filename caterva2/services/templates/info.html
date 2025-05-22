@@ -1,38 +1,45 @@
 <h3>{{ path }}</h3>
 
 <ul class="nav nav-tabs" id="tabs">
-    <li class="nav-item" role="presentation">
-        <button type="button" class="nav-link active" id="main-tab"
-                data-bs-toggle="tab" data-bs-target="#main-tab-pane"
-                role="tab" aria-controls="main-tab-pane" aria-selected="true">
-            Main
-        </button>
-    </li>
+    {% for tab in tabs %}
+        <li class="nav-item" role="presentation">
+            <button type="button" id="{{ tab.name }}-tab"
+                    data-bs-toggle="tab" data-bs-target="#{{ tab.name }}-tab-pane"
+                    role="tab" aria-controls="{{ tab.name }}-tab-pane"
+                    {% if loop.first %}
+                        class="nav-link active" aria-selected="true"
+                    {% else %}
+                        class="nav-link" aria-selected="false"
+                    {% endif %}
+            >
+                {{ tab.label }}
+            </button>
+        </li>
+    {% endfor %}
     {% if view_url %}
     <li class="nav-item" role="presentation">
         <button type="button" class="nav-link" id="data-tab"
                 data-bs-toggle="tab" data-bs-target="#data-tab-pane"
-                role="tab" aria-controls="data-tab-pane" aria-selected="true">
+                role="tab" aria-controls="data-tab-pane" aria-selected="false">
             Data
         </button>
     </li>
     {% endif %}
-    {% if display %}
-        <li class="nav-item" role="presentation">
-            <button type="button" class="nav-link" id="display-tab"
-                    data-bs-toggle="tab" data-bs-target="#display-tab-pane"
-                    role="tab" aria-controls="display-tab-pane" aria-selected="false">
-                {{ display.label }}
-            </button>
-        </li>
-    {% endif %}
 </ul>
 
 <div class="tab-content" id="myTabContent">
-    <div class="tab-pane fade show active" id="main-tab-pane" tabindex="0"
-         role="tabpanel" aria-labelledby="tab-main">
-        {% include 'includes/info_metadata.html' %}
-    </div>
+    {% for tab in tabs %}
+        <div id="{{ tab.name }}-tab-pane" role="tabpanel" aria-labelledby="tab-{{ tab.name }}"
+             tabindex="0" class="tab-pane fade {% if loop.first %}show active{% endif %}"
+             {% if tab.url %}
+             hx-get="{{ tab.url }}" hx-trigger="load"
+             {% endif %}
+        >
+            {% if tab.include %}
+                {% include tab.include %}
+            {% endif %}
+        </div>
+    {% endfor %}
 
     {% if view_url %}
     <div class="tab-pane fade" id="data-tab-pane" tabindex="0"
@@ -40,13 +47,6 @@
         <div id="info-view" hx-post="{{ view_url }}" hx-trigger="load" hx-ext="morph" hx-swap="morph:innerHTML">
         </div>
     </div>
-    {% endif %}
-
-    {% if display %}
-        <div class="tab-pane fade" id="display-tab-pane" tabindex="0"
-             role="tabpanel" aria-labelledby="tab-display"
-             hx-get="{{ display.url }}" hx-trigger="load">
-        </div>
     {% endif %}
 </div>
 

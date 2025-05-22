@@ -1780,32 +1780,50 @@ async def htmx_path_info(
         abspath, settings.cache, settings.personal, settings.shared, settings.public
     )
 
+    # Tabs
+    tabs = []
+
+    # Tabs: Display
     vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
     contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)
     plugin = plugins.get(contenttype)
     if plugin:
-        display = {
-            "url": url(f"plugins/{plugin.name}/display/{path}"),
-            "label": plugin.label,
-        }
+        tabs.append(
+            {
+                "name": "display",
+                "label": plugin.label,
+                "url": url(f"plugins/{plugin.name}/display/{path}"),
+            }
+        )
     else:
         mimetype = guess_type(path)
         if mimetype and (
             mimetype in {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
             or mimetype.startswith("image/")
         ):
-            display = {
-                "url": url(f"display/{path}"),
-                "label": "Display",
-            }
-        else:
-            display = None
+            tabs.append(
+                {
+                    "name": "display",
+                    "url": url(f"display/{path}"),
+                    "label": "Display",
+                }
+            )
 
+    # Tabs: Main
+    tabs.append(
+        {
+            "name": "main",
+            "label": "Main",
+            "include": "includes/info_metadata.html",
+        }
+    )
+
+    # Context
     context = {
-        "path": path,
-        "meta": meta,
-        "display": display,
         "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
+        "meta": meta,
+        "path": path,
+        "tabs": tabs,
     }
 
     # XXX
