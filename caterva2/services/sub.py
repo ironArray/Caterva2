@@ -1654,7 +1654,8 @@ async def htmx_path_list(
             if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
                 abspath = pathlib.Path(f"{abspath}.b2")
 
-            add_dataset(path, abspath)
+            with contextlib.suppress(FileNotFoundError):
+                add_dataset(path, abspath)
 
     # Assign names to datasets
     datasets = sorted(datasets, key=lambda x: x["path"])
