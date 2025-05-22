@@ -2138,9 +2138,10 @@ class UnfoldCmd:
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        path = pathlib.Path(argv[1])
+        path = operands.get(argv[1], argv[1])
+        path = pathlib.Path(path)
         _ = await unfold_file(path, user)
-        # Redirect to display the achive file (the unfolded directory will be next to it)
+        # Redirect to display the archive file (the unfolded directory will be next to it)
         url = make_url(request, "html_home", path=path)
         return htmx_redirect(hx_current_url, url)
 
