@@ -1791,7 +1791,7 @@ async def htmx_path_info(
     else:
         mimetype = guess_type(path)
         if mimetype and (
-            mimetype in {"application/pdf", "application/x-ipynb+json", "text/markdown"}
+            mimetype in {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
             or mimetype.startswith("image/")
         ):
             display = {
@@ -2440,7 +2440,12 @@ async def html_display(
     response_class=HTMLResponse,
 ):
     mimetype = guess_type(path)
-    if mimetype == "application/pdf":
+    if mimetype == "application/json":
+        content = await get_file_content(path, user)
+        content = content.decode("utf-8")
+        content = json.dumps(json.loads(content), indent=2)
+        return f"<pre>{content}</pre>"
+    elif mimetype == "application/pdf":
         data = f"{url('api/preview/')}{path}"
         return f'<object data="{data}" type="application/pdf" class="w-100" style="height: 768px"></object>'
     elif mimetype == "application/x-ipynb+json":
@@ -2452,7 +2457,8 @@ async def html_display(
         )
     elif mimetype == "text/markdown":
         content = await get_file_content(path, user)
-        return markdown.markdown(content.decode("utf-8"))
+        content = content.decode("utf-8")
+        return markdown.markdown(content)
     elif mimetype.startswith("image/"):
         src = f"{url('api/preview/')}{path}"
         img = await get_image(path, user)
