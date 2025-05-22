@@ -6,6 +6,7 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
+import json
 import os
 from collections.abc import Callable, Iterator, Mapping
 
@@ -304,7 +305,6 @@ class HDF5Proxy(blosc2.Operand):
     """
 
     def __init__(self, b2arr, h5file=None, dsetname=None):
-        attrs_dsetname = "!_attrs_"  # the Blosc2 dataset name for the Group attributes in HDF5
         if b2arr is not None:
             # The file has been opened already, so we just need to set the filename and dataset name
             self.dsetname = b2arr.vlmeta["_dsetname"]
@@ -322,29 +322,17 @@ class HDF5Proxy(blosc2.Operand):
                 raise ValueError(f"File {fname} does not exist with .h5 or .hdf5 extension")
             # Convert to absolute path, and add the extension
             self.fname = fname
-            # print("Opening HDF5 file", self.fname)
             h5file = h5py.File(self.fname, "r")
-            if attrs_dsetname in self.dsetname:
-                dsetname = self.dsetname[: self.dsetname.index(attrs_dsetname)]
-            else:
-                dsetname = self.dsetname
-            # print("h5file, dsetname", h5file, dsetname)
+            dsetname = self.dsetname
             self.dset = h5file[dsetname] if dsetname else h5file
             self.b2arr = b2arr
             return
 
-        # print("Creating HDF5Proxy from", h5file, dsetname)
         self.dset = h5file[dsetname] if dsetname else h5file
         self.fname = h5file.filename
-        if not hasattr(self.dset, "shape") or not hasattr(self.dset, "dtype"):
-            # This is probably a Group
-            shape = ()
-            dtype = numpy.dtype("u1")
-            b2dsetname = (dsetname + "/" + attrs_dsetname) if dsetname else attrs_dsetname
-        else:
-            shape = self.dset.shape or ()  # empty datasets have no shape
-            dtype = self.dset.dtype
-            b2dsetname = dsetname
+        shape = self.dset.shape or ()  # empty datasets have no shape
+        dtype = self.dset.dtype
+        b2dsetname = dsetname
         self.dsetname = b2dsetname
 
         # Store the Blosc2 array below a fake HDF5 hierarchy
@@ -364,7 +352,6 @@ class HDF5Proxy(blosc2.Operand):
             if not os.path.exists(dirname):
                 os.makedirs(dirname)
 
-        # print("Creating Blosc2 array in", urlpath, self.dsetname)
         try:
             b2args = b2args_from_h5dset(self.dset)
             self.b2arr = blosc2.empty(
@@ -390,7 +377,6 @@ class HDF5Proxy(blosc2.Operand):
         b2vlmeta["_dsetname"] = self.dsetname
         # Use the dset attrs to populate the Blosc2 array's vlmeta
         b2attrs = b2attrs_from_h5dset(self.dset)
-        # print("b2attrs", b2attrs)
         # Update the Blosc2 array's vlmeta with the HDF5 dataset's attributes
         for aname, avalue in b2attrs.items():
             b2vlmeta.set_vlmeta(aname, avalue, typesize=1)  # non-numeric
@@ -422,11 +408,6 @@ class HDF5Proxy(blosc2.Operand):
     @property
     def fields(self) -> Mapping[str, numpy.dtype]:
         return self.b2arr.fields
-
-    # TODO: would that be useful?
-    # @property
-    # def chunks(self) -> tuple[int, ...]:
-    #     return self.dset.chunks
 
     def __getitem__(self, item: slice | list[slice] | tuple | None) -> np.ndarray:
         """
@@ -564,24 +545,93 @@ class HDF5Proxy(blosc2.Operand):
             os.remove(self.b2arr.urlpath)
 
 
-def create_hdf5_proxies(
-    path: str | os.PathLike,
-    b2_args=None,
-) -> Iterator[HDF5Proxy]:
+class HDF5AttributeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        # First try to decode bytes as UTF-8 strings (most HDF5 attributes are ASCII)
+        if isinstance(obj, bytes):
+            try:
+                # Try to decode as UTF-8 string first (common case for HDF5 attributes)
+                return obj.decode("utf-8")
+            except UnicodeDecodeError:
+                # Fall back to base64 for true binary data
+                import base64
+
+                return {"__bytes__": base64.b64encode(obj).decode("ascii")}
+
+        if isinstance(obj, numpy.ndarray):
+            return obj.tolist()
+        if isinstance(obj, numpy.generic):
+            return obj.item()
+        if isinstance(obj, h5py.Empty):
+            if obj.dtype.kind not in ["S", "U"]:  # not strings
+                return None
+            return obj.dtype.type().item() if hasattr(obj.dtype.type(), "item") else obj.dtype.type()
+
+        # Let the base class handle it or raise TypeError
+        return super().default(obj)
+
+
+def serialize_h5_attrs_to_json(h5_attrs, indent=2):
+    """
+    Convert HDF5 attributes to a JSON string with proper handling of HDF5 types.
+
+    Parameters
+    ----------
+    h5_attrs : h5py.AttributeManager
+        The HDF5 attributes to serialize
+    indent : int, optional
+        Number of spaces for JSON indentation, default is 2
+
+    Returns
+    -------
+    str
+        A JSON string representation of the attributes
+    """
+    try:
+        # Convert attributes to dict and serialize to JSON
+        attrs_dict = dict(h5_attrs.items())
+        json_str = json.dumps(attrs_dict, indent=indent, cls=HDF5AttributeEncoder)
+    except Exception as e:
+        print(f"Error serializing attributes to JSON: {e}")
+        # Fallback: serialize individually
+        json_dict = {}
+        for key, value in h5_attrs.items():
+            try:
+                json_dict[key] = json.dumps(value, cls=HDF5AttributeEncoder)
+            except Exception as e:
+                json_dict[key] = f"[Error: {e}]"
+        json_str = json.dumps(json_dict, indent=indent)
+
+    return json_str
+
+
+def create_hdf5_proxies(path: str | os.PathLike) -> Iterator[HDF5Proxy]:
     """Create a generator of HDF5 proxies from the given HDF5 file."""
-    if b2_args is None:
-        b2_args = {}
+    attrs_dsetname = "!_attrs_.json"  # the Blosc2 dataset name for the Group attributes in HDF5
     h5file = h5py.File(path, "r")
+
+    # Store HDF5 file attributes as JSON
+    dirname = h5file.filename.rsplit(".", 1)[0]
+    os.makedirs(dirname, exist_ok=True)
+    jsonpath = os.path.join(dirname, attrs_dsetname)
+    with open(jsonpath, "w") as f:
+        f.write(serialize_h5_attrs_to_json(h5file.attrs))
 
     # Recursive function to visit all groups and datasets
     def visit_group(group):
-        yield HDF5Proxy(None, h5file, "")
         for name, obj in group.items():
             full_path = f"{group.name}/{name}".lstrip("/")
 
-            if isinstance(obj, h5py.Dataset | h5py.Group):
+            if isinstance(obj, h5py.Dataset):
                 yield HDF5Proxy(None, h5file, full_path)
             if isinstance(obj, h5py.Group):
+                # Store HDF5 group attributes as JSON
+                groupname = dirname + "/" + full_path
+                os.makedirs(groupname, exist_ok=True)
+                jsonpath = os.path.join(groupname, attrs_dsetname)
+                with open(jsonpath, "w") as f:
+                    f.write(serialize_h5_attrs_to_json(obj.attrs))
+
                 # Recursively visit subgroups
                 yield from visit_group(obj)
 
@@ -589,13 +639,3 @@ def create_hdf5_proxies(
     yield from visit_group(h5file)
 
     h5file.close()
-
-
-# def remove_hdf5_proxies(
-#     h5fname: str,
-# ) -> None:
-#     """Remove the HDF5 proxies from the given HDF5 file.
-#
-#     The proxies will be removed for each dataset in the file.
-#     """
-#     # TODO
