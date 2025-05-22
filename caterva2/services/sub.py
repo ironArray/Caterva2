@@ -1780,34 +1780,26 @@ async def htmx_path_info(
         abspath, settings.cache, settings.personal, settings.shared, settings.public
     )
 
-    # Tabs
+    # Context
     tabs = []
+    context = {
+        "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
+        "meta": meta,
+        "path": path,
+        "tabs": tabs,
+    }
 
     # Tabs: Display
-    vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
-    contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)
-    plugin = plugins.get(contenttype)
-    if plugin:
+    mimetype = guess_type(path)
+    known_mimetypes = {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
+    if mimetype and (mimetype in known_mimetypes or mimetype.startswith("image/")):
         tabs.append(
             {
                 "name": "display",
-                "label": plugin.label,
-                "url": url(f"plugins/{plugin.name}/display/{path}"),
+                "url": url(f"display/{path}"),
+                "label": "Display",
             }
         )
-    else:
-        mimetype = guess_type(path)
-        if mimetype and (
-            mimetype in {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
-            or mimetype.startswith("image/")
-        ):
-            tabs.append(
-                {
-                    "name": "display",
-                    "url": url(f"display/{path}"),
-                    "label": "Display",
-                }
-            )
 
     # Tabs: Main
     tabs.append(
@@ -1818,24 +1810,32 @@ async def htmx_path_info(
         }
     )
 
-    # Context
-    context = {
-        "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
-        "meta": meta,
-        "path": path,
-        "tabs": tabs,
-    }
-
-    # XXX
+    # Tabs: Data
     if hasattr(meta, "shape"):
-        view_url = make_url(request, "htmx_path_view", path=path)
-        context.update(
+        context["data_url"] = make_url(request, "htmx_path_view", path=path)
+        context["shape"] = meta.shape
+        tabs.append(
             {
-                "view_url": view_url,
-                "shape": meta.shape,
+                "name": "data",
+                "label": "Data",
+                "include": "includes/info_data.html",
             }
         )
 
+    # Tabs: plugin defined
+    vlmeta = getattr(getattr(meta, "schunk", meta), "vlmeta", {})
+    contenttype = vlmeta.get("contenttype") or guess_dset_ctype(path, meta)
+    plugin = plugins.get(contenttype)
+    if plugin:
+        tabs.append(
+            {
+                "name": "plugin",
+                "label": plugin.label,
+                "url": url(f"plugins/{plugin.name}/display/{path}"),
+            }
+        )
+
+    # Render response
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     # Push URL only when clicked, not on load/reload
