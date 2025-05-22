@@ -807,9 +807,9 @@ async def fetch_data(
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(array, hdf5.HDF5Proxy):
-        data = array.to_cframe(slice_ or ())
+        data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyExpr):
-        data = array[slice_ or ()]
+        data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()
     elif isinstance(array, blosc2.NDArray):
