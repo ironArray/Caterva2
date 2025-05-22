@@ -44,9 +44,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Project
-from caterva2 import api_utils, models, utils
+from caterva2 import api_utils, hdf5, models, utils
 from caterva2.services import settings, srv_utils
-from caterva2.services.subscriber import db, schemas, users
+from caterva2.services.subscriber import db, schemas, users, ncores
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -84,11 +84,12 @@ class PubSourceDataset:
                 self._chunks = metadata.chunks
                 self._blocks = metadata.blocks
                 dtype = metadata.dtype
-                if metadata.dtype.startswith("["):
-                    # TODO: eval is dangerous, but we mostly trust the metadata
-                    # This is a list, so we need to convert it to a string
-                    dtype = eval(dtype)
-                self._dtype = np.dtype(dtype)
+                # Sometimes dtype is a tuple (e.g. ('<f8', (10,))), and this seems a safe way to handle it
+                try:
+                    dtype = np.dtype(dtype)
+                except (ValueError, TypeError):
+                    dtype = np.dtype(ast.literal_eval(dtype))
+                self._dtype = dtype
                 self._cparams = dict(metadata.schunk.cparams)
             else:
                 if suffix == ".b2frame":
@@ -285,6 +286,7 @@ def open_b2(abspath, path):
     """
     if pathlib.Path(path).parts[0] in {"@personal", "@shared", "@public"}:
         container = blosc2.open(abspath)
+        vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
         if isinstance(container, blosc2.LazyExpr):
             # Open the operands properly
             operands = container.operands
@@ -298,8 +300,13 @@ def open_b2(abspath, path):
                     )
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
             return container
-        else:
-            return container
+        # Check if this is a file of a special type
+        elif "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
+            container = hdf5.HDF5Proxy(container)
+        # Set the number of threads for compression and decompression
+        container.cparams.nthreads = ncores
+        container.dparams.nthreads = ncores
+        return container
 
     # Return Proxy
     dataset = PubDataset(abspath, path)
@@ -406,7 +413,10 @@ optional_user = (
 
 
 def _setup_plugin_globals():
-    from . import plugins
+    try:
+        from . import plugins  # When used as a module
+    except ImportError:
+        import plugins  # When used as a script
 
     # These need to be available for plugins at import time.
     plugins.current_active_user = current_active_user
@@ -766,9 +776,9 @@ async def fetch_data(
     if isinstance(container, blosc2.Proxy):
         container = container._cache
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr):
+    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy):
         array = container
-        schunk = getattr(array, "schunk", None)
+        schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
     else:
@@ -791,13 +801,14 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and not isinstance(array, blosc2.LazyExpr):
+    if whole and not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
-    if isinstance(array, blosc2.LazyExpr):
-        # LazyExpr
+    if isinstance(array, hdf5.HDF5Proxy):
+        data = array.to_cframe(slice_ or ())
+    elif isinstance(array, blosc2.LazyExpr):
         data = array[slice_ or ()]
         data = blosc2.asarray(data)
         data = data.to_cframe()
@@ -1093,6 +1104,39 @@ async def copy(
     return str(destpath)
 
 
+def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
+    """
+    Convert a path with special root to an absolute path that can be written to.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path with special root (@personal, @shared, @public)
+    user : db.User
+        The authenticated user
+
+    Returns
+    -------
+    pathlib.Path
+        The absolute path in the filesystem
+
+    Raises
+    ------
+    fastapi.HTTPException
+        If the path is not in a writable root
+    """
+    root = path.parts[0]
+    if root == "@personal":
+        return settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
+    elif root == "@shared":
+        return settings.shared / pathlib.Path(*path.parts[1:])
+    elif root == "@public":
+        return settings.public / pathlib.Path(*path.parts[1:])
+    else:
+        detail = "Only @personal or @shared or @public roots can be modified"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+
 @app.post("/api/upload/{path:path}")
 async def upload_file(
     path: pathlib.Path,
@@ -1117,20 +1161,8 @@ async def upload_file(
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        abspath = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        abspath = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        raise fastapi.HTTPException(
-            status_code=400,  # bad request
-            detail="Only uploading to @personal or @shared or @public roots is allowed",
-        )
-
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
     # We may upload a new file, or replace an existing file
     if abspath.is_dir():
         abspath /= file.filename
@@ -1158,7 +1190,7 @@ async def upload_file(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1194,17 +1226,8 @@ async def append_file(
     if not user:
         raise srv_utils.raise_unauthorized("Uploading requires authentication")
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        abspath = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        abspath = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only uploading to @personal or @shared or @public roots is allowed"
-        raise fastapi.HTTPException(detail=detail, status_code=400)
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
 
     # We may upload a new file, or replace an existing file
     if not abspath.is_file():
@@ -1247,6 +1270,69 @@ async def append_file(
     return result_shape
 
 
+@app.post("/api/unfold/{path:path}")
+async def unfold_file(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Unfold a container (zip, tar, hdf5, etc.) into a directory.
+
+    The container is always unfolded into a directory with the same name as the
+    container, but without the extension.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to dataset to unfold.
+
+    Returns
+    -------
+    str
+        The path of the directory where the datasets have been unfolded.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Unfolding requires authentication")
+
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
+
+    if not abspath.is_file():
+        detail = "Target file does not exist or is not a file"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Unfold the container
+    dirname = None
+    if abspath.suffix in {".h5", ".hdf5"}:
+        # Create proxies for each dataset in HDF5 file
+        all_dsets = list(hdf5.create_hdf5_proxies(abspath))
+        if len(all_dsets) == 0:
+            detail = "No arrays found in HDF5 file"
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+        dirname = abspath.with_suffix("")
+    else:
+        detail = "Target file must be a zip, tar or hdf5 container"
+        raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Check quota
+    if settings.quota:
+        # Get the size of the datasets (proxies) in new directory
+        newsize = 0
+        if os.path.exists(dirname):
+            # Traverse the directory and get the size for all files
+            for _, relpath in utils.walk_files(dirname):
+                newsize += os.path.getsize(relpath)
+        total_size = get_disk_usage() + newsize
+        if total_size > settings.quota:
+            # Remove the directory if it exists
+            shutil.rmtree(dirname)
+            detail = "Unfold failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # Return the new directory name
+    return path.stem
+
+
 @app.post("/api/remove/{path:path}")
 async def remove(
     path: pathlib.Path,
@@ -1269,30 +1355,21 @@ async def remove(
     if not user:
         raise srv_utils.raise_unauthorized("Removing files requires authentication")
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        path2 = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        path2 = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only removing from @personal or @shared or @public roots is allowed"
-        raise fastapi.HTTPException(status_code=400, detail=detail)
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
 
-    # If path2 is a directory, remove the contents of the directory
-    if path2.is_dir():
-        shutil.rmtree(path2)
+    # If abspath is a directory, remove the contents of the directory
+    if abspath.is_dir():
+        shutil.rmtree(abspath)
     else:
         # Try to unlink the file
         try:
-            path2.unlink()
+            abspath.unlink()
         except FileNotFoundError:
             # Try adding a .b2 extension
-            path2 = path2.with_suffix(path2.suffix + ".b2")
+            abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
-                path2.unlink()
+                abspath.unlink()
             except FileNotFoundError as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
@@ -1329,21 +1406,12 @@ async def add_notebook(
         detail = "Notebooks must end with the .ipynb extension"
         raise fastapi.HTTPException(status_code=400, detail=detail)
 
-    # Replace the root with absolute path
-    root = path.parts[0]
-    if root == "@personal":
-        path2 = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        path2 = settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        path2 = settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only @personal or @shared or @public roots can be modified"
-        raise fastapi.HTTPException(status_code=400, detail=detail)
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
 
     # Check a file does not exist in the same path
-    path2 = pathlib.Path(f"{path2}.b2")
-    if path2.exists():
+    abspath = pathlib.Path(f"{abspath}.b2")
+    if abspath.exists():
         detail = "File exists at the given path"
         raise fastapi.HTTPException(status_code=400, detail=detail)
 
@@ -1352,7 +1420,7 @@ async def add_notebook(
     file = io.StringIO()
     nbformat.write(nb, file)
     data = file.getvalue().encode()
-    srv_utils.compress(data, dst=path2)
+    srv_utils.compress(data, dst=abspath)
 
     return path
 
@@ -1837,9 +1905,7 @@ async def htmx_path_view(
         try:
             arr = open_b2(abspath, path)
         except ValueError:
-            return htmx_error(
-                request, "Cannot open array; if it's a lazy expression, maybe an operand is missing."
-            )
+            return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
         idx = None
 
     # Local variables
@@ -2045,7 +2111,32 @@ class AddNotebookCmd:
         return htmx_redirect(hx_current_url, url)
 
 
-commands_list = [AddUserCmd, DelUserCmd, ListUsersCmd, CopyCmd, MoveCmd, RemoveCmd, AddNotebookCmd]
+class UnfoldCmd:
+    """Unfold archive file (e.g. HDF5)."""
+
+    names = ("unfold",)
+    expected = "unfold <path>"
+    nargs = 2
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        path = pathlib.Path(argv[1])
+        _ = await unfold_file(path, user)
+        # Redirect to display the achive file (the unfolded directory will be next to it)
+        url = make_url(request, "html_home", path=path)
+        return htmx_redirect(hx_current_url, url)
+
+
+commands_list = [
+    AddUserCmd,
+    DelUserCmd,
+    ListUsersCmd,
+    CopyCmd,
+    MoveCmd,
+    RemoveCmd,
+    AddNotebookCmd,
+    UnfoldCmd,
+]
 
 commands = {}
 for cmd in commands_list:
@@ -2234,6 +2325,22 @@ async def htmx_upload(
         first_member = next((m for m in new_members), None)
         path = f"{name}/{first_member}"
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
+
+    if suffix in [".h5", ".hdf5"]:
+        # Save file
+        fpath = path / filename
+        with open(fpath, "wb") as dst:
+            dst.write(data)
+        # Create proxies for each dataset in HDF5 file
+        all_dsets = list(hdf5.create_hdf5_proxies(fpath))
+        if len(all_dsets) == 0:
+            return htmx_error(request, "No arrays found in HDF5 file")
+        # Show the first dataset in the list
+        fproxy = all_dsets[0]
+        # dirname will be the name of the file without extension
+        dirname = fpath.stem
+        dsetname = f"{name}/{dirname}/{fproxy.dsetname}" + ".b2nd"
+        return htmx_redirect(hx_current_url, make_url(request, "html_home", path=dsetname), root=name)
 
     if filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
@@ -2567,8 +2674,11 @@ def main():
     model = models.Subscriber(roots={}, etags={})
     settings.database = srv_utils.Database(settings.statedir / "db.json", model)
 
-    # Register display plugins
-    from .plugins import tomography  # delay module load
+    # Register display plugins (delay module load)
+    try:
+        from .plugins import tomography  # When used as module
+    except ImportError:
+        from caterva2.services.plugins import tomography  # When used as script
 
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography

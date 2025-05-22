@@ -55,7 +55,8 @@ def cache_lookup(cachedir, path, may_not_exist=False):
         # Special case for directories
         return cachedir / path
 
-    if path.suffix not in {".b2frame", ".b2nd"} and not may_not_exist:
+    # HDF5 files cannot be compressed, as they are supported natively
+    if path.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
         if path.is_file():
             compress_file(path)
         path = f"{path}.b2"
@@ -107,10 +108,22 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         path = obj
         if not path.is_file():
             raise FileNotFoundError(f'File "{path}" does not exist or is a directory')
-
-        assert path.suffix in {".b2frame", ".b2nd", ".b2"}
         stat = path.stat()
         mtime = stat.st_mtime
+        size = stat.st_size
+
+        if path.suffix in {".h5", ".hdf5"}:
+            # HDF5 file
+            # TODO: extract metadata from HDF5 file
+            # try:
+            #     import h5py
+            # except ImportError:
+            #     raise ImportError("h5py is required to read HDF5 files")
+            # with h5py.File(path, "r") as f:
+            #     obj = f
+            return get_model_from_obj(obj, models.File, mtime=mtime, size=size)
+
+        assert path.suffix in {".b2frame", ".b2nd", ".b2"}
         try:
             obj = blosc2.open(path)
         except RuntimeError:

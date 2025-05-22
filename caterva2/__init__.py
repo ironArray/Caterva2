@@ -8,7 +8,6 @@
 ###############################################################################
 
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
-
 from .client import BasicAuth, Client, Dataset, File, Root, sub_urlbase_default
 
 __version__ = "2025.5.2"

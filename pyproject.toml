@@ -82,6 +82,7 @@ dev = [
 # Currently used to enable HDF5 support at the publisher.
 hdf5 = [
     "h5py",
+    "b2h5py>=0.5.1",
     "hdf5plugin",
     "msgpack",
 ]
