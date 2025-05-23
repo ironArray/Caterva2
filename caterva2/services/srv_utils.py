@@ -145,9 +145,19 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         return get_model_from_obj(schunk, models.SChunk, cparams=cparams, mtime=mtime)
     elif isinstance(obj, blosc2.LazyExpr):
         # overwrite operands and expression with _tosave versions for metadata display
-        operands = operands_as_paths(obj.operands_tosave, cache, personal, shared, public)
+        operands = operands_as_paths(
+            obj.operands_tosave if hasattr(obj, "operands_tosave") else obj.operands,
+            cache,
+            personal,
+            shared,
+            public,
+        )
         return get_model_from_obj(
-            obj, models.LazyArray, operands=operands, mtime=mtime, expression=obj.expression_tosave
+            obj,
+            models.LazyArray,
+            operands=operands,
+            mtime=mtime,
+            expression=obj.expression_tosave if hasattr(obj, "expression_tosave") else obj.expression,
         )
     else:
         raise TypeError(f"unexpected {type(obj)}")
