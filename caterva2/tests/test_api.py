@@ -658,11 +658,6 @@ def test_lazyexpr(auth_client):
     assert lxinfo["expression"] == expression
     assert lxinfo["operands"] == operands
 
-    # tempexp = re.sub(
-    #     r"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]["o0"], lxinfo["expression"]
-    # )  # ds -> o0 automatically
-    # assert tempexp == f"({re.sub(r'ds', operands['ds'], expression)})"
-
     # Check result data.
     a = auth_client.fetch(oppt)
     b = auth_client.fetch(lxpath)
@@ -728,17 +723,6 @@ def test_expr_from_expr(auth_client):
     assert lxinfo["operands"] == operands
     assert lxinfo["expression"] == expression
 
-    # tempexp = re.sub(
-    #     r"(?<=\s)o0|(?<=\()o0", lxinfo["operands"]["o0"], lxinfo["expression"]
-    # )  # ds -> o0 automatically
-    # assert tempexp == f"({re.sub(r'ds', operands['ds'], expression)})"
-
-    # tempexp = lxinfo2["expression"]
-    # for i, (_op, f) in enumerate(lxinfo2["operands"].items()):
-    #     tempexp = re.sub(rf"(?<=\s)o{i}|(?<=\()o{i}", f, tempexp)
-    # step1 = f"({re.sub(r'ds', f'({expression})', expression2)})"
-    # step2 = f"{re.sub(r'ds', operands['ds'], step1)}"
-    # assert tempexp == step2
     assert lxinfo2["operands"] == operands2
     assert lxinfo2["expression"] == expression2
 
