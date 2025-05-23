@@ -293,8 +293,12 @@ def open_b2(abspath, path):
             for key, value in operands.items():
                 if value is None:
                     raise ValueError(f'Missing operand "{key}"')
-                if "proxy-source" in value.schunk.meta:
-                    # Save operand as Proxy, see blosc2.open doc for more info
+                vlmetaval = value.schunk.vlmeta
+                if "proxy-source" in value.schunk.meta or (
+                    "_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"
+                ):
+                    # Save operand as Proxy, see blosc2.open doc for more info.
+                    # Or, it can be an HDF5 dataset too (which should be handled in the next call)
                     relpath = srv_utils.get_relpath(
                         value, settings.cache, settings.personal, settings.shared, settings.public
                     )

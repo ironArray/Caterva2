@@ -181,10 +181,16 @@ def get_relpath(ndarr, cache, personal, shared, public):
     path = pathlib.Path(ndarr.schunk.urlpath)
     if shared is not None and path.is_relative_to(shared):
         # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
-        return path
+        path = path.relative_to(shared)
+        parts = list(path.parts)
+        parts[0] = "@shared"
+        return pathlib.Path(*parts)
     elif public is not None and path.is_relative_to(public):
         # Shared: /.../<public>/<subpath> to <path> (i.e. no change)
-        return path
+        path = path.relative_to(public)
+        parts = list(path.parts)
+        parts[0] = "@public"
+        return pathlib.Path(*parts)
     try:
         # Cache: /.../<root>/<subpath> to <root>/<subpath>
         path = path.relative_to(cache)
