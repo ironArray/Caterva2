@@ -746,6 +746,7 @@ async def fetch_data(
     path: pathlib.Path,
     slice_: str | None = None,
     user: db.User = Depends(optional_user),
+    filter: str | None = None,
 ):
     """
     Fetch a dataset.
@@ -756,6 +757,8 @@ async def fetch_data(
         The path to the dataset.
     slice_ : str
         The slice to fetch.
+    filter : str
+        The filter to apply to the dataset.
 
     Returns
     -------
@@ -771,12 +774,16 @@ async def fetch_data(
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
     # This is still needed and will only update the necessary chunks
     await dataprep()
-    container = open_b2(abspath, path)
+    if filter:
+        filter = filter.strip()
+        container, _ = get_filtered_array(abspath, path, filter, sortby=None)
+    else:
+        container = open_b2(abspath, path)
 
     if isinstance(container, blosc2.Proxy):
         container = container._cache
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy):
+    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
@@ -801,14 +808,14 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy):
+    if whole and not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
-    elif isinstance(array, blosc2.LazyExpr):
+    elif isinstance(array, blosc2.LazyExpr | blosc2.NDField):
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()
@@ -1868,7 +1875,7 @@ def get_filtered_array(abspath, path, filter, sortby):
                 # If boolean, give the filter a boolean expression
                 filter = f"{filter} == True"
             else:
-                raise IndexError("Filter should be a boolean expression")
+                return arr[filter], idx  # just return the blosc2 NDfield associated to field
         # Let's create a LazyExpr with the filter
         larr = arr[filter]
         # TODO: do some benchmarking to see if this is worth it
