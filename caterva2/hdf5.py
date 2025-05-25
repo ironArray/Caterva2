@@ -623,15 +623,15 @@ def serialize_h5_attrs_to_json(h5_attrs, indent=2):
 
 def create_hdf5_proxies(path: str | os.PathLike) -> Iterator[HDF5Proxy]:
     """Create a generator of HDF5 proxies from the given HDF5 file."""
-    attrs_dsetname = "!_attrs_.json"  # the Blosc2 dataset name for the Group attributes in HDF5
+    attrs_dsetname = "!_attrs_.json.b2"  # the Blosc2 dataset name for the Group attributes in HDF5
     h5file = h5py.File(path, "r")
 
     # Store HDF5 file attributes as JSON
     dirname = h5file.filename.rsplit(".", 1)[0]
     os.makedirs(dirname, exist_ok=True)
     jsonpath = os.path.join(dirname, attrs_dsetname)
-    with open(jsonpath, "w") as f:
-        f.write(serialize_h5_attrs_to_json(h5file.attrs))
+    data = serialize_h5_attrs_to_json(h5file.attrs)
+    blosc2.SChunk(data=data.encode("utf-8"), urlpath=jsonpath, mode="w")
 
     # Recursive function to visit all groups and datasets
     def visit_group(group):
@@ -645,8 +645,8 @@ def create_hdf5_proxies(path: str | os.PathLike) -> Iterator[HDF5Proxy]:
                 groupname = dirname + "/" + full_path
                 os.makedirs(groupname, exist_ok=True)
                 jsonpath = os.path.join(groupname, attrs_dsetname)
-                with open(jsonpath, "w") as f:
-                    f.write(serialize_h5_attrs_to_json(obj.attrs))
+                data = serialize_h5_attrs_to_json(obj.attrs)
+                blosc2.SChunk(data=data.encode("utf-8"), urlpath=jsonpath, mode="w")
 
                 # Recursively visit subgroups
                 yield from visit_group(obj)
