@@ -12,6 +12,7 @@ import shutil
 
 import blosc2
 import h5py
+import numexpr as ne
 import numpy as np
 import pytest
 
@@ -228,3 +229,44 @@ def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
                 np.testing.assert_allclose(slice_, h5ds[item])
             else:
                 assert slice_.tobytes() == h5ds[item].tobytes()
+
+
+# Exercises the expression evaluation with HDF5 proxies
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "a + 50",
+        "a ** 2.3 + b / 2.3",
+        "sqrt(a) ** sin(b)",
+        "where(a < 50, a + 50, b)",
+    ],
+)
+def test_expr_where(expression, examples_dir, tmp_path, auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    ds_a = "arrays/3d-blosc2-a"
+    ds_b = "arrays/3d-blosc2-b"
+    root = pathlib.Path("@shared")
+    remote_root = auth_client.get(root)
+    with chdir_ctxt(tmp_path):
+        hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
+        h5f = h5py.File(hdf5_path, "r")
+        remote_a = remote_dir / (ds_a + ".b2nd")
+        assert remote_a in remote_root
+        remote_b = remote_dir / (ds_b + ".b2nd")
+        assert remote_b in remote_root
+
+        operands = {"a": str(remote_root) + "/" + str(remote_a), "b": str(remote_root) + "/" + str(remote_b)}
+        lxpath = auth_client.lazyexpr("myexpr", expression, operands)
+        assert lxpath == pathlib.Path("@personal/myexpr.b2nd")
+
+        # Compute the expression
+        result = auth_client.get_slice(lxpath)
+        assert isinstance(result, blosc2.NDArray)
+
+        # Check the data
+        na = h5f[ds_a][:]
+        nb = h5f[ds_b][:]
+        nresult = ne.evaluate(expression, {"a": na, "b": nb})
+        np.testing.assert_allclose(result[:], nresult)

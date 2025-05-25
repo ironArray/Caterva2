@@ -414,6 +414,17 @@ class HDF5Proxy(blosc2.Operand):
     def fields(self) -> Mapping[str, numpy.dtype]:
         return self.b2arr.fields
 
+    # Is this useful in this context?
+    # # Provide minimal __array_interface__ to allow NumPy to work with this object
+    # @property
+    # def __array_interface__(self):
+    #     return {
+    #         "shape": self.shape,
+    #         "typestr": self.dtype.str,
+    #         "data": self[()],
+    #         "version": 3,
+    #     }
+
     def __getitem__(self, item: slice | list[slice] | tuple | None) -> np.ndarray:
         """
         Get a slice as a numpy.ndarray from the HDF5 dataset.

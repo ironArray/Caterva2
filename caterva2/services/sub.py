@@ -303,7 +303,32 @@ def open_b2(abspath, path):
                         value, settings.cache, settings.personal, settings.shared, settings.public
                     )
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
+
+            if not hasattr(container, "_where_args"):
+                # If the container does not have _where_args, it is a LazyExpr
+                # and we can return it directly.
+                return container
+
+            # Repeat the operation for where args (for properly handling proxies)
+            where_args = container._where_args
+            for key, value in where_args.items():
+                if value is None:
+                    raise ValueError(f'Missing operand "{key}"')
+                metaval = value.schunk.meta if hasattr(value, "schunk") else {}
+                vlmetaval = value.schunk.vlmeta if hasattr(value, "schunk") else {}
+                if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
+                    relpath = srv_utils.get_relpath(
+                        value, settings.cache, settings.personal, settings.shared, settings.public
+                    )
+                    value = open_b2(value.schunk.urlpath, relpath)
+                    where_args[key] = value
+                elif isinstance(value, blosc2.LazyExpr):
+                    # Properly open the operands (to e.g. find proxies)
+                    for opkey, opvalue in value.operands.items():
+                        value.operands[opkey] = open_b2(opvalue.schunk.urlpath, relpath)
+
             return container
+
         # Check if this is a file of a special type
         elif "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
             container = hdf5.HDF5Proxy(container)

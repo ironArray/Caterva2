@@ -197,6 +197,22 @@ def create_example_root(path):
             **B2Comp(cname="lz4", clevel=7, filters=B2Comp.BITSHUFFLE),
         )
 
+        a = numpy.linspace(-1, 2, 1000).reshape(10, 10, 10)
+        h5f.create_dataset(
+            "/arrays/3d-blosc2-a",
+            data=a,
+            chunks=(4, 10, 10),
+            **B2Comp(cname="lz4", clevel=7, filters=B2Comp.BITSHUFFLE),
+        )
+
+        a = numpy.linspace(-1, 2, 1000).reshape(10, 10, 10)
+        h5f.create_dataset(
+            "/arrays/3d-blosc2-b",
+            data=a,
+            chunks=(2, 5, 10),
+            **B2Comp(cname="blosclz", clevel=7, filters=B2Comp.SHUFFLE),
+        )
+
         h5f.create_dataset("/arrays/array-dtype", dtype=numpy.dtype(("float64", (4,))), shape=(10,))
 
         ds = h5f.create_dataset("/attrs", data=0)
