@@ -7,10 +7,12 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 import contextlib
+import os
 import pathlib
 
 import blosc2
 import httpx
+import numexpr as ne
 import numpy as np
 import pytest
 
@@ -662,6 +664,50 @@ def test_lazyexpr(auth_client):
     a = auth_client.fetch(oppt)
     b = auth_client.fetch(lxpath)
     np.testing.assert_array_equal(a[:], b[:])
+
+
+# More exercises for the expression evaluation with Blosc2 arrays
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "a + 50",
+        "a ** 2.3 + b / 2.3",
+        "sqrt(a) ** sin(b)",
+        "where(a < 50, a + 50, b)",
+    ],
+)
+def test_lazyexpr2(expression, examples_dir, tmp_path, auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    root = pathlib.Path("@shared")
+    remote_root = auth_client.get(root)
+    remote_dir = "arrays"
+    ds_a = f"{remote_dir}/3d-blosc2-a.b2nd"
+    ds_b = f"{remote_dir}/3d-blosc2-b.b2nd"
+
+    with chdir_ctxt(tmp_path):
+        os.makedirs(remote_dir, exist_ok=True)
+        a = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
+        blosc2.asarray(a, urlpath=ds_a, chunks=(5, 10, 10))
+        remote_a = remote_root.upload(ds_a)
+        b = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
+        blosc2.asarray(b, urlpath=ds_b, chunks=(3, 5, 5))
+        remote_b = remote_root.upload(ds_b)
+        assert ds_a in remote_root
+        assert ds_b in remote_root
+
+        operands = {"a": remote_a, "b": remote_b}
+        lxpath = auth_client.lazyexpr("myexpr", expression, operands)
+        assert lxpath == pathlib.Path("@personal/myexpr.b2nd")
+
+        # Compute the expression
+        result = auth_client.get_slice(lxpath)
+        assert isinstance(result, blosc2.NDArray)
+
+        # Check the data
+        nresult = ne.evaluate(expression, {"a": a, "b": b})
+        np.testing.assert_allclose(result[:], nresult)
 
 
 def test_lazyexpr_getchunk(auth_client):

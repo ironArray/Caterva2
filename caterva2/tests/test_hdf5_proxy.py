@@ -241,7 +241,7 @@ def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
         "where(a < 50, a + 50, b)",
     ],
 )
-def test_expr_where(expression, examples_dir, tmp_path, auth_client):
+def test_expression(expression, examples_dir, tmp_path, auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 

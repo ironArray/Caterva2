@@ -293,10 +293,9 @@ def open_b2(abspath, path):
             for key, value in operands.items():
                 if value is None:
                     raise ValueError(f'Missing operand "{key}"')
+                metaval = value.schunk.meta if hasattr(value, "schunk") else {}
                 vlmetaval = value.schunk.vlmeta
-                if "proxy-source" in value.schunk.meta or (
-                    "_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"
-                ):
+                if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
                     # Save operand as Proxy, see blosc2.open doc for more info.
                     # Or, it can be an HDF5 dataset too (which should be handled in the next call)
                     relpath = srv_utils.get_relpath(
@@ -325,6 +324,11 @@ def open_b2(abspath, path):
                 elif isinstance(value, blosc2.LazyExpr):
                     # Properly open the operands (to e.g. find proxies)
                     for opkey, opvalue in value.operands.items():
+                        if isinstance(opvalue, blosc2.LazyExpr):
+                            continue
+                        relpath = srv_utils.get_relpath(
+                            opvalue, settings.cache, settings.personal, settings.shared, settings.public
+                        )
                         value.operands[opkey] = open_b2(opvalue.schunk.urlpath, relpath)
 
             return container

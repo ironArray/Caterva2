@@ -556,6 +556,9 @@ class Dataset(File):
         """
         super().__init__(root, path)
 
+    def __str__(self):
+        return self.path.as_posix()
+
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
         return f"<Dataset: {self.path}>"
