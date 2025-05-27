@@ -1,3 +1,4 @@
+import ast
 import functools
 import io
 import pathlib
@@ -341,7 +342,11 @@ class File:
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
         if isinstance(item, str):  # used a filter or field to index so want blosc2 array as result
-            fields = np.dtype(eval(self.dtype)).fields
+            try:
+                dtype = np.dtype(self.dtype)
+            except (ValueError, TypeError):
+                dtype = np.dtype(ast.literal_eval(self.dtype))
+            fields = dtype.fields
             if fields is None:
                 raise ValueError("The array is not structured (its dtype does not have fields)")
             if item in fields:
