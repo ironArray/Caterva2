@@ -740,6 +740,24 @@ def test_lazyexpr_getchunk(auth_client):
     np.testing.assert_array_equal(out, out_expr)
 
 
+def test_lazyexpr_fields(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    oppt = f"{TEST_CATERVA2_ROOT}/ds-1d-fields.b2nd"
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+
+    # Test a field
+    arr = auth_client.get(oppt)
+    field = arr["a"]
+    np.testing.assert_allclose(field[:], arr[:]["a"])
+
+    # Test a lazyexpr
+    servered = arr["(a < 500) & (b >= .1)"][:]
+    downloaded = arr.slice(None)["(a < 500) & (b >= .1)"][:]
+    [np.testing.assert_array_equal(servered[f], downloaded[f]) for f in downloaded.dtype.fields]
+
+
 def test_expr_from_expr(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")

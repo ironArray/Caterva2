@@ -313,13 +313,13 @@ class File:
         """
         return api_utils.get_download_url(self.path, self.urlbase)
 
-    def __getitem__(self, key):
+    def __getitem__(self, item):
         """
         Retrieves a slice of the dataset.
 
         Parameters
         ----------
-        key : int, slice, tuple of ints and slices, or None
+        item : int, slice, tuple of ints and slices, or None
             Specifies the slice to fetch.
 
         Returns
@@ -340,7 +340,17 @@ class File:
         >>> ds[0:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        return self.slice(key, as_blosc2=False)
+        if isinstance(item, str):  # used a filter or field to index so want blosc2 array as result
+            fields = np.dtype(eval(self.dtype)).fields
+            if fields is None:
+                raise ValueError("The array is not structured (its dtype does not have fields)")
+            if item in fields:
+                # A shortcut to access fields
+                return self.client.get_slice(self.path, as_blosc2=True, field=item)  # arg key is None
+            else:  # used a filter (possibly lazyexpr)
+                return self.client.get_slice(self.path, item, as_blosc2=True)
+        else:
+            return self.slice(item, as_blosc2=False)
 
     def slice(
         self, key: int | slice | Sequence[slice], as_blosc2: bool = True
@@ -871,24 +881,25 @@ class Client:
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
-        urlbase, path = _format_paths(self.urlbase, path)
-        slice_ = api_utils.slice_to_string(slice_)  # convert to string
-        return api_utils.fetch_data(path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie)
+        # Does the same as get_slice but forces return of np array
+        return self.get_slice(path, key=slice_, as_blosc2=False)
 
-    def get_slice(self, path, key=None, as_blosc2=True):
+    def get_slice(self, path, key=None, as_blosc2=True, field=None):
         """Get a slice of a File/Dataset.
 
         Parameters
         ----------
-        key : int, slice, or sequence of slices
+        key : int, slice, sequence of slices or str
             The slice to retrieve.  If a single slice is provided, it will be
             applied to the first dimension.  If a sequence of slices is
             provided, each slice will be applied to the corresponding
-            dimension.
+            dimension. If str, is interpreted as filter.
         as_blosc2 : bool
             If True (default), the result will be returned as a Blosc2 object
             (either a `SChunk` or `NDArray`).  If False, it will be returned
             as a NumPy array (equivalent to `self[key]`).
+        field: str
+            Shortcut to access a field in a structured array. If provided, `key` is ignored.
 
         Returns
         -------
@@ -905,12 +916,20 @@ class Client:
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        # Convert slices to strings
-        slice_ = api_utils.slice_to_string(key)
-        # Fetch and return the data as a Blosc2 object / NumPy array
-        return api_utils.fetch_data(
-            path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
-        )
+        if field:  # blosc2 doesn't support indexing of multiple fields
+            return api_utils.fetch_data(
+                path, urlbase, {"field": field}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+            )
+        if isinstance(key, str):  # A filter has been passed
+            return api_utils.fetch_data(
+                path, urlbase, {"filter": key}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+            )
+        else:  # Convert slices to strings
+            slice_ = api_utils.slice_to_string(key)
+            # Fetch and return the data as a Blosc2 object / NumPy array
+            return api_utils.fetch_data(
+                path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+            )
 
     def get_chunk(self, path, nchunk):
         """
