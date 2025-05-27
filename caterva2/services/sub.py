@@ -24,6 +24,7 @@ import string
 import tarfile
 import typing
 import zipfile
+from argparse import ArgumentError
 
 # Requirements
 import blosc2
@@ -747,6 +748,7 @@ async def fetch_data(
     slice_: str | None = None,
     user: db.User = Depends(optional_user),
     filter: str | None = None,
+    field: str | None = None,
 ):
     """
     Fetch a dataset.
@@ -759,6 +761,8 @@ async def fetch_data(
         The slice to fetch.
     filter : str
         The filter to apply to the dataset.
+    field : str
+        The desired field of dataset. If provided, filter is ignored.
 
     Returns
     -------
@@ -774,7 +778,10 @@ async def fetch_data(
     abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
     # This is still needed and will only update the necessary chunks
     await dataprep()
+
     if filter:
+        if field:
+            raise ArgumentError("Cannot handle both field and filter parameters at the same time")
         filter = filter.strip()
         container, _ = get_filtered_array(abspath, path, filter, sortby=None)
     else:
@@ -782,6 +789,7 @@ async def fetch_data(
 
     if isinstance(container, blosc2.Proxy):
         container = container._cache
+    container = container[field] if field else container
 
     if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
         array = container
@@ -808,7 +816,7 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
+    if whole and (not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField)) and (not filter):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
@@ -1869,13 +1877,15 @@ def get_filtered_array(abspath, path, filter, sortby):
 
     # Filter rows only for NDArray with fields
     if filter:
+        arr = arr._cache if isinstance(arr, blosc2.Proxy) else arr
         # Check whether filter is the name of a field
         if filter in arr.fields:
             if arr.dtype.fields[filter][0] == bool:  # noqa: E721
                 # If boolean, give the filter a boolean expression
                 filter = f"{filter} == True"
             else:
-                return arr[filter], idx  # just return the blosc2 NDfield associated to field
+                raise IndexError("Filter should be a boolean expression")
+
         # Let's create a LazyExpr with the filter
         larr = arr[filter]
         # TODO: do some benchmarking to see if this is worth it
