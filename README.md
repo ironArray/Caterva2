@@ -1,20 +1,27 @@
-# Caterva2: On-demand access to Blosc2 data repositories
+# Caterva2: On-demand access to Blosc2/HDF5 data repositories
 
 ## What is it?
 
-Caterva2 is a distributed system written in Python meant for sharing [Blosc2][] datasets (either native or converted on-the-fly from HDF5) among different hosts by using a [publish–subscribe][] messaging pattern.  Here, publishers categorize datasets into root groups that are announced to the broker and propagated to subscribers.  Also, every subscriber exposes a REST interface that allows clients to access the datasets.
+Caterva2 is a service meant for serving [Blosc2][] and [HDF5][] datasets among authenticated users, work groups, or the general public.  There are several interfaces to Caterva2, including a Web GUI, a REST API, a Python API, and a command-line client.
 
-<img src="./doc/_static/Caterva2-PubSub.png" alt="Figure: Caterva2 publish-subscribe" width="95%"/>
+<img src="./doc/_static/caterva2-block-diagram.png" alt="Figure: Caterva2 block diagram" width="100%"/>
+
+It can be used either remotely or locally, as a simple way to access datasets in a directory hierarchy, or to share them with other users in the same network.
+
+<img src="./doc/_static/caterva2-data-sharing.png" alt="Figure: How data can be shared" width="100%"/>
+
+The Python API is the recommended way for building your own Caterva2 clients, whereas the Web client provides a more user-friendly interface for browsing and accessing datasets.
+
+<img src="./doc/_static/web-data-view.png" alt="Figure: Web data browser and viewer" width="100%"/>
+
+<img src="./doc/_static/web-tomo-view.png" alt="Figure: Web viewer for tomography" width="100%"/>
+
 
 [Blosc2]: https://www.blosc.org/pages/blosc-in-depth/
     "What Is Blosc? (Blosc blog)"
 
-[publish–subscribe]: https://en.wikipedia.org/wiki/Publish–subscribe_pattern
-    "Publish–subscribe pattern (Wikipedia)"
-
-Caterva2 subscribers perform on demand data access with local caching (fit for re-publishing), which can be particularly useful for the efficient sharing of remote datasets locally, thus optimizing communication and storage resources within work groups.
-
-<img src="./doc/_static/Caterva2-Data-On-Demand.png" alt="Figure: Caterva2 on-demand data access" width="95%"/>
+[HDF5]: https://www.hdfgroup.org/solutions/hdf5/
+    "HDF5 (HDF Group)"
 
 ## Components of Caterva2
 
@@ -31,7 +38,7 @@ The Caterva2 package includes all the aforementioned components, although its ma
 
 ## Installation
 
-You may install Caterva2 in several ways:.
+You may install Caterva2 in several ways:
 
 - Pre-built wheel from PyPI:
 
@@ -120,7 +127,7 @@ Then fire up the broker, start publishing a root named `foo` with `root-example`
 ```sh
 cat2bro &  # broker
 cat2pub foo root-example &  # publisher
-cat2sub &  # subscriber
+CATERVA2_SECRET=c2sikrit cat2sub &  # subscriber
 ```
 
 (To stop them later on, bring each one to the foreground with `fg` and press Ctrl+C.)
@@ -133,24 +140,28 @@ It's also possible to run only the subscriber. For this copy
 Then only run the subscriber:
 
 ```sh
-cat2sub &  # subscriber
+CATERVA2_SECRET=c2sikrit cat2sub &  # subscriber
 ```
 
-### HDF5 roots
+### Using a configuration file
 
-If you want to try and publish your own HDF5 file as a root, you need to include the `hdf5` extra in your Caterva2 installation.  Then you may just run:
+All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).  Caterva2 source code includes a fully documented `caterva2.sample.toml` file (see also [caterva2.toml](caterva2.toml) in Caterva2 tutorials).
+
+### User authentication
+
+The Caterva2 subscriber includes some support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web client will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
+
+To create a user, you can use the `cat2adduser` command line client. For example:
 
 ```sh
-cat2pub foo /path/to/your-file.h5 &
+cat2adduser user@example.com foobar11
 ```
 
-You can also get an example HDF5 file with some datasets by running:
+To tell the command line client to authenticate against a subscriber, add the `--username` and `--password` options:
 
 ```sh
-python -m caterva2.services.hdf5root root-example.h5
+cat2cli --user "user@example.com" --pass "foobar11" info foo/README.md
 ```
-
-You may want to test compatibility with [silx' HDF5 examples](https://www.silx.org/pub/h5web/) (`epics.h5` and `grove.h5` are quite illustrative).
 
 ### The command line client
 
@@ -168,97 +179,78 @@ foo
 We only have the `foo` root that we started publishing. If other publishers were running,
 we would see them listed here too.
 
-Let's ask our local subscriber to subscribe to the `foo` root:
+Let's ask our local subscriber to subscribe to the `@shared` root:
 
 ```sh
-cat2cli subscribe foo  # -> Ok
+cat2cli --username user@example.com --password foobar11 subscribe @shared  # -> Ok
 ```
 
-Now, one can list the datasets in the `foo` root:
+Now, one can list the datasets in the `@shared` root:
 
 ```sh
-cat2cli list foo
+cat2cli --username user@example.com --password foobar11 list foo
 ```
 
 ```
-foo/README.md
-...
-foo/ds-hello.b2frame
-...
-foo/dir2/ds-4d.b2nd
+kevlar.h5
+kevlar/!_attrs_.json
+kevlar/entry/!_attrs_.json
+kevlar/entry/data/!_attrs_.json
+kevlar/entry/data/data.b2nd
 ```
 
 Let's ask the subscriber for more info about the `foo/dir2/ds-4d.b2nd` dataset:
 
 ```sh
-cat2cli info foo/dir2/ds-4d.b2nd
+cat2cli --username user@example.com --password foobar11 info @shared/kevlar/entry/data/data.b2nd
 ```
 
 ```
 {
-    'shape': [2, 3, 4, 5],
-    'chunks': [1, 2, 3, 4],
-    'blocks': [1, 2, 2, 2],
-    'dtype': 'complex128',
+    'shape': [1000, 2167, 2070],
+    'chunks': [1, 2167, 2070],
+    'blocks': [1, 11, 2070],
+    'dtype': 'uint16',
     'schunk': {
-        # ...
-    }
+        'cbytes': 0,
+        'chunkshape': 4485690,
+        'chunksize': 8971380,
+        'contiguous': True,
+        'cparams': {
+            'codec': 5,
+            'codec_meta': 0,
+            'clevel': 1,
+            'filters': [0, 0, 0, 0, 0, 1],
+            'filters_meta': [0, 0, 0, 0, 0, 0],
+            'typesize': 2,
+            'blocksize': 45540,
+            'nthreads': 1,
+            'splitmode': 3,
+            'tuner': 0,
+            'use_dict': False,
+            'filters, meta': [[1, 0]]
+        },
+        'cratio': 0.0,
+        'nbytes': 8971380000,
+        'urlpath': '/Users/faltet/blosc/Caterva2/_caterva2/sub/shared/kevlar/entry/data/data.b2nd',
+        'vlmeta': {'_ftype': 'hdf5', '_dsetname': 'entry/data/data'},
+        'nchunks': 1000,
+        'mtime': None
+    },
+    'mtime': '2025-05-27T11:33:12.287605Z'
 }
 ```
 
-Let's print data from a specified dataset:
+This command returns a JSON object with the dataset's metadata, including its shape, chunks, blocks, data type, and compression parameters. The `schunk` field contains information about the underlying Blosc2 super-chunk that stores the dataset's data.
+
+There are more commands available in the `cat2cli` client; ask for help with:
 
 ```sh
-cat2cli show foo/ds-hello.b2frame[:12]  # -> Hello world!
+cat2cli --help
 ```
 
-It allows printing slices instead of the whole dataset too:
+### Docs
 
-```sh
-cat2cli show foo/dir2/ds-4d.b2nd[1,2,3]
-```
-
-```
-[115.+115.j 116.+116.j 117.+117.j 118.+118.j 119.+119.j]
-```
-
-Finally, we can tell the subscriber to download the dataset:
-
-```sh
-cat2cli download foo/dir2/ds-4d.b2nd
-```
-
-```
-Dataset saved to foo/dir2/ds-4d.b2nd
-```
-
-### Using a configuration file
-
-All the services mentioned above (and clients, to some limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).  Caterva2 source code includes a fully documented `caterva2.sample.toml` file (see also [caterva2.toml](caterva2.toml) in Caterva2 tutorials).
-
-### Experimental user authentication
-
-The Caterva2 subscriber includes some initial and incomplete support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations.  After that, accessing the subscriber's Web client will only be possible after logging in with an email address and a password.  New accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
-
-To tell the command line client to authenticate against a subscriber, add the `--username` and `--password` options:
-
-```sh
-cat2cli --user "user@example.com" --pass "foobar11" info foo/README.md
-```
-
-## Tools
-
-Although Caterva2 allows publishing an HDF5 file directly as a root (with datasets converted to Blosc2 arrays on-the-fly), it also includes a simple script that can import its full hierarchy to a new Caterva2 root directory.  You may use it like:
-
-```sh
-cat2import existing-hdf5-file.h5 new-caterva2-root
-```
-
-The tool is still pretty limited in its supported input and generated output, please invoke it with `--help` for more information (see also [cat2import](cat2import) in Caterva2 utilities documentation).
-
-Caterva2 also ships a complementary tool to export a Caterva root directory to an HDF5 file; see [cat2export](cat2export) in Caterva2 utilities documentation.  You may use it like:
-```sh
-cat2export existing-caterva2-root new-hdf5-file.h5
-```
+Go to the [Caterva2 documentation](https://ironarray.io/caterva2-doc/index.html) for more information on how to use Caterva2, including tutorials, API references, and examples.
 
 That's all folks!
