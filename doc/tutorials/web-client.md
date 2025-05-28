@@ -134,7 +134,10 @@ The most powerful set of commands are those implemented via "lazy expressions", 
 
 First, let's select the dataset `@personal/localfile.b2nd` that we uploaded and view its data. Now select the dataset `@personal/ds-1d.b2nd`, an array of the same shape. In fact, lazy expressions support broadcasting, so the two datasets can be of different shapes, as long as they are compatible.
 
-Let's create an expression that adds them together into a new dataset that we'll call `out`.  The command box accepts Python-like expressions, and we refer to the datasets acting as operands using the tag that appears next to their name in the dataset list.  In our case, `@personal/localfile.b2nd` is tagged as `a`, and `@personal/ds-1d.b2nd` as `h`, thus the command to be entered in the command box is `out = a + h`.  Entering the command and clicking on "GO" creates a new dataset (a `LazyExpr`) `@personal/out.b2nd` which should be shown instantly.
+Let's create an expression that adds them together into a new dataset that we'll call `out`.  The command box accepts Python-like expressions, and we refer to the datasets acting as operands using the tag that appears next to their name in the dataset list.  In our case, `@personal/localfile.b2nd` is tagged as `a`, and `@personal/ds-1d.b2nd` as `h`, thus the command to be entered in the command box is `out = a + h`. Note that one can also specify file names directly using the syntax ``out = dset1 + dset2 # {"dset1": "@personal/localfile.b2nd", "dset2": "@personal/ds-1d.b2nd"}``, but using tags is often more convenient.
+
+```{figure} images/web-command.webp
+Entering the command and clicking on "GO" creates a new dataset (a `LazyExpr`) `@personal/out.b2nd` which should be shown instantly.
 
 ```{figure} images/web-lazyexpr.webp
 ---
