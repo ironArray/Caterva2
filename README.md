@@ -12,8 +12,6 @@ It can be used either remotely or locally, as a simple way to access datasets in
 
 The Python API is the recommended way for building your own Caterva2 clients, whereas the Web client provides a more user-friendly interface for browsing and accessing datasets.
 
-<img src="./doc/_static/web-data-view.png" alt="Figure: Web data browser and viewer" width="100%"/>
-
 <img src="./doc/_static/web-tomo-view.png" alt="Figure: Web viewer for tomography" width="100%"/>
 
 
@@ -23,18 +21,32 @@ The Python API is the recommended way for building your own Caterva2 clients, wh
 [HDF5]: https://www.hdfgroup.org/solutions/hdf5/
     "HDF5 (HDF Group)"
 
-## Components of Caterva2
+## Caterva2 Clients
+The main role of the Caterva2 package is to provide a simple and lightweight library to build your own Caterva2 clients. The variety of interfaces available allows you to choose the one that best fits your needs. For example, querying a dataset from source can be accomplished :
+- Via the [Web API](https://ironarray.io/caterva2-doc/tutorials/web-client.html) using a browser <img src="./doc/_static/web-data-view.png" alt="Figure: Web data browser and viewer" width="100%"/>
+- Via the [Python API](https://ironarray.io/caterva2-doc/tutorials/API.html)
+```
+client = cat2.Client("https://cat2.cloud/demo")
+client.get("@public/examples/tomo-guess-test.b2nd")
+```
+- Via the [command line client](https://ironarray.io/caterva2-doc/tutorials/cli.html)
+```sh
+cat2cli info @public/kevlar/entry/data/data.b2nd
+```
 
-A Caterva2 deployment includes:
+In addition, as Caterva2 supports authentication, all client interfaces expose a way to log in and access private datasets. Administration of authenticated users may be done using the internal mechanics of Caterva2.
+
+## Internal Mechanics of Caterva2
+When a user uses a client (Web API, Python API or command line) to query datasets, the client will connect to a Caterva2 **subscriber** service, which in turn will communicate with the associated **publishers** to which it is subscribed, to retrieve the requested datasets. This subscriber/publisher interaction is mediated by a **broker** service.
+
+In order to set up a Caterva2 deployment to enable file-sharing on your system, you will thus need the following components:
 
 - One **broker** service to enable the communication between publishers and subscribers.
 - Several **publishers**, each one providing subscribers with access to one root and the datasets that it contains. The root may be a native Caterva2 directory with Blosc2 and plain files, or an HDF5 file (support for other formats may be added).
 - Several **subscribers**, each one tracking changes in multiple roots and datasets from publishers, and caching them locally for efficient reuse.
 - Several **clients**, each one asking a subscriber to track roots and datasets, and provide access to their data and metadata.
 
-Publishers and subscribers may be apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).
-
-The Caterva2 package includes all the aforementioned components, although its main role is to provide a simple and lightweight library to build your own Caterva2 clients.
+Publishers and subscribers may be far apart, in different networks with limited or expensive connectivity between them, while subscribers and clients will usually be close enough to have fast and cheap connectivity (e.g. a local network).
 
 ## Installation
 
