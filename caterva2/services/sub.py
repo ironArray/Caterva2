@@ -2275,7 +2275,7 @@ async def htmx_command(
         try:
             return await cmd.call(request, user, argv, operands, hx_current_url)
         except Exception as exc:
-            return htmx_error(request, f'Error in "{command}" command: {exc.detail}')
+            return htmx_error(request, f'Error in "{command}" command: {exc}')
 
     # If the command is not recognized
     return htmx_error(request, f'Invalid command "{argv[0]}" or expression not found')

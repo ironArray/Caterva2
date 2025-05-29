@@ -11,8 +11,8 @@ install:
 	${BIN}/pip install -e .[clients]
 	${BIN}/pip install -e .[tests]
 	${BIN}/pip install pre-commit
-	#${BIN}/pip install -e ../jupyterlite/py/jupyterlite-core
-	#${BIN}/pip install -e ../jupyterlite/py/jupyterlite
+	${BIN}/pip install -e ../jupyterlite/py/jupyterlite-core
+	${BIN}/pip install -e ../jupyterlite/py/jupyterlite
 
 assets:
 	rm caterva2/services/static/build/*
