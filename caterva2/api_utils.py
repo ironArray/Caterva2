@@ -65,7 +65,7 @@ def parse_slice(string):
     return tuple(obj) if len(obj) > 1 else obj[0]
 
 
-def get_auth_cookie(urlbase, user_auth):
+def get_auth_cookie(urlbase, user_auth, timeout=5):
     """
     Authenticate to a subscriber as a user and get an authorization cookie.
 
@@ -98,7 +98,7 @@ def get_auth_cookie(urlbase, user_auth):
 
     if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
         user_auth = user_auth._asdict()
-    resp = client.post(url, data=user_auth)
+    resp = client.post(url, data=user_auth, timeout=timeout)
     resp.raise_for_status()
     return "=".join(list(resp.cookies.items())[0])
 
@@ -269,9 +269,9 @@ def get(
     return json if model is None else model(**json)
 
 
-def post(url, json=None, auth_cookie=None, server=None):
+def post(url, json=None, auth_cookie=None, server=None, timeout=5):
     client, url = get_client_and_url(server, url)
     headers = {"Cookie": auth_cookie} if auth_cookie else None
-    response = client.post(url, json=json, headers=headers)
+    response = client.post(url, json=json, headers=headers, timeout=timeout)
     response.raise_for_status()
     return response.json()

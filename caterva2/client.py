@@ -72,7 +72,9 @@ class Root:
         """
         Retrieves a list of files in this root.
         """
-        return api_utils.get(f"{self.urlbase}/api/list/{self.name}", auth_cookie=self.cookie)
+        return api_utils.get(
+            f"{self.urlbase}/api/list/{self.name}", auth_cookie=self.cookie, timeout=self.client.timeout
+        )
 
     def __repr__(self):
         return f"<Root: {self.name}>"
@@ -257,7 +259,9 @@ class File:
         _, root = _format_paths(root.urlbase, root.name)
         self.name = name
         self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
-        self.meta = api_utils.get(f"{self.urlbase}/api/info/{self.path}", auth_cookie=self.cookie)
+        self.meta = api_utils.get(
+            f"{self.urlbase}/api/info/{self.path}", auth_cookie=self.cookie, timeout=self.root.client.timeout
+        )
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
 
@@ -652,7 +656,7 @@ class BasicAuth:
 
 
 class Client:
-    def __init__(self, urlbase, auth=None):
+    def __init__(self, urlbase, auth=None, timeout=5):
         """
         Creates a client for server in urlbase.
 
@@ -671,6 +675,7 @@ class Client:
         """
         self.urlbase = utils.urlbase_type(urlbase)
         self.cookie = None
+        self.timeout = timeout
         if auth is not None:
             if isinstance(auth, BasicAuth):
                 username = auth.username
@@ -682,7 +687,7 @@ class Client:
                 raise ValueError("auth must be BasicAuth or a tuple (username, password)")
             if username and password:
                 self.cookie = api_utils.get_auth_cookie(
-                    self.urlbase, {"username": username, "password": password}
+                    self.urlbase, {"username": username, "password": password}, timeout=self.timeout
                 )
 
     def get_roots(self):
@@ -710,7 +715,7 @@ class Client:
         {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
         """
         urlbase, _ = _format_paths(self.urlbase)
-        return api_utils.get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie)
+        return api_utils.get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie, timeout=self.timeout)
 
     def _get_root(self, name):
         """
@@ -800,7 +805,9 @@ class Client:
         {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': True}
         """
         urlbase, root = _format_paths(self.urlbase, root)
-        return api_utils.post(f"{self.urlbase}/api/subscribe/{root}", auth_cookie=self.cookie)
+        return api_utils.post(
+            f"{self.urlbase}/api/subscribe/{root}", auth_cookie=self.cookie, timeout=self.timeout
+        )
 
     def get_list(self, path):
         """
@@ -826,7 +833,9 @@ class Client:
         ['README.md', 'dir1/ds-2d.b2nd', 'dir1/ds-3d.b2nd']
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        return api_utils.get(f"{self.urlbase}/api/list/{path}", auth_cookie=self.cookie)
+        return api_utils.get(
+            f"{self.urlbase}/api/list/{path}", auth_cookie=self.cookie, timeout=self.timeout
+        )
 
     def get_info(self, path):
         """
@@ -856,7 +865,9 @@ class Client:
         [100, 200]
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        return api_utils.get(f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie)
+        return api_utils.get(
+            f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout
+        )
 
     def fetch(self, path, slice_=None):
         """
@@ -969,7 +980,10 @@ class Client:
         """
         urlbase, path = _format_paths(self.urlbase, path)
         data = api_utils._xget(
-            f"{self.urlbase}/api/chunk/{path}", {"nchunk": nchunk}, auth_cookie=self.cookie
+            f"{self.urlbase}/api/chunk/{path}",
+            {"nchunk": nchunk},
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
         )
         return data.content
 
@@ -1094,7 +1108,7 @@ class Client:
 
         client, url = api_utils.get_client_and_url(None, f"{self.urlbase}/api/append/{remotepath}")
         headers = {"Cookie": self.cookie}
-        response = client.post(url, files={"file": file}, headers=headers)
+        response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         return tuple(response.json())
 
@@ -1125,7 +1139,9 @@ class Client:
         PurePosixPath('@personal/dir/data')
         """
         urlbase, path = _format_paths(self.urlbase, remotepath)
-        result = api_utils.post(f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie)
+        result = api_utils.post(
+            f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie, timeout=self.timeout
+        )
         return PurePosixPath(result)
 
     def remove(self, path):
@@ -1159,7 +1175,9 @@ class Client:
         True
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        result = api_utils.post(f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie)
+        result = api_utils.post(
+            f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
+        )
         return pathlib.PurePosixPath(result)
 
     def move(self, src, dst):
@@ -1198,6 +1216,7 @@ class Client:
             f"{self.urlbase}/api/move/",
             {"src": str(src), "dst": str(dst)},
             auth_cookie=self.cookie,
+            timeout=self.timeout,
         )
         return pathlib.PurePosixPath(result)
 
@@ -1237,7 +1256,10 @@ class Client:
         """
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
-            f"{self.urlbase}/api/copy/", {"src": str(src), "dst": str(dst)}, auth_cookie=self.cookie
+            f"{self.urlbase}/api/copy/",
+            {"src": str(src), "dst": str(dst)},
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
         )
         return pathlib.PurePosixPath(result)
 
@@ -1286,7 +1308,9 @@ class Client:
         else:
             operands = {}
         expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
-        dataset = api_utils.post(f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie)
+        dataset = api_utils.post(
+            f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
+        )
         return pathlib.PurePosixPath(dataset)
 
     def adduser(self, newuser, password=None, superuser=False):
