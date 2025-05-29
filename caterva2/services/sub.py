@@ -2457,10 +2457,13 @@ async def htmx_delete(
         return fastapi.HTTPException(status_code=400)
 
     # Remove
-    if abspath.suffix not in {".b2frame", ".b2nd"}:
+    if abspath.suffix in [".h5", ".hdf5"]:
+        pass
+    elif abspath.suffix not in {".b2frame", ".b2nd"}:
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
         if not abspath.exists():
             return fastapi.HTTPException(status_code=404)
+
     abspath.unlink()
 
     # Redirect to home
