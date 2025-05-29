@@ -3,12 +3,12 @@
 {# Used in root_list.html #}
 <input type="hidden" id="query-search" name="search" value="{{ search_text }}">
 
-<!-- Search box -->
-<form class="d-flex mt-1" hx-get="{{ search_url }}" hx-target="#path-list">
-    <input class="form-control me-2" name="search" type="search"
-           placeholder="Search" aria-label="Search" value="{{ search_text }}">
-    <button class="btn btn-outline-success" type="submit">Search</button>
-</form>
+<!-- Filter box -->
+<input class="form-control me-2" name="search" type="search"
+       placeholder="Filter" aria-label="Filter" value="{{ search_text }}"
+       hx-get="{{ search_url }}" hx-target="#path-list" hx-trigger="input changed delay:1s"
+       hx-ext="morph" hx-swap="morph:innerHTML"
+       >
 
 <!-- Datasets list -->
 <div class="h-75 overflow-scroll mt-1" id="dataset-list">
