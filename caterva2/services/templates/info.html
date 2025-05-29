@@ -16,6 +16,19 @@
             </button>
         </li>
     {% endfor %}
+    <li class="nav-item ms-auto">
+        <a href="{{ url("api/download/") }}{{ path }}" class="nav-link notab text-decoration-none">
+            <i class="fa-solid fa-download"></i> Download
+        </a>
+    </li>
+    {% if can_delete %}
+    <li class="nav-item">
+        <a href="#" class="nav-link notab text-decoration-none link-danger"
+           hx-delete="{{ url("htmx/delete/") }}{{path}}" hx-confirm="Do you confirm deletion?">
+            <i class="fa-solid fa-trash"></i> Delete
+        </a>
+    </li>
+    {% endif %}
 </ul>
 
 <div class="tab-content" id="myTabContent">
