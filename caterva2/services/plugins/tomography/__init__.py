@@ -81,15 +81,17 @@ def display(
     base = url(f"plugins/{name}")
     context = {
         "href": f"{base}/display_one/{path}",
-        "pages": arr.shape[0],
+        "shape": arr.shape,
     }
     return templates.TemplateResponse(request, "display.html", context=context)
 
 
-async def __get_image(path, user, i):
+async def __get_image(path, user, ndim, i):
     # Alternatively, call abspath_and_dataprep with the corresponding slice to download data async
     array = await get_container(path, user)
-    content = array[i]
+    index = [slice(None) for x in array.shape]
+    index[ndim] = slice(i, i + 1, 1)
+    content = array[tuple(index)].squeeze()
     return PIL.Image.fromarray(content)
 
 
@@ -99,13 +101,14 @@ async def display_one(
     # Path parameters
     path: pathlib.Path,
     # Query parameters
-    i: int,
+    ndim: int = 0,
+    i: int = 0,
     user: db.User = Depends(optional_user),
 ):
-    img = await __get_image(path, user, i)
+    img = await __get_image(path, user, ndim, i)
 
     base = url(f"plugins/{name}")
-    src = f"{base}/image/{path}?{i=}"
+    src = f"{base}/image/{path}?{ndim=}&{i=}"
 
     width = 768  # Max size
     links = []
@@ -129,11 +132,12 @@ async def image_file(
     # Path parameters
     path: pathlib.Path,
     # Query parameters
+    ndim: int,
     i: int,
     width: int | None = None,
     user: db.User = Depends(optional_user),
 ):
-    img = await __get_image(path, user, i)
+    img = await __get_image(path, user, ndim, i)
     img_file = resize_image(img, width)
 
     def iterfile():

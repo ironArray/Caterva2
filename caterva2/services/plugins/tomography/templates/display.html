@@ -1,4 +1,19 @@
-<input type="number" min="0" max="{{ pages - 1 }}" name="i" value="0"
-        hx-get="{{ href }}" hx-target="#image-div">
+<form class="d-inline-flex gap-2" hx-get="{{ href }}" hx-target="#image-div" hx-trigger="change">
+  <select class="form-select" name="ndim" hx-on:change="updateDim(this)">
+    {% for dim in shape %}
+      <option value="{{ loop.index0 }}" data-size="{{ dim }}">Dim {{ loop.index0 }} ({{ dim }})</option>
+    {% endfor %}
+  </select>
+  <input class="form-control" type="number" min="0" max="{{ shape.0 - 1}}" name="i" value="0">
+</form>
 
 <div hx-get="{{ href }}?i=0" hx-trigger="load" id="image-div"></div>
+
+<script>
+  function updateDim(select) {
+    const size = select.selectedOptions[0].getAttribute('data-size');
+    const input = document.querySelector('input[name="i"]');
+    input.setAttribute('max', size - 1);
+    input.value = 0;
+  }
+</script>
