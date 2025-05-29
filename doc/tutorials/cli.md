@@ -1,67 +1,77 @@
 (Using-the-command-line-client)=
 # Using the command-line client
 
-For quick queries to a subscriber or for use in shell scripts, Caterva2 ships the `cat2cli` program.  To use it, you need to install Caterva2 with the `clients` extra:
+For quick queries to a subscriber or for use in shell scripts, Caterva2 ships the `cat2cli` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `subscriber` in order to be able to query something.
 
 ```sh
-python -m pip install caterva2[clients]
+python -m pip install caterva2[clients,subscriber]
 ```
 
-Start test Caterva2 services (see [](Launching-Caterva2-services)) first.  To ask the default subscriber about all roots known by the broker, use the `roots` command:
+To create a user, you can use the `cat2adduser` command line client. For example:
 
 ```sh
-cat2cli roots  # -> foo (subscribed)
+cat2adduser user@example.com foobar11
 ```
 
-**Note:** To choose a different subscriber, you may use the `--subscriber` command-line option. If the subscriber requires user authentication, use the `--username` and `--password` options. To learn about the options and arguments supported by *any* Caterva2 program, just invoke it with `--help`, e.g. `cat2cli --help`.  You may also use a configuration file (see [](caterva2.toml)).
-
-Though the previous command reports `foo` as subscribed (from previous sections), you may still use `subscribe` to subscribe to it (again):
+Now that the services are running, we can use the `cat2cli` client to talk
+to the subscriber. In another shell, let's list all the available roots in the system:
 
 ```sh
-cat2cli subscribe foo  # -> Ok
+cat2cli --user "user@example.com" --pass "foobar11" roots
 ```
 
-Now, to get the list of datasets in the `foo` root, use the `list` command:
+```
+@public (subscribed)
+@personal (subscribed)
+@shared (subscribed)
+```
+First let's upload a file from the `root-example`folder to the `@personal` root:
 
 ```sh
-cat2cli list foo  # -> foo/ds-1d.b2nd foo/ds-hello.b2frame ...
+cat2cli --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
 ```
 
-Please note that dataset names are already prefixed with the root name, so that you may copy them into other `cat2cli` commands, for instance `info` to get the metadata of a dataset:
+Now, one can list the datasets in the `@personal` root and see that the uploaded file appears
 
 ```sh
-cat2cli info foo/dir1/ds-2d.b2nd
+cat2cli --username user@example.com --password foobar11 list @personal
+>> ds-1d.b2nd
 ```
 
-This shows the familiar metadata, in Python format:
-
-```python
-{'dtype': 'uint16',
- 'ndim': 2,
- 'shape': [10, 20],
- # ...
- 'size': 400}
-```
-
-(Many `cat2cli` commands like `info` accept a `--json` option after them to force JSON output, in case you prefer it.)
-
-To show a (part of) a dataset, you may use the `show` command, which accepts a Python-like slice after the dataset name (without spaces).  For the same slice of `ds-2d.b2nd` from previous examples, you may run:
+Let's ask the subscriber for more info about the dataset:
 
 ```sh
-cat2cli show foo/dir1/ds-2d.b2nd[0:2,4:8]
+cat2cli --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
 ```
 
-And you'll get a textual representation of the slice:
-
 ```
-[[ 4  5  6  7]
- [24 25 26 27]]
+Getting info for @personal/ds-1d.b2nd
+{
+    'shape': [1000],
+    'chunks': [100],
+    'blocks': [10],
+    'dtype': 'int64',
+    'schunk': {
+        'cbytes': 5022,
+        'chunkshape': 100,
+        'chunksize': 800,
+        'contiguous': True,
+        'cparams': {'codec': 5, 'codec_meta': 0, 'clevel': 1, 'filters': [0, 0, 0, 0, 0, 1], 'filters_meta': [0, 0, 0, 0, 0, 0], 'typesize': 8, 'blocksize': 80, 'nthreads': 1, 'splitmode': 1, 'tuner': 0, 'use_dict': False, 'filters, meta': [[1, 0]]},
+        'cratio': 1.5929908403026682,
+        'nbytes': 8000,
+        'urlpath': '/home/lshaw/Caterva2/_caterva2/sub/personal/2fa87091-84c6-44f9-a57e-7f04290630b1/ds-1d.b2nd',
+        'vlmeta': {},
+        'nchunks': 10,
+        'mtime': None
+    },
+    'mtime': '2025-05-29T09:11:26.860956Z'
+}
 ```
 
-Data retrieved by `show` cannot be saved locally; for that you'll need to get the whole dataset with `download`:
+This command returns a JSON object with the dataset's metadata, including its shape, chunks, blocks, data type, and compression parameters. The `schunk` field contains information about the underlying Blosc2 super-chunk that stores the dataset's data.
+
+There are more commands available in the `cat2cli` client; ask for help with:
 
 ```sh
-cat2cli download foo/dir1/ds-2d.b2nd
+cat2cli --help
 ```
-
-Again, the program reports the path of the resulting local file.
