@@ -25,7 +25,6 @@ The Python API is the recommended way for building your own Caterva2 clients, wh
 The main role of the Caterva2 package is to provide a simple and lightweight library to build your own Caterva2 clients. The variety of interfaces available allows you to choose the one that best fits your needs. For example, querying a dataset from source can be accomplished :
 - Via the [web GUI](https://ironarray.io/caterva2-doc/tutorials/web-client.html) using a browser <img src="./doc/_static/web-data-view.png" alt="Figure: web data browser and viewer" width="100%"/>
 - Via the [Python API](https://ironarray.io/caterva2-doc/tutorials/API.html)
-- Via the [REST API](https://cat2.cloud/demo/docs) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/)
 ```
 client = cat2.Client("https://cat2.cloud/demo")
 client.get("@public/examples/tomo-guess-test.b2nd")
@@ -34,6 +33,7 @@ client.get("@public/examples/tomo-guess-test.b2nd")
 ```sh
 cat2cli info @public/kevlar/entry/data/data.b2nd
 ```
+- Via the [REST API](https://cat2.cloud/demo/docs) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/).
 
 In addition, as Caterva2 supports authentication, all client interfaces expose a way to log in and access private datasets. Administration of authenticated users may be done using the internal mechanics of Caterva2 (see section "User authentication" below).
 
