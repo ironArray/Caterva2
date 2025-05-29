@@ -1369,8 +1369,8 @@ async def unfold_file(
         newsize = 0
         if os.path.exists(dirname):
             # Traverse the directory and get the size for all files
-            for _, relpath in utils.walk_files(dirname):
-                newsize += os.path.getsize(relpath)
+            for abspath, _ in utils.walk_files(dirname):
+                newsize += os.path.getsize(abspath)
         total_size = get_disk_usage() + newsize
         if total_size > settings.quota:
             # Remove the directory if it exists

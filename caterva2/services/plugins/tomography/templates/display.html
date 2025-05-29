@@ -1,4 +1,4 @@
 <input type="number" min="0" max="{{ pages - 1 }}" name="i" value="0"
-        hx-get="{{ href }}" hx-target="#image-div" xxhx-swap="innerHTML show:top">
+        hx-get="{{ href }}" hx-target="#image-div">
 
-<div hx-get="{{ href }}?i=0" hx-trigger="load" id="image-div" xxhx-preserve></div>
+<div hx-get="{{ href }}?i=0" hx-trigger="load" id="image-div"></div>

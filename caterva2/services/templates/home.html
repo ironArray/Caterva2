@@ -106,20 +106,6 @@ htmx.on('htmx:beforeSwap', function (evt) {
         //showAlert(ev.detail.error, "danger");
     }
 })
-
-
-document.body.addEventListener('htmx:beforeRequest', function(evt) {
-    console.log('beforeRequest', window.scrollY);
-  sessionStorage.setItem('scrollPosition', window.scrollY);
-});
-
-document.body.addEventListener('htmx:afterSettle', function(evt) {
-  const scrollPosition = sessionStorage.getItem('scrollPosition');
-    console.log('afterSwap', window.scrollY, scrollPosition);
-  if (scrollPosition) {
-    window.scrollTo(0, scrollPosition);
-  }
-});
 </script>
 
 </body>
