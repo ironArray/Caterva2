@@ -1,5 +1,5 @@
 # The Publisher-Subscriber Model in Caterva2
-**Note**: this functionality is in alpha stage. If you are interested in testing it, please contact the Caterva2 team.
+**Note**: this functionality is in alpha stage; if you are interested in testing it, please contact the ironArray team.
 
 Caterva2 offers the possibility of using the publisher-subscriber (pub-sub) message pattern. Under this framework, when a user uses a client (Web API, Python API or command line) to query datasets, the client will connect to a Caterva2 **subscriber** service, which in turn will communicate with the associated **publishers** to which it is subscribed, to retrieve the requested datasets. This subscriber/publisher interaction is mediated by a **broker** service.
 

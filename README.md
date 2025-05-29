@@ -2,7 +2,7 @@
 
 ## What is it?
 
-Caterva2 is a service meant for serving [Blosc2][] and [HDF5][] datasets among authenticated users, work groups, or the general public.  There are several interfaces to Caterva2, including a Web GUI, a REST API, a Python API, and a command-line client.
+Caterva2 is a service meant for serving [Blosc2][] and [HDF5][] datasets among authenticated users, work groups, or the public.  There are several interfaces to Caterva2, including a Web GUI, a REST API, a Python API, and a command-line client.
 
 <img src="./doc/_static/caterva2-block-diagram.png" alt="Figure: Caterva2 block diagram" width="100%"/>
 
@@ -64,7 +64,7 @@ You may install Caterva2 in several ways:
   python -m pip install -e .
   ```
 
-When a user uses a client (Web API, Python API or command line) to query datasets, the client will connect to a Caterva2 **subscriber** service, which
+When a user uses a client (web GUI, REST API, Python API, or command line) to query datasets, the client will connect to a Caterva2 **subscriber** service, which
 accesses the relevant datasets stored either locally or remotely. The subscriber services may be managed via the command line by installing the `caterva2` package with the `[subscriber]` extra feature (we also wish to use the command line client, so we will also install the `clients` extra too):
 
   ```sh
