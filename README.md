@@ -2,7 +2,7 @@
 
 ## What is it?
 
-Caterva2 is a service meant for serving [Blosc2][] and [HDF5][] datasets among authenticated users, work groups, or the public.  There are several interfaces to Caterva2, including a Web GUI, a REST API, a Python API, and a command-line client.
+Caterva2 is a service meant for serving [Blosc2][] and [HDF5][] datasets among authenticated users, work groups, or the public.  There are several interfaces to Caterva2, including a web GUI, a REST API, a Python API, and a command-line client.
 
 <img src="./doc/_static/caterva2-block-diagram.png" alt="Figure: Caterva2 block diagram" width="100%"/>
 
@@ -10,9 +10,9 @@ It can be used either remotely or locally, as a simple way to access datasets in
 
 <img src="./doc/_static/caterva2-data-sharing.png" alt="Figure: How data can be shared" width="100%"/>
 
-The Python API is the recommended way for building your own Caterva2 clients, whereas the Web client provides a more user-friendly interface for browsing and accessing datasets.
+The Python API is the recommended way for building your own Caterva2 clients, whereas the web client provides a more user-friendly interface for browsing and accessing datasets.
 
-<img src="./doc/_static/web-tomo-view.png" alt="Figure: Web viewer for tomography" width="100%"/>
+<img src="./doc/_static/web-tomo-view.png" alt="Figure: web viewer for tomography" width="100%"/>
 
 
 [Blosc2]: https://www.blosc.org/pages/blosc-in-depth/
@@ -23,7 +23,7 @@ The Python API is the recommended way for building your own Caterva2 clients, wh
 
 ## Caterva2 Clients
 The main role of the Caterva2 package is to provide a simple and lightweight library to build your own Caterva2 clients. The variety of interfaces available allows you to choose the one that best fits your needs. For example, querying a dataset from source can be accomplished :
-- Via the [Web API](https://ironarray.io/caterva2-doc/tutorials/web-client.html) using a browser <img src="./doc/_static/web-data-view.png" alt="Figure: Web data browser and viewer" width="100%"/>
+- Via the [web GUI](https://ironarray.io/caterva2-doc/tutorials/web-client.html) using a browser <img src="./doc/_static/web-data-view.png" alt="Figure: web data browser and viewer" width="100%"/>
 - Via the [Python API](https://ironarray.io/caterva2-doc/tutorials/API.html)
 - Via the [REST API](https://cat2.cloud/demo/docs) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/)
 ```
@@ -75,7 +75,7 @@ In general, if you intend to run Caterva2 services, client programs, or the test
 - `subscriber` for running the Caterva2 subscriber service
 - `clients` to use Caterva2 client programs (command-line or terminal)
 - `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
-- `plugins` to enable Web client features like the tomography display
+- `plugins` to enable web GUI features like the tomography display
 - `tools` for additional utilities like `cat2import` and `cat2export` (see below)
 - `tests` if you want to run the Caterva2 test suite
 
@@ -144,7 +144,7 @@ cat2adduser user@example.com foobar11
 ```
 
 Client queries then require the same user credentials:
-- The user will be prompted to login when accessing the Web client using a browser
+- The user will be prompted to login when accessing the web client using a browser
 - The Python API client can be authenticated in the following way:
 ```
 client = cat2.Client("https://cat2.cloud/demo", ('user@example.com', 'foobar11'))
@@ -216,6 +216,6 @@ cat2cli --help
 ```
 
 ### Docs
-To see how to use the Python and Web APIs, check out the [Caterva2 documentation](https://ironarray.io/caterva2-doc/tutorials/API.html). You'll also find more information on how to use Caterva2, including tutorials, API references, and examples [here](https://ironarray.io/caterva2-doc/index.html).
+To see how to use the Python and REST API and web GUI, check out the [Caterva2 documentation](https://ironarray.io/caterva2-doc/tutorials/API.html). You'll also find more information on how to use Caterva2, including tutorials, API references, and examples [here](https://ironarray.io/caterva2-doc/index.html).
 
 That's all folks!
