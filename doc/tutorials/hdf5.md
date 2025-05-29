@@ -1,6 +1,5 @@
 (hdf5)=
-# Working with hdf5 files
-
+# Working with HDF5 files
 Caterva2 offers native support for working with HDF5 files. See [here](https://ironarray.wistia.com/medias/y64r14mojw) for a video demonstration. The notebook used is available on [github](https://github.com/ironArray/Caterva2/blob/main/examples/Video6-Cat2Cloud_and_HDF5.ipynb). In this tutorial, we will cover the same material: This tutorial demonstrates how to use the Cat2Cloud system with large HDF5 files. You'll learn how to upload, access, manipulate, and visualize HDF5 data both through proxy objects and Blosc2 arrays using the Caterva2 Python client.
 
 ## What is an HDF5 file?
@@ -17,7 +16,7 @@ Schematic of hdf5 file structure
 ```
 
 
-## Loading a .h5 file
+## Loading a HDF5 file
 HDF5 files are common in many scientific and industrial applications, and so examples abound online. We're going to use some example diffraction data from a synchrotron, provided by the [silx project](http://www.silx.org/). This may be downloaded locally (after importing necessary libraries - see the notebook mentioned at the beginning of this tutorial):
 
 ```
@@ -31,7 +30,7 @@ if not os.path.exists(f"{dir_path}.h5"):
 ```
 
 ## Unfolding the file
-In order to handle the `.h5` file using Cat2Cloud's powerful software, we must expose the hierarchical structure of the HDF5 file on the server, which in our case will be the `demo`server at https://cat2.cloud/demo. This is done by uploading the file to the Caterva2 server and then unfolding it, using a memory-light structure of subdirectories and proxy datasets.
+In order to handle the `.h5` file using Cat2Cloud, we must expose the hierarchical structure of the HDF5 file on the server, which in our case will be the `demo` server at https://cat2.cloud/demo. This is done by uploading the file to the Caterva2 server and then unfolding it, using a memory-light structure of subdirectories and proxy datasets.
 
 ```
 url = "https://cat2.cloud/demo"
@@ -98,7 +97,7 @@ scale: 75%
 
 Second visualisation
 ```
-We can also go to the web client and directly visualise the lazy expression we have just generated and saved via the Tomography tab for the saved expression:
+We can also go to the web client and directly visualize the lazy expression we have just generated and saved via the Tomography tab for the saved expression:
 
 ```{figure}images/hdf5-tomo.webp
 ---
