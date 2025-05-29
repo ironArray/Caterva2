@@ -2398,22 +2398,8 @@ async def htmx_upload(
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
     if suffix in [".h5", ".hdf5"]:
-        # Save file
-        fpath = path / filename
-        with open(fpath, "wb") as dst:
-            dst.write(data)
-        # Create proxies for each dataset in HDF5 file
-        all_dsets = list(hdf5.create_hdf5_proxies(fpath))
-        if len(all_dsets) == 0:
-            return htmx_error(request, "No arrays found in HDF5 file")
-        # Show the first dataset in the list
-        fproxy = all_dsets[0]
-        # dirname will be the name of the file without extension
-        dirname = fpath.stem
-        dsetname = f"{name}/{dirname}/{fproxy.dsetname}" + ".b2nd"
-        return htmx_redirect(hx_current_url, make_url(request, "html_home", path=dsetname), root=name)
-
-    if filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
+        pass
+    elif filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f"{filename}.b2"
