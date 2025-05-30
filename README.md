@@ -33,7 +33,7 @@ client.get("@public/examples/tomo-guess-test.b2nd")
 ```sh
 cat2cli info @public/kevlar/entry/data/data.b2nd
 ```
-- Via the [REST API](https://cat2.cloud/demo/docs) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/).
+- Via the [REST API](https://ironarray.io/caterva2-doc/tutorials/RESTAPI.html) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/) (see [here](https://cat2.cloud/demo/docs)).
 
 In addition, as Caterva2 supports authentication, all client interfaces expose a way to log in and access private datasets. Administration of authenticated users may be done using the internal mechanics of Caterva2 (see section "User authentication" below).
 

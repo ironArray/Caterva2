@@ -10,6 +10,7 @@ API
 web-client
 hdf5
 cli
+RESTAPI
 launching-services
 configuration
 independent-services
