@@ -18,7 +18,7 @@ curl -X 'GET' \
 We can query the list of files in the `@public` root via:
 ```
 curl -X 'GET' \
-  'https://cat2.cloud/demo/api/list/%40public' \
+  'https://cat2.cloud/demo/api/list/@public' \
   -H 'accept: application/json'
 ```
 which gives:
@@ -36,8 +36,7 @@ which gives:
 Let's get some metadata for the `"examples/dir1/ds-2d.b2nd"` dataset:
 ```
 curl -X 'GET' \
-  'https://cat2.cloud/demo/api/info/%40public%2Fexamples%2Fdir1%2Fds-2d.b2nd' \
-
+  'https://cat2.cloud/demo/api/info/@public/examples/dir1/ds-2d.b2nd' \
   -H 'accept: application/json'
 ```
 ```json
@@ -65,7 +64,7 @@ curl -X 'GET' \
 Finally we can download the dataset to a local file, `localfile.b2nd`, using:
 ```
 curl -X 'GET' \
-'https://cat2.cloud/demo/api/download/%40public%2Fexamples%2Fdir1%2Fds-2d.b2nd' \
+'https://cat2.cloud/demo/api/download/@public/examples/dir1/ds-2d.b2nd' \
   -H 'accept: application/json' --output "localfile.b2nd"
 ```
 For further details see the [Caterva2 REST API documentation](https://cat2.cloud/demo/docs), which can be used to automatically generate ``curl`` commands of the kind in this tutorial.
