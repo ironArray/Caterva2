@@ -1899,7 +1899,7 @@ async def htmx_path_info(
     return response
 
 
-# Have to disable cache since gives incorrect responses when underlying files are changed
+# Have to disable cache since gives incorrect responses when underlying files are changed (see issue #207)
 # @functools.lru_cache(maxsize=16)
 def get_filtered_array(abspath, path, filter, sortby):
     arr = open_b2(abspath, path)
