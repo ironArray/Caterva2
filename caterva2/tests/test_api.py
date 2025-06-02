@@ -758,6 +758,43 @@ def test_lazyexpr_fields(auth_client):
     [np.testing.assert_array_equal(servered[f], downloaded[f]) for f in downloaded.dtype.fields]
 
 
+def test_lazyexpr_cache(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    oppt = f"{TEST_CATERVA2_ROOT}/sa-1M.b2nd"
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+    N = 1000
+    rng = np.random.default_rng(seed=1)
+    it = ((-x + 1, x - 2, x) for x in range(N))
+    sa = blosc2.fromiter(
+        it, dtype=[("A", "i4"), ("B", "f4"), ("C", "f8")], shape=(N,), urlpath="sa-1M.b2nd", mode="w"
+    )
+    path = auth_client.upload("sa-1M.b2nd", oppt)
+    arr = auth_client.get(path)
+
+    # Test a lazyexpr
+    arr = auth_client.get(oppt)
+    servered = arr["(a < 500) & (b >= .1)"][:]
+    downloaded = arr.slice(None)["(a < 500) & (b >= .1)"][:]
+    [np.testing.assert_array_equal(servered[f], downloaded[f]) for f in downloaded.dtype.fields]
+
+    # Overwrite the file and check that cache isn't used
+    N = 10000
+    rng = np.random.default_rng(seed=1)
+    it = ((-x + 1, x - 2, x) for x in range(N))
+    sa = blosc2.fromiter(
+        it, dtype=[("A", "i4"), ("B", "f4"), ("C", "f8")], shape=(N,), urlpath="sa-1M.b2nd", mode="w"
+    )
+    path = auth_client.upload("sa-1M.b2nd", oppt)
+    arr = auth_client.get(path)
+
+    # Test lazyexpr again
+    servered = arr["(A < - 500) & (B >= .1)"][:]
+    downloaded = arr.slice(None)["(A < - 500) & (B >= .1)"][:]
+    [np.testing.assert_allclose(servered[f], downloaded[f]) for f in downloaded.dtype.fields]
+
+
 def test_expr_from_expr(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
