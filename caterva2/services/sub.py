@@ -817,7 +817,8 @@ async def fetch_data(
         if field:
             raise ArgumentError("Cannot handle both field and filter parameters at the same time")
         filter = filter.strip()
-        container, _ = get_filtered_array(abspath, path, filter, sortby=None)
+        mtime = abspath.stat().st_mtime
+        container, _ = get_filtered_array(abspath, path, filter, sortby=None, mtime=mtime)
     else:
         container = open_b2(abspath, path)
 
@@ -1900,9 +1901,9 @@ async def htmx_path_info(
     return response
 
 
-# Global dictionary to store objects
+# Added mtime to implicitly check when underlying files are changed, and so can't use cache (see issue #207)
 @functools.lru_cache(maxsize=16)
-def get_filtered_array(abspath, path, filter, sortby):
+def get_filtered_array(abspath, path, filter, sortby, mtime):
     arr = open_b2(abspath, path)
     has_ndfields = hasattr(arr, "fields") and arr.fields != {}
     assert has_ndfields
@@ -1954,7 +1955,8 @@ async def htmx_path_view(
     filter = filter.strip()
     if filter or sortby:
         try:
-            arr, idx = get_filtered_array(abspath, path, filter, sortby)
+            mtime = abspath.stat().st_mtime
+            arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime)
         except TypeError as exc:
             return htmx_error(request, f"Error in filter: {exc}")
         except NameError as exc:
