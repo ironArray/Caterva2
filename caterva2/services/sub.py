@@ -11,7 +11,6 @@ import ast
 import asyncio
 import collections.abc
 import contextlib
-import functools
 import io
 import itertools
 import json
@@ -1900,8 +1899,8 @@ async def htmx_path_info(
     return response
 
 
-# Global dictionary to store objects
-@functools.lru_cache(maxsize=16)
+# Have to disable cache since gives incorrect responses when underlying files are changed
+# @functools.lru_cache(maxsize=16)
 def get_filtered_array(abspath, path, filter, sortby):
     arr = open_b2(abspath, path)
     has_ndfields = hasattr(arr, "fields") and arr.fields != {}
