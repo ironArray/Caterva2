@@ -106,5 +106,5 @@ class: with-border
 scale: 75%
 ---
 
-Second visualisation
+Tomography
 ```
