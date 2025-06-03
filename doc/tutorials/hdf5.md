@@ -5,7 +5,7 @@ Caterva2 offers native support for working with HDF5 files. See [here](https://i
 ## What is an HDF5 file?
 HDF stands for Hierarchical Data Format. [HDF5](https://www.hdfgroup.org/solutions/hdf5/) is a file format and set of tools for managing complex data. It is designed to store and organize large amounts of heterogeneous data, enabling quick access and efficient storage, using compression for example. HDF5 files are made up of a root (`/`) which may then contain the file contents. These contents are organised using the two main structures of HDF5 files - groups (which are like subdirectories) and datasets. Both datasets and groups possess metadata, which may include special, bespoke information about the object in the form of attributes (`attrs`).
 
-```{figure}images/hdf5-file.webp
+```{figure} images/hdf5-file.webp
 ---
 class: with-border
 
@@ -65,7 +65,7 @@ plt.imshow(example_image / 65535,
            figure=fig, cmap=cmap, vmax=1, vmin=0)
 ```
 
-```{figure}images/hdf5-output1.webp
+```{figure} images/hdf5-output1.webp
 ---
 class: with-border
 
@@ -88,7 +88,7 @@ plt.imshow(example_image, figure=fig,
 ```
 The result is an image with the desired diffraction pattern visible, as shown below:
 
-```{figure}images/hdf5-output2.webp
+```{figure} images/hdf5-output2.webp
 ---
 class: with-border
 
@@ -99,7 +99,7 @@ Second visualisation
 ```
 We can also go to the web client and directly visualize the lazy expression we have just generated and saved via the Tomography tab for the saved expression:
 
-```{figure}images/hdf5-tomo.webp
+```{figure} images/hdf5-tomo.webp
 ---
 class: with-border
 
