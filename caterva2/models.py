@@ -19,6 +19,13 @@ class Corrupt(pydantic.BaseModel):
     error: str
 
 
+class MissingOperands(pydantic.BaseModel):
+    mtime: datetime.datetime | None = None
+    error: str
+    expr: str
+    missing_ops: dict
+
+
 class CParams(pydantic.BaseModel, extra="allow"):
     codec: blosc2.Codec
     codec_meta: int

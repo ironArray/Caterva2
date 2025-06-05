@@ -300,9 +300,7 @@ def open_b2(abspath, path):
                 if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
                     # Save operand as Proxy, see blosc2.open doc for more info.
                     # Or, it can be an HDF5 dataset too (which should be handled in the next call)
-                    relpath = srv_utils.get_relpath(
-                        value, settings.cache, settings.personal, settings.shared, settings.public
-                    )
+                    relpath = srv_utils.get_relpath(value)
                     operands[key] = open_b2(value.schunk.urlpath, relpath)
 
             if not hasattr(container, "_where_args"):
@@ -318,9 +316,7 @@ def open_b2(abspath, path):
                 metaval = value.schunk.meta if hasattr(value, "schunk") else {}
                 vlmetaval = value.schunk.vlmeta if hasattr(value, "schunk") else {}
                 if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
-                    relpath = srv_utils.get_relpath(
-                        value, settings.cache, settings.personal, settings.shared, settings.public
-                    )
+                    relpath = srv_utils.get_relpath(value)
                     value = open_b2(value.schunk.urlpath, relpath)
                     where_args[key] = value
                 elif isinstance(value, blosc2.LazyExpr):
@@ -328,9 +324,7 @@ def open_b2(abspath, path):
                     for opkey, opvalue in value.operands.items():
                         if isinstance(opvalue, blosc2.LazyExpr):
                             continue
-                        relpath = srv_utils.get_relpath(
-                            opvalue, settings.cache, settings.personal, settings.shared, settings.public
-                        )
+                        relpath = srv_utils.get_relpath(opvalue)
                         value.operands[opkey] = open_b2(opvalue.schunk.urlpath, relpath)
 
             return container

@@ -32,6 +32,8 @@ from caterva2.services.subscriber import db as sub_db
 from caterva2.services.subscriber import schemas as sub_schemas
 from caterva2.services.subscriber import users as sub_users
 
+from . import settings
+
 
 def compress_file(path):
     with open(path, "rb") as src:
@@ -126,6 +128,12 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         assert path.suffix in {".b2frame", ".b2nd", ".b2"}
         try:
             obj = blosc2.open(path)
+        except blosc2.exceptions.MissingOperands as exc:
+            error = "Lazy expression with missing operands"
+            missing_ops = {k: get_relpath(v) for k, v in exc.missing_ops.items()}
+            return get_model_from_obj(
+                obj, models.MissingOperands, error=error, expr=exc.expr, missing_ops=missing_ops
+            )
         except RuntimeError:
             return get_model_from_obj(obj, models.Corrupt, mtime=mtime, error="Unrecognized format")
     else:
@@ -177,8 +185,19 @@ def reformat_cparams(cparams):
     return cparams
 
 
-def get_relpath(ndarr, cache, personal, shared, public):
-    path = pathlib.Path(ndarr.schunk.urlpath)
+def get_relpath(path, cache=None, personal=None, shared=None, public=None):
+    if cache is None:
+        cache = settings.cache
+    if personal is None:
+        personal = settings.personal
+    if shared is None:
+        shared = settings.shared
+    if public is None:
+        public = settings.public
+
+    if not isinstance(path, pathlib.Path):
+        path = pathlib.Path(path.schunk.urlpath)
+
     if shared is not None and path.is_relative_to(shared):
         # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
         path = path.relative_to(shared)
