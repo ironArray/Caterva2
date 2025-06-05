@@ -105,22 +105,23 @@ async def display_one(
     i: int = 0,
     user: db.User = Depends(optional_user),
 ):
-    img = await __get_image(path, user, ndim, i)
+    array = await get_container(path, user)
+    height, width = (x for j, x in enumerate(array.shape) if j != ndim)
 
     base = url(f"plugins/{name}")
     src = f"{base}/image/{path}?{ndim=}&{i=}"
 
-    width = 768  # Max size
+    max_width = 768  # Max size
     links = []
-    if img.width > width:
+    if width > max_width:
         links.append(
             {
                 "href": src,
-                "label": f"{img.width} x {img.height} (original size)",
+                "label": f"{width} x {height} (original size)",
                 "target": "blank_",
             }
         )
-        src = f"{src}&{width=}"
+        src = f"{src}&width={max_width}"
 
     context = {"src": src, "links": links}
     return sub_templates.TemplateResponse(request, "display_image.html", context=context)
