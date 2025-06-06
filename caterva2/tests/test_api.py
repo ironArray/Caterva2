@@ -1029,3 +1029,4 @@ def test_client_timeout(auth_client):
     with pytest.raises(Exception) as e_info:
         _ = auth_client.lazyexpr("expr", "linspace(0, 100, 1000_0000)", compute=True)
     assert "Timeout" in str(e_info)
+    auth_client.timeout = 5  # Reset timeout to default value
