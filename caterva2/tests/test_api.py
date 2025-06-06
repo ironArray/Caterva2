@@ -1015,3 +1015,17 @@ def test_listusers_unauthorized(client, auth_client):
     with pytest.raises(Exception) as e_info:
         _ = client.listusers()
     assert "Not Found" in str(e_info)
+
+
+def test_client_timeout(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    auth_client.subscribe(TEST_CATERVA2_ROOT)
+    lxpath = auth_client.lazyexpr("expr", "linspace(0, 100, 1000_0000)", compute=True)
+    assert lxpath == pathlib.Path("@personal/expr.b2nd")
+    auth_client.timeout = 0.0001
+    # Try again
+    with pytest.raises(Exception) as e_info:
+        _ = auth_client.lazyexpr("expr", "linspace(0, 100, 1000_0000)", compute=True)
+    assert "Timeout" in str(e_info)

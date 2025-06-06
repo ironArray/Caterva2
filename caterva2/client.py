@@ -934,17 +934,32 @@ class Client:
         urlbase, path = _format_paths(self.urlbase, path)
         if field:  # blosc2 doesn't support indexing of multiple fields
             return api_utils.fetch_data(
-                path, urlbase, {"field": field}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+                path,
+                urlbase,
+                {"field": field},
+                auth_cookie=self.cookie,
+                as_blosc2=as_blosc2,
+                timeout=self.timeout,
             )
         if isinstance(key, str):  # A filter has been passed
             return api_utils.fetch_data(
-                path, urlbase, {"filter": key}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+                path,
+                urlbase,
+                {"filter": key},
+                auth_cookie=self.cookie,
+                as_blosc2=as_blosc2,
+                timeout=self.timeout,
             )
         else:  # Convert slices to strings
             slice_ = api_utils.slice_to_string(key)
             # Fetch and return the data as a Blosc2 object / NumPy array
             return api_utils.fetch_data(
-                path, urlbase, {"slice_": slice_}, auth_cookie=self.cookie, as_blosc2=as_blosc2
+                path,
+                urlbase,
+                {"slice_": slice_},
+                auth_cookie=self.cookie,
+                as_blosc2=as_blosc2,
+                timeout=self.timeout,
             )
 
     def get_chunk(self, path, nchunk):
