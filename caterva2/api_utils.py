@@ -98,13 +98,19 @@ def get_auth_cookie(urlbase, user_auth, timeout=5):
 
     if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
         user_auth = user_auth._asdict()
-    resp = client.post(url, data=user_auth, timeout=timeout)
+    try:
+        resp = client.post(url, data=user_auth, timeout=timeout)
+    except httpx.ReadTimeout as e:
+        raise TimeoutError(
+            f"Timeout after {timeout} seconds while trying to access {url}. "
+            f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+        ) from e
     resp.raise_for_status()
     return "=".join(list(resp.cookies.items())[0])
 
 
-def fetch_data(path, urlbase, params, auth_cookie=None, as_blosc2=False):
-    response = _xget(f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie)
+def fetch_data(path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5):
+    response = _xget(f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, timeout=timeout)
     data = response.content
     # Try different deserialization methods
     try:
@@ -242,7 +248,13 @@ def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None, server=No
     if auth_cookie:
         headers = headers.copy() if headers else {}
         headers["Cookie"] = auth_cookie
-    response = client.get(url, params=params, headers=headers, timeout=timeout)
+    try:
+        response = client.get(url, params=params, headers=headers, timeout=timeout)
+    except httpx.ReadTimeout as e:
+        raise TimeoutError(
+            f"Timeout after {timeout} seconds while trying to access {url}. "
+            f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+        ) from e
     if raise_for_status:
         response.raise_for_status()
     return response
@@ -272,6 +284,12 @@ def get(
 def post(url, json=None, auth_cookie=None, server=None, timeout=5):
     client, url = get_client_and_url(server, url)
     headers = {"Cookie": auth_cookie} if auth_cookie else None
-    response = client.post(url, json=json, headers=headers, timeout=timeout)
+    try:
+        response = client.post(url, json=json, headers=headers, timeout=timeout)
+    except httpx.ReadTimeout as e:
+        raise TimeoutError(
+            f"Timeout after {timeout} seconds while trying to access {url}. "
+            f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+        ) from e
     response.raise_for_status()
     return response.json()
