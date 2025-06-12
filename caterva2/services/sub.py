@@ -2482,6 +2482,8 @@ def resize_image(img, width):
 
     img_file = io.BytesIO()
     img.save(img_file, format="PNG")
+    # img.save(img_file, format="WebP", lossless=True, quality=100)
+    # img.save(img_file, format="AVIF", lossless=True)
     img_file.seek(0)
     return img_file
 
