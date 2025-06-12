@@ -106,7 +106,7 @@ async def display_one(
     user: db.User = Depends(optional_user),
 ):
     array = await get_container(path, user)
-    height, width = (x for j, x in enumerate(array.shape) if j != ndim)
+    height, width = (x for j, x in enumerate(array.shape[:3]) if j != ndim)
 
     base = url(f"plugins/{name}")
     src = f"{base}/image/{path}?{ndim=}&{i=}"
