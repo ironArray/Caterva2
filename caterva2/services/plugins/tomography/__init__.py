@@ -11,8 +11,7 @@ from fastapi.templating import Jinja2Templates
 # Project
 from caterva2.services.sub import optional_user
 
-from ...sub import get_container, open_b2, resize_image
-from ...sub import templates as sub_templates
+from ...sub import get_container, resize_image
 from ...subscriber import db
 
 app = FastAPI()
@@ -69,19 +68,26 @@ def guess(path: pathlib.Path, meta) -> bool:
 
 
 @app.get("/display/{path:path}", response_class=HTMLResponse)
-def display(
+async def display(
     request: Request,
     # Path parameters
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    arr = open_b2(abspath, path)
+    ndim = 0
+    i = 0
+
+    array = await get_container(path, user)
+    height, width = (x for j, x in enumerate(array.shape[:3]) if j != ndim)
 
     base = url(f"plugins/{name}")
+    href = f"{base}/image/{path}?{ndim=}&{i=}"
+
     context = {
-        "href": f"{base}/display_one/{path}",
-        "shape": arr.shape,
+        "href": href,
+        "shape": array.shape,
+        "width": width,
+        "height": height,
     }
     return templates.TemplateResponse(request, "display.html", context=context)
 
@@ -93,38 +99,6 @@ async def __get_image(path, user, ndim, i):
     index[ndim] = slice(i, i + 1, 1)
     content = array[tuple(index)].squeeze()
     return PIL.Image.fromarray(content)
-
-
-@app.get("/display_one/{path:path}", response_class=HTMLResponse)
-async def display_one(
-    request: Request,
-    # Path parameters
-    path: pathlib.Path,
-    # Query parameters
-    ndim: int = 0,
-    i: int = 0,
-    user: db.User = Depends(optional_user),
-):
-    array = await get_container(path, user)
-    height, width = (x for j, x in enumerate(array.shape[:3]) if j != ndim)
-
-    base = url(f"plugins/{name}")
-    src = f"{base}/image/{path}?{ndim=}&{i=}"
-
-    max_width = 768  # Max size
-    links = []
-    if width > max_width:
-        links.append(
-            {
-                "href": src,
-                "label": f"{width} x {height} (original size)",
-                "target": "blank_",
-            }
-        )
-        src = f"{src}&width={max_width}"
-
-    context = {"src": src, "links": links}
-    return sub_templates.TemplateResponse(request, "display_image.html", context=context)
 
 
 @app.get("/image/{path:path}")

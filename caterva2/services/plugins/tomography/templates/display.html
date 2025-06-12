@@ -1,19 +1,48 @@
-<form class="d-flex gap-2" hx-get="{{ href }}" hx-target="#image-div" hx-trigger="change,submit">
+<div class="d-flex gap-2">
   <select class="form-select w-auto" name="ndim" hx-on:change="updateDim(this)">
     {% for dim in shape[:3] %}
-      <option value="{{ loop.index0 }}" data-size="{{ dim }}">Dim {{ loop.index0 }} ({{ dim }})</option>
+    <option value="{{ loop.index0 }}" data-size="{{ dim }}">Dim {{ loop.index0 }} ({{ dim }})</option>
     {% endfor %}
   </select>
-  <input class="form-control w-auto" type="number" min="0" max="{{ shape.0 - 1}}" name="i" value="0">
-</form>
+  <input class="form-control w-auto" type="number" min="0" max="{{ shape.0 - 1}}" name="i" value="0"
+         hx-on:change="updateIdx(this)">
+</div>
 
-<div hx-get="{{ href }}?i=0" hx-trigger="load" id="image-div"></div>
+<a href="{{ href }}" target="blank_" id="image-original">
+  {{ width }} x {{ height }} (original size)
+</a>
+<br>
+<img src="{{ href }}&width=768" id="display-image">
 
 <script>
+  function updateURL(src, name, value) {
+    const url = new URL(src);
+    url.searchParams.set(name, value);
+    return url.toString();
+  }
+
   function updateDim(select) {
-    const size = select.selectedOptions[0].getAttribute('data-size');
+    const option = select.selectedOptions[0];
+    const size = option.getAttribute('data-size');
     const input = document.querySelector('input[name="i"]');
     input.setAttribute('max', size - 1);
     input.value = 0;
+
+    // Update image URL
+    let img = document.getElementById('display-image');
+    img.src = updateURL(img.src, 'ndim', option.value);
+
+    // Update link to original size image
+    let link = document.getElementById('image-original');
+    if (link) {
+      link.href = updateURL(link.href, 'ndim', option.value);
+      const [h, w] = [...select.options].filter(opt => !opt.selected).map(opt => opt.dataset.size);
+      link.textContent = `${w} x ${h} (original size)`;
+    }
+  }
+
+  function updateIdx(input) {
+    let img = document.getElementById('display-image');
+    img.src = updateURL(img.src, 'i', input.value);
   }
 </script>
