@@ -5,14 +5,15 @@
     {% endfor %}
   </select>
   <input class="form-control w-auto" type="number" min="0" max="{{ shape.0 - 1}}" name="i" value="0"
-         hx-on:change="updateIdx(this)">
+         hx-on:change="updateImage('i', this.value)">
+  {% with  id="tomography-spinner" %}
+    {% include 'includes/loading.html' %}
+  {% endwith %}
 </div>
 
-<a href="{{ href }}" target="blank_" id="image-original">
-  {{ width }} x {{ height }} (original size)
-</a>
+<a href="{{ href }}" target="blank_" id="image-original">{{ width }} x {{ height }} (original size)</a>
 <br>
-<img src="{{ href }}&width=768" id="display-image">
+<img src="{{ href }}&width=768" id="display-image" onload="stopSpinner()">
 
 <script>
   function updateURL(src, name, value) {
@@ -21,16 +22,22 @@
     return url.toString();
   }
 
+  function updateImage(name, value) {
+    let img = document.getElementById('display-image');
+    document.getElementById('tomography-spinner').classList.add('htmx-request');
+    img.src = updateURL(img.src, name, value);
+  }
+
   function updateDim(select) {
+    // Update image URL
     const option = select.selectedOptions[0];
+    updateImage('ndim', option.value);
+
+    // Update max of input element
     const size = option.getAttribute('data-size');
     const input = document.querySelector('input[name="i"]');
     input.setAttribute('max', size - 1);
     input.value = 0;
-
-    // Update image URL
-    let img = document.getElementById('display-image');
-    img.src = updateURL(img.src, 'ndim', option.value);
 
     // Update link to original size image
     let link = document.getElementById('image-original');
@@ -41,8 +48,10 @@
     }
   }
 
-  function updateIdx(input) {
-    let img = document.getElementById('display-image');
-    img.src = updateURL(img.src, 'i', input.value);
+  function stopSpinner() {
+    const spinner = document.getElementById('tomography-spinner');
+    if (spinner) {
+      spinner.classList.remove('htmx-request');
+    }
   }
 </script>

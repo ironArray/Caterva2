@@ -2,6 +2,7 @@ import ast
 import pathlib
 
 # Requirements
+import jinja2
 import numpy as np
 import PIL.Image
 from fastapi import Depends, FastAPI, Request, responses
@@ -12,11 +13,18 @@ from fastapi.templating import Jinja2Templates
 from caterva2.services.sub import optional_user
 
 from ...sub import get_container, resize_image
+from ...sub import templates as sub_templates
 from ...subscriber import db
 
 app = FastAPI()
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+templates.env.loader = jinja2.ChoiceLoader(
+    [
+        templates.env.loader,  # Preserve the original loader
+        sub_templates.env.loader,  # Add the sub-templates loader
+    ]
+)
 
 name = "tomography"  # Identifies the plugin
 label = "Tomography"
