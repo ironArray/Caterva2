@@ -1,7 +1,8 @@
 {% if username %}
-<form hx-post="{{ cmd_url }}" hx-include="#dataset-list input"
+<form id="form-prompt"
+      hx-post="{{ cmd_url }}" hx-include="#dataset-list input"
+      hx-on::before-request="handleSubmit(event, this)"
       hx-on::after-request="resetForm(event, this)"
-      onsubmit="handleSubmit()"
 >
     <div class="d-flex">
         <div class="input-group me-2">
@@ -11,7 +12,7 @@
                 <i class="fa-regular fa-question"></i>
             </span>
         </div>
-        <button class="btn btn-outline-success" type="submit">GO</button>
+        <button class="btn btn-outline-success d-flex align-items-center gap-1" type="submit">GO</button>
     </div>
 </form>
 

@@ -141,26 +141,24 @@ function disable(ev) {
     ev.preventDefault();
 }
 
-function handleSubmit() {
-    let form = event.target;
-    let btn = event.submitter;
-
-    btn.addEventListener('click', disable);
-    if (! btn.hidden) {
-        btn.innerHTML_bak = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
-    }
-
-    form.btn = btn;
+function handleSubmit(evt, form) {
+    let btn = form.querySelector('button');
+    btn.onclick = function(ev) {
+        ev.preventDefault();
+        htmx.trigger(evt.detail.elt, 'htmx:abort');
+    };
+    btn.innerHTML_bak = btn.innerHTML;
+    btn.innerHTML = 'Abort <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
 }
 
-function resetForm(event, form) {
-    let btn = form.btn;
-    btn.innerHTML = btn.innerHTML_bak;
-    btn.removeEventListener('click', disable);
-
-    if (event.detail.xhr.status < 400)
+function resetForm(ev, form) {
+    if (ev.detail.xhr.status < 400) {
         form.reset();
+    }
+
+    let btn = form.querySelector('button');
+    btn.innerHTML = btn.innerHTML_bak;
+    btn.onclick = null;
 }
 
 window.activate = activate;
