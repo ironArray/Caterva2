@@ -63,6 +63,10 @@
               <p>Here the lazy expression will be computed using the provided file in the <code>locals</code> dictionary
                   in place of <code>a</code>, and the file aliased by <code>b</code>.</p>
           </li>
+          <li>
+              <code>x := a[:10]</code>
+              <p>Here the lazy expression is executed eagerly and saves a slice of the file aliased by <code>a</code>.</p>
+          </li>
       </ul>
   </div>
 </div>
