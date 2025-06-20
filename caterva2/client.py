@@ -515,7 +515,7 @@ class File:
         """
         return self.client.copy(self.path, dst)
 
-    def concat(self, srcs, dst, axis):
+    def concatenate(self, srcs, dst, axis):
         """
         Concatenate the file with srcs along axis to a new location dst.
 
@@ -549,7 +549,7 @@ class File:
         PurePosixPath('@personal/c.b2nd')
         """
         srcs = [srcs] if not isinstance(srcs, list) else srcs  # assure that srcs is list
-        return self.client.concat([self.path] + srcs, dst, axis)
+        return self.client.concatenate([self.path] + srcs, dst, axis)
 
     def remove(self):
         """
@@ -1314,7 +1314,7 @@ class Client:
         )
         return pathlib.PurePosixPath(result)
 
-    def concat(self, srcs, dst, axis):
+    def concatenate(self, srcs, dst, axis):
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
             f"{self.urlbase}/api/concat/",

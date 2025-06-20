@@ -2344,7 +2344,11 @@ async def htmx_command(
     # Commands
     cmd = commands.get(argv[0])
     if cmd is not None:
-        if (cmd == ConcatCmd and len(argv) < 4) or (cmd != ConcatCmd and len(argv) != cmd.nargs):
+        if cmd == ConcatCmd and len(argv) < 4:
+            return htmx_error(
+                request, f"Invalid syntax: expected {cmd.expected} (at least 4 args for concat)."
+            )
+        if cmd != ConcatCmd and len(argv) != cmd.nargs:
             return htmx_error(request, f"Invalid syntax: expected {cmd.expected}")
 
         try:
