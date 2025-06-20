@@ -258,6 +258,36 @@ def test_copy(auth_client, dirpath, final_dir, fill_auth):
     return None
 
 
+def test_concat(auth_client, fill_auth, examples_dir):
+    if not auth_client:
+        return pytest.skip("authentication support needed")
+
+    _, mypublic = fill_auth
+    myshared = auth_client.get("@shared")
+    # Copy a 1d dataset to the shared area
+    file = mypublic["ds-1d.b2nd"]
+    copyname = "a.b2nd"
+    newpath = file.copy(f"@shared/{copyname}")
+    assert newpath == myshared[copyname].path
+    copyname2 = "b.b2nd"
+    newpath2 = file.copy(f"@shared/{copyname2}")
+    assert newpath2 == myshared[copyname2].path
+
+    # Concatenate
+    file = myshared[copyname]
+    resultname = "result.b2nd"
+    finalpath = file.concat(newpath2, f"{myshared.name}/{resultname}", axis=0)
+
+    assert myshared[resultname].shape[0] == 2 * myshared[copyname].shape[0]
+
+    # Check the data
+    fname = examples_dir / "ds-1d.b2nd"
+    a = blosc2.open(fname)
+    b = np.concatenate([a[:], a[:]], axis=0)
+    sfile = myshared[resultname]
+    return np.testing.assert_array_equal(sfile[:], b)
+
+
 @pytest.mark.parametrize("fields", [True, False])
 def test_append(auth_client, fields, fill_auth, examples_dir):
     if not auth_client:

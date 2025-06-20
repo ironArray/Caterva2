@@ -1148,6 +1148,56 @@ async def copy(
     return str(destpath)
 
 
+@app.post("/api/concat/")
+async def concat(
+    payload: models.ConcatPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Concatenate datasets
+
+    Returns
+    -------
+    str
+        The path of the concatenated dataset.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Copying files requires authentication")
+
+    srcs, dst, axis = payload.srcs, payload.dst, payload.axis
+    # src should start with a special root or known root
+    for src in srcs:
+        if not src.startswith(("@personal", "@shared", "@public")) and src not in settings.database.roots:
+            raise fastapi.HTTPException(
+                status_code=400, detail="Only concatenating from existing roots is allowed"
+            )
+    # dst should start with a special root and if not try and massage it
+    if not dst.startswith(("@personal", "@shared", "@public")):
+        path = settings.personal / str(user.id)
+        path.mkdir(exist_ok=True, parents=True)
+        dest_abspath = pathlib.Path(f"{path / dst}")
+        destpath = pathlib.Path(f"@personal/{dst}")
+    else:
+        destpath = pathlib.Path(dst)
+        dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+
+    abspaths = [abspath_and_dataprep(pathlib.Path(src), user=user)[0] for src in srcs]
+
+    # dst should be a .b2nd array and if not try and massage it
+    if not dest_abspath.suffix:
+        dest_abspath = dest_abspath.with_suffix(".b2nd")
+        destpath = destpath.with_suffix(".b2nd")
+    else:
+        if not (dest_abspath.suffix == ".b2nd"):
+            raise fastapi.HTTPException(
+                status_code=400, detail="Concatenation destination must be a .b2nd file"
+            )
+    list_of_arrays = [blosc2.open(path) for path in abspaths]
+    blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath), mode="w")
+
+    return str(destpath)
+
+
 def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
     """
     Convert a path with special root to an absolute path that can be written to.
@@ -2193,6 +2243,33 @@ class UnfoldCmd:
         return htmx_redirect(hx_current_url, url)
 
 
+class ConcatCmd:
+    """Concatenate arrays."""
+
+    names = ("concat",)
+    expected = "concat <axis> <src1> ... <srcN> > <dst>"
+    nargs = 4  # can be more if more than 2 sources
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        axis = int(argv[1])
+        list_of_arrays = []
+        i = 2
+        while True:
+            src = operands.get(argv[i], argv[i])  # get the path
+            i += 1
+            if src == ">":
+                break
+            list_of_arrays.append(src)
+        dst = operands.get(argv[i], argv[i])
+        payload = models.ConcatPayload(srcs=list_of_arrays, dst=dst, axis=axis)
+        result_path = await concat(payload, user)
+        # Redirect to display new dataset
+        result_path = await display_first(result_path, user)
+        url = make_url(request, "html_home", path=result_path)
+        return htmx_redirect(hx_current_url, url)
+
+
 commands_list = [
     AddUserCmd,
     DelUserCmd,
@@ -2202,6 +2279,7 @@ commands_list = [
     RemoveCmd,
     AddNotebookCmd,
     UnfoldCmd,
+    ConcatCmd,
 ]
 
 commands = {}
@@ -2266,7 +2344,7 @@ async def htmx_command(
     # Commands
     cmd = commands.get(argv[0])
     if cmd is not None:
-        if len(argv) != cmd.nargs:
+        if (cmd == ConcatCmd and len(argv) < 4) or (cmd != ConcatCmd and len(argv) != cmd.nargs):
             return htmx_error(request, f"Invalid syntax: expected {cmd.expected}")
 
         try:
