@@ -1193,7 +1193,7 @@ async def concat(
                 status_code=400, detail="Concatenation destination must be a .b2nd file"
             )
     list_of_arrays = [blosc2.open(path) for path in abspaths]
-    blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath), mode="w")
+    blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath))
 
     return str(destpath)
 
