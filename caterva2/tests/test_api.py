@@ -272,33 +272,35 @@ def test_concat(auth_client, fill_auth, examples_dir):
     copyname2 = "b.b2nd"
     newpath2 = file.copy(f"@shared/{copyname2}")
     assert newpath2 == myshared[copyname2].path
+    copyname3 = "c.b2nd"
+    newpath3 = file.copy(f"@shared/{copyname3}")
+    assert newpath3 == myshared[copyname3].path
 
     # Test for File class
     file = myshared[copyname]
     resultname = "result.b2nd"
-    finalpath = file.concatenate(newpath2, f"{myshared.name}/{resultname}", axis=0)
+    finalpath = file.concatenate([newpath2, newpath3], f"{myshared.name}/{resultname}", axis=0)
 
-    assert myshared[resultname].shape[0] == 2 * myshared[copyname].shape[0]
+    assert myshared[resultname].shape[0] == 3 * myshared[copyname].shape[0]
 
     # Check the data
     fname = examples_dir / "ds-1d.b2nd"
     a = blosc2.open(fname)
-    b = np.concatenate([a[:], a[:]], axis=0)
+    locres = np.concatenate([a[:], a[:], a[:]], axis=0)
     sfile = myshared[resultname]
-    np.testing.assert_array_equal(sfile[:], b)
+    np.testing.assert_array_equal(sfile[:], locres)
 
     # Test for Client class
     resultname = "result2.b2nd"
-    finalpath = auth_client.concatenate([newpath, newpath2], f"{myshared.name}/{resultname}", axis=0)
+    finalpath = auth_client.concatenate(
+        [newpath, newpath2, newpath3], f"{myshared.name}/{resultname}", axis=0
+    )
 
-    assert myshared[resultname].shape[0] == 2 * myshared[copyname].shape[0]
+    assert myshared[resultname].shape[0] == 3 * myshared[copyname].shape[0]
 
     # Check the data
-    fname = examples_dir / "ds-1d.b2nd"
-    a = blosc2.open(fname)
-    b = np.concatenate([a[:], a[:]], axis=0)
     sfile = myshared[resultname]
-    return np.testing.assert_array_equal(sfile[:], b)
+    return np.testing.assert_array_equal(sfile[:], locres)
 
 
 @pytest.mark.parametrize("fields", [True, False])
