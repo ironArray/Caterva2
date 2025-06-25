@@ -1194,9 +1194,9 @@ async def concatstack(
             )
     list_of_arrays = [blosc2.open(path) for path in abspaths]
     if stack:
-        blosc2.stack(list_of_arrays, axis, urlpath=str(dest_abspath))
+        blosc2.stack(list_of_arrays, axis, urlpath=str(dest_abspath), mode="w")
     else:
-        blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath))
+        blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath), mode="w")
     return str(destpath)
 
 
