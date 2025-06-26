@@ -1148,23 +1148,11 @@ async def copy(
     return str(destpath)
 
 
-@app.post("/api/concatstack/")
-async def concatstack(
-    payload: models.ConcatStackPayload,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Stack or concatenate datasets
-
-    Returns
-    -------
-    str
-        The path of the stacked/concatenated dataset.
-    """
+def concatstackhelper(payload: models.ConcatStackPayload, user: db.User = Depends(current_active_user)):
     if not user:
         raise srv_utils.raise_unauthorized("Stacking or concatenating files requires authentication")
 
-    srcs, dst, axis, stack = payload.srcs, payload.dst, payload.axis, payload.stack
+    srcs, dst = payload.srcs, payload.dst
     # src should start with a special root or known root
     for src in srcs:
         if not src.startswith(("@personal", "@shared", "@public")) and src not in settings.database.roots:
@@ -1192,11 +1180,44 @@ async def concatstack(
             raise fastapi.HTTPException(
                 status_code=400, detail="Stack/concat destination must be a .b2nd file"
             )
+    return abspaths, dest_abspath, destpath
+
+
+@app.post("/api/concat/")
+async def concat(
+    payload: models.ConcatStackPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Concatenate datasets
+
+    Returns
+    -------
+    str
+        The path of the concatenated dataset.
+    """
+    abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
     list_of_arrays = [blosc2.open(path) for path in abspaths]
-    if stack:
-        blosc2.stack(list_of_arrays, axis, urlpath=str(dest_abspath), mode="w")
-    else:
-        blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath), mode="w")
+    blosc2.concatenate(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
+    return str(destpath)
+
+
+@app.post("/api/stack/")
+async def stack(
+    payload: models.ConcatStackPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Concatenate datasets
+
+    Returns
+    -------
+    str
+        The path of the stacked dataset.
+    """
+    abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
+    list_of_arrays = [blosc2.open(path) for path in abspaths]
+    blosc2.stack(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
     return str(destpath)
 
 
@@ -2264,8 +2285,8 @@ class ConcatCmd:
                 break
             list_of_arrays.append(src)
         dst = operands.get(argv[i], argv[i])
-        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis, stack=False)
-        result_path = await concatstack(payload, user)
+        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
+        result_path = await concat(payload, user)
         # Redirect to display new dataset
         result_path = await display_first(result_path, user)
         url = make_url(request, "html_home", path=result_path)
@@ -2291,8 +2312,8 @@ class StackCmd:
                 break
             list_of_arrays.append(src)
         dst = operands.get(argv[i], argv[i])
-        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis, stack=True)
-        result_path = await concatstack(payload, user)
+        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
+        result_path = await stack(payload, user)
         # Redirect to display new dataset
         result_path = await display_first(result_path, user)
         url = make_url(request, "html_home", path=result_path)
@@ -2308,8 +2329,8 @@ commands_list = [
     RemoveCmd,
     AddNotebookCmd,
     UnfoldCmd,
-    ConcatCmd,
-    StackCmd,
+    # ConcatCmd,
+    # StackCmd,
 ]
 
 commands = {}
@@ -2372,7 +2393,7 @@ async def htmx_command(
             return htmx_error(request, f"Runtime error: {exc}")
 
     # Commands
-    cmd = commands.get(argv[0])
+    cmd = commands.get(argv[0])  # should give error if try to access stack or concat at the moment
     if cmd is not None:
         if (cmd in (ConcatCmd, StackCmd)) and len(argv) < 4:
             return htmx_error(

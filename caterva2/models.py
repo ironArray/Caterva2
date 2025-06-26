@@ -90,7 +90,6 @@ class ConcatStackPayload(pydantic.BaseModel):
     axis: int
     srcs: list[str]
     dst: str
-    stack: bool
 
 
 class AddUserPayload(pydantic.BaseModel):

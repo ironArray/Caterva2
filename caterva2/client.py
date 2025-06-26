@@ -1353,8 +1353,8 @@ class Client:
     def concatenate(self, srcs, dst, axis):
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
-            f"{self.urlbase}/api/concatstack/",
-            {"srcs": [str(src) for src in srcs], "dst": str(dst), "axis": int(axis), "stack": False},
+            f"{self.urlbase}/api/concat/",
+            {"srcs": [str(src) for src in srcs], "dst": str(dst), "axis": int(axis)},
             auth_cookie=self.cookie,
             timeout=self.timeout,
         )
@@ -1363,8 +1363,8 @@ class Client:
     def stack(self, srcs, dst, axis):
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
-            f"{self.urlbase}/api/concatstack/",
-            {"srcs": [str(src) for src in srcs], "dst": str(dst), "axis": int(axis), "stack": True},
+            f"{self.urlbase}/api/stack/",
+            {"srcs": [str(src) for src in srcs], "dst": str(dst), "axis": int(axis)},
             auth_cookie=self.cookie,
             timeout=self.timeout,
         )
