@@ -1148,28 +1148,16 @@ async def copy(
     return str(destpath)
 
 
-@app.post("/api/concat/")
-async def concat(
-    payload: models.ConcatPayload,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Concatenate datasets
-
-    Returns
-    -------
-    str
-        The path of the concatenated dataset.
-    """
+def concatstackhelper(payload: models.ConcatStackPayload, user: db.User = Depends(current_active_user)):
     if not user:
-        raise srv_utils.raise_unauthorized("Copying files requires authentication")
+        raise srv_utils.raise_unauthorized("Stacking or concatenating files requires authentication")
 
-    srcs, dst, axis = payload.srcs, payload.dst, payload.axis
+    srcs, dst = payload.srcs, payload.dst
     # src should start with a special root or known root
     for src in srcs:
         if not src.startswith(("@personal", "@shared", "@public")) and src not in settings.database.roots:
             raise fastapi.HTTPException(
-                status_code=400, detail="Only concatenating from existing roots is allowed"
+                status_code=400, detail="Only stacking/concatenating from existing roots is allowed"
             )
     # dst should start with a special root and if not try and massage it
     if not dst.startswith(("@personal", "@shared", "@public")):
@@ -1190,11 +1178,46 @@ async def concat(
     else:
         if not (dest_abspath.suffix == ".b2nd"):
             raise fastapi.HTTPException(
-                status_code=400, detail="Concatenation destination must be a .b2nd file"
+                status_code=400, detail="Stack/concat destination must be a .b2nd file"
             )
-    list_of_arrays = [blosc2.open(path) for path in abspaths]
-    blosc2.concatenate(list_of_arrays, axis, urlpath=str(dest_abspath))
+    return abspaths, dest_abspath, destpath
 
+
+@app.post("/api/concat/")
+async def concat(
+    payload: models.ConcatStackPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Concatenate datasets
+
+    Returns
+    -------
+    str
+        The path of the concatenated dataset.
+    """
+    abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
+    list_of_arrays = [blosc2.open(path) for path in abspaths]
+    blosc2.concatenate(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
+    return str(destpath)
+
+
+@app.post("/api/stack/")
+async def stack(
+    payload: models.ConcatStackPayload,
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Concatenate datasets
+
+    Returns
+    -------
+    str
+        The path of the stacked dataset.
+    """
+    abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
+    list_of_arrays = [blosc2.open(path) for path in abspaths]
+    blosc2.stack(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
     return str(destpath)
 
 
@@ -2262,8 +2285,35 @@ class ConcatCmd:
                 break
             list_of_arrays.append(src)
         dst = operands.get(argv[i], argv[i])
-        payload = models.ConcatPayload(srcs=list_of_arrays, dst=dst, axis=axis)
+        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
         result_path = await concat(payload, user)
+        # Redirect to display new dataset
+        result_path = await display_first(result_path, user)
+        url = make_url(request, "html_home", path=result_path)
+        return htmx_redirect(hx_current_url, url)
+
+
+class StackCmd:
+    """Stack arrays."""
+
+    names = ("stack",)
+    expected = "stack <axis> <src1> ... <srcN> > <dst>"
+    nargs = 4  # can be more if more than 2 sources
+
+    @classmethod
+    async def call(cls, request, user, argv, operands, hx_current_url):
+        axis = int(argv[1])
+        list_of_arrays = []
+        i = 2
+        while True:
+            src = operands.get(argv[i], argv[i])  # get the path
+            i += 1
+            if src == ">":
+                break
+            list_of_arrays.append(src)
+        dst = operands.get(argv[i], argv[i])
+        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
+        result_path = await stack(payload, user)
         # Redirect to display new dataset
         result_path = await display_first(result_path, user)
         url = make_url(request, "html_home", path=result_path)
@@ -2279,7 +2329,8 @@ commands_list = [
     RemoveCmd,
     AddNotebookCmd,
     UnfoldCmd,
-    ConcatCmd,
+    # ConcatCmd,
+    # StackCmd,
 ]
 
 commands = {}
@@ -2342,13 +2393,13 @@ async def htmx_command(
             return htmx_error(request, f"Runtime error: {exc}")
 
     # Commands
-    cmd = commands.get(argv[0])
+    cmd = commands.get(argv[0])  # should give error if try to access stack or concat at the moment
     if cmd is not None:
-        if cmd == ConcatCmd and len(argv) < 4:
+        if (cmd in (ConcatCmd, StackCmd)) and len(argv) < 4:
             return htmx_error(
                 request, f"Invalid syntax: expected {cmd.expected} (at least 4 args for concat)."
             )
-        if cmd != ConcatCmd and len(argv) != cmd.nargs:
+        if cmd not in (ConcatCmd, StackCmd) and len(argv) != cmd.nargs:
             return htmx_error(request, f"Invalid syntax: expected {cmd.expected}")
 
         try:

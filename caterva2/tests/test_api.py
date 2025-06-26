@@ -303,6 +303,54 @@ def test_concat(auth_client, fill_auth, examples_dir):
     return np.testing.assert_array_equal(sfile[:], locres)
 
 
+def test_stack(auth_client, fill_auth, examples_dir):
+    if not auth_client:
+        return pytest.skip("authentication support needed")
+
+    _, mypublic = fill_auth
+    myshared = auth_client.get("@shared")
+    fstr = "dir1/ds-2d.b2nd"
+
+    # Copy a 1d dataset to the shared area
+    file = mypublic[fstr]
+    s = file.shape
+    news = (s[0], 3, *s[1:])
+    copyname = "a.b2nd"
+    newpath = file.copy(f"@shared/{copyname}")
+    assert newpath == myshared[copyname].path
+    copyname2 = "b.b2nd"
+    newpath2 = file.copy(f"@shared/{copyname2}")
+    assert newpath2 == myshared[copyname2].path
+    copyname3 = "c.b2nd"
+    newpath3 = file.copy(f"@shared/{copyname3}")
+    assert newpath3 == myshared[copyname3].path
+
+    # Test for File class
+    file = myshared[copyname]
+    resultname = "result.b2nd"
+    finalpath = file.stack([newpath2, newpath3], f"{myshared.name}/{resultname}", axis=1)
+    assert myshared[resultname].shape[1] == 3
+    assert myshared[resultname].shape == news
+
+    # Check the data
+    fname = examples_dir / fstr
+    a = blosc2.open(fname)
+    locres = np.stack([a[:], a[:], a[:]], axis=1)
+    sfile = myshared[resultname]
+    np.testing.assert_array_equal(sfile[:], locres)
+
+    # Test for Client class
+    resultname = "result2.b2nd"
+    finalpath = auth_client.stack([newpath, newpath2, newpath3], f"{myshared.name}/{resultname}", axis=1)
+
+    assert myshared[resultname].shape[1] == 3
+    assert myshared[resultname].shape == news
+
+    # Check the data
+    sfile = myshared[resultname]
+    return np.testing.assert_array_equal(sfile[:], locres)
+
+
 @pytest.mark.parametrize("fields", [True, False])
 def test_append(auth_client, fields, fill_auth, examples_dir):
     if not auth_client:

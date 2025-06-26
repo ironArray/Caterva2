@@ -551,6 +551,42 @@ class File:
         srcs = [srcs] if not isinstance(srcs, list) else srcs  # assure that srcs is list
         return self.client.concatenate([self.path] + srcs, dst, axis)
 
+    def stack(self, srcs, dst, axis):
+        """
+        Stack the file with srcs along new axis to a new location dst.
+
+        Parameters
+        ----------
+        srcs: list of Paths
+            Source files to be stacked with current file
+        dst : Path
+            The destination path for the file.
+        axis: int
+            Axis along which to stack.
+
+        Returns
+        -------
+        Path
+            The new path of the stacked file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # For stacking a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd', "a.b2nd")
+        <Dataset: @personal/a.b2nd>
+        >>> root.upload('root-example/dir2/ds-4d.b2nd', "b.b2nd")
+        <Dataset: @personal/b.b2nd>
+        >>> file = root['a.b2nd']
+        >>> file.stack('@personal/b.b2nd', '@personal/c.b2nd', axis=0)
+        PurePosixPath('@personal/c.b2nd')
+        """
+        srcs = [srcs] if not isinstance(srcs, list) else srcs  # assure that srcs is list
+        return self.client.stack([self.path] + srcs, dst, axis)
+
     def remove(self):
         """
         Removes the file from the remote repository.
@@ -1318,6 +1354,16 @@ class Client:
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
             f"{self.urlbase}/api/concat/",
+            {"srcs": [str(src) for src in srcs], "dst": str(dst), "axis": int(axis)},
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
+        )
+        return pathlib.PurePosixPath(result)
+
+    def stack(self, srcs, dst, axis):
+        urlbase, _ = _format_paths(self.urlbase)
+        result = api_utils.post(
+            f"{self.urlbase}/api/stack/",
             {"srcs": [str(src) for src in srcs], "dst": str(dst), "axis": int(axis)},
             auth_cookie=self.cookie,
             timeout=self.timeout,
