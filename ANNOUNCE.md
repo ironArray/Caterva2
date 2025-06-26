@@ -1,18 +1,14 @@
-Announcing Caterva2 2025.05.02
-==============================
+Announcing Caterva2 2025.6.26
+=============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 data repositories.
 
-This is a minor release that includes several bug fixes and
-improvements in the web UI.  In particular, the `Client.lazyexpr`
-method has made the `operands` parameter optional (it was required),
-and it gained a new `compute` parameter, which allows to compute the
-lazy expression immediately, if desired.
-
-Important: this release includes a breaking change in the client server
-communication, so your will need to update the client package to
-version 2025.5.2 or later for a smoother experience.
+This is a major release that includes native support for HDF5 datasets.
+Also, the tomography viewer has been improved to support navigation
+across different axes, not just the first one.  In addition, we have
+added new `concatenate` and `stack` API methods to mirror new Blosc2
+capabilities.
 
 For more info, you can have a look at the release notes in:
 

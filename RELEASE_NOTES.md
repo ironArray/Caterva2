@@ -1,5 +1,48 @@
 # Release notes
 
+## Changes from 2025.5.2 to 2025.6.26
+
+### New support for native HDF5 files
+
+* The HDF5 files can be uploaded to the server and 'unfold'ed into
+  component datasets, which are then available for browsing and
+  downloading.
+
+* The datasets are suffixed with `.b2nd` to indicate that
+  they can be browsed and downloaded as Blosc2-compressed arrays, but
+  they are actually proxies to the original HDF5 datasets.  This allows
+  for a more efficient use of space and faster access to the data.
+
+* New tutorial on how to use the HDF5 support:
+  https://ironarray.io/caterva2-doc/tutorials/hdf5.html
+
+### Web frontend
+
+* Improvements in the tomography viewer:
+  * It now supports travelling in any direction (not just the first dimension).
+  * The size by default is now 512x512 pixels, which is more suitable for
+    a faster browsing experience.
+  * Update image with JavaScript instead of htmx for reducing latencies.
+
+* The Download and Delete buttons now are always visible, not just on the
+  Meta (previously Main) tab as before.
+
+### API additions
+
+* New `Client.concat` and `Client.stack` methods to be able to concatenate or
+  stack datasets in the server.  This is useful for creating new datasets from
+  existing ones without downloading them.
+
+* These have been added to the REST API as well, so they can be used
+  from the web client or any other client that supports the REST API.
+
+### Bug fixes and improvements
+
+* Add field-indexing to caterva2. Fixes #187.
+* Enabled field filtering for Proxy sources.
+* Full support for HDF5Proxy instances in expressions (including where()).
+* Support for HDF5 proxies in lazy operands.
+
 ## Changes from 2025.04.09 to 2025.5.2
 
 ### API changes
