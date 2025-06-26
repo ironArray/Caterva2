@@ -9,11 +9,9 @@
 import os
 import pathlib
 import re
-import sys
 
 # Requirements
 import httpx
-import requests
 
 # Caterva2
 from caterva2 import utils
@@ -25,11 +23,6 @@ try:
     blosc2_is_here = True
 except ImportError:
     blosc2_is_here = False
-
-
-USE_REQUESTS = os.environ.get("USE_REQUESTS", False)
-if sys.platform == "emscripten":
-    USE_REQUESTS = True
 
 
 def slice_to_string(slice_):
@@ -157,31 +150,17 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None):
         localpath /= url.split("/")[-1]
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
-    if USE_REQUESTS:
-        with client.get(url, headers=headers, stream=True) as r:
-            r.raise_for_status()
-            # Build the local filepath
-            cdisp = r.headers.get("content-disposition", "")
-            is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
-            if is_b2:
-                # Append '.b2' to the filename
-                localpath = localpath.with_suffix(localpath.suffix + ".b2")
-            with open(localpath, "wb") as f:
-                for data in r.iter_content():
-                    f.write(data)
-
-    else:
-        with client.stream("GET", url, headers=headers) as r:
-            r.raise_for_status()
-            # Build the local filepath
-            cdisp = r.headers.get("content-disposition", "")
-            is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
-            if is_b2:
-                # Append '.b2' to the filename
-                localpath = localpath.with_suffix(localpath.suffix + ".b2")
-            with open(localpath, "wb") as f:
-                for data in r.iter_bytes():
-                    f.write(data)
+    with client.stream("GET", url, headers=headers) as r:
+        r.raise_for_status()
+        # Build the local filepath
+        cdisp = r.headers.get("content-disposition", "")
+        is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
+        if is_b2:
+            # Append '.b2' to the filename
+            localpath = localpath.with_suffix(localpath.suffix + ".b2")
+        with open(localpath, "wb") as f:
+            for data in r.iter_bytes():
+                f.write(data)
 
     if is_b2 and try_unpack:
         localpath = b2_unpack(localpath)
@@ -214,12 +193,6 @@ def unfold_file(remotepath, urlbase, auth_cookie=None):
 
 
 def get_client_and_url(server, url, return_async_client=False):
-    # Use requests instead of httpx (for pyodide)
-    if USE_REQUESTS and not return_async_client and server is None:
-        client = requests.Session()
-        return client, url
-
-    # When NOT called from pyodide
     if return_async_client:
         client_class = httpx.AsyncClient
         transport_class = httpx.AsyncHTTPTransport
