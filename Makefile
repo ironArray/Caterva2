@@ -1,24 +1,46 @@
-.PHONY: install bro pub-dir pub-color pub-gris sub
+.PHONY: install assets lite-dev lite-test bro pub-dir pub-color pub-gris sub
 
-PYTHON = python3
-BIN = ./venv/bin
+VENV = ./venv
+BIN = $(VENV)/bin
 
 install:
-	${PYTHON} -m venv venv
+	python3 -m venv venv
 	${BIN}/pip install -U pip
 	${BIN}/pip install -e .
 	${BIN}/pip install -e .[services,hdf5,plugins,blosc2-plugins]
 	${BIN}/pip install -e .[clients]
 	${BIN}/pip install -e .[tests]
 	${BIN}/pip install pre-commit
-	#${BIN}/pip install -e ../jupyterlite/py/jupyterlite-core
-	#${BIN}/pip install -e ../jupyterlite/py/jupyterlite
 
 assets:
 	rm caterva2/services/static/build/*
 	npm run build
 	git add caterva2/services/static/build/
 
+
+# Installs our jupyterlite fork from a local copy, for development purposes
+lite-dev:
+	# 1. install our fork of jupyterlite
+	# Before doing this you must run "make build" in our jupyterlite fork
+	${BIN}/pip install --force-reinstall ../jupyterlite/dist/*.whl
+
+	# 2. Clean static files and build them again
+	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
+	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
+
+# Installs our jupyterlite fork from github, useful to test before deployment
+lite-test:
+	# 1. install our fork of jupyterlite
+	rm downloads -rf
+	gh run -R ironArray/jupyterlite download -n "caterva2 dist" --dir downloads
+	${BIN}/pip install --force-reinstall downloads/*.whl
+
+	# 2. Clean static files and build them again
+	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
+	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
+
+
+# To run the different services, for convenience
 bro:
 	${BIN}/python3 -m caterva2.services.bro
 
@@ -33,9 +55,3 @@ pub-gris:
 
 sub:
 	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub
-
-lite:
-	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
-	#${BIN}/pip install git+https://github.com/ironArray/jupyter-cat2cloud
-	#${BIN}/pip install -e ../jupyter-cat2cloud
-	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
