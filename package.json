@@ -8,16 +8,20 @@
     "example": "examples"
   },
   "scripts": {
-    "build": "vite build && npm run minify && npm run rename",
-    "minify": "esbuild caterva2/services/static/build/main.js --minify --outfile=caterva2/services/static/build/main.min.js",
-    "rename": "bash scripts/rename.sh",
+    "dev": "vite",
+    "build": "vite build && npm run minify",
+    "minify": "esbuild caterva2/services/static/build/*.js --minify --outdir=caterva2/services/static/build --allow-overwrite",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [],
   "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "bootstrap": "^5.3.3",
+  "license": "AGPL",
+  "devDependencies": {
     "sass": "1.77.6",
-    "vite": "^4.5.3"
+    "vite": "^6.3"
+  },
+  "dependencies": {
+    "@popperjs/core": "^2.11.8",
+    "bootstrap": "^5.3"
   }
 }

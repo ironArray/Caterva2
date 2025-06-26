@@ -1,11 +1,14 @@
+import { resolve } from 'path'
 import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
-    let entry = 'src/main.js';
+    const main = resolve(__dirname, 'src/main.js')
+
     let config = {
         base: '/static/',
         build: {
+            cssCodeSplit: true,
             manifest: 'manifest.json',
             outDir: 'caterva2/services/static/build',
             rollupOptions: {
@@ -17,15 +20,19 @@ export default defineConfig(({ command, mode }) => {
 
     if (command === 'serve') {
         config.build.rollupOptions = {
-            input: {
-                main: entry,
-            }
+            input: {main}
         }
-    } else { // build
+    }
+    else { // build
         config.build.lib = {
-            entry,
+            entry: {main},
             formats: ['es'],
-            fileName: (format) => 'main.js',
+            fileName: (format, entryName) => `${entryName}.js`,
+        }
+        // In lib mode filenames don't include a hash by default, add one here
+        config.build.rollupOptions.output = {
+            entryFileNames: '[name]-[hash].js',
+            assetFileNames: '[name]-[hash][extname]',
         }
     }
 

@@ -1,14 +1,11 @@
 {
   "src/main.js": {
-    "file": "main.min.c40c4686.js",
-    "isEntry": true,
+    "file": "main-0TRUBJNS.js",
+    "name": "main",
     "src": "src/main.js",
+    "isEntry": true,
     "css": [
-      "style.5e38a8c0.css"
+      "main-B2VahVEQ.css"
     ]
-  },
-  "style.css": {
-    "file": "style.css",
-    "src": "style.css"
   }
 }
