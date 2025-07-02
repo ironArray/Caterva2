@@ -656,6 +656,9 @@ class Dataset(File):
 
     @property
     def dtype(self):
+        """
+        The data type of the dataset.
+        """
         try:
             return self.meta["dtype"]
         except KeyError as e:
@@ -663,6 +666,9 @@ class Dataset(File):
 
     @property
     def shape(self):
+        """
+        The shape of the dataset.
+        """
         try:
             return tuple(self.meta["shape"])
         except KeyError as e:
@@ -670,6 +676,9 @@ class Dataset(File):
 
     @property
     def chunks(self):
+        """
+        The chunkshape of the compressed dataset.
+        """
         try:
             return tuple(self.meta["chunks"])
         except KeyError as e:
@@ -677,6 +686,9 @@ class Dataset(File):
 
     @property
     def blocks(self):
+        """
+        The blockshape of the compressed dataset.
+        """
         try:
             return tuple(self.meta["blocks"])
         except KeyError as e:
@@ -1351,6 +1363,37 @@ class Client:
         return pathlib.PurePosixPath(result)
 
     def concatenate(self, srcs, dst, axis):
+        """
+        Concatenate the srcs along axis to a new location dst.
+
+        Parameters
+        ----------
+        srcs: list of Paths
+            Source files to be concatenated
+        dst : Path
+            The destination path for the file.
+        axis: int
+            Axis along which to concatenate.
+
+        Returns
+        -------
+        Path
+            The new path of the concatenated file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # For concatenating a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd', "a.b2nd")
+        <Dataset: @personal/a.b2nd>
+        >>> root.upload('root-example/dir2/ds-4d.b2nd', "b.b2nd")
+        <Dataset: @personal/b.b2nd>
+        >>> client.concatenate(['@personal/a.b2nd', '@personal/b.b2nd'], '@personal/c.b2nd', axis=0)
+        PurePosixPath('@personal/c.b2nd')
+        """
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
             f"{self.urlbase}/api/concat/",
@@ -1361,6 +1404,37 @@ class Client:
         return pathlib.PurePosixPath(result)
 
     def stack(self, srcs, dst, axis):
+        """
+        Stack the files in srcs along new axis to a new location dst.
+
+        Parameters
+        ----------
+        srcs: list of Paths
+            Source files accessible by client to be stacked
+        dst : Path
+            The destination path for the file.
+        axis: int
+            Axis along which to stack.
+
+        Returns
+        -------
+        Path
+            The new path of the stacked file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # For stacking a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd', "a.b2nd")
+        <Dataset: @personal/a.b2nd>
+        >>> root.upload('root-example/dir2/ds-4d.b2nd', "b.b2nd")
+        <Dataset: @personal/b.b2nd>
+        >>> client.stack(['@personal/a.b2nd', '@personal/b.b2nd'], '@personal/c.b2nd', axis=0)
+        PurePosixPath('@personal/c.b2nd')
+        """
         urlbase, _ = _format_paths(self.urlbase)
         result = api_utils.post(
             f"{self.urlbase}/api/stack/",

@@ -43,7 +43,6 @@ Up until now we've just seen the read-only operations that may be performed on t
 ---
 class: with-border
 
-scale: 75%
 ---
 
 The login screen
@@ -55,7 +54,6 @@ The main Web client screen has some changes now: besides the indication of the l
 ---
 class: with-border
 
-scale: 75%
 ---
 
 The main screen showing new user features

@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Caterva2'
-copyright = '2024, ironArray SLU'
-author = 'ironArray SLU'
-release = '0.3.dev0'
+project = "Caterva2"
+copyright = "2024, ironArray SLU"
+author = "ironArray SLU"
+release = "0.3.dev0"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -26,19 +26,20 @@ extensions = [
     "nbsphinx",
 ]
 
+autosummary_generate = True  # Enable auto generation of stub files
+
 myst_enable_extensions = [
     "html_image",
 ]
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_static_path = ['_static']
+html_static_path = ["_static"]
 source_suffix = [".rst", ".md"]
 html_theme = "pydata_sphinx_theme"
 html_css_files = [

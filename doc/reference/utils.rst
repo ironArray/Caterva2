@@ -6,21 +6,9 @@ Utility classes and variables
 
 A collection of utility classes and variables that are used throughout the Caterva2 API.
 
-.. currentmodule:: caterva2
+.. automodule:: caterva2
+    :members:
+    :undoc-members:
+    :exclude-members: Client, Root, Dataset, File
 
-Classes
--------
-
-.. autosummary::
-   :toctree: autofiles
-
-    BasicAuth
-
-Variables
----------
-
-.. autosummary::
-   :toctree: autofiles
-
-   __version__
-..    sub_urlbase_default
+    .. autodata:: __version__

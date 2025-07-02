@@ -8,67 +8,59 @@ A client is a remote repository that can be subscribed to. It is the main entry 
 .. currentmodule:: caterva2
 
 
-Constructor
------------
+.. autoclass:: Client
+    :members:
+    :exclude-members: get, get_roots, get_list, subscribe, fetch, get_chunk, download, upload, adduser, deluser, listusers, lazyexpr
 
-.. autosummary::
-    :toctree: autofiles
+    :Special Methods:
+    .. autosummary::
 
-    Client.__init__
-
-
-Getting roots, files, datasets, subscribing...
-----------------------------------------------
-
-.. autosummary::
-    :toctree: autofiles
-
-    Client.get
-    Client.get_roots
-    Client.get_list
-    Client.subscribe
-
-
-Fetch / download / upload datasets
-----------------------------------
-
-.. autosummary::
-    :toctree: autofiles
-
-    Client.fetch
-    Client.get_chunk
-    Client.download
-    Client.upload
+       __init__
+       get
+       get_roots
+       get_list
+       subscribe
+       fetch
+       get_chunk
+       download
+       upload
+       adduser
+       deluser
+       listusers
+       lazyexpr
 
 
-User management
----------------
-
-.. autosummary::
-    :toctree: autofiles
-
-    Client.adduser
-    Client.deluser
-    Client.listusers
+    Constructor
+    ----------
+    .. automethod:: __init__
 
 
-Utility methods
----------------
-
-.. autosummary::
-    :toctree: autofiles
-
-    Client.append
-    Client.copy
-    Client.move
-    Client.remove
-    Client.get_info
+    Getting roots, files, datasets, subscribing...
+    ----------------------------------------------
+    .. automethod:: get
+    .. automethod:: get_roots
+    .. automethod:: get_list
+    .. automethod:: subscribe
 
 
-Evaluating expressions
-----------------------
+    Fetch / download / upload datasets
+    ----------------------------------
+    .. automethod:: fetch
+    .. automethod:: get_chunk
+    .. automethod:: download
+    .. automethod:: upload
 
-.. autosummary::
-    :toctree: autofiles
 
-    Client.lazyexpr
+    User management
+    ---------------
+    .. automethod:: adduser
+    .. automethod:: deluser
+    .. automethod:: listusers
+
+
+    Evaluating expressions
+    ----------------------
+    .. automethod:: lazyexpr
+
+    Utility methods
+    ---------------
