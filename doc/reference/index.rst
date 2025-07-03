@@ -1,8 +1,7 @@
 API Reference
 =============
-
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
     client_class
     root_class

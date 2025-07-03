@@ -9,7 +9,6 @@ HDF stands for Hierarchical Data Format. [HDF5](https://www.hdfgroup.org/solutio
 ---
 class: with-border
 
-scale: 75%
 ---
 
 Schematic of hdf5 file structure
@@ -46,11 +45,14 @@ bloscpath = client.unfold(apath)
 ```
 
 By running the line ``print(f"After uploading and unfolding: {myroot.file_list}")``, one can check that the `.h5` indeed has been correctly exposed. Note that one may also use the `unfold` command in the prompt on the web client, applying it to the uploaded file:
-
-<p align="middle">
-  <img src="images/hdf5-unfold.webp" width="200" />
-  <img src="images/hdf5-unfold2.webp" width="200" />
-</p>
+```{image} images/hdf5-unfold.webp
+:alt: Unfold command
+:width: 49.5%
+```
+```{image} images/hdf5-unfold2.webp
+:alt: Unfold result
+:width: 49.5%
+```
 The unfolded file structure is clearly visible in the second image.
 We may now perform operations on the `.b2nd` proxy.
 
@@ -69,7 +71,6 @@ plt.imshow(example_image / 65535,
 ---
 class: with-border
 
-scale: 75%
 ---
 
 First visualisation
@@ -92,7 +93,6 @@ The result is an image with the desired diffraction pattern visible, as shown be
 ---
 class: with-border
 
-scale: 75%
 ---
 
 Second visualisation
@@ -103,7 +103,6 @@ We can also go to the web client and directly visualize the lazy expression we h
 ---
 class: with-border
 
-scale: 75%
 ---
 
 Second visualisation

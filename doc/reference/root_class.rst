@@ -6,13 +6,26 @@ Root class
 A root is a remote repository that can be subscribed to.
 
 .. currentmodule:: caterva2
-.. autosummary::
-    :toctree: autofiles
 
-    Root.__init__
-    Root.__getitem__
-    Root.__contains__
-    Root.__iter__
-    Root.__len__
-    Root.file_list
-    Root.upload
+.. autoclass:: Root
+    :members:
+    :member-order: groupwise
+
+    :Special Methods:
+    .. autosummary::
+        __init__
+        __getitem__
+        __contains__
+        __iter__
+        __len__
+
+    Constructor
+    -----------
+    .. automethod:: __init__
+
+    Utility Methods
+    -----------
+    .. automethod:: __getitem__
+    .. automethod:: __contains__
+    .. automethod:: __iter__
+    .. automethod:: __len__
