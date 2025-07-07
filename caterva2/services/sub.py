@@ -19,6 +19,7 @@ import logging
 import mimetypes
 import os
 import pathlib
+import re
 import shutil
 import string
 import tarfile
@@ -1208,7 +1209,7 @@ async def stack(
     user: db.User = Depends(current_active_user),
 ):
     """
-    Concatenate datasets
+    Stack datasets
 
     Returns
     -------
@@ -2270,21 +2271,21 @@ class ConcatCmd:
     """Concatenate arrays."""
 
     names = ("concat",)
-    expected = "concat <axis> <src1> ... <srcN> > <dst>"
-    nargs = 4  # can be more if more than 2 sources
+    expected = "dst = concat([<src1>, ... <srcN>], axis) or dst = concat([<src1>, ... <srcN>])"
+    nargs = 5  # can be more if more than 2 sources
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        axis = int(argv[1])
+        dst = argv[1]  # expect to receive [concat, dst, src1, src2, ..., srcN, axis]
         list_of_arrays = []
         i = 2
         while True:
             src = operands.get(argv[i], argv[i])  # get the path
             i += 1
-            if src == ">":
+            if isinstance(src, int):
                 break
             list_of_arrays.append(src)
-        dst = operands.get(argv[i], argv[i])
+        axis = src
         payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
         result_path = await concat(payload, user)
         # Redirect to display new dataset
@@ -2297,21 +2298,21 @@ class StackCmd:
     """Stack arrays."""
 
     names = ("stack",)
-    expected = "stack <axis> <src1> ... <srcN> > <dst>"
-    nargs = 4  # can be more if more than 2 sources
+    expected = "dst = stack([<src1>, ... <srcN>], axis) or dst = stack([<src1>, ... <srcN>])"
+    nargs = 5  # can be more if more than 2 sources
 
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
-        axis = int(argv[1])
+        dst = argv[1]
         list_of_arrays = []
         i = 2
         while True:
             src = operands.get(argv[i], argv[i])  # get the path
             i += 1
-            if src == ">":
+            if isinstance(src, int):
                 break
             list_of_arrays.append(src)
-        dst = operands.get(argv[i], argv[i])
+        axis = src
         payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
         result_path = await stack(payload, user)
         # Redirect to display new dataset
@@ -2329,8 +2330,8 @@ commands_list = [
     RemoveCmd,
     AddNotebookCmd,
     UnfoldCmd,
-    # ConcatCmd,
-    # StackCmd,
+    ConcatCmd,
+    StackCmd,
 ]
 
 commands = {}
@@ -2370,32 +2371,70 @@ async def htmx_command(
     elif nargs > 1 and argv[1] in {"=", ":="}:
         operator = argv[1]
         compute = operator == ":="
-        try:
-            result_name, expr = command.split(operator, maxsplit=1)
-            if "#" in expr:  # get alternative operands
-                expr, alt_ops = expr.split("#", maxsplit=1)
-                alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
-                for k, v in alt_ops.items():
-                    operands[k] = v  # overwrite or add operands if necessary
-            result_path = make_expr(result_name, expr, operands, user, compute=compute)
-            url = make_url(request, "html_home", path=result_path)
-            return htmx_redirect(hx_current_url, url)
-        except SyntaxError:
-            return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
-        except ValueError as exc:
-            return htmx_error(request, f"Invalid expression: {exc}")
-        except TypeError as exc:
-            return htmx_error(request, f"Invalid expression: {exc}")
-        except KeyError as exc:
-            error = f"Expression error: {exc.args[0]} is not in the list of available datasets"
-            return htmx_error(request, error)
-        except RuntimeError as exc:
-            return htmx_error(request, f"Runtime error: {exc}")
+        if (argv[2][:6] != "concat") and (argv[2][:5] != "stack"):
+            try:
+                result_name, expr = command.split(operator, maxsplit=1)
+                if "#" in expr:  # get alternative operands
+                    expr, alt_ops = expr.split("#", maxsplit=1)
+                    alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
+                    for k, v in alt_ops.items():
+                        operands[k] = v  # overwrite or add operands if necessary
+                result_path = make_expr(result_name, expr, operands, user, compute=compute)
+                url = make_url(request, "html_home", path=result_path)
+                return htmx_redirect(hx_current_url, url)
+            except SyntaxError:
+                return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
+            except ValueError as exc:
+                return htmx_error(request, f"Invalid expression: {exc}")
+            except TypeError as exc:
+                return htmx_error(request, f"Invalid expression: {exc}")
+            except KeyError as exc:
+                error = f"Expression error: {exc.args[0]} is not in the list of available datasets"
+                return htmx_error(request, error)
+            except RuntimeError as exc:
+                return htmx_error(request, f"Runtime error: {exc}")
+        else:  # used dst = concat([src1, ..., srcN], 1)
+            dst, expr = command.split(operator, maxsplit=1)
+            args = re.split(r"[()]", expr)
+            args = [a.strip() for a in args]
+            cmd = commands.get(args[0])
+            err_msg = cmd.expected
+            if cmd not in {ConcatCmd, StackCmd}:
+                return htmx_error(request, "Invalid syntax: Expected concat or stack. " + err_msg)
+            if args[-1] != "":
+                return htmx_error(request, "Invalid syntax: " + err_msg)
+            argv = [args[0], dst.strip()]
+            *sources, ax = args[1].split(",")
+            ax_ = 0
+            try:
+                ax_ = int(ax.split("=")[-1])
+            except Exception:
+                # assume no axis provided, will use default 0
+                sources = args[1].split(",")
+
+            num_sources = len(sources)
+            if num_sources < 2:
+                return htmx_error(request, "Require at least two sources. " + err_msg)
+            for i, s in enumerate(sources):
+                if i == 0:
+                    # get opening parentheses
+                    bracket = next((i for i, item in enumerate(("[", "(", "{")) if s[0] == item), -1)
+                    if bracket != -1:
+                        sources[0] = s[1:]
+                    else:
+                        return htmx_error(request, "Unable to get iterable of sources. " + err_msg)
+                if i == num_sources - 1:
+                    if s[-1] == ["]", ")", "}"][bracket]:  # parentheses must match
+                        sources[-1] = s[:-1]
+                    else:
+                        return htmx_error(request, "Unable to get iterable of sources. " + err_msg)
+            argv += sources
+            argv += [ax_]  # argv = [concat/stack, dst, src1, src2, ..., srcN, axis]
 
     # Commands
-    cmd = commands.get(argv[0])  # should give error if try to access stack or concat at the moment
+    cmd = commands.get(argv[0])
     if cmd is not None:
-        if (cmd in (ConcatCmd, StackCmd)) and len(argv) < 4:
+        if (cmd in (ConcatCmd, StackCmd)) and len(argv) < 5:
             return htmx_error(
                 request, f"Invalid syntax: expected {cmd.expected} (at least 4 args for concat)."
             )
