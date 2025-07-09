@@ -4,7 +4,7 @@
 
 Caterva2 is a service meant for serving [Blosc2][] and [HDF5][] datasets among authenticated users, work groups, or the public.  There are several interfaces to Caterva2, including a web GUI, a REST API, a Python API, and a command-line client.
 
-<img src="./doc/_static/caterva2-block-diagram.png" alt="Figure: Caterva2 block diagram" width="100%"/>
+<img src="./doc/_static/caterva2-block-diagram2.png" alt="Figure: Caterva2 block diagram" width="100%"/>
 
 It can be used either remotely or locally, as a simple way to access datasets in a directory hierarchy, or to share them with other users in the same network.
 
