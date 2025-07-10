@@ -1,4 +1,4 @@
-.PHONY: install assets lite-dev lite-test bro pub-dir pub-color pub-gris sub
+.PHONY: install assets lite-build lite-dev lite-test bro pub-dir pub-color pub-gris sub
 
 VENV = ./venv
 BIN = $(VENV)/bin
@@ -18,26 +18,24 @@ assets:
 	git add caterva2/services/static/build/
 
 
-# Installs our jupyterlite fork from a local copy, for development purposes
-lite-dev:
-	# 1. install our fork of jupyterlite
-	# Before doing this you must run "make build" in our jupyterlite fork
-	${BIN}/pip install --force-reinstall ../jupyterlite/dist/*.whl
-
-	# 2. Clean static files and build them again
+lite-build:
 	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
 	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
+
+# Installs our jupyterlite fork from a local copy, for development purposes
+# Before doing this you must run "make build" in our jupyterlite fork
+lite-dev:
+	${BIN}/pip uninstall jupyterlite jupyterlite-core -y
+	${BIN}/pip install ../jupyterlite/dist/jupyterlite_core-*.whl
+	${BIN}/pip install ../jupyterlite/dist/jupyterlite-*.whl
+	$(MAKE) lite-build
 
 # Installs our jupyterlite fork from github, useful to test before deployment
 lite-test:
-	# 1. install our fork of jupyterlite
 	rm downloads -rf
 	gh run -R ironArray/jupyterlite download -n "caterva2 dist" --dir downloads
 	${BIN}/pip install --force-reinstall downloads/*.whl
-
-	# 2. Clean static files and build them again
-	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
-	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
+	$(MAKE) lite-build
 
 
 # To run the different services, for convenience
