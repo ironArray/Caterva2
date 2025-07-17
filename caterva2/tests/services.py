@@ -1,7 +1,7 @@
 """Caterva2 services for tests.
 
-This ensures that Caterva2 broker, publisher and subscriber services are
-running before proceeding to tests.  It has three modes of operation:
+This ensures that Caterva2 subscriber service is running before proceeding to tests.
+It has three modes of operation:
 
 - Standalone script: when run as a script, it starts the services as children
   and makes sure that they are available to other local programs.  If given an
@@ -82,8 +82,6 @@ def service_ep_getter(first):
     return get_service_ep
 
 
-get_bro_ep = service_ep_getter("localhost:8000")
-get_pub_ep = service_ep_getter("localhost:8001")
 get_sub_ep = service_ep_getter("localhost:8002")
 
 
@@ -103,14 +101,6 @@ def make_get_http(host, path="/"):
 
 def http_service_check(conf, conf_sect, def_host, path):
     return make_get_http(conf.get(f"{conf_sect}.http", def_host), path)
-
-
-def bro_check(conf):
-    return http_service_check(conf, "broker", get_bro_ep(), "/api/roots")
-
-
-def pub_check(id_, conf):
-    return http_service_check(conf, f"publisher.{id_}", get_pub_ep(), "/api/list")
 
 
 def sub_check(conf):
@@ -207,15 +197,6 @@ class ManagedServices(Services):
 
     def start_all(self):
         self._setup()
-
-        self._start_proc("broker", check=bro_check(self.configuration))
-        for root in self.roots:
-            self._start_proc(
-                f"publisher.{root.name}",
-                root.name,
-                self._get_data_path(root),
-                check=pub_check(root.name, self.configuration),
-            )
         self._start_proc("subscriber", check=sub_check(self.configuration))
 
     def stop_all(self):
@@ -245,9 +226,6 @@ class ExternalServices(Services):
         self.configuration = conf = configuration
 
         self._checks = checks = {}
-        checks["broker"] = bro_check(conf)
-        for root in roots:
-            checks[f"publisher.{root.name}"] = pub_check(root.name, conf)
         checks["subscriber"] = sub_check(conf)
 
     def start_all(self):

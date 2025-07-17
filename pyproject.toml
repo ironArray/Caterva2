@@ -21,7 +21,7 @@ authors = [
     {name = "ironArray SLU", email = "contact@ironarray.io"},
 ]
 dynamic = ["version"]
-keywords = ["pubsub", "blosc2"]
+keywords = ["blosc2"]
 license = {text = "GNU Affero General Public License version 3"}
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -46,7 +46,6 @@ path = "caterva2/__init__.py"
 [project.optional-dependencies]
 base-services = [
     "fastapi>=0.109",
-    "fastapi_websocket_pubsub",
     "pydantic>=2",
     "safer",
     "uvicorn",
@@ -109,8 +108,6 @@ only-include = ["caterva2", "root-example"]
 Home = "https://github.com/ironArray/Caterva2"
 
 [project.scripts]
-cat2bro = "caterva2.services.bro:main"
-cat2pub = "caterva2.services.pub:main"
 cat2sub = "caterva2.services.sub:main"
 cat2agent = "caterva2.clients.agent:main"
 cat2cli = "caterva2.clients.cli:main"

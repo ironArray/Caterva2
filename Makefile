@@ -1,4 +1,4 @@
-.PHONY: install assets lite-build lite-dev lite-test bro pub-dir pub-color pub-gris sub
+.PHONY: install assets lite-build lite-dev lite-test run
 
 VENV = ./venv
 BIN = $(VENV)/bin
@@ -38,18 +38,6 @@ lite-test:
 	$(MAKE) lite-build
 
 
-# To run the different services, for convenience
-bro:
-	${BIN}/python3 -m caterva2.services.bro
-
-pub-dir:
-	${BIN}/python3 -m caterva2.services.pub --id dir
-
-pub-color:
-	${BIN}/python3 -m caterva2.services.pub --id color
-
-pub-gris:
-	${BIN}/python3 -m caterva2.services.pub --id gris
-
-sub:
+# To run the server, for convenience
+run:
 	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub

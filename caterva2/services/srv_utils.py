@@ -20,7 +20,6 @@ import typing
 # Requirements
 import blosc2
 import fastapi
-import fastapi_websocket_pubsub
 import safer
 import uvicorn
 from fastapi_users.exceptions import UserNotExists
@@ -231,12 +230,6 @@ def operands_as_paths(operands, cache, personal, shared, public):
 #
 # Pub/Sub helpers
 #
-
-
-def start_client(url):
-    client = fastapi_websocket_pubsub.PubSubClient()
-    client.start_client(url)
-    return client
 
 
 async def disconnect_client(client, timeout=5):

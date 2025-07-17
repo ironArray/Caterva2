@@ -34,11 +34,6 @@ except AttributeError:  # Python < 3.11
 
 
 @pytest.fixture
-def pub_host(services):
-    return services.get_endpoint(f"publisher.{TEST_CATERVA2_ROOT}")
-
-
-@pytest.fixture
 def fill_public(client, examples_dir):
     # Manually copy some files to the public area (TEST_STATE_DIR)
     fnames = ["README.md", "ds-1d.b2nd", "ds-1d-fields.b2nd", "dir1/ds-2d.b2nd"]
@@ -65,7 +60,6 @@ def fill_auth(auth_client, fill_public):
 
 
 def test_subscribe(client, auth_client):
-    assert client.subscribe(TEST_CATERVA2_ROOT) == "Ok"
     assert client.subscribe("@public") == "Ok"
     for root in ["@personal", "@shared"]:
         if auth_client:
@@ -76,11 +70,9 @@ def test_subscribe(client, auth_client):
             assert "Unauthorized" in str(e_info)
 
 
-def test_roots(pub_host, client, auth_client):
+def test_roots(client, auth_client):
     client = auth_client if auth_client else client
     roots = client.get_roots()
-    assert roots[TEST_CATERVA2_ROOT]["name"] == TEST_CATERVA2_ROOT
-    assert roots[TEST_CATERVA2_ROOT]["http"] == pub_host
     assert roots["@public"]["name"] == "@public"
     assert roots["@public"]["http"] == ""
     if auth_client:
@@ -92,9 +84,6 @@ def test_roots(pub_host, client, auth_client):
 
 
 def test_get_root(client, auth_client):
-    myroot = client.get(TEST_CATERVA2_ROOT)
-    assert myroot.name == TEST_CATERVA2_ROOT
-    assert myroot.urlbase == client.urlbase
     mypublic = client.get("@public")
     assert mypublic.name == "@public"
     assert mypublic.urlbase == client.urlbase
@@ -107,13 +96,13 @@ def test_get_root(client, auth_client):
         assert myshared.urlbase == auth_client.urlbase
 
 
-def test_get_file(client):
-    myfile = client.get(TEST_CATERVA2_ROOT + "/README.md")
+def test_get_file(client, fill_public):
+    myfile = client.get("@public/README.md")
     assert myfile.name == "README.md"
 
 
-def test_get_dataset(client):
-    myds = client.get(TEST_CATERVA2_ROOT + "/ds-1d.b2nd")
+def test_get_dataset(client, fill_public):
+    myds = client.get("@public/ds-1d.b2nd")
     assert myds.name == "ds-1d.b2nd"
     assert isinstance(myds, cat2.Dataset)
     assert myds.shape == (1000,)

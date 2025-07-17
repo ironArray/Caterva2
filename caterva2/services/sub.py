@@ -60,7 +60,6 @@ dotenv.load_dotenv()
 logger = logging.getLogger("sub")
 
 # State
-clients = {}  # topic: <PubSubClient>
 locks = {}
 
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
@@ -399,12 +398,6 @@ def follow(name: str):
         settings.database.etags[key] = response.headers["etag"]
         settings.database.save()
 
-    # Subscribe to changes in the dataset
-    if name not in clients:
-        client = srv_utils.start_client(f"ws://{settings.broker}/pubsub")
-        client.subscribe(name, updated_dataset)
-        clients[name] = client
-
     return None
 
 
@@ -489,10 +482,6 @@ async def lifespan(app: FastAPI):
 
             if changed:
                 settings.database.save()
-
-            # Follow the @new channel to know when a new root is added
-            client = srv_utils.start_client(f"ws://{settings.broker}/pubsub")
-            client.subscribe("@new", new_root)
 
             # Resume following
             for path in settings.cache.iterdir():
