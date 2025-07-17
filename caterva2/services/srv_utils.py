@@ -271,16 +271,6 @@ def get_abspath(root, path, may_not_exist=False):
     return abspath
 
 
-def check_dset_path(proot, path):
-    try:
-        exists = proot.exists_dset(path)
-    except ValueError:
-        raise_bad_request(f"Invalid path {path}")
-    else:
-        if not exists:
-            raise_not_found()
-
-
 def uvicorn_run(app, args, root_path=""):
     http = args.http
     if http.uds:

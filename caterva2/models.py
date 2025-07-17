@@ -105,18 +105,7 @@ class File(pydantic.BaseModel):
 
 class Root(pydantic.BaseModel):
     name: str
-    http: str
-    subscribed: bool | None = None  # Used only by the subscriber program
-
-
-class Broker(pydantic.BaseModel):
-    roots: dict[str, Root]
-
-
-class Publisher(pydantic.BaseModel):
-    etags: dict[str, str]
 
 
 class Subscriber(pydantic.BaseModel):
-    roots: dict[str, Root]
-    etags: dict[str, str]
+    pass

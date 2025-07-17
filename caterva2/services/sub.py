@@ -33,11 +33,9 @@ import blosc2
 import dotenv
 import fastapi
 import furl
-import httpx
 import markdown
 import nbconvert
 import nbformat
-import numpy as np
 import PIL.Image
 
 # FastAPI
@@ -69,140 +67,6 @@ mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 def guess_type(path):
     mimetype, encoding = mimetypes.guess_type(path)
     return mimetype
-
-
-class PubSourceDataset:
-    """
-    Class for getting chunks from a dataset on a publisher service.
-    """
-
-    def __init__(self, abspath, path, metadata=None):
-        self.path = pathlib.Path(path)
-        if metadata is not None:
-            suffix = abspath.suffix
-            if suffix == ".b2nd":
-                metadata = models.Metadata(**metadata)
-                self._shape = metadata.shape
-                self._chunks = metadata.chunks
-                self._blocks = metadata.blocks
-                dtype = metadata.dtype
-                # Sometimes dtype is a tuple (e.g. ('<f8', (10,))), and this seems a safe way to handle it
-                try:
-                    dtype = np.dtype(dtype)
-                except (ValueError, TypeError):
-                    dtype = np.dtype(ast.literal_eval(dtype))
-                self._dtype = dtype
-                self._cparams = dict(metadata.schunk.cparams)
-            else:
-                if suffix == ".b2frame":
-                    metadata = models.SChunk(**metadata)
-                else:
-                    abspath = pathlib.Path(f"{abspath}.b2")
-                    metadata = models.SChunk(**metadata)
-                self._typesize = metadata.cparams.typesize
-                self._chunksize = metadata.chunksize
-                self._nbytes = metadata.nbytes
-                self._cparams = dict(metadata.cparams)
-            del self._cparams["filters, meta"]
-            self._cparams = blosc2.CParams(**self._cparams)
-            self.abspath = abspath
-            if self.abspath is not None:
-                self.abspath.parent.mkdir(exist_ok=True, parents=True)
-
-    def _get_request_args(self, nchunk, return_async_client):
-        root, *name = self.path.parts
-        root = settings.database.roots[root]
-        name = pathlib.Path(*name)
-
-        url = f"/api/download/{name}"
-        client, url = api_utils.get_client_and_url(root.http, url, return_async_client=return_async_client)
-        args = {"url": url, "params": {"nchunk": nchunk}, "timeout": 5}
-        return client, args
-
-    def _get_chunk(self, nchunk):
-        client, req_args = self._get_request_args(nchunk, return_async_client=False)
-
-        response = client.get(**req_args)
-        response.raise_for_status()
-        return response.content
-
-    async def _aget_chunk(self, nchunk):
-        client, req_args = self._get_request_args(nchunk, return_async_client=True)
-
-        async with client.stream("GET", **req_args) as resp:
-            buffer = []
-            async for chunk in resp.aiter_bytes():
-                buffer.append(chunk)
-            return b"".join(buffer)
-
-
-# Class representing a NDArray in a publisher
-class PubNDDataset(blosc2.ProxyNDSource, PubSourceDataset):
-    @property
-    def shape(self):
-        return self._shape
-
-    @property
-    def chunks(self):
-        return self._chunks
-
-    @property
-    def blocks(self):
-        return self._blocks
-
-    @property
-    def dtype(self):
-        return self._dtype
-
-    @property
-    def cparams(self):
-        return self._cparams
-
-    def get_chunk(self, nchunk: int) -> bytes:
-        return self._get_chunk(nchunk)
-
-    async def aget_chunk(self, nchunk: int) -> bytes:
-        return await self._aget_chunk(nchunk)
-
-
-# Class representing a SChunk in a publisher
-class PubSCDataset(blosc2.ProxySource, PubSourceDataset):
-    @property
-    def typesize(self):
-        return self._typesize
-
-    @property
-    def chunksize(self):
-        return self._chunksize
-
-    @property
-    def nbytes(self):
-        return self._nbytes
-
-    @property
-    def cparams(self):
-        return self._cparams
-
-    def get_chunk(self, nchunk: int) -> bytes:
-        return self._get_chunk(nchunk)
-
-    async def aget_chunk(self, nchunk: int) -> bytes:
-        return await self._aget_chunk(nchunk)
-
-
-# Factory function for creating a proxy for a dataset in publisher
-def PubDataset(abspath, path, metadata=None):
-    dataset = PubSourceDataset(abspath, path, metadata)
-    # By using __new__() and updating the internal dict of the instance,
-    # we can return the right class avoiding calling PubSourceDataset.__init__ again
-    if hasattr(dataset, "_shape"):
-        # return PubNDDataset(abspath, path, metadata)
-        instance = PubNDDataset.__new__(PubNDDataset)
-    else:
-        # return PubSCDataset(abspath, path, metadata)
-        instance = PubSCDataset.__new__(PubSCDataset)
-    instance.__dict__.update(dataset.__dict__)
-    return instance
 
 
 def get_disk_usage():
@@ -243,42 +107,6 @@ def make_url(request, name, query=None, **path_params):
     return settings.urlbase + url
 
 
-async def new_root(data, topic):
-    logger.info(f"NEW root {topic} {data=}")
-    root = models.Root(**data)
-    settings.database.roots[root.name] = root
-    settings.database.save()
-
-
-async def updated_dataset(data, topic):
-    name = topic
-    relpath = data["path"]
-
-    rootdir = settings.cache / name
-    abspath = rootdir / relpath
-    metadata = data.get("metadata")
-    if metadata is None:
-        if abspath.suffix not in {".b2nd", ".b2frame"}:
-            abspath = pathlib.Path(f"{abspath}.b2")
-        if abspath.is_file():
-            abspath.unlink()
-    else:
-        key = f"{name}/{relpath}"
-        init_b2(abspath, key, metadata)
-
-
-def init_b2(abspath, path, metadata):
-    dataset = PubDataset(abspath, path, metadata)
-    # TODO: not sure if this would prevent some kind of update in dataset. @jdavid?
-    # if os.path.exists(dataset.abspath):
-    #     return
-    schunk_meta = metadata.get("schunk", metadata)
-    vlmeta = {}
-    for k, v in schunk_meta["vlmeta"].items():
-        vlmeta[k] = v
-    blosc2.Proxy(dataset, urlpath=dataset.abspath, vlmeta=vlmeta, caterva2_env=True)
-
-
 def open_b2(abspath, path):
     """
     Open a Blosc2 dataset.
@@ -286,119 +114,59 @@ def open_b2(abspath, path):
     Return a Proxy if the dataset is in a publisher,
     or the LazyExpr or Blosc2 container otherwise.
     """
-    if pathlib.Path(path).parts[0] in {"@personal", "@shared", "@public"}:
-        container = blosc2.open(abspath)
-        vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
-        if isinstance(container, blosc2.LazyExpr):
-            # Open the operands properly
-            operands = container.operands
-            for key, value in operands.items():
-                if value is None:
-                    raise ValueError(f'Missing operand "{key}"')
-                metaval = value.schunk.meta if hasattr(value, "schunk") else {}
-                vlmetaval = value.schunk.vlmeta
-                if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
-                    # Save operand as Proxy, see blosc2.open doc for more info.
-                    # Or, it can be an HDF5 dataset too (which should be handled in the next call)
-                    relpath = srv_utils.get_relpath(value)
-                    operands[key] = open_b2(value.schunk.urlpath, relpath)
+    root = pathlib.Path(path).parts[0]
+    if root not in {"@personal", "@shared", "@public"}:
+        raise ValueError(f"Unexpected root={root}")
 
-            if not hasattr(container, "_where_args"):
-                # If the container does not have _where_args, it is a LazyExpr
-                # and we can return it directly.
-                return container
+    container = blosc2.open(abspath)
+    vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
+    if isinstance(container, blosc2.LazyExpr):
+        # Open the operands properly
+        operands = container.operands
+        for key, value in operands.items():
+            if value is None:
+                raise ValueError(f'Missing operand "{key}"')
+            metaval = value.schunk.meta if hasattr(value, "schunk") else {}
+            vlmetaval = value.schunk.vlmeta
+            if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
+                # Save operand as Proxy, see blosc2.open doc for more info.
+                # Or, it can be an HDF5 dataset too (which should be handled in the next call)
+                relpath = srv_utils.get_relpath(value)
+                operands[key] = open_b2(value.schunk.urlpath, relpath)
 
-            # Repeat the operation for where args (for properly handling proxies)
-            where_args = container._where_args
-            for key, value in where_args.items():
-                if value is None:
-                    raise ValueError(f'Missing operand "{key}"')
-                metaval = value.schunk.meta if hasattr(value, "schunk") else {}
-                vlmetaval = value.schunk.vlmeta if hasattr(value, "schunk") else {}
-                if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
-                    relpath = srv_utils.get_relpath(value)
-                    value = open_b2(value.schunk.urlpath, relpath)
-                    where_args[key] = value
-                elif isinstance(value, blosc2.LazyExpr):
-                    # Properly open the operands (to e.g. find proxies)
-                    for opkey, opvalue in value.operands.items():
-                        if isinstance(opvalue, blosc2.LazyExpr):
-                            continue
-                        relpath = srv_utils.get_relpath(opvalue)
-                        value.operands[opkey] = open_b2(opvalue.schunk.urlpath, relpath)
-
+        if not hasattr(container, "_where_args"):
+            # If the container does not have _where_args, it is a LazyExpr
+            # and we can return it directly.
             return container
 
-        # Check if this is a file of a special type
-        elif "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
-            container = hdf5.HDF5Proxy(container)
-        # Set the number of threads for compression and decompression
-        container.cparams.nthreads = ncores
-        container.dparams.nthreads = ncores
+        # Repeat the operation for where args (for properly handling proxies)
+        where_args = container._where_args
+        for key, value in where_args.items():
+            if value is None:
+                raise ValueError(f'Missing operand "{key}"')
+            metaval = value.schunk.meta if hasattr(value, "schunk") else {}
+            vlmetaval = value.schunk.vlmeta if hasattr(value, "schunk") else {}
+            if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
+                relpath = srv_utils.get_relpath(value)
+                value = open_b2(value.schunk.urlpath, relpath)
+                where_args[key] = value
+            elif isinstance(value, blosc2.LazyExpr):
+                # Properly open the operands (to e.g. find proxies)
+                for opkey, opvalue in value.operands.items():
+                    if isinstance(opvalue, blosc2.LazyExpr):
+                        continue
+                    relpath = srv_utils.get_relpath(opvalue)
+                    value.operands[opkey] = open_b2(opvalue.schunk.urlpath, relpath)
+
         return container
 
-    # Return Proxy
-    dataset = PubDataset(abspath, path)
-    container = blosc2.open(abspath)
-    # No need to pass caterva2_env=True since _cache has already been created
-    return blosc2.Proxy(dataset, _cache=container)
-
-
-#
-# Internal API
-#
-
-
-def follow(name: str):
-    root = settings.database.roots.get(name)
-    if root is None:
-        return {name: "This dataset does not exist in the network"}
-
-    if not root.subscribed:
-        root.subscribed = True
-        settings.database.save()
-
-    # Create root directory in the cache
-    rootdir = settings.cache / name
-    if not rootdir.exists():
-        rootdir.mkdir(exist_ok=True)
-
-    # Get list of datasets
-    try:
-        data = api_utils.get("/api/list", server=root.http)
-    except httpx.ConnectError:
-        return None
-
-    # Initialize the datasets in the cache
-    for relpath in data:
-        # If-None-Match header
-        key = f"{name}/{relpath}"
-        val = settings.database.etags.get(key)
-        headers = None if val is None else {"If-None-Match": val}
-
-        # Call API
-        response = api_utils.get(
-            f"/api/info/{relpath}",
-            headers=headers,
-            server=root.http,
-            raise_for_status=False,
-            return_response=True,
-        )
-        if response.status_code == 304:
-            continue
-
-        response.raise_for_status()
-        metadata = response.json()
-
-        # Save metadata and create Proxy
-        abspath = rootdir / relpath
-        init_b2(abspath, key, metadata)
-
-        # Save etag
-        settings.database.etags[key] = response.headers["etag"]
-        settings.database.save()
-
-    return None
+    # Check if this is a file of a special type
+    elif "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
+        container = hdf5.HDF5Proxy(container)
+    # Set the number of threads for compression and decompression
+    container.cparams.nthreads = ncores
+    container.dparams.nthreads = ncores
+    return container
 
 
 #
@@ -454,45 +222,7 @@ async def lifespan(app: FastAPI):
     if user_login_enabled():
         await db.create_db_and_tables(settings.statedir)
 
-    # Initialize roots from the broker
-    client = None
-    if settings.broker:
-        try:
-            data = api_utils.get("/api/roots", server=settings.broker)
-        except httpx.ConnectError:
-            logger.warning(f'Broker "{settings.broker}" not available')
-        else:
-            changed = False
-            # Deleted
-            d = list(settings.database.roots.items())
-            for name, _root in d:
-                if name not in data:
-                    del settings.database.roots[name]
-                    changed = True
-
-            # New or updated
-            for name, values in data.items():
-                root = models.Root(**values)
-                if name not in settings.database.roots:
-                    settings.database.roots[root.name] = root
-                    changed = True
-                elif settings.database.roots[root.name].http != root.http:
-                    settings.database.roots[root.name].http = root.http
-                    changed = True
-
-            if changed:
-                settings.database.save()
-
-            # Resume following
-            for path in settings.cache.iterdir():
-                if path.is_dir():
-                    follow(path.name)
-
     yield
-
-    # Disconnect from worker
-    if client is not None:
-        await srv_utils.disconnect_client(client)
 
 
 # Visualize the size of a file on a compact and human-readable format
@@ -566,52 +296,15 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     """
     # Here we just return the roots that are known by the broker
     # plus the special roots @personal, @shared and @public
-    roots = settings.database.roots.copy()
-    root = models.Root(name="@public", http="", subscribed=True)
+    roots = {}
+    root = models.Root(name="@public")
     roots[root.name] = root
     if user:
         for name in ["@personal", "@shared"]:
-            root = models.Root(name=name, http="", subscribed=True)
+            root = models.Root(name=name)
             roots[root.name] = root
 
     return roots
-
-
-def get_root(name):
-    root = settings.database.roots.get(name)
-    if root is None:
-        srv_utils.raise_not_found(f"{name} not known by the broker")
-
-    return root
-
-
-@app.post("/api/subscribe/{name}")
-async def post_subscribe(
-    name: str,
-    user: db.User = Depends(optional_user),
-):
-    """
-    Subscribe to a root.
-
-    Parameters
-    ----------
-    name : str
-        The name of the root.
-
-    Returns
-    -------
-    str
-        'Ok' if successful.
-    """
-    if name == "@public":
-        pass
-    elif name in {"@personal", "@shared"}:
-        if not user:
-            raise srv_utils.raise_unauthorized(f"Subscribing to {name} requires authentication")
-    else:
-        get_root(name)
-        follow(name)
-    return "Ok"
 
 
 @app.get("/api/list/{path:path}")
@@ -645,8 +338,7 @@ async def get_list(
             srv_utils.raise_not_found("@shared needs authentication")
         rootdir = settings.shared
     else:
-        root = get_root(root)
-        rootdir = settings.cache / root.name
+        raise ValueError(f"Unexpected root={root}")
 
     # List the datasets in root or directory
     directory = rootdir / pathlib.Path(*path.parts[1:])
@@ -723,39 +415,27 @@ def abspath_and_dataprep(
     given, or the whole data otherwise.
     """
     parts = path.parts
-    if parts[0] == "@personal":
-        if not user:
-            raise fastapi.HTTPException(status_code=404)  # NotFound
+    root = parts[0]
+    if root not in {"@personal", "@shared", "@public"}:
+        raise ValueError(f"Unexpected root={root}")
 
+    if root in {"@personal", "@shared"} and not user:
+        raise fastapi.HTTPException(status_code=401)  # Unauthorized
+
+    if root == "@personal":
         filepath = settings.personal / str(user.id) / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(settings.personal, filepath, may_not_exist)
 
-        async def dataprep():
-            pass
-
-    elif parts[0] == "@shared":
-        if not user:
-            raise fastapi.HTTPException(status_code=404)  # NotFound
-
+    elif root == "@shared":
         filepath = settings.shared / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(settings.shared, filepath, may_not_exist)
 
-        async def dataprep():
-            pass
-
-    elif parts[0] == "@public":
+    elif root == "@public":
         filepath = settings.public / pathlib.Path(*parts[1:])
         abspath = srv_utils.cache_lookup(settings.public, filepath, may_not_exist)
 
-        async def dataprep():
-            pass
-
-    else:
-        filepath = settings.cache / path
-        abspath = srv_utils.cache_lookup(settings.cache, filepath, may_not_exist)
-
-        async def dataprep():
-            return await partial_download(abspath, path, slice_)
+    async def dataprep():
+        pass
 
     return (abspath, dataprep)
 
@@ -918,21 +598,20 @@ async def get_chunk(
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         root = path.parts[0]
-        if root in {"@personal", "@shared", "@public"}:
-            if path in {"@personal", "@shared"} and not user:
-                raise fastapi.HTTPException(status_code=401)  # Unauthorized
+        if root not in {"@personal", "@shared", "@public"}:
+            raise ValueError(f"Unexpected root={root}")
 
-            container = open_b2(abspath, path)
-            if isinstance(container, blosc2.LazyArray):
-                # We do not support LazyUDF in Caterva2 yet.
-                # In case we do, this would have to be changed.
-                chunk = container.get_chunk(nchunk)
-            else:
-                schunk = getattr(container, "schunk", container)
-                chunk = schunk.get_chunk(nchunk)
+        if root in {"@personal", "@shared"} and not user:
+            raise fastapi.HTTPException(status_code=401)  # Unauthorized
+
+        container = open_b2(abspath, path)
+        if isinstance(container, blosc2.LazyArray):
+            # We do not support LazyUDF in Caterva2 yet.
+            # In case we do, this would have to be changed.
+            chunk = container.get_chunk(nchunk)
         else:
-            sub_dset = PubDataset(abspath, path)
-            chunk = await sub_dset.aget_chunk(nchunk)
+            schunk = getattr(container, "schunk", container)
+            chunk = schunk.get_chunk(nchunk)
 
     downloader = srv_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
@@ -1107,13 +786,18 @@ async def copy(
         raise srv_utils.raise_unauthorized("Copying files requires authentication")
 
     src, dst = payload.src, payload.dst
+
     # src should start with a special root or known root
-    if not src.startswith(("@personal", "@shared", "@public")) and src not in settings.database.roots:
-        raise fastapi.HTTPException(status_code=400, detail="Only copying from existing roots is allowed")
+    if not src.startswith(("@personal", "@shared", "@public")):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Only copying from @personal or @shared or @public roots is allowed",
+        )
     # dst should start with a special root
     if not dst.startswith(("@personal", "@shared", "@public")):
         raise fastapi.HTTPException(
-            status_code=400, detail="Only copying to @personal or @shared or @public roots is allowed"
+            status_code=400,
+            detail="Only copying to @personal or @shared or @public roots is allowed",
         )
 
     namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
@@ -1149,9 +833,10 @@ def concatstackhelper(payload: models.ConcatStackPayload, user: db.User = Depend
     srcs, dst = payload.srcs, payload.dst
     # src should start with a special root or known root
     for src in srcs:
-        if not src.startswith(("@personal", "@shared", "@public")) and src not in settings.database.roots:
+        if not src.startswith(("@personal", "@shared", "@public")):
             raise fastapi.HTTPException(
-                status_code=400, detail="Only stacking/concatenating from existing roots is allowed"
+                status_code=400,
+                detail="Only stacking/concatenating from @personal or @shared or @public roots is allowed",
             )
     # dst should start with a special root and if not try and massage it
     if not dst.startswith(("@personal", "@shared", "@public")):
@@ -1747,7 +1432,6 @@ async def htmx_root_list(
 ):
     context = {
         "checked": roots,
-        "roots": sorted(settings.database.roots.values(), key=lambda x: x.name),
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1763,9 +1447,7 @@ def _get_rootdir(user, root):
     elif root == "@public":
         return settings.public
     else:
-        if not get_root(root).subscribed:
-            follow(root)
-        return settings.cache / root
+        raise ValueError(f"Unexpected root={root}")
 
     return None
 
@@ -2761,7 +2443,6 @@ async def jupyterlite_contents(
         if rootdir is not None:
             content.append(directory(rootdir, "@public"))
 
-        # TODO pub/sub roots: settings.database.roots.values()
         dir_abspath = rootdir.parent
         dir_relpath = ""
     else:
@@ -2871,14 +2552,12 @@ def main():
     # Parse command line arguments
     _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
     parser = utils.get_parser(
-        broker=conf.get("broker.http", ""),
         http=conf.get(".http", "localhost:8002"),
         loglevel=conf.get(".loglevel", "warning"),
         statedir=conf.get(".statedir", _stdir),
         id=conf.id,
     )
     args = utils.run_parser(parser)
-    settings.broker = args.broker
 
     # Init cache
     settings.statedir = args.statedir.resolve()
@@ -2900,7 +2579,7 @@ def main():
     # app.mount("/personal", StaticFiles(directory=settings.personal), name="personal")
 
     # Init database
-    model = models.Subscriber(roots={}, etags={})
+    model = models.Subscriber()
     settings.database = srv_utils.Database(settings.statedir / "db.json", model)
 
     # Register display plugins (delay module load)

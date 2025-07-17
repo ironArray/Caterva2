@@ -64,13 +64,11 @@ def test_roots(client, auth_client):
     client = auth_client if auth_client else client
     roots = client.get_roots()
     assert roots["@public"]["name"] == "@public"
-    assert roots["@public"]["http"] == ""
+
+    # Special roots (only available when authenticated)
     if auth_client:
-        # Special roots (only available when authenticated)
         assert roots["@personal"]["name"] == "@personal"
-        assert roots["@personal"]["http"] == ""
         assert roots["@shared"]["name"] == "@shared"
-        assert roots["@shared"]["http"] == ""
 
 
 def test_get_root(client, auth_client):

@@ -11,12 +11,6 @@
 
     Roots:
 
-    {% for root in roots %}
-        {% with name=root.name  %}
-            {% include 'includes/root.html' %}
-        {% endwith %}
-    {% endfor %}
-
     {% if user %}
         {% with name="@personal", upload=True %}
             {% set title="This special root contains the results of calculations done by the user" %}

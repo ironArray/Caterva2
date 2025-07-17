@@ -784,8 +784,6 @@ class Client:
         dict
             Dictionary mapping available root names to their details:
             - ``name``: the root name
-            - ``http``: the HTTP endpoint
-            - ``subscribed``: whether it is subscribed or not.
 
         Examples
         --------
@@ -797,7 +795,7 @@ class Client:
         >>> client.subscribe('b2tests')
         'Ok'
         >>> roots_dict['b2tests']
-        {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
+        {'name': 'b2tests'}
         """
         urlbase, _ = _format_paths(self.urlbase)
         return api_utils.get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie, timeout=self.timeout)
@@ -863,7 +861,7 @@ class Client:
         >>> client.subscribe(root_name)
         'Ok'
         >>> client.get_roots()[root_name]
-        {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': True}
+        {'name': 'h5numbers_j2k'}
         """
         warnings.warn("subscribe() is deprecated, it does nothing, just remove the call")
         return "Ok"
