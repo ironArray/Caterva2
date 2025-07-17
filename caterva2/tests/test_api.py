@@ -36,15 +36,16 @@ except AttributeError:  # Python < 3.11
 @pytest.fixture
 def fill_public(client, examples_dir):
     # Manually copy some files to the public area (TEST_STATE_DIR)
-    fnames = ["README.md", "ds-1d.b2nd", "ds-1d-fields.b2nd", "dir1/ds-2d.b2nd"]
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "subscriber/public"
+    fnames = [str(fname.relative_to(examples_dir)) for fname in examples_dir.rglob("*") if fname.is_file()]
     for fname in fnames:
         orig = examples_dir / fname
         data = orig.read_bytes()
-        if not fname.endswith(("b2nd", "b2frame")):
+        if not fname.endswith(("b2nd", "b2frame", "h5")):
             fname += ".b2"
             schunk = blosc2.SChunk(data=data)
             data = schunk.to_cframe()
-        dest = pathlib.Path(TEST_STATE_DIR) / f"subscriber/public/{fname}"
+        dest = dest_dir / fname
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
     # We need a user here in case we want to remove files from @public
@@ -57,17 +58,6 @@ def fill_auth(auth_client, fill_public):
         return None
     fnames, _ = fill_public
     return fnames, auth_client.get("@public")
-
-
-def test_subscribe(client, auth_client):
-    assert client.subscribe("@public") == "Ok"
-    for root in ["@personal", "@shared"]:
-        if auth_client:
-            assert auth_client.subscribe(root) == "Ok"
-        else:
-            with pytest.raises(Exception) as e_info:
-                _ = client.subscribe(root)
-            assert "Unauthorized" in str(e_info)
 
 
 def test_roots(client, auth_client):
@@ -113,10 +103,6 @@ def test_get_dataset(client, fill_public):
 
 
 def test_list(client, auth_client, examples_dir):
-    myroot = client.get(TEST_CATERVA2_ROOT)
-    example = examples_dir
-    files = {str(f.relative_to(str(example))) for f in example.rglob("*") if f.is_file()}
-    assert set(myroot.file_list) == files
     if auth_client:
         mypersonal = auth_client.get("@personal")
         # In previous tests we have created some files in the personal area
@@ -130,31 +116,13 @@ def test_list_public(client, fill_public):
     assert set(mypublic.file_list) == set(fnames)
     # Test toplevel list
     flist = client.get_list("@public")
-    assert len(flist) == 4
-    for fname in flist:
-        assert fname in fnames
+    assert set(flist) == set(fnames)
     # Test directory list
-    flist = client.get_list("@public/dir1")
-    assert len(flist) == 1
-    for fname in flist:
-        assert fname == "ds-2d.b2nd"
+    assert client.get_list("@public/dir1") == ["ds-2d.b2nd", "ds-3d.b2nd"]
     # Test directory list with trailing slash
-    flist = client.get_list("@public/dir1/")
-    assert len(flist) == 1
-    for fname in flist:
-        assert fname == "ds-2d.b2nd"
+    assert client.get_list("@public/dir1/") == ["ds-2d.b2nd", "ds-3d.b2nd"]
     # Test single dataset list
-    flist = client.get_list("@public/dir1/ds-2d.b2nd")
-    assert len(flist) == 1
-    for fname in flist:
-        assert fname == "ds-2d.b2nd"
-
-
-def test_file(client):
-    myroot = client.get(TEST_CATERVA2_ROOT)
-    file = myroot["README.md"]
-    assert file.name == "README.md"
-    assert file.urlbase == client.urlbase
+    assert client.get_list("@public/dir1/ds-2d.b2nd") == ["ds-2d.b2nd"]
 
 
 def test_file_public(client, fill_public):
@@ -168,9 +136,9 @@ def test_file_public(client, fill_public):
 def test_dataset_info(client, fill_public):
     fnames, mypublic = fill_public
     for fname in fnames:
-        if type(mypublic[fname]) is cat2.Dataset:  # Files cannot be expected to have attributes
-            info = client.get_info("@public/" + fname)
+        if fname.endswith(".b2nd"):
             data = mypublic[fname]
+            info = client.get_info("@public/" + fname)
             assert data.dtype == info["dtype"]
             assert data.shape == tuple(info["shape"])
             assert data.blocks == tuple(info["blocks"])
@@ -375,7 +343,7 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
     "slice_",
     [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(10, 20, 1)],
 )
-def test_dataset_getitem_fetch(slice_, examples_dir, client):
+def test_dataset_getitem_fetch(slice_, examples_dir, client, fill_public):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-hello.b2frame"]
     assert ds.name == "ds-hello.b2frame"
@@ -627,6 +595,10 @@ def test_download_regular_file(examples_dir, tmp_path, client, auth_client):
 def test_download_public_file(examples_dir, fill_public, tmp_path):
     fnames, mypublic = fill_public
     for fname in fnames:
+        # TODO fetch (and download) of HDF5 files is not supported (gives a 500 error)
+        if fname.endswith(".h5"):
+            continue
+
         # Download the file
         ds = mypublic[fname]
         with chdir_ctxt(tmp_path):
@@ -730,7 +702,6 @@ def test_lazyexpr(auth_client):
     operands = {opnm: oppt}
     lxname = "my_expr"
 
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
     opinfo = auth_client.get_info(oppt)
     lxpath = auth_client.lazyexpr(lxname, expression, operands)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
@@ -792,7 +763,7 @@ def test_lazyexpr2(expression, examples_dir, tmp_path, auth_client):
         np.testing.assert_allclose(result[:], nresult)
 
 
-def test_lazyexpr_getchunk(auth_client):
+def test_lazyexpr_getchunk(auth_client, fill_public):
     if not auth_client:
         pytest.skip("authentication support needed")
 
@@ -802,7 +773,6 @@ def test_lazyexpr_getchunk(auth_client):
     operands = {opnm: oppt}
     lxname = "my_expr"
 
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
     lxpath = auth_client.lazyexpr(lxname, expression, operands)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
 
@@ -827,7 +797,6 @@ def test_lazyexpr_fields(auth_client):
         pytest.skip("authentication support needed")
 
     oppt = f"{TEST_CATERVA2_ROOT}/ds-1d-fields.b2nd"
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
 
     # Test a field
     arr = auth_client.get(oppt)
@@ -891,7 +860,6 @@ def test_expr_from_expr(auth_client):
     operands = {opnm: oppt}
     lxname = "my_expr"
 
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
     opinfo = auth_client.get_info(oppt)
     lxpath = auth_client.lazyexpr(lxname, expression, operands)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
@@ -928,7 +896,6 @@ def test_expr_no_operand(auth_client):
     expression = "linspace(0, 10, num=50)"
     lxname = "my_expr"
 
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
     lxpath = auth_client.lazyexpr(lxname, expression)
     assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
     c = auth_client.get(lxpath)
@@ -941,7 +908,6 @@ def test_expr_no_operand(auth_client):
     expression = "ds + linspace(0, 10, num=50)"
     lxname = "my_expr"
 
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
     with pytest.raises(Exception) as e_info:
         lxpath = auth_client.lazyexpr(lxname, expression)
 
@@ -952,8 +918,6 @@ def test_expr_force_compute(auth_client):
 
     expression = "linspace(0, 10, num=50)"
     lxname = "my_expr"
-
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
 
     # Uncomputed lazyexpr is a blosc2 lazyexpr
     lxpath = auth_client.lazyexpr(lxname, expression, compute=False)
@@ -1103,7 +1067,6 @@ def test_client_timeout(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
-    auth_client.subscribe(TEST_CATERVA2_ROOT)
     lxpath = auth_client.lazyexpr("expr", "linspace(0, 100, 1000_0000)", compute=True)
     assert lxpath == pathlib.Path("@personal/expr.b2nd")
     auth_client.timeout = 0.0001

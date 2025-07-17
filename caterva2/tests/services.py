@@ -64,7 +64,7 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = "_caterva2"
 TEST_STATE_DIR = DEFAULT_STATE_DIR + "_tests"
 TEST_DEFAULT_ROOT = "foo"
-TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
+TEST_CATERVA2_ROOT = "@public"
 TEST_HDF5_ROOT = "hdf5root"
 
 local_port_iter = itertools.count(8100)
