@@ -928,7 +928,11 @@ async def get_chunk(
     abspath, _ = abspath_and_dataprep(path, user=user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
-        if user and path.parts[0] == "@personal":
+        root = path.parts[0]
+        if root in {"@personal", "@shared", "@public"}:
+            if path in {"@personal", "@shared"} and not user:
+                raise fastapi.HTTPException(status_code=401)  # Unauthorized
+
             container = open_b2(abspath, path)
             if isinstance(container, blosc2.LazyArray):
                 # We do not support LazyUDF in Caterva2 yet.
