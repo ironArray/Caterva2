@@ -15,8 +15,84 @@ import h5py
 import numexpr as ne
 import numpy as np
 import pytest
+from hdf5plugin import Blosc2 as B2Comp
 
-hdf5root = pytest.importorskip("caterva2.services.hdf5root", reason="HDF5 support not present")
+
+def create_example_root(path):
+    """Create an example HDF5 file to be used as a root."""
+
+    with h5py.File(path, "x") as h5f:
+        h5f.create_dataset("/scalar", data=123.456)
+        h5f.create_dataset("/string", data=np.bytes_("Hello world!"))
+
+        a = np.arange(100, dtype="uint8")
+        h5f.create_dataset("/arrays/1d-raw", data=a)
+
+        h5f["/arrays/soft-link"] = h5py.SoftLink("/arrays/1d-raw")
+
+        a = np.array([b"foobar"] * 100)
+        h5f.create_dataset("/arrays/1ds-blosc2", data=a, chunks=(50,), **B2Comp())
+
+        a = np.arange(100, dtype="complex128").reshape(10, 10)
+        a = a + a * 1j
+        h5f.create_dataset("/arrays/2d-nochunks", data=a, chunks=None)
+
+        a = np.arange(100, dtype="complex128").reshape(10, 10)
+        a = a + a * 1j
+        h5f.create_dataset("/arrays/2d-gzip", data=a, chunks=(4, 4), compression="gzip")
+
+        a = np.arange(1000, dtype="uint8").reshape(10, 10, 10)
+        h5f.create_dataset(
+            "/arrays/3d-blosc2",
+            data=a,
+            chunks=(4, 10, 10),
+            **B2Comp(cname="lz4", clevel=7, filters=B2Comp.BITSHUFFLE),
+        )
+
+        a = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
+        h5f.create_dataset(
+            "/arrays/3d-blosc2-a",
+            data=a,
+            chunks=(4, 10, 10),
+            **B2Comp(cname="lz4", clevel=7, filters=B2Comp.BITSHUFFLE),
+        )
+
+        a = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
+        h5f.create_dataset(
+            "/arrays/3d-blosc2-b",
+            data=a,
+            chunks=(2, 5, 10),
+            **B2Comp(cname="blosclz", clevel=7, filters=B2Comp.SHUFFLE),
+        )
+
+        h5f.create_dataset("/arrays/array-dtype", dtype=np.dtype(("float64", (4,))), shape=(10,))
+
+        ds = h5f.create_dataset("/attrs", data=0)
+        a = np.arange(4, dtype="uint8").reshape(2, 2)
+        for k, v in {
+            "Int": 42,
+            "IntT": np.int16(42),
+            "Bin": b"foo",
+            "BinT": np.bytes_(b"foo"),
+            "Str": "bar",  # StrT=np.str_("bar"),
+            "Arr": a.tolist(),
+            "ArrT": a,
+            "NilBin": h5py.Empty("|S4"),
+            # NilStr=h5py.Empty('|U4'),
+            "NilInt": h5py.Empty("uint8"),
+        }.items():
+            ds.attrs[k] = v
+
+        h5f.create_dataset("/arrays/empty", data=h5py.Empty("float64"))
+
+        h5f.create_dataset("/arrays/compound-dtype", dtype=np.dtype("uint8,float64"), shape=(10,))
+
+        a = np.arange(1, dtype="uint8").reshape((1,) * 23)
+        h5f.create_dataset("/unsupported/too-many-dimensions", data=a)
+
+        # TODO: This could be supported by mapping the vlstring dataset to an NDArray with shape=() and dtype="u1"
+        h5f.create_dataset("/unsupported/vlstring", data="Hello world!")
+
 
 try:
     chdir_ctxt = contextlib.chdir
@@ -50,7 +126,7 @@ def get_all_datasets(f, prefix=""):
         ("ex-noattr.h5", None),
         ("ex-noattr.h5", "ex-noattr2.h5"),  # upload with remote name
         ("root-example.h5", None),
-        (None, None),  # use hdf5root.create_example_root(h5fpath)
+        (None, None),  # use create_example_root(h5fpath)
     ],
 )
 @pytest.mark.parametrize("root", ["@personal", "@shared", "@public"])
@@ -67,7 +143,7 @@ def test_unfold(fnames, remove, root, examples_dir, tmp_path, auth_client):
             # Create a temporary HDF5 file
             localpath = "create-example-root.h5"
             path = tmp_path / localpath
-            hdf5root.create_example_root(path)
+            create_example_root(path)
         else:
             path = examples_dir / localpath
             assert path.is_file()
@@ -130,7 +206,7 @@ def create_and_unfold_hdf5(tmp_path, remote_root, create_file=True, localpath="c
 
     if create_file:
         # Create a temporary HDF5 file
-        hdf5root.create_example_root(hdf5_path)
+        create_example_root(hdf5_path)
 
     # Upload the file to the remote root
     remote_ds = remote_root.upload(localpath)
