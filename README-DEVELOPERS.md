@@ -12,7 +12,7 @@ As the config files are already there, this essentially boils down to:
   pre-commit install
 ```
 
-Also, for running the tests, one needs to run manually the broker, publisher and subscriber.
+Also, for running the tests, one needs to run manually the subscriber.
 There is a `caterva2.tests.services` script that does this.
 
 ## Build CSS and JS
@@ -78,9 +78,7 @@ python -m caterva2.tests.services &
 or, if you prefer:
 
 ```shell
-cat2bro &
-cat2pub foo root-example &
-cat2sub &
+cat2sub
 ```
 
 State files will be stored in dir `_caterva2/`.

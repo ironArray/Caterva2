@@ -123,9 +123,10 @@ dir1/                   ds-1d-b.b2nd            ds-1d.b2nd              ds-hello
 Now:
 
 - create a virtual environment and install Caterva2 with the `[subscriber,clients]` extras (see above).
-- copy the configuration file `caterva2-standalone.sample.toml` to `caterva2.toml`.
+- copy the configuration file `caterva2.sample.toml` to `caterva2.toml`.
 
-For more advanced configuration options, see the fully documented `caterva2.sample.toml` file (see also [caterva2.toml](caterva2.toml) in Caterva2 tutorials). Subscribers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
+Subscribers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
+See also [configuration.md](configuration.md) in Caterva2 tutorials.
 
 Then run the subscriber:
 

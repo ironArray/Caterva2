@@ -294,8 +294,7 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     dict
         The dict of roots.
     """
-    # Here we just return the roots that are known by the broker
-    # plus the special roots @personal, @shared and @public
+    # Here we just return the special roots @personal, @shared and @public
     roots = {}
     root = models.Root(name="@public")
     roots[root.name] = root

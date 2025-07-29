@@ -182,7 +182,7 @@ def main():
     subparsers = parser.add_subparsers(required=True)
 
     # roots
-    help = "List all the available roots in a broker."
+    help = "List all the available roots."
     subparser = subparsers.add_parser("roots", help=help)
     subparser.add_argument("--json", action="store_true")
     subparser.set_defaults(func=cmd_roots)

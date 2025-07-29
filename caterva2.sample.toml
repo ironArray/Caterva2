@@ -1,54 +1,29 @@
-# Example configuration file for Caterva2 components.
+# Example configuration for a standalone subscriber
 #
-# This may be parsed by different programs, and each program may look up settings in its own section, or in other programs' sections, if present. For instance, there is no setting in the ``subscriber`` section for the broker endpoint; instead, the subscriber program will look ``broker.http`` up. For instance, in a subscriber configuration file::
+# It's possible to run only the subscriber. Then the configuration has only a
+# section for the subscriber. And maybe another one for the client.
+
+# The subscriber section must define:
 #
-#     [broker]
-#     http = ...  # Broker HTTP endpoint, to be used by subscriber.
-#     # No need for more broker settings unless the broker is to use this file.
+# - statedir: the directory where the subcriber's data will be stored (default: _caterva2/sub)
+# - http: where the subscriber listens to (a unix socket or a host/port) (default: localhost:8002)
+# - urlbase: the base url users will use to reach the subscriber (default: http://localhost:8002)
+# - quota: if defined, it will limit the disk usage (default: 0, no limit)
+# - maxusers: if defined, it will limit the number of users (default: 0, no limit)
+# - login: if true, users will need to authenticate (default: true)
+# - register: if true, users will be able to register (default: false)
 #
-#     [subscriber]
-#     ...
-#
-# Some sections may appear multiple times, each with a different ID (see below). However, if you are to use a single program of each category, you should be file with ID-less sections.
-#
-# All sections and settings are optional.
-
-# The configuration of the broker service.
-# Only one of these is allowed for the moment.
-[broker]
-http = "localhost:8000"  # The ``host:port`` endpoint where the service listens for HTTP requests. Other programs may look ``broker.http`` up to find how to connect to a broker. Use ``*`` as a host to listen on all addresses.
-statedir = "_caterva2/bro"  # The directory where the service will place state files.
-loglevel = "warning"  # All service messages having this severity or worse will be logged.
-
-# The configuration of the publisher service.
-# Several of these are allowed, each with a different ID (the string after the dot). A publisher invoked with ``--id=something`` will look its configuration up in the ``publisher.something`` section.
-[publisher.1]
-http = "localhost:8001"  # The ``host:port`` endpoint where the service listens for HTTP requests. Use ``*`` as a host to listen on all addresses.
-statedir = "_caterva2/pub"  # The directory where the service will place state files.
-loglevel = "warning"  # All service messages having this severity or worse will be logged.
-name = "foo"  # The name given to the root to be registered at the broker. This setting has no default, if it is not defined here, you need to give it to the publisher as an argument.
-root = "root-examples"  # The location (directory, HDF5 file...) containing the datasets for the registered root.
-
-# Only one of these is allowed. It will be used by a publisher invoked with no ID, or it may be used by other programs to find how to connect to a publisher (``publisher.http``).
-[publisher]
-http = "localhost:8001"
-# ... other settings as above ...
-
-# The configuration of the subscriber service.
-# Several of these are allowed, each with a different ID (the string after the dot). A subscriber invoked with ``--id=something`` will look its configuration up in the ``subscriber.something`` section.
-[subscriber.1]
-http = "localhost:8002"  # The ``host:port`` endpoint where the service listens for HTTP requests. Use ``*`` as a host to listen on all addresses.
-urlbase = "https://cat2.example.com"  # The base of URLs, if different from ``http://<subscriber.http>``.
-statedir = "_caterva2/sub"  # The directory where the service will place state files.
-loglevel = "warning"  # All service messages having this severity or worse will be logged.
-
-# Only one of these is allowed. It will be used by a subscriber invoked with no ID, or it may be used by other programs to find how to connect to a subscriber (``subscriber.url``).
 [subscriber]
-urlbase = "https://cat2.example.com"
-# ... other settings as above ...
+statedir = "_caterva2/sub"
+#http = "_caterva2/sub/uvicorn.socket"
+http = "localhost:8002"
+urlbase = "http://localhost:8002"
+quota = "10G"
+maxusers = 5
+register = true  # allow users to register
 
-# Common configuration of client programs.
-# Only one of these is allowed for the moment.
+# The client section defines the credentials for the client to authenticate
+# against the subscriber.
 [client]
-username = ""  # If present and not empty, a name to be used to authenticate the user to the subscriber and get an authorization token.
-password = ""  # If present and not empty, a password for the previous user.
+username = ""
+password = ""

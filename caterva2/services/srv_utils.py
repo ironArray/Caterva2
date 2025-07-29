@@ -228,17 +228,6 @@ def operands_as_paths(operands, cache, personal, shared, public):
 
 
 #
-# Pub/Sub helpers
-#
-
-
-async def disconnect_client(client, timeout=5):
-    if client is not None:
-        # If the broker is down client.disconnect hangs, wo we wrap it in a timeout
-        await asyncio.wait_for(client.disconnect(), timeout)
-
-
-#
 # HTTP server helpers
 #
 
