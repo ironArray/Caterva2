@@ -27,20 +27,6 @@ It has three modes of operation:
   not tamper with the state directory nor stop the services when tests finish.
 
   Usage example: same as above (but on the pytest side).
-
-- pytest fixture with managed services: if the environment variable
-  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture uses
-  external services; otherwise, it takes care of starting the services as
-  children and making sure that they are available to other local programs.
-  It also uses the value in `TEST_STATE_DIR` as the directory to store state
-  in.  If the directory exists, it is removed first. Then the directory is
-  created and populated with the example files from the source distribution.
-  When tests finish, the services are stopped.
-
-  Usage example::
-
-      $ cd Caterva2
-      $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
 """
 
 import collections
@@ -109,12 +95,7 @@ def sub_check(conf):
 TestRoot = collections.namedtuple("TestRoot", ["name", "source"])
 
 
-class Services:
-    def __init__(self):  # mostly to appease QA
-        pass
-
-
-class ManagedServices(Services):
+class ManagedServices:
     def __init__(self, state_dir, reuse_state=True, roots=None, configuration=None):
         super().__init__()
 
@@ -218,36 +199,6 @@ class ManagedServices(Services):
         return f"http://{self.get_endpoint(service)}"
 
 
-class ExternalServices(Services):
-    def __init__(self, roots=None, configuration=None):
-        super().__init__()
-        self.roots = list(roots)
-        self.configuration = conf = configuration
-
-        self._checks = checks = {}
-        checks["subscriber"] = sub_check(conf)
-
-    def start_all(self):
-        failed = [check.__name__ for check in self._checks.values() if not check()]
-        if failed:
-            raise RuntimeError("failed checks for external services: " + " ".join(failed))
-
-    def stop_all(self):
-        pass
-
-    def wait_for_all(self):
-        pass
-
-    def get_endpoint(self, service):
-        if service not in self._checks:
-            return None
-        return self._checks[service].host
-
-    def get_urlbase(self, service):
-        ep = self.get_endpoint(service)
-        return f"http://{ep}" if ep else None
-
-
 @pytest.fixture(scope="session")
 def services(configuration, examples_dir):
     # TODO: Consider using a temporary directory to avoid
@@ -255,11 +206,7 @@ def services(configuration, examples_dir):
     # and tests being influenced by the presence of a configuration file.
     roots = [TestRoot(TEST_CATERVA2_ROOT, examples_dir)]
 
-    srvs = (
-        ExternalServices(roots=roots, configuration=configuration)
-        if os.environ.get("CATERVA2_USE_EXTERNAL", "0") == "1"
-        else ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=configuration)
-    )
+    srvs = ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=configuration)
 
     try:
         srvs.start_all()

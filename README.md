@@ -96,14 +96,6 @@ python -m pytest -v
 
 Tests will use a copy of Caterva2's `root-example` directory.  After they finish, state files will be left under the `_caterva2_tests` directory for inspection (it will be re-created when tests are run again).
 
-In case you want to run the tests with your own running daemons, you can do:
-
-```shell
-env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
-```
-
-Neither `root-example` nor `_caterva2_tests` will be used in this case.
-
 ## Quick start
 
 (Find more detailed step-by-step [tutorials](Tutorials) in Caterva2 documentation.)

@@ -67,31 +67,6 @@ USE_REQUESTS=1 CATERVA2_SECRET=c2sikrit pytest
 ```
 ```
 
-### With external daemons
-
-To have daemons running across several test runs (for faster testing), start the daemons:
-
-```shell
-python -m caterva2.tests.services &
-```
-
-or, if you prefer:
-
-```shell
-cat2sub
-```
-
-State files will be stored in dir `_caterva2/`.
-
-Finally, in another shell (unless you like to hear the daemons chatting), run the tests:
-
-```shell
-env CATERVA2_USE_EXTERNAL=1 python -m pytest -s
-```
-
-For stopping the daemons, you will have to kill the `caterva2.tests.services` process.
-If you started them manually, you will have to kill them manually too (sorry!).
-
 ## Build wheels
 
 We are using [hatch](https://hatch.pypa.io) as the build system, so for building wheels and
@@ -116,12 +91,7 @@ cd ..   # to avoid using the source code
 python -m caterva2.tests -v
 ```
 
-Please note that the services should be not running at this point.  In case you want to check against
-the current services, you can do:
-
-```shell
-env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
-```
+Please note that the services should be not running at this point.
 
 ## Create docs
 
