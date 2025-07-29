@@ -20,18 +20,6 @@ import caterva2 as cat2
 
 from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
 
-try:
-    chdir_ctxt = contextlib.chdir
-except AttributeError:  # Python < 3.11
-    import os
-
-    @contextlib.contextmanager
-    def chdir_ctxt(path):
-        cwd = os.getcwd()
-        os.chdir(path)
-        yield
-        os.chdir(cwd)
-
 
 @pytest.fixture
 def fill_public(client, examples_dir):
@@ -493,14 +481,14 @@ def test_getitem_client_nd(slice_, name, examples_dir, client):
 def test_download_b2nd(name, examples_dir, tmp_path, client, auth_client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         path = ds.download()
         assert path == ds.path
 
     # Data contents
     example = examples_dir / name
     a = blosc2.open(example)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         b = blosc2.open(path)
         np.testing.assert_array_equal(a[:], b[:])
 
@@ -515,14 +503,14 @@ def test_download_b2nd(name, examples_dir, tmp_path, client, auth_client):
 def test_download_b2frame(examples_dir, tmp_path, client, auth_client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-hello.b2frame"]
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         path = ds.download()
         assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = blosc2.open(example)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         b = blosc2.open(path)
         assert a[:] == b[:]
 
@@ -548,7 +536,7 @@ def test_download_localpath(fnames, examples_dir, tmp_path, client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     name, localpath = fnames
     ds = myroot[name]
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         if localpath.endswith("/"):
             # Create a directory in localpath
             localpath2 = pathlib.Path(localpath)
@@ -561,7 +549,7 @@ def test_download_localpath(fnames, examples_dir, tmp_path, client):
     # Data contents
     example = examples_dir / name
     a = blosc2.open(example)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         b = blosc2.open(path)
         np.testing.assert_array_equal(a[:], b[:])
 
@@ -569,14 +557,14 @@ def test_download_localpath(fnames, examples_dir, tmp_path, client):
 def test_download_regular_file(examples_dir, tmp_path, client, auth_client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         path = ds.download()
         assert path == ds.path
 
     # Data contents
     example = examples_dir / ds.name
     a = open(example).read()
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         b = open(path).read()
         assert a[:] == b[:]
 
@@ -599,7 +587,7 @@ def test_download_public_file(examples_dir, fill_public, tmp_path):
 
         # Download the file
         ds = mypublic[fname]
-        with chdir_ctxt(tmp_path):
+        with contextlib.chdir(tmp_path):
             path = ds.download()
             assert path == ds.path
             # Check data contents
@@ -632,7 +620,7 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
     remote_root = auth_client.get(root)
     myroot = auth_client.get(TEST_CATERVA2_ROOT)
     ds = myroot[localpath]
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         path = ds.download()
         assert path == ds.path
         # Check whether path exists and is a file
@@ -665,7 +653,7 @@ def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path)
     remote_root = client.get("@public")
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         path = ds.download()
         assert path == ds.path
         with pytest.raises(Exception) as e_info:
@@ -737,7 +725,7 @@ def test_lazyexpr2(expression, examples_dir, tmp_path, auth_client):
     ds_a = f"{remote_dir}/3d-blosc2-a.b2nd"
     ds_b = f"{remote_dir}/3d-blosc2-b.b2nd"
 
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         os.makedirs(remote_dir, exist_ok=True)
         a = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
         blosc2.asarray(a, urlpath=ds_a, chunks=(5, 10, 10))

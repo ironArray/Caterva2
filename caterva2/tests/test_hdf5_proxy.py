@@ -94,19 +94,6 @@ def create_example_root(path):
         h5f.create_dataset("/unsupported/vlstring", data="Hello world!")
 
 
-try:
-    chdir_ctxt = contextlib.chdir
-except AttributeError:  # Python < 3.11
-    import os
-
-    @contextlib.contextmanager
-    def chdir_ctxt(path):
-        cwd = os.getcwd()
-        os.chdir(path)
-        yield
-        os.chdir(cwd)
-
-
 def get_all_datasets(f, prefix=""):
     """Recursively get all datasets in an HDF5 file."""
     datasets = []
@@ -138,7 +125,7 @@ def test_unfold(fnames, remove, root, examples_dir, tmp_path, auth_client):
     # First, choose an HDF5 dataset
     localpath, remotepath = fnames
     remote_root = auth_client.get(root)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         if localpath is None:
             # Create a temporary HDF5 file
             localpath = "create-example-root.h5"
@@ -232,7 +219,7 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
 
     root = pathlib.Path("@shared")
     remote_root = auth_client.get(root)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
         h5f = h5py.File(hdf5_path, "r")
         for file_ in file_list:
@@ -273,7 +260,7 @@ def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
 
     root = pathlib.Path("@shared")
     remote_root = auth_client.get(root)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
         h5f = h5py.File(hdf5_path, "r")
         for file_ in file_list:
@@ -325,7 +312,7 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
     ds_b = "arrays/3d-blosc2-b"
     root = pathlib.Path("@shared")
     remote_root = auth_client.get(root)
-    with chdir_ctxt(tmp_path):
+    with contextlib.chdir(tmp_path):
         hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
         h5f = h5py.File(hdf5_path, "r")
         remote_a = remote_dir / (ds_a + ".b2nd")

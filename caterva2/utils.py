@@ -13,11 +13,7 @@ import datetime
 import logging
 import os
 import pathlib
-
-try:
-    import tomllib as toml
-except ImportError:
-    import tomli as toml
+import tomllib as toml
 
 #
 # Context managers
