@@ -41,7 +41,6 @@ maxusers = conf.get(".maxusers")
 # Not strictly necessary but useful for documentation
 statedir = None
 database = None  # <Database> instance
-cache = None
 personal = None
 shared = None
 public = None

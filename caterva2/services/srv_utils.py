@@ -21,7 +21,6 @@ import typing
 import blosc2
 import fastapi
 import safer
-import uvicorn
 from fastapi_users.exceptions import UserNotExists
 from sqlalchemy.future import select
 
@@ -45,24 +44,6 @@ def compress_file(path):
         dst.write(data)
 
     path.unlink()
-
-
-def cache_lookup(cachedir, path, may_not_exist=False):
-    if cachedir == path:
-        # Special case for the cache root
-        return path
-    path = pathlib.Path(path)
-    if (cachedir / path).is_dir():
-        # Special case for directories
-        return cachedir / path
-
-    # HDF5 files cannot be compressed, as they are supported natively
-    if path.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
-        if path.is_file():
-            compress_file(path)
-        path = f"{path}.b2"
-
-    return get_abspath(cachedir, path, may_not_exist)
 
 
 def get_model_from_obj(obj, model_class, **kwargs):
@@ -103,7 +84,7 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
+def read_metadata(obj):
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -154,10 +135,6 @@ def read_metadata(obj, cache=None, personal=None, shared=None, public=None):
         # overwrite operands and expression with _tosave versions for metadata display
         operands = operands_as_paths(
             obj.operands_tosave if hasattr(obj, "operands_tosave") else obj.operands,
-            cache,
-            personal,
-            shared,
-            public,
         )
         return get_model_from_obj(
             obj,
@@ -184,47 +161,33 @@ def reformat_cparams(cparams):
     return cparams
 
 
-def get_relpath(path, cache=None, personal=None, shared=None, public=None):
-    if cache is None:
-        cache = settings.cache
-    if personal is None:
-        personal = settings.personal
-    if shared is None:
-        shared = settings.shared
-    if public is None:
-        public = settings.public
-
+def get_relpath(path):
     if not isinstance(path, pathlib.Path):
         path = pathlib.Path(path.schunk.urlpath)
 
-    if shared is not None and path.is_relative_to(shared):
-        # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
-        path = path.relative_to(shared)
-        parts = ["@shared"] + list(path.parts)
-        return pathlib.Path(*parts)
-    elif public is not None and path.is_relative_to(public):
-        # Shared: /.../<public>/<subpath> to <path> (i.e. no change)
+    # Public: /.../<public>/<subpath> to <path> (i.e. no change)
+    public = settings.public
+    if public is not None and path.is_relative_to(public):
         path = path.relative_to(public)
         parts = ["@public"] + list(path.parts)
         return pathlib.Path(*parts)
-    try:
-        # Cache: /.../<root>/<subpath> to <root>/<subpath>
-        path = path.relative_to(cache)
-    except ValueError:
-        # personal: /.../<uid>/<subpath> to @personal/<subpath>
-        path = path.relative_to(personal)
-        parts = list(path.parts)
-        parts[0] = "@personal"
-        path = pathlib.Path(*parts)
 
-    return path
+    # Shared: /.../<shared>/<subpath> to <path> (i.e. no change)
+    shared = settings.shared
+    if shared is not None and path.is_relative_to(shared):
+        path = path.relative_to(shared)
+        parts = ["@shared"] + list(path.parts)
+        return pathlib.Path(*parts)
+
+    # Personal: /.../<uid>/<subpath> to @personal/<subpath>
+    path = path.relative_to(settings.personal)
+    parts = list(path.parts)
+    parts[0] = "@personal"
+    return pathlib.Path(*parts)
 
 
-def operands_as_paths(operands, cache, personal, shared, public):
-    return {
-        nm: None if op is None else str(get_relpath(op, cache, personal, shared, public))
-        for (nm, op) in operands.items()
-    }
+def operands_as_paths(operands):
+    return {nm: None if op is None else str(get_relpath(op)) for (nm, op) in operands.items()}
 
 
 #
@@ -244,28 +207,6 @@ def raise_unauthorized(detail="Unauthorized"):
 
 def raise_not_found(detail="Not Found"):
     raise fastapi.HTTPException(status_code=404, detail=detail)
-
-
-def get_abspath(root, path, may_not_exist=False):
-    abspath = root / path
-
-    # Security check
-    if root not in abspath.parents:
-        raise_bad_request(f"Invalid path {path}")
-
-    # Existence check
-    if not abspath.is_file() and not may_not_exist:
-        raise_not_found()
-
-    return abspath
-
-
-def uvicorn_run(app, args, root_path=""):
-    http = args.http
-    if http.uds:
-        uvicorn.run(app, uds=http.uds, root_path=root_path)
-    else:
-        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
 
 
 #

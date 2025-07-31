@@ -37,6 +37,7 @@ import markdown
 import nbconvert
 import nbformat
 import PIL.Image
+import uvicorn
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
@@ -324,12 +325,8 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
-    # Get the root
-    root = path.parts[0]
-    rootdir = get_rootdir_or_error(root, user)
-
     # List the datasets in root or directory
-    directory = rootdir / pathlib.Path(*path.parts[1:])
+    directory = get_writable_path(path, user)
     if directory.is_file():
         name = pathlib.Path(directory.name)
         return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
@@ -359,10 +356,8 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    return srv_utils.read_metadata(
-        abspath, settings.cache, settings.personal, settings.shared, settings.public
-    )
+    abspath = get_abspath(path, user)
+    return srv_utils.read_metadata(abspath)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -389,34 +384,49 @@ async def partial_download(abspath, path, slice_=None):
         await proxy.afetch(slice_)
 
 
-def abspath_and_dataprep(
-    path: pathlib.Path, slice_: (tuple | None) = None, user: (db.User | None) = None, may_not_exist=False
+def get_abspath(
+    path: pathlib.Path, user: (db.User | None), may_not_exist=False
 ) -> tuple[
     pathlib.Path,
     collections.abc.Callable[[], collections.abc.Awaitable],
 ]:
     """
-    Get absolute path in local storage and data preparation operation.
-
-    After awaiting the preparation operation to complete, data in the
-    dataset should be ready for reading, either that covered by the slice if
-    given, or the whole data otherwise.
+    Get absolute path in local storage.
     """
+    filepath = get_writable_path(path, user)
+
     root = path.parts[0]
-    rootdir = get_rootdir_or_error(root, user)
-    filepath = rootdir / pathlib.Path(*path.parts[1:])
-
     if root == "@personal":
-        abspath = srv_utils.cache_lookup(settings.personal, filepath, may_not_exist)
+        cachedir = settings.personal
     elif root == "@shared":
-        abspath = srv_utils.cache_lookup(settings.shared, filepath, may_not_exist)
+        cachedir = settings.shared
     elif root == "@public":
-        abspath = srv_utils.cache_lookup(settings.public, filepath, may_not_exist)
+        cachedir = settings.public
 
-    async def dataprep():
-        pass
+    # Special case for the cache root
+    if cachedir == filepath:
+        return filepath
 
-    return (abspath, dataprep)
+    # Special case for directories
+    elif (cachedir / filepath).is_dir():
+        return cachedir / filepath
+
+    # HDF5 files cannot be compressed, as they are supported natively
+    if filepath.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
+        if filepath.is_file():
+            srv_utils.compress_file(filepath)
+        filepath = f"{filepath}.b2"
+
+    # Security check
+    abspath = cachedir / filepath
+    if cachedir not in abspath.parents:
+        srv_utils.raise_bad_request(f"Invalid path {filepath}")
+
+    # Existence check
+    if not abspath.is_file() and not may_not_exist:
+        srv_utils.raise_not_found()
+
+    return abspath
 
 
 @app.get("/api/fetch/{path:path}")
@@ -451,10 +461,7 @@ async def fetch_data(
     """
 
     slice_ = api_utils.parse_slice(slice_)
-    # Download and update the necessary chunks of the schunk in cache
-    abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
-    # This is still needed and will only update the necessary chunks
-    await dataprep()
+    abspath = get_abspath(path, user)
 
     if filter:
         if field:
@@ -573,7 +580,7 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(optional_user),
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
+    abspath = get_abspath(path, user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         root = path.parts[0]
@@ -632,9 +639,7 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
         path = operands[var]
         # Detect special roots
         path = pathlib.Path(path)
-        root = path.parts[0]
-        rootdir = get_rootdir_or_error(root, user)
-        abspath = rootdir / pathlib.Path(*path.parts[1:])
+        abspath = get_writable_path(path, user)
         var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
@@ -716,8 +721,8 @@ async def move(
         )
     namepath = pathlib.Path(payload.src)
     destpath = pathlib.Path(payload.dst)
-    abspath, _ = abspath_and_dataprep(namepath, user=user)
-    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+    abspath = get_abspath(namepath, user)
+    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
 
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she can add a '.b2' extension :-)
@@ -771,8 +776,8 @@ async def copy(
         )
 
     namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
-    abspath, _ = abspath_and_dataprep(namepath, user=user)
-    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+    abspath = get_abspath(namepath, user)
+    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
 
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she should add a '.b2' extension
@@ -816,9 +821,9 @@ def concatstackhelper(payload: models.ConcatStackPayload, user: db.User = Depend
         )
 
     destpath = pathlib.Path(dst)
-    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
 
-    abspaths = [abspath_and_dataprep(pathlib.Path(src), user=user)[0] for src in srcs]
+    abspaths = [get_abspath(pathlib.Path(src), user) for src in srcs]
 
     # dst should be a .b2nd array and if not try and massage it
     if not dest_abspath.suffix:
@@ -891,19 +896,9 @@ def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
     fastapi.HTTPException
         If the path is not in a writable root
     """
-    root = path.parts[0]
-    if root not in {"@personal", "@shared", "@public"}:
-        detail = "Only @personal or @shared or @public roots can be modified"
-        raise fastapi.HTTPException(detail=detail, status_code=400)
-
-    if root == "@personal":
-        base_path = settings.personal / str(user.id)
-    elif root == "@shared":
-        base_path = settings.shared
-    elif root == "@public":
-        base_path = settings.public
-
-    return base_path / pathlib.Path(*path.parts[1:])
+    root, *subpath = path.parts
+    rootdir = get_rootdir_or_error(root, user)
+    return rootdir / pathlib.Path(*subpath)
 
 
 @app.post("/api/upload/{path:path}")
@@ -1558,10 +1553,8 @@ async def htmx_path_info(
         return response
 
     # Read metadata
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    meta = srv_utils.read_metadata(
-        abspath, settings.cache, settings.personal, settings.shared, settings.public
-    )
+    abspath = get_abspath(path, user)
+    meta = srv_utils.read_metadata(abspath)
 
     # Context
     tabs = []
@@ -1684,7 +1677,7 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
+    abspath = get_abspath(path, user)
     filter = filter.strip()
     if filter or sortby:
         try:
@@ -2293,8 +2286,7 @@ async def htmx_delete(
 
 
 async def get_container(path, user):
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
+    abspath = get_abspath(path, user)
     return open_b2(abspath, path)
 
 
@@ -2432,12 +2424,8 @@ async def jupyterlite_contents(
         dir_abspath = rootdir.parent
         dir_relpath = ""
     else:
-        # Check access to the root
-        root, *subpath = parts
-        rootdir = get_rootdir_or_error(root, user)
-
         # Get absolute and relative paths to the directory
-        dir_abspath = rootdir / pathlib.Path(*subpath)
+        dir_abspath = get_writable_path(path, user)
         dir_relpath = path
 
         for abspath, relpath in utils.iterdir(dir_abspath):
@@ -2543,14 +2531,8 @@ def main():
     )
     args = utils.run_parser(parser)
 
-    # Init cache
+    # Directories
     settings.statedir = args.statedir.resolve()
-    settings.cache = settings.statedir / "cache"
-    settings.cache.mkdir(exist_ok=True, parents=True)
-    # Use `download_cached()`, `StaticFiles` does not support authorization.
-    # app.mount("/files", StaticFiles(directory=cache), name="files")
-
-    # Shared/Public dirs
     settings.shared = settings.statedir / "shared"
     settings.shared.mkdir(exist_ok=True, parents=True)
     settings.public = settings.statedir / "public"
@@ -2574,7 +2556,7 @@ def main():
 
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(abspath_and_dataprep, settings.urlbase)
+    tomography.init(settings.urlbase)
 
     # Mount media
     media = settings.statedir / "media"
@@ -2586,7 +2568,11 @@ def main():
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
-    srv_utils.uvicorn_run(app, args, root_path=root_path)
+    http = args.http
+    if http.uds:
+        uvicorn.run(app, uds=http.uds, root_path=root_path)
+    else:
+        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
 
 
 if __name__ == "__main__":
