@@ -20,7 +20,6 @@ import typing
 # Requirements
 import blosc2
 import fastapi
-import fastapi_websocket_pubsub
 import safer
 import uvicorn
 from fastapi_users.exceptions import UserNotExists
@@ -229,23 +228,6 @@ def operands_as_paths(operands, cache, personal, shared, public):
 
 
 #
-# Pub/Sub helpers
-#
-
-
-def start_client(url):
-    client = fastapi_websocket_pubsub.PubSubClient()
-    client.start_client(url)
-    return client
-
-
-async def disconnect_client(client, timeout=5):
-    if client is not None:
-        # If the broker is down client.disconnect hangs, wo we wrap it in a timeout
-        await asyncio.wait_for(client.disconnect(), timeout)
-
-
-#
 # HTTP server helpers
 #
 
@@ -276,16 +258,6 @@ def get_abspath(root, path, may_not_exist=False):
         raise_not_found()
 
     return abspath
-
-
-def check_dset_path(proot, path):
-    try:
-        exists = proot.exists_dset(path)
-    except ValueError:
-        raise_bad_request(f"Invalid path {path}")
-    else:
-        if not exists:
-            raise_not_found()
 
 
 def uvicorn_run(app, args, root_path=""):

@@ -172,20 +172,22 @@ cat2cli roots
 When using the programmatic API, you need to provide the subscriber address explicitly:
 
 ```python
-roots = caterva2.get_roots(urlbase='http://sub.edu.example.org:3126')
-foo = caterva2.Root('foo', urlbase='http://sub.edu.example.org:3126')
+roots = caterva2.get_roots(urlbase="http://sub.edu.example.org:3126")
+foo = caterva2.Root("foo", urlbase="http://sub.edu.example.org:3126")
 ```
 
 Since parsing TOML is very easy with Python, your API client may just access the needed configuration like this:
 
 ``` python
-from tomllib import load as toml_load  # "from tomli" on Python < 3.11
-with open('caterva2.toml', 'rb') as conf_file:
+from tomllib import load as toml_load
+
+with open("caterva2.toml", "rb") as conf_file:
     conf = toml_load(conf_file)
-#user_auth = dict(username=conf['client]['username'],
+# user_auth = dict(username=conf['client]['username'],
 #                 password=conf['client]['password'])
-foo = caterva2.Root('foo',
-                    urlbase=conf['subscriber']['url'],
-                    #user_auth=user_auth,
+foo = caterva2.Root(
+    "foo",
+    urlbase=conf["subscriber"]["url"],
+    # user_auth=user_auth,
 )
 ```

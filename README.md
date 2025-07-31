@@ -96,14 +96,6 @@ python -m pytest -v
 
 Tests will use a copy of Caterva2's `root-example` directory.  After they finish, state files will be left under the `_caterva2_tests` directory for inspection (it will be re-created when tests are run again).
 
-In case you want to run the tests with your own running daemons, you can do:
-
-```shell
-env CATERVA2_USE_EXTERNAL=1 python -m caterva2.tests -v
-```
-
-Neither `root-example` nor `_caterva2_tests` will be used in this case.
-
 ## Quick start
 
 (Find more detailed step-by-step [tutorials](Tutorials) in Caterva2 documentation.)
@@ -123,9 +115,10 @@ dir1/                   ds-1d-b.b2nd            ds-1d.b2nd              ds-hello
 Now:
 
 - create a virtual environment and install Caterva2 with the `[subscriber,clients]` extras (see above).
-- copy the configuration file `caterva2-standalone.sample.toml` to `caterva2.toml`.
+- copy the configuration file `caterva2.sample.toml` to `caterva2.toml`.
 
-For more advanced configuration options, see the fully documented `caterva2.sample.toml` file (see also [caterva2.toml](caterva2.toml) in Caterva2 tutorials). Subscribers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
+Subscribers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
+See also [configuration.md](configuration.md) in Caterva2 tutorials.
 
 Then run the subscriber:
 

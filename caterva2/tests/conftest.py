@@ -8,7 +8,7 @@ import pytest
 import caterva2 as cat2
 
 from .conf import configuration  # noqa: F401
-from .files import examples_dir, examples_hdf5  # noqa: F401
+from .files import examples_dir  # noqa: F401
 from .services import services  # noqa: F401
 from .sub_auth import sub_user  # noqa: F401
 

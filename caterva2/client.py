@@ -3,6 +3,7 @@ import functools
 import io
 import pathlib
 import sys
+import warnings
 from collections.abc import Sequence
 from pathlib import PurePosixPath
 
@@ -783,8 +784,6 @@ class Client:
         dict
             Dictionary mapping available root names to their details:
             - ``name``: the root name
-            - ``http``: the HTTP endpoint
-            - ``subscribed``: whether it is subscribed or not.
 
         Examples
         --------
@@ -796,34 +795,10 @@ class Client:
         >>> client.subscribe('b2tests')
         'Ok'
         >>> roots_dict['b2tests']
-        {'name': 'b2tests', 'http': 'localhost:8014', 'subscribed': True}
+        {'name': 'b2tests'}
         """
         urlbase, _ = _format_paths(self.urlbase)
         return api_utils.get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie, timeout=self.timeout)
-
-    def _get_root(self, name):
-        """
-        Retrieves a specified root name.
-
-        Parameters
-        ----------
-        name : str
-            Name of the root to retrieve.
-
-        Returns
-        -------
-        Root
-            An instance of :class:`Root`.
-
-        """
-        if "/" in name:
-            raise ValueError("Root names cannot contain slashes")
-        # It is a root, subscribe to it
-        ret = self.subscribe(name)
-        if ret != "Ok":
-            roots = self.get_roots()
-            raise ValueError(f"Could not subscribe to root {name} (only {roots.keys()} available)")
-        return Root(self, name)
 
     def get(self, path):
         """
@@ -857,11 +832,11 @@ class Client:
         path = pathlib.PurePosixPath(path).as_posix()
         # Check if the path is a root or a file/dataset
         if "/" not in path:
-            return self._get_root(path)
+            return Root(self, path)
+
         # If not a root, assume it's a file/dataset
-        root_name = path.split("/")[0]
-        root = self._get_root(root_name)
-        file_path = path[len(root_name) + 1 :]
+        root_name, file_path = path.split("/", 1)
+        root = Root(self, root_name)
         return root[file_path]
 
     def subscribe(self, root):
@@ -886,12 +861,10 @@ class Client:
         >>> client.subscribe(root_name)
         'Ok'
         >>> client.get_roots()[root_name]
-        {'name': 'h5numbers_j2k', 'http': 'localhost:8011', 'subscribed': True}
+        {'name': 'h5numbers_j2k'}
         """
-        urlbase, root = _format_paths(self.urlbase, root)
-        return api_utils.post(
-            f"{self.urlbase}/api/subscribe/{root}", auth_cookie=self.cookie, timeout=self.timeout
-        )
+        warnings.warn("subscribe() is deprecated, it does nothing, just remove the call")
+        return "Ok"
 
     def get_list(self, path):
         """

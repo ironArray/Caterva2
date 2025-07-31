@@ -56,21 +56,8 @@ def cmd_roots(client, args):
         print(json.dumps(data))
         return
 
-    for name, root in data.items():
-        if root["subscribed"] is True:
-            print(f"{name} (subscribed)")
-        else:
-            print(name)
-
-
-@handle_errors
-def cmd_subscribe(client, args):
-    data = client.subscribe(args.root)
-    if args.json:
-        print(json.dumps(data))
-        return
-
-    print(data)
+    for name in data:
+        print(name)
 
 
 @handle_errors
@@ -195,20 +182,13 @@ def main():
     subparsers = parser.add_subparsers(required=True)
 
     # roots
-    help = "List all the available roots in a broker."
+    help = "List all the available roots."
     subparser = subparsers.add_parser("roots", help=help)
     subparser.add_argument("--json", action="store_true")
     subparser.set_defaults(func=cmd_roots)
 
-    # subscribe
-    help = "Request access to the datasets in a root."
-    subparser = subparsers.add_parser("subscribe", help=help)
-    subparser.add_argument("--json", action="store_true")
-    subparser.add_argument("root")
-    subparser.set_defaults(func=cmd_subscribe)
-
     # list
-    help = "List all the available datasets in a root. Needs to be subscribed to the root."
+    help = "List all the available datasets in a root."
     subparser = subparsers.add_parser("list", aliases=["ls"], help=help)
     subparser.add_argument("--json", action="store_true")
     subparser.add_argument("root")

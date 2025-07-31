@@ -8,29 +8,11 @@
 ###############################################################################
 
 import argparse
-import contextlib
 import datetime
 import logging
 import os
 import pathlib
-
-try:
-    import tomllib as toml
-except ImportError:
-    import tomli as toml
-
-#
-# Context managers
-#
-
-
-@contextlib.contextmanager
-def log_exception(logger, message):
-    try:
-        yield
-    except Exception:
-        logger.exception(message)
-
+import tomllib as toml
 
 #
 # Datetime related
@@ -96,11 +78,9 @@ class Socket(str):
             self.uds = string
 
 
-def get_parser(loglevel="warning", statedir=None, id=None, http=None, url=None, broker=None):
+def get_parser(loglevel="warning", statedir=None, id=None, http=None):
     parser = argparse.ArgumentParser()
     _add_preliminary_args(parser, id=id)  # just for help purposes
-    if broker is not None:
-        parser.add_argument("--broker", default=broker, type=Socket, help="socket address of the broker")
     if http is not None:
         parser.add_argument(
             "--http", default=http, type=Socket, help="Listen to given hostname:port or unix socket"
@@ -124,8 +104,6 @@ def run_parser(parser):
 #
 # Configuration file
 #
-
-conf_file_name = "caterva2.toml"
 
 
 class Conf:
@@ -158,7 +136,7 @@ class Conf:
 def _add_preliminary_args(parser, id=None):
     parser.add_argument(
         "--conf",
-        default=conf_file_name,
+        default="caterva2.toml",
         type=pathlib.Path,
         help=("path to alternative configuration file " "(may not exist)"),
     )
@@ -166,12 +144,6 @@ def _add_preliminary_args(parser, id=None):
         parser.add_argument(
             "--id", default=id, help=("a string to distinguish services " "of the same category")
         )
-
-
-def _parse_preliminary_args(allow_id):
-    parser = argparse.ArgumentParser(add_help=False)
-    _add_preliminary_args(parser, id="" if allow_id else None)
-    return parser.parse_known_args()[0]
 
 
 def get_conf(prefix=None, allow_id=False):
@@ -189,7 +161,9 @@ def get_conf(prefix=None, allow_id=False):
     For instance, with ``conf = get_conf('foo')`` and ``--id=bar``,
     ``conf.get('.item')`` is equivalent to ``conf.get('foo.bar.item')``.
     """
-    opts = _parse_preliminary_args(allow_id)
+    parser = argparse.ArgumentParser(add_help=False)
+    _add_preliminary_args(parser, id="" if allow_id else None)
+    opts = parser.parse_known_args()[0]
     if allow_id and opts.id and any(p in opts.id for p in [os.curdir, os.pardir, os.sep]):
         raise ValueError("invalid identifier", opts.id)
 

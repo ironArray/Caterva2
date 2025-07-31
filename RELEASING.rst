@@ -31,7 +31,7 @@ installing the wheel, then test it::
 Check that the examples in docstrings are up to date. You will
 need to register a user in https://cat2.cloud/demo/ with
 username 'user@example.com' and password 'foo'. Then, copy
-the content of ``caterva2-standalone.sample.toml`` to ``caterva2.toml``
+the content of ``caterva2.sample.toml`` to ``caterva2.toml``
 and run the following commands::
 
   $ rm -r _caterva2/

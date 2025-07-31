@@ -1,7 +1,7 @@
 """Caterva2 services for tests.
 
-This ensures that Caterva2 broker, publisher and subscriber services are
-running before proceeding to tests.  It has three modes of operation:
+This ensures that Caterva2 subscriber service is running before proceeding to tests.
+It has three modes of operation:
 
 - Standalone script: when run as a script, it starts the services as children
   and makes sure that they are available to other local programs.  If given an
@@ -27,20 +27,6 @@ running before proceeding to tests.  It has three modes of operation:
   not tamper with the state directory nor stop the services when tests finish.
 
   Usage example: same as above (but on the pytest side).
-
-- pytest fixture with managed services: if the environment variable
-  ``CATERVA2_USE_EXTERNAL`` is set to 1, the `services()` fixture uses
-  external services; otherwise, it takes care of starting the services as
-  children and making sure that they are available to other local programs.
-  It also uses the value in `TEST_STATE_DIR` as the directory to store state
-  in.  If the directory exists, it is removed first. Then the directory is
-  created and populated with the example files from the source distribution.
-  When tests finish, the services are stopped.
-
-  Usage example::
-
-      $ cd Caterva2
-      $ env CATERVA2_USE_EXTERNAL=1 pytest  # state in ``_caterva2_tests``
 """
 
 import collections
@@ -64,8 +50,7 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = "_caterva2"
 TEST_STATE_DIR = DEFAULT_STATE_DIR + "_tests"
 TEST_DEFAULT_ROOT = "foo"
-TEST_CATERVA2_ROOT = TEST_DEFAULT_ROOT
-TEST_HDF5_ROOT = "hdf5root"
+TEST_CATERVA2_ROOT = "@public"
 
 local_port_iter = itertools.count(8100)
 logger = logging.getLogger("tests")
@@ -82,8 +67,6 @@ def service_ep_getter(first):
     return get_service_ep
 
 
-get_bro_ep = service_ep_getter("localhost:8000")
-get_pub_ep = service_ep_getter("localhost:8001")
 get_sub_ep = service_ep_getter("localhost:8002")
 
 
@@ -105,14 +88,6 @@ def http_service_check(conf, conf_sect, def_host, path):
     return make_get_http(conf.get(f"{conf_sect}.http", def_host), path)
 
 
-def bro_check(conf):
-    return http_service_check(conf, "broker", get_bro_ep(), "/api/roots")
-
-
-def pub_check(id_, conf):
-    return http_service_check(conf, f"publisher.{id_}", get_pub_ep(), "/api/list")
-
-
 def sub_check(conf):
     return http_service_check(conf, "subscriber", get_sub_ep(), "/api/roots")
 
@@ -120,12 +95,7 @@ def sub_check(conf):
 TestRoot = collections.namedtuple("TestRoot", ["name", "source"])
 
 
-class Services:
-    def __init__(self):  # mostly to appease QA
-        pass
-
-
-class ManagedServices(Services):
+class ManagedServices:
     def __init__(self, state_dir, reuse_state=True, roots=None, configuration=None):
         super().__init__()
 
@@ -207,15 +177,6 @@ class ManagedServices(Services):
 
     def start_all(self):
         self._setup()
-
-        self._start_proc("broker", check=bro_check(self.configuration))
-        for root in self.roots:
-            self._start_proc(
-                f"publisher.{root.name}",
-                root.name,
-                self._get_data_path(root),
-                check=pub_check(root.name, self.configuration),
-            )
         self._start_proc("subscriber", check=sub_check(self.configuration))
 
     def stop_all(self):
@@ -238,53 +199,14 @@ class ManagedServices(Services):
         return f"http://{self.get_endpoint(service)}"
 
 
-class ExternalServices(Services):
-    def __init__(self, roots=None, configuration=None):
-        super().__init__()
-        self.roots = list(roots)
-        self.configuration = conf = configuration
-
-        self._checks = checks = {}
-        checks["broker"] = bro_check(conf)
-        for root in roots:
-            checks[f"publisher.{root.name}"] = pub_check(root.name, conf)
-        checks["subscriber"] = sub_check(conf)
-
-    def start_all(self):
-        failed = [check.__name__ for check in self._checks.values() if not check()]
-        if failed:
-            raise RuntimeError("failed checks for external services: " + " ".join(failed))
-
-    def stop_all(self):
-        pass
-
-    def wait_for_all(self):
-        pass
-
-    def get_endpoint(self, service):
-        if service not in self._checks:
-            return None
-        return self._checks[service].host
-
-    def get_urlbase(self, service):
-        ep = self.get_endpoint(service)
-        return f"http://{ep}" if ep else None
-
-
 @pytest.fixture(scope="session")
-def services(configuration, examples_dir, examples_hdf5):
+def services(configuration, examples_dir):
     # TODO: Consider using a temporary directory to avoid
     # polluting the current directory with test files
     # and tests being influenced by the presence of a configuration file.
     roots = [TestRoot(TEST_CATERVA2_ROOT, examples_dir)]
-    if examples_hdf5 is not None:
-        roots.append(TestRoot(TEST_HDF5_ROOT, examples_hdf5))
 
-    srvs = (
-        ExternalServices(roots=roots, configuration=configuration)
-        if os.environ.get("CATERVA2_USE_EXTERNAL", "0") == "1"
-        else ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=configuration)
-    )
+    srvs = ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=configuration)
 
     try:
         srvs.start_all()
@@ -313,10 +235,6 @@ def main(defer):
     from . import conf, files, sub_auth
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
-    hdf5source = files.make_examples_hdf5()
-    if hdf5source:
-        defer(lambda: (hdf5source.parent.is_dir() and shutil.rmtree(hdf5source.parent)))
-        roots.append(TestRoot(TEST_HDF5_ROOT, hdf5source))
 
     if "--help" in sys.argv:
         rspecs = " ".join(f'"{r.name}={r.source}"' for r in roots)
