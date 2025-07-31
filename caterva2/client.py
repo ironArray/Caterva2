@@ -13,7 +13,7 @@ from blosc2 import NDArray, SChunk
 
 from . import api_utils, utils
 
-sub_urlbase_default = "http://localhost:8002"
+sub_urlbase_default = "http://localhost:8000"
 """The default base of URLs provided by the subscriber."""
 
 

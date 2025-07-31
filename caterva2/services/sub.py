@@ -2524,7 +2524,7 @@ def main():
     # Parse command line arguments
     _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
     parser = utils.get_parser(
-        http=conf.get(".http", "localhost:8002"),
+        http=conf.get(".http", "localhost:8000"),
         loglevel=conf.get(".loglevel", "warning"),
         statedir=conf.get(".statedir", _stdir),
         id=conf.id,

@@ -29,7 +29,7 @@ def parse_size(size):
 
 conf = utils.get_conf("subscriber", allow_id=True)
 
-urlbase = conf.get(".urlbase", "http://localhost:8002")
+urlbase = conf.get(".urlbase", "http://localhost:8000")
 login = conf.get(".login", True)
 register = conf.get(".register", False)
 demo = conf.get(".demo", False)
