@@ -169,6 +169,7 @@ def cmd_listusers(client, args):
 
 
 def main():
+    # Build the parser
     conf = utils.get_conf()
     parser = utils.get_parser()
     parser.add_argument(

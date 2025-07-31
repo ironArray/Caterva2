@@ -40,4 +40,4 @@ lite-test:
 
 # To run the server, for convenience
 run:
-	BLOSC_TRACE=1 ${BIN}/python3 -m caterva2.services.sub
+	${BIN}/python3 -m caterva2.services.sub

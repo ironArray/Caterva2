@@ -27,7 +27,7 @@ def parse_size(size):
     return int(number * units[unit])
 
 
-conf = utils.get_conf("subscriber", allow_id=True)
+conf = utils.get_conf("subscriber")
 
 urlbase = conf.get(".urlbase", "http://localhost:8000")
 login = conf.get(".login", True)

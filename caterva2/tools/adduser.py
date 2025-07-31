@@ -18,14 +18,17 @@ from caterva2.services import srv_utils
 
 
 def main():
-    conf = utils.get_conf("subscriber", allow_id=True)
-    _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
-    parser = utils.get_parser(statedir=conf.get(".statedir", _stdir), id=conf.id)
+    # Load configuration (args)
+    conf = utils.get_conf("subscriber")
+    parser = utils.get_parser(
+        statedir=conf.get(".statedir", "_caterva2/sub"),
+    )
     parser.add_argument("username")
     parser.add_argument("password", nargs="?")
     parser.add_argument("--superuser", "-S", action="store_true", default=False)
     args = utils.run_parser(parser)
 
+    # Add user
     statedir = args.statedir.resolve()
     user = srv_utils.add_user(args.username, args.password, args.superuser, state_dir=statedir)
     print("Password:", user.password)

@@ -2518,16 +2518,12 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
 
 
 def main():
-    # Read configuration file
-    conf = utils.get_conf("subscriber", allow_id=True)
-
-    # Parse command line arguments
-    _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
+    # Load configuration (args)
+    conf = utils.get_conf("subscriber")
     parser = utils.get_parser(
         http=conf.get(".http", "localhost:8000"),
         loglevel=conf.get(".loglevel", "warning"),
-        statedir=conf.get(".statedir", _stdir),
-        id=conf.id,
+        statedir=conf.get(".statedir", "_caterva2/sub"),
     )
     args = utils.run_parser(parser)
 
