@@ -27,9 +27,9 @@ def parse_size(size):
     return int(number * units[unit])
 
 
-conf = utils.get_conf("subscriber", allow_id=True)
+conf = utils.get_conf("subscriber")
 
-urlbase = conf.get(".urlbase", "http://localhost:8002")
+urlbase = conf.get(".urlbase", "http://localhost:8000")
 login = conf.get(".login", True)
 register = conf.get(".register", False)
 demo = conf.get(".demo", False)
@@ -41,7 +41,6 @@ maxusers = conf.get(".maxusers")
 # Not strictly necessary but useful for documentation
 statedir = None
 database = None  # <Database> instance
-cache = None
 personal = None
 shared = None
 public = None

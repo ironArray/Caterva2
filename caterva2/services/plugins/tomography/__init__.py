@@ -31,14 +31,11 @@ label = "Tomography"
 contenttype = "tomography"
 
 
-abspath_and_dataprep = None
 urlbase = None
 
 
-def init(absp_n_datap, urlbase_):
-    global abspath_and_dataprep
+def init(urlbase_):
     global urlbase
-    abspath_and_dataprep = absp_n_datap
     urlbase = urlbase_
 
 
@@ -101,7 +98,6 @@ async def display(
 
 
 async def __get_image(path, user, ndim, i):
-    # Alternatively, call abspath_and_dataprep with the corresponding slice to download data async
     array = await get_container(path, user)
     index = [slice(None) for x in array.shape]
     index[ndim] = slice(i, i + 1, 1)

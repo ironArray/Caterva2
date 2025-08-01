@@ -43,20 +43,8 @@ The client must implement the following commands:
 There should be a configuration file (by default $CWD/caterva2.toml) where the configuration for each service is specified. For example:
 
 ```
-[broker]
+[subscriber]
 http = "localhost:8000"
-statedir = "_caterva2/bro"
-loglevel = "warning"
-
-[publisher.1]
-http = "localhost:8001"
-statedir = "_caterva2/pub"
-loglevel = "warning"
-name = "foo"
-root = "root-examples"
-
-[subscriber.1]
-http = "localhost:8002"
 urlbase = "https://cat2.example.com"  # e.g. served by reverse proxy
 statedir = "_caterva2/sub"
 loglevel = "warning"

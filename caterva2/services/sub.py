@@ -37,6 +37,7 @@ import markdown
 import nbconvert
 import nbformat
 import PIL.Image
+import uvicorn
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
@@ -324,23 +325,8 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
-    # Get the root
-    root = path.parts[0]
-    if root == "@public":
-        rootdir = settings.public
-    elif root == "@personal":
-        if not user:
-            srv_utils.raise_not_found("@personal needs authentication")
-        rootdir = settings.personal / str(user.id)
-    elif root == "@shared":
-        if not user:
-            srv_utils.raise_not_found("@shared needs authentication")
-        rootdir = settings.shared
-    else:
-        raise ValueError(f"Unexpected root={root}")
-
     # List the datasets in root or directory
-    directory = rootdir / pathlib.Path(*path.parts[1:])
+    directory = get_writable_path(path, user)
     if directory.is_file():
         name = pathlib.Path(directory.name)
         return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
@@ -370,10 +356,8 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    return srv_utils.read_metadata(
-        abspath, settings.cache, settings.personal, settings.shared, settings.public
-    )
+    abspath = get_abspath(path, user)
+    return srv_utils.read_metadata(abspath)
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -400,43 +384,49 @@ async def partial_download(abspath, path, slice_=None):
         await proxy.afetch(slice_)
 
 
-def abspath_and_dataprep(
-    path: pathlib.Path, slice_: (tuple | None) = None, user: (db.User | None) = None, may_not_exist=False
+def get_abspath(
+    path: pathlib.Path, user: (db.User | None), may_not_exist=False
 ) -> tuple[
     pathlib.Path,
     collections.abc.Callable[[], collections.abc.Awaitable],
 ]:
     """
-    Get absolute path in local storage and data preparation operation.
-
-    After awaiting the preparation operation to complete, data in the
-    dataset should be ready for reading, either that covered by the slice if
-    given, or the whole data otherwise.
+    Get absolute path in local storage.
     """
-    parts = path.parts
-    root = parts[0]
-    if root not in {"@personal", "@shared", "@public"}:
-        raise ValueError(f"Unexpected root={root}")
+    filepath = get_writable_path(path, user)
 
-    if root in {"@personal", "@shared"} and not user:
-        raise fastapi.HTTPException(status_code=401)  # Unauthorized
-
+    root = path.parts[0]
     if root == "@personal":
-        filepath = settings.personal / str(user.id) / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(settings.personal, filepath, may_not_exist)
-
+        cachedir = settings.personal
     elif root == "@shared":
-        filepath = settings.shared / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(settings.shared, filepath, may_not_exist)
-
+        cachedir = settings.shared
     elif root == "@public":
-        filepath = settings.public / pathlib.Path(*parts[1:])
-        abspath = srv_utils.cache_lookup(settings.public, filepath, may_not_exist)
+        cachedir = settings.public
 
-    async def dataprep():
-        pass
+    # Special case for the cache root
+    if cachedir == filepath:
+        return filepath
 
-    return (abspath, dataprep)
+    # Special case for directories
+    elif (cachedir / filepath).is_dir():
+        return cachedir / filepath
+
+    # HDF5 files cannot be compressed, as they are supported natively
+    if filepath.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
+        if filepath.is_file():
+            srv_utils.compress_file(filepath)
+        filepath = f"{filepath}.b2"
+
+    # Security check
+    abspath = cachedir / filepath
+    if cachedir not in abspath.parents:
+        srv_utils.raise_bad_request(f"Invalid path {filepath}")
+
+    # Existence check
+    if not abspath.is_file() and not may_not_exist:
+        srv_utils.raise_not_found()
+
+    return abspath
 
 
 @app.get("/api/fetch/{path:path}")
@@ -471,10 +461,7 @@ async def fetch_data(
     """
 
     slice_ = api_utils.parse_slice(slice_)
-    # Download and update the necessary chunks of the schunk in cache
-    abspath, dataprep = abspath_and_dataprep(path, slice_, user=user)
-    # This is still needed and will only update the necessary chunks
-    await dataprep()
+    abspath = get_abspath(path, user)
 
     if filter:
         if field:
@@ -593,15 +580,11 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(optional_user),
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
+    abspath = get_abspath(path, user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         root = path.parts[0]
-        if root not in {"@personal", "@shared", "@public"}:
-            raise ValueError(f"Unexpected root={root}")
-
-        if root in {"@personal", "@shared"} and not user:
-            raise fastapi.HTTPException(status_code=401)  # Unauthorized
+        get_rootdir_or_error(root, user)
 
         container = open_b2(abspath, path)
         if isinstance(container, blosc2.LazyArray):
@@ -656,14 +639,7 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
         path = operands[var]
         # Detect special roots
         path = pathlib.Path(path)
-        if path.parts[0] == "@personal":
-            abspath = settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-        elif path.parts[0] == "@shared":
-            abspath = settings.shared / pathlib.Path(*path.parts[1:])
-        elif path.parts[0] == "@public":
-            abspath = settings.public / pathlib.Path(*path.parts[1:])
-        else:
-            abspath = settings.cache / path
+        abspath = get_writable_path(path, user)
         var_dict[var] = open_b2(abspath, path)
 
     # Create the lazy expression dataset
@@ -745,8 +721,8 @@ async def move(
         )
     namepath = pathlib.Path(payload.src)
     destpath = pathlib.Path(payload.dst)
-    abspath, _ = abspath_and_dataprep(namepath, user=user)
-    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+    abspath = get_abspath(namepath, user)
+    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
 
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she can add a '.b2' extension :-)
@@ -800,8 +776,8 @@ async def copy(
         )
 
     namepath, destpath = pathlib.Path(src), pathlib.Path(dst)
-    abspath, _ = abspath_and_dataprep(namepath, user=user)
-    dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+    abspath = get_abspath(namepath, user)
+    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
 
     # If destination has not an extension, assume it is a directory
     # If user wants something without an extension, she should add a '.b2' extension
@@ -839,15 +815,15 @@ def concatstackhelper(payload: models.ConcatStackPayload, user: db.User = Depend
             )
     # dst should start with a special root and if not try and massage it
     if not dst.startswith(("@personal", "@shared", "@public")):
-        path = settings.personal / str(user.id)
-        path.mkdir(exist_ok=True, parents=True)
-        dest_abspath = pathlib.Path(f"{path / dst}")
-        destpath = pathlib.Path(f"@personal/{dst}")
-    else:
-        destpath = pathlib.Path(dst)
-        dest_abspath, _ = abspath_and_dataprep(destpath, user=user, may_not_exist=True)
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Only stacking/concatenating to @personal or @shared or @public roots is allowed",
+        )
 
-    abspaths = [abspath_and_dataprep(pathlib.Path(src), user=user)[0] for src in srcs]
+    destpath = pathlib.Path(dst)
+    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
+
+    abspaths = [get_abspath(pathlib.Path(src), user) for src in srcs]
 
     # dst should be a .b2nd array and if not try and massage it
     if not dest_abspath.suffix:
@@ -920,16 +896,9 @@ def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
     fastapi.HTTPException
         If the path is not in a writable root
     """
-    root = path.parts[0]
-    if root == "@personal":
-        return settings.personal / str(user.id) / pathlib.Path(*path.parts[1:])
-    elif root == "@shared":
-        return settings.shared / pathlib.Path(*path.parts[1:])
-    elif root == "@public":
-        return settings.public / pathlib.Path(*path.parts[1:])
-    else:
-        detail = "Only @personal or @shared or @public roots can be modified"
-        raise fastapi.HTTPException(detail=detail, status_code=400)
+    root, *subpath = path.parts
+    rootdir = get_rootdir_or_error(root, user)
+    return rootdir / pathlib.Path(*subpath)
 
 
 @app.post("/api/upload/{path:path}")
@@ -1436,19 +1405,36 @@ async def htmx_root_list(
     return templates.TemplateResponse(request, "root_list.html", context)
 
 
-def _get_rootdir(user, root):
-    if root == "@personal":
-        if user:
-            return settings.personal / str(user.id)
-    elif root == "@shared":
-        if user:
-            return settings.shared
-    elif root == "@public":
+def get_rootdir_or_error(root, user):
+    if root not in {"@personal", "@shared", "@public"}:
+        raise fastapi.HTTPException(status_code=404)  # NotFound
+
+    if root == "@public":
         return settings.public
-    else:
-        raise ValueError(f"Unexpected root={root}")
+    elif root == "@shared" and user:
+        return settings.shared
+    elif root == "@personal" and user:
+        return settings.personal / str(user.id)
+
+    raise fastapi.HTTPException(status_code=401)  # Unauthorized
+
+
+def get_rootdir_or_none(root, user):
+    if root == "@public":
+        return settings.public
+    elif root == "@shared" and user:
+        return settings.shared
+    elif root == "@personal" and user:
+        return settings.personal / str(user.id)
 
     return None
+
+
+def filter_roots(roots, user):
+    for root in roots:
+        rootdir = get_rootdir_or_none(root, user)
+        if rootdir is not None:
+            yield root, rootdir
 
 
 @app.get("/htmx/path-list/", response_class=HTMLResponse)
@@ -1489,8 +1475,7 @@ async def htmx_path_list(
             }
         )
 
-    for root in roots:
-        rootdir = _get_rootdir(user, root)
+    for root, rootdir in filter_roots(roots, user):
         for abspath, relpath in utils.walk_files(rootdir):
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
@@ -1508,14 +1493,15 @@ async def htmx_path_list(
                 break
         else:
             root = segments[1]
-            rootdir = _get_rootdir(user, root)
-            relpath = pathlib.Path(*segments[2:])
-            abspath = rootdir / relpath
-            if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
-                abspath = pathlib.Path(f"{abspath}.b2")
+            rootdir = get_rootdir_or_none(root, user)
+            if rootdir is not None:
+                relpath = pathlib.Path(*segments[2:])
+                abspath = rootdir / relpath
+                if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
+                    abspath = pathlib.Path(f"{abspath}.b2")
 
-            with contextlib.suppress(FileNotFoundError):
-                add_dataset(path, abspath)
+                with contextlib.suppress(FileNotFoundError):
+                    add_dataset(path, abspath)
 
     # Assign names to datasets
     datasets = sorted(datasets, key=lambda x: x["path"])
@@ -1567,10 +1553,8 @@ async def htmx_path_info(
         return response
 
     # Read metadata
-    abspath, _ = abspath_and_dataprep(path, user=user)
-    meta = srv_utils.read_metadata(
-        abspath, settings.cache, settings.personal, settings.shared, settings.public
-    )
+    abspath = get_abspath(path, user)
+    meta = srv_utils.read_metadata(abspath)
 
     # Context
     tabs = []
@@ -1693,7 +1677,7 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath, _ = abspath_and_dataprep(path, user=user)
+    abspath = get_abspath(path, user)
     filter = filter.strip()
     if filter or sortby:
         try:
@@ -2171,14 +2155,15 @@ async def htmx_upload(
     if not user:
         raise srv_utils.raise_unauthorized("Uploading files requires authentication")
 
+    if name not in {"@personal", "@shared", "@public"}:
+        raise fastapi.HTTPException(status_code=404)  # NotFound
+
     if name == "@personal":
         path = settings.personal / str(user.id)
     elif name == "@shared":
         path = settings.shared
     elif name == "@public":
         path = settings.public
-    else:
-        raise fastapi.HTTPException(status_code=404)  # NotFound
 
     # Read the file and check quota
     data = await file.read()
@@ -2269,20 +2254,21 @@ async def htmx_delete(
     user: db.User = Depends(current_active_user),
 ):
     # Find absolute path to file
+    root = path.parts[0]
+    if root not in {"@personal", "@shared", "@public"}:
+        return fastapi.HTTPException(status_code=400)
+
     parts = list(path.parts)
-    name = parts[0]
-    if name == "@personal":
+    if root == "@personal":
         parts[0] = str(user.id)
         path = pathlib.Path(*parts)
         abspath = settings.personal / path
-    elif name == "@shared":
+    elif root == "@shared":
         path = pathlib.Path(*parts[1:])
         abspath = settings.shared / path
-    elif name == "@public":
+    elif root == "@public":
         path = pathlib.Path(*parts[1:])
         abspath = settings.public / path
-    else:
-        return fastapi.HTTPException(status_code=400)
 
     # Remove
     if abspath.suffix in [".h5", ".hdf5"]:
@@ -2296,12 +2282,11 @@ async def htmx_delete(
 
     # Redirect to home
     url = make_url(request, "html_home")
-    return htmx_redirect(hx_current_url, url, root=name)
+    return htmx_redirect(hx_current_url, url, root=root)
 
 
 async def get_container(path, user):
-    abspath, dataprep = abspath_and_dataprep(path, user=user)
-    await dataprep()
+    abspath = get_abspath(path, user)
     return open_b2(abspath, path)
 
 
@@ -2429,30 +2414,18 @@ async def jupyterlite_contents(
 
     content = []
     if len(parts) == 0:
-        rootdir = _get_rootdir(user, "@personal")
-        if rootdir is not None:
-            rootdir.mkdir(exist_ok=True)
-            content.append(directory(rootdir, "@personal"))
+        roots = {"@personal", "@shared", "@public"}
+        for root, rootdir in filter_roots(roots):
+            if root == "@personal":
+                rootdir.mkdir(exist_ok=True)
 
-        rootdir = _get_rootdir(user, "@shared")
-        if rootdir is not None:
-            content.append(directory(rootdir, "@shared"))
-
-        rootdir = _get_rootdir(user, "@public")
-        if rootdir is not None:
-            content.append(directory(rootdir, "@public"))
+            content.append(directory(rootdir, root))
 
         dir_abspath = rootdir.parent
         dir_relpath = ""
     else:
-        # Check access to the root
-        root, *subpath = parts
-        rootdir = _get_rootdir(user, root)
-        if rootdir is None:
-            raise fastapi.HTTPException(status_code=404)  # NotFound
-
         # Get absolute and relative paths to the directory
-        dir_abspath = rootdir / pathlib.Path(*subpath)
+        dir_abspath = get_writable_path(path, user)
         dir_relpath = path
 
         for abspath, relpath in utils.iterdir(dir_abspath):
@@ -2545,27 +2518,17 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
 
 
 def main():
-    # Read configuration file
-    conf = utils.get_conf("subscriber", allow_id=True)
-
-    # Parse command line arguments
-    _stdir = "_caterva2/sub" + (f".{conf.id}" if conf.id else "")
+    # Load configuration (args)
+    conf = utils.get_conf("subscriber")
     parser = utils.get_parser(
-        http=conf.get(".http", "localhost:8002"),
+        http=conf.get(".http", "localhost:8000"),
         loglevel=conf.get(".loglevel", "warning"),
-        statedir=conf.get(".statedir", _stdir),
-        id=conf.id,
+        statedir=conf.get(".statedir", "_caterva2/sub"),
     )
     args = utils.run_parser(parser)
 
-    # Init cache
+    # Directories
     settings.statedir = args.statedir.resolve()
-    settings.cache = settings.statedir / "cache"
-    settings.cache.mkdir(exist_ok=True, parents=True)
-    # Use `download_cached()`, `StaticFiles` does not support authorization.
-    # app.mount("/files", StaticFiles(directory=cache), name="files")
-
-    # Shared/Public dirs
     settings.shared = settings.statedir / "shared"
     settings.shared.mkdir(exist_ok=True, parents=True)
     settings.public = settings.statedir / "public"
@@ -2589,7 +2552,7 @@ def main():
 
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
-    tomography.init(abspath_and_dataprep, settings.urlbase)
+    tomography.init(settings.urlbase)
 
     # Mount media
     media = settings.statedir / "media"
@@ -2601,7 +2564,11 @@ def main():
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
-    srv_utils.uvicorn_run(app, args, root_path=root_path)
+    http = args.http
+    if http.uds:
+        uvicorn.run(app, uds=http.uds, root_path=root_path)
+    else:
+        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
 
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ def service_ep_getter(first):
     return get_service_ep
 
 
-get_sub_ep = service_ep_getter("localhost:8002")
+get_sub_ep = service_ep_getter("localhost:8000")
 
 
 def make_get_http(host, path="/"):

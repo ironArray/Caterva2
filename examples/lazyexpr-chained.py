@@ -19,7 +19,7 @@ import numpy as np
 import caterva2 as cat2
 
 # Open a client to the local server
-# client = cat2.Client("http://localhost:8002", ("user@example.com", "foobar11"))
+# client = cat2.Client("http://localhost:8000", ("user@example.com", "foobar11"))
 # Open a client to the Cat2Cloud server
 client = cat2.Client("https://cat2.cloud/demo", ("user@example.com", "foobar11"))
 

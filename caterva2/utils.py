@@ -10,7 +10,6 @@
 import argparse
 import datetime
 import logging
-import os
 import pathlib
 import tomllib as toml
 
@@ -78,9 +77,9 @@ class Socket(str):
             self.uds = string
 
 
-def get_parser(loglevel="warning", statedir=None, id=None, http=None):
+def get_parser(loglevel="warning", statedir=None, http=None):
     parser = argparse.ArgumentParser()
-    _add_preliminary_args(parser, id=id)  # just for help purposes
+    _add_preliminary_args(parser)  # just for help purposes
     if http is not None:
         parser.add_argument(
             "--http", default=http, type=Socket, help="Listen to given hostname:port or unix socket"
@@ -107,12 +106,10 @@ def run_parser(parser):
 
 
 class Conf:
-    def __init__(self, conf, prefix=None, id=None):
+    def __init__(self, conf, prefix=None):
         self._conf = conf
         self.prefix = prefix
-        self.id = id
-
-        self._pfx = (f"{prefix}.{id}" if id else prefix) if prefix else None
+        self._pfx = prefix if prefix else None
 
     def get(self, key, default=None):
         """Get configuration item with dot-separated `key`.
@@ -133,20 +130,16 @@ class Conf:
         return conf
 
 
-def _add_preliminary_args(parser, id=None):
+def _add_preliminary_args(parser):
     parser.add_argument(
         "--conf",
         default="caterva2.toml",
         type=pathlib.Path,
         help=("path to alternative configuration file " "(may not exist)"),
     )
-    if id is not None:  # the empty string is a valid (default) ID
-        parser.add_argument(
-            "--id", default=id, help=("a string to distinguish services " "of the same category")
-        )
 
 
-def get_conf(prefix=None, allow_id=False):
+def get_conf(prefix=None):
     """Get settings from the configuration file, if existing.
 
     If the configuration file does not exist, return an empty configuration.
@@ -154,23 +147,15 @@ def get_conf(prefix=None, allow_id=False):
     You may get the value for a key from the returned configuration ``conf``
     with ``conf.get('path.to.item'[, default])``.  If a `prefix` is given and
     the key starts with a dot, like ``.path.to.item``, `prefix` is prepended
-    to it.  If `allow_id` is true and command line arguments has a non-empty
-    value for the ``--id`` option, the value gets appended to `prefix`,
-    separated by a dot.
-
-    For instance, with ``conf = get_conf('foo')`` and ``--id=bar``,
-    ``conf.get('.item')`` is equivalent to ``conf.get('foo.bar.item')``.
+    to it.
     """
     parser = argparse.ArgumentParser(add_help=False)
-    _add_preliminary_args(parser, id="" if allow_id else None)
+    _add_preliminary_args(parser)
     opts = parser.parse_known_args()[0]
-    if allow_id and opts.id and any(p in opts.id for p in [os.curdir, os.pardir, os.sep]):
-        raise ValueError("invalid identifier", opts.id)
 
-    id_ = opts.id if allow_id else None
     try:
         with open(opts.conf, "rb") as conf_file:
             conf = toml.load(conf_file)
-            return Conf(conf, prefix=prefix, id=id_)
+            return Conf(conf, prefix=prefix)
     except FileNotFoundError:
-        return Conf({}, prefix=prefix, id=id_)
+        return Conf({}, prefix=prefix)
