@@ -89,7 +89,7 @@ Announcing
 - Send an announcement to the blosc and comp.compression mailing lists.
   Use the ``ANNOUNCE.md`` file as skeleton (likely as the definitive version).
 
-- Tweet/toot about it from the @Blosc2 account.
+- Announce the release in Linkedin/mastodon/bluesky from the @Blosc2 account.
 
 
 Post-release actions

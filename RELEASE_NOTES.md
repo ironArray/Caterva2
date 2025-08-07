@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 2025.8.7 to XXX
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 2025.6.26 to 2025.8.7
 
 ### Big refactoring

@@ -2,7 +2,7 @@ Announcing Caterva2 2025.8.7
 =============================
 
 Caterva2 is a high-performance storage and computation system for
-Blosc2 data repositories.
+Blosc2 and HDF5 data repositories.
 
 This is a major release that includes a big refactoring for getting rid of
 the PubSub code (which, to be frank, was not bringing too much benefit).
@@ -19,9 +19,9 @@ For more info, you can have a look at the release notes in:
 
 https://github.com/ironArray/Caterva2/releases
 
-More info and examples are available in the README:
+Ready for serious data sharing?  Visit the Caterva2 website:
 
-https://github.com/ironArray/Caterva2#readme
+https://ironarray.io/caterva2
 
 ## What is it?
 
