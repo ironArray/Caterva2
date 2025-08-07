@@ -1,5 +1,34 @@
 # Release notes
 
+## Changes from 2025.6.26 to 2025.8.7
+
+### Big refactoring
+
+* The PubSub code has been pruned. Even if powerful, PubSub added much
+  complexity to the code, without providing a clear benefit.
+
+* New `cat2agent` to watch a directory and sync changes to a Caterva2 server.
+  This is particularly useful for automatically uploading new datasets to a
+  Caterva2 server, or for keeping a local copy of a remote Caterva2 server.
+
+* With the introduction of the HDF5Proxy class, HDF5Root was obsoleted and
+  has been removed.
+
+### Web frontend
+
+* New stack/concat prompt commands.
+
+### API changes
+
+* No API changes for the client REST or Python APIs, so the big refactoring
+  does not affect them.
+
+### Bug fixes and improvements
+
+* Fix "/api/chunk/{path:path}" for shared/public.
+
+* Several minor fixes so that the behavior of the server is more consistent.
+
 ## Changes from 2025.5.2 to 2025.6.26
 
 ### New support for native HDF5 files

@@ -11,7 +11,7 @@
 
 from .client import BasicAuth, Client, Dataset, File, Root, sub_urlbase_default
 
-__version__ = "2025.6.27.dev0"
+__version__ = "2025.8.7"
 """The version in use of the Caterva2 package."""
 
 __all__ = [
