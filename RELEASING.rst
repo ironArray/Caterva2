@@ -26,6 +26,7 @@ installing the wheel, then test it::
   $ python -m pip install -e ".[tests,hdf5]"
   $ cd ..   # to avoid using the source code
   $ python -m caterva2.tests -v
+  $ CATERVA2_SECRET="c2sikrit" python -m caterva2.tests -v
   $ cd -
 
 Check that the examples in docstrings are up to date. You will
@@ -37,8 +38,8 @@ and run the following commands::
   $ rm -r _caterva2/
   $ cat2adduser superuser@example.com foobarfoo -S
   $ CATERVA2_SECRET="123" cat2sub
-  $ python -m doctest  caterva2/api.py
-  $ python -m doctest  caterva2/api_utils.py
+
+And experiment a bit with uploading, browsing and downloading files.
 
 If the tests pass, you are ready to release.
 
@@ -73,13 +74,13 @@ Tagging and releasing
 
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::
 
-  $ pip install caterva2[tests] -U
-  $ python -m caterva2.tests -v
+  $ pip uninstall caterva2
+  $ pip install caterva2[tests]
+  $ python -m caterva2.tests
+  $ CATERVA2_SECRET="c2sikrit" python -m caterva2.tests
 
-- Go to ``Blosc/blogsite`` repo, then to "Actions", click on the most recent
-  workflow run (at the top of the list), and then click on the "Re-run all
-  jobs" button to regenerate the documentation and check that it has been
-  correctly updated in https://www.blosc.org.
+- Go to ``https://github.com/ironArray/website2`` repo, and do a release of
+    the website2 project, which will update the website with the new release.
 
 
 Announcing
