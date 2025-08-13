@@ -2295,17 +2295,29 @@ async def get_container(path, user):
 async def get_file_content(path, user):
     """
     This helper function returns the contents of the file at the given path, as a byte
-    string. If the given user is allowed to.
+    string (if the given user has acces to it).
+
+    There are 2 different cases:
+
+    - Datasets (b2nd, b2frame and h5) are returned as they are stored (compressed)
+    - Regular files are returned uncompressed
+
+    This function is used when we need to send data to a regular client (e.g. a browser).
+    Such a client does not know how to uncompress .b2 files, so we must send these files
+    uncompressed.
+
+    Our own client will use instead the fetch API, because it sends the .b2 files
+    compressed, and then it's able to uncompress them in the client side.
     """
     abspath = get_abspath(path, user)
     suffix = abspath.suffix
 
     if suffix in {".b2frame", ".b2nd"}:
-        # Blosc2 arrays
+        # Blosc2 datasets are returned
         container = open_b2(abspath, path)
         return container.to_cframe()
     elif suffix == ".b2":
-        # Other Blosc2 compressed files
+        # Blosc2 compressed files are decom
         container = open_b2(abspath, path)
         return container[:]
 
