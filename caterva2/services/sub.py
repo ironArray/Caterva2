@@ -26,7 +26,6 @@ import tarfile
 import traceback
 import typing
 import zipfile
-from argparse import ArgumentError
 
 # Requirements
 import blosc2
@@ -465,7 +464,7 @@ async def fetch_data(
 
     if filter:
         if field:
-            raise ArgumentError("Cannot handle both field and filter parameters at the same time")
+            srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         filter = filter.strip()
         mtime = abspath.stat().st_mtime
         container, _ = get_filtered_array(abspath, path, filter, sortby=None, mtime=mtime)
