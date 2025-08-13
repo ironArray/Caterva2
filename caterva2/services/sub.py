@@ -2293,14 +2293,26 @@ async def get_container(path, user):
 
 
 async def get_file_content(path, user):
-    container = await get_container(path, user)
+    """
+    This helper function returns the contents of the file at the given path, as a byte
+    string. If the given user is allowed to.
+    """
+    abspath = get_abspath(path, user)
+    suffix = abspath.suffix
 
-    # Return compressed (this is used only by the downloader)
-    if path.suffix in {".b2frame", ".b2nd"}:
+    if suffix in {".b2frame", ".b2nd"}:
+        # Blosc2 arrays
+        container = open_b2(abspath, path)
         return container.to_cframe()
+    elif suffix == ".b2":
+        # Other Blosc2 compressed files
+        container = open_b2(abspath, path)
+        return container[:]
 
-    # Return uncompressed
-    return container[:]
+    # Other files, not Blosc2 compressed
+    # HDF5 files are not compressed with Blosc2
+    with open(abspath, "rb") as file:
+        return file.read()
 
 
 async def get_image(path, user):
