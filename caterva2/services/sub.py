@@ -448,7 +448,10 @@ async def fetch_data(
     filter : str
         The filter to apply to the dataset.
     field : str
-        The desired field of dataset. If provided, filter is ignored.
+        The desired field of dataset.
+
+    The field and filter parameters are incompatible, if both are giving the API will
+    return a "400 Bad Request" error response.
 
     Returns
     -------
