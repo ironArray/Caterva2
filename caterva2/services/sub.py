@@ -2458,7 +2458,7 @@ async def jupyterlite_contents(
     content = []
     if len(parts) == 0:
         roots = {"@personal", "@shared", "@public"}
-        for root, rootdir in filter_roots(roots):
+        for root, rootdir in filter_roots(roots, user):
             if root == "@personal":
                 rootdir.mkdir(exist_ok=True)
 
