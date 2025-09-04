@@ -113,7 +113,7 @@ def fetch_data(path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout
 
 
 def get_download_url(path, urlbase):
-    return f"{urlbase}/api/fetch/{path}"
+    return f"{urlbase}/api/download/{path}"
 
 
 def b2_unpack(filepath):
@@ -141,22 +141,21 @@ def download_url(url, localpath, auth_cookie=None):
         localpath /= url.split("/")[-1]
 
     headers = {}
+    headers["Accept-Encoding"] = "blosc2"
     if auth_cookie:
         headers["Cookie"] = auth_cookie
 
     with client.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
-        # Build the local filepath
-        cdisp = r.headers.get("content-disposition", "")
-        is_b2 = bool(_attachment_b2fname_rx.findall(cdisp))
-        if is_b2:
-            # Append '.b2' to the filename
+        decompress = r.headers.get("Content-Encoding") == "blosc2"
+        if decompress:
             localpath = localpath.with_suffix(localpath.suffix + ".b2")
+
         with open(localpath, "wb") as f:
             for data in r.iter_bytes():
                 f.write(data)
 
-    if is_b2:
+    if decompress:
         localpath = b2_unpack(localpath)
 
     return localpath

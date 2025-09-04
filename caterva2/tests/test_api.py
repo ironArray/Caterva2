@@ -414,35 +414,16 @@ def test_slice_dataset_nd(slice_, name, examples_dir, client):
     np.testing.assert_array_equal(arr[()], a[slice_])
 
 
-@pytest.mark.parametrize(
-    "slice_",
-    [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
-)
-def test_getitem_regular_file(slice_, examples_dir, client):
+def test_getitem_regular_file(fill_public, client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
-
-    # Data contents
-    example = examples_dir / ds.name
-    a = open(example).read().encode()
-    if isinstance(slice_, int):
-        assert ord(ds[slice_]) == a[slice_]  # TODO: why do we need ord() here?
-    else:
-        assert ds[slice_] == a[slice_]
+    with pytest.raises(httpx.HTTPStatusError):
+        ds[1]
 
 
-@pytest.mark.parametrize(
-    "slice_",
-    [1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
-)
-def test_getitem_client_regular_file(slice_, examples_dir, client):
-    # Data contents
-    example = examples_dir / "README.md"
-    a = open(example).read().encode()
-    if isinstance(slice_, int):
-        assert ord(client.fetch(TEST_CATERVA2_ROOT + "/" + "README.md", slice_=slice_)) == a[slice_]
-    else:
-        assert client.fetch(TEST_CATERVA2_ROOT + "/" + "README.md", slice_=slice_) == a[slice_]
+def test_getitem_client_regular_file(client):
+    with pytest.raises(httpx.HTTPStatusError):
+        resp = client.fetch(TEST_CATERVA2_ROOT + "/" + "README.md")
 
 
 @pytest.mark.parametrize(
@@ -516,7 +497,7 @@ def test_download_b2frame(examples_dir, tmp_path, client, auth_client):
 
     # Using 2-step download
     urlpath = ds.get_download_url()
-    assert urlpath == f"{client.urlbase}/api/fetch/{ds.path}"
+    assert urlpath == f"{client.urlbase}/api/download/{ds.path}"
     data = httpx.get(urlpath, headers={"Cookie": auth_client.cookie} if auth_client else None)
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
@@ -554,7 +535,7 @@ def test_download_localpath(fnames, examples_dir, tmp_path, client):
         np.testing.assert_array_equal(a[:], b[:])
 
 
-def test_download_regular_file(examples_dir, tmp_path, client, auth_client):
+def test_download_regular_file(fill_public, examples_dir, tmp_path, client, auth_client):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["README.md"]
     with contextlib.chdir(tmp_path):
@@ -568,10 +549,18 @@ def test_download_regular_file(examples_dir, tmp_path, client, auth_client):
         b = open(path).read()
         assert a[:] == b[:]
 
-    # Using 2-step download
     urlpath = ds.get_download_url()
-    assert urlpath == f"{client.urlbase}/api/fetch/{ds.path}"
-    data = httpx.get(urlpath, headers={"Cookie": auth_client.cookie} if auth_client else None)
+    assert urlpath == f"{client.urlbase}/api/download/{ds.path}"
+
+    # Download (decompressed)
+    headers = {"Cookie": auth_client.cookie} if auth_client else None
+    data = httpx.get(urlpath, headers=headers)
+    assert data.status_code == 200
+    assert a[:] == data.content.decode()
+
+    # Download (compressed)
+    headers["Accept-Encoding"] = "blosc2"
+    data = httpx.get(urlpath, headers=headers)
     assert data.status_code == 200
     b = blosc2.schunk_from_cframe(data.content)
     # TODO: why do we need .decode() here?

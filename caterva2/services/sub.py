@@ -465,6 +465,13 @@ async def fetch_data(
     slice_ = api_utils.parse_slice(slice_)
     abspath = get_abspath(path, user)
 
+    if abspath.suffix not in {".b2frame", ".b2nd"}:
+        detail = (
+            "The fetch API only supports datasets (.b2nd and .b2); "
+            "use the download API if you only want to download the file"
+        )
+        raise fastapi.HTTPException(status_code=400, detail=detail)
+
     if filter:
         if field:
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
@@ -476,7 +483,9 @@ async def fetch_data(
 
     if isinstance(container, blosc2.Proxy):
         container = container._cache
-    container = container[field] if field else container
+
+    if field:
+        container = container[field]
 
     if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
         array = container
@@ -534,14 +543,22 @@ async def fetch_data(
 @app.get("/api/download/{path:path}")
 async def download_data(
     path: pathlib.Path,
-    # Query parameters
     user: db.User = Depends(optional_user),
+    accept_encoding: str | None = fastapi.Header(None),
 ):
+    decompress = accept_encoding != "blosc2"
+
     async def downloader():
-        yield await get_file_content(path, user)
+        yield await get_file_content(path, user, decompress=decompress)
 
     mimetype = guess_type(path)
     headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
+    if accept_encoding == "blosc2":
+        abspath = get_abspath(path, user)
+        suffix = abspath.suffix
+        if suffix == ".b2":
+            headers["Content-Encoding"] = "blosc2"
+
     return responses.StreamingResponse(downloader(), media_type=mimetype, headers=headers)
 
 
@@ -2292,7 +2309,7 @@ async def get_container(path, user):
     return open_b2(abspath, path)
 
 
-async def get_file_content(path, user):
+async def get_file_content(path, user, decompress=True):
     """
     This helper function returns the contents of the file at the given path, as a byte
     string (if the given user has acces to it).
@@ -2312,14 +2329,19 @@ async def get_file_content(path, user):
     abspath = get_abspath(path, user)
     suffix = abspath.suffix
 
-    if suffix in {".b2frame", ".b2nd"}:
-        # Blosc2 datasets are returned
+    if suffix == ".b2":
+        # Blosc2 compressed files are decompressed
         container = open_b2(abspath, path)
-        return container.to_cframe()
-    elif suffix == ".b2":
-        # Blosc2 compressed files are decom
+        if decompress:
+            return container[:]
+        else:
+            return container.to_cframe()
+    elif suffix in {".b2frame", ".b2nd"}:
+        # HDF5Proxy files are all zeros, so we have to open them (this will read the data
+        # from the .h5 file)
         container = open_b2(abspath, path)
-        return container[:]
+        if isinstance(container, hdf5.HDF5Proxy):
+            return container.to_cframe()
 
     # Other files, not Blosc2 compressed
     # HDF5 files are not compressed with Blosc2
