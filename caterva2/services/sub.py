@@ -111,8 +111,7 @@ def open_b2(abspath, path):
     """
     Open a Blosc2 dataset.
 
-    Return a Proxy if the dataset is in a publisher,
-    or the LazyExpr or Blosc2 container otherwise.
+    Return a HDF5Proxy or a LazyExpr or Blosc2 container.
     """
     root = pathlib.Path(path).parts[0]
     if root not in {"@personal", "@shared", "@public"}:
@@ -480,9 +479,6 @@ async def fetch_data(
         container, _ = get_filtered_array(abspath, path, filter, sortby=None, mtime=mtime)
     else:
         container = open_b2(abspath, path)
-
-    if isinstance(container, blosc2.Proxy):
-        container = container._cache
 
     if field:
         container = container[field]
@@ -1657,7 +1653,6 @@ def get_filtered_array(abspath, path, filter, sortby, mtime):
 
     # Filter rows only for NDArray with fields
     if filter:
-        arr = arr._cache if isinstance(arr, blosc2.Proxy) else arr
         # Check whether filter is the name of a field
         if filter in arr.fields:
             if arr.dtype.fields[filter][0] == bool:  # noqa: E721
