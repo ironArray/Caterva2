@@ -553,7 +553,7 @@ def test_download_regular_file(fill_public, examples_dir, tmp_path, client, auth
     assert urlpath == f"{client.urlbase}/api/download/{ds.path}"
 
     # Download (decompressed)
-    headers = {"Cookie": auth_client.cookie} if auth_client else None
+    headers = {"Cookie": auth_client.cookie} if auth_client else {}
     data = httpx.get(urlpath, headers=headers)
     assert data.status_code == 200
     assert a[:] == data.content.decode()
