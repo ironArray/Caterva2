@@ -11,18 +11,11 @@ import pathlib
 import re
 
 # Requirements
+import blosc2
 import httpx
 
 # Caterva2
 from caterva2 import utils
-
-# Optional requirements
-try:
-    import blosc2
-
-    blosc2_is_here = True
-except ImportError:
-    blosc2_is_here = False
 
 
 def slice_to_string(slice_):
@@ -124,8 +117,6 @@ def get_download_url(path, urlbase):
 
 
 def b2_unpack(filepath):
-    if not blosc2_is_here:
-        return filepath
     schunk = blosc2.open(filepath)
     outfile = filepath.with_suffix("")
     with open(outfile, "wb") as f:
@@ -140,7 +131,7 @@ def b2_unpack(filepath):
 _attachment_b2fname_rx = re.compile(r';\s*filename\*?\s*=\s*"([^"]+\.b2)"')
 
 
-def download_url(url, localpath, try_unpack=True, auth_cookie=None):
+def download_url(url, localpath, auth_cookie=None):
     client, url = get_client_and_url(None, url)
 
     localpath = pathlib.Path(localpath)
@@ -149,7 +140,10 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None):
         # Get the filename from the URL
         localpath /= url.split("/")[-1]
 
-    headers = {"Cookie": auth_cookie} if auth_cookie else None
+    headers = {}
+    if auth_cookie:
+        headers["Cookie"] = auth_cookie
+
     with client.stream("GET", url, headers=headers) as r:
         r.raise_for_status()
         # Build the local filepath
@@ -162,7 +156,7 @@ def download_url(url, localpath, try_unpack=True, auth_cookie=None):
             for data in r.iter_bytes():
                 f.write(data)
 
-    if is_b2 and try_unpack:
+    if is_b2:
         localpath = b2_unpack(localpath)
 
     return localpath

@@ -1097,9 +1097,7 @@ class Client:
             path = localpath / dataset.name
         else:
             path = localpath
-        return api_utils.download_url(
-            url, str(path), try_unpack=api_utils.blosc2_is_here, auth_cookie=self.cookie
-        )
+        return api_utils.download_url(url, str(path), auth_cookie=self.cookie)
 
     def upload(self, localpath, dataset):
         """

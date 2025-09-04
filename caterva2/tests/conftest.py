@@ -1,6 +1,7 @@
 import platform
 import sys
 
+import blosc2
 import httpx
 import numpy as np
 import pytest
@@ -12,17 +13,11 @@ from .files import examples_dir  # noqa: F401
 from .services import services  # noqa: F401
 from .sub_auth import sub_user  # noqa: F401
 
-try:  # Python-Blosc2 is optional
-    import blosc2
-except ImportError:
-    blosc2 = None
-
 
 def pytest_configure(config):
     print("\n" + "-=" * 38)
     print(f"Caterva2 version:      {cat2.__version__}")
-    if blosc2 is not None:
-        print(f"Python-Blosc2 version: {blosc2.__version__}")
+    print(f"Python-Blosc2 version: {blosc2.__version__}")
     print(f"HTTPX version:         {httpx.__version__}")
     print(f"NumPy version:         {np.__version__}")
     print(f"Python version:        {sys.version}")
