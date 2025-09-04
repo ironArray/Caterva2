@@ -570,10 +570,6 @@ def test_download_regular_file(fill_public, examples_dir, tmp_path, client, auth
 def test_download_public_file(examples_dir, fill_public, tmp_path):
     fnames, mypublic = fill_public
     for fname in fnames:
-        # TODO fetch (and download) of HDF5 files is not supported (gives a 500 error)
-        if fname.endswith(".h5"):
-            continue
-
         # Download the file
         ds = mypublic[fname]
         with contextlib.chdir(tmp_path):
