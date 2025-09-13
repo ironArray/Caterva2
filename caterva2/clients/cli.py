@@ -71,6 +71,55 @@ def cmd_list(client, args):
         print(f"{item}")
 
 
+# New helpers for tree command
+def build_tree(paths):
+    """Builds a nested dict representing directories and files from a list of paths."""
+    tree = {}
+    for p in paths:
+        parts = p.strip("/").split("/")
+        node = tree
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        last = parts[-1]
+        # files are represented by None, directories by dict
+        if last in node:
+            # If an entry exists as a dict (dir) and we are inserting a file, keep dir.
+            if node[last] is None:
+                node[last] = None
+        else:
+            node[last] = None
+    return tree
+
+
+def _print_tree_node(node, prefix=""):
+    """Recursively prints a node (dict)."""
+    # Sort for deterministic output; directories and files mixed lexicographically.
+    items = sorted(node.items(), key=lambda kv: kv[0])
+    for idx, (name, child) in enumerate(items):
+        is_last = idx == len(items) - 1
+        connector = "└──" if is_last else "├──"
+        print(f"{prefix}{connector} {name}")
+        if isinstance(child, dict):
+            extension = "    " if is_last else "│   "
+            _print_tree_node(child, prefix + extension)
+
+
+@handle_errors
+def cmd_tree(client, args):
+    """
+    Print a hierarchical tree of datasets/files in the specified root/path.
+    """
+    data = client.get_list(args.root)
+    if args.json:
+        print(json.dumps(data))
+        return
+
+    # Build a nested representation and print it
+    tree = build_tree(data)
+    # Print top-level entries without a leading root label (similar to unix `tree .`)
+    _print_tree_node(tree)
+
+
 @handle_errors
 def cmd_url(client, args):
     data = api_utils.get_download_url(args.dataset, args.urlbase)
@@ -194,6 +243,13 @@ def main():
     subparser.add_argument("--json", action="store_true")
     subparser.add_argument("root")
     subparser.set_defaults(func=cmd_list)
+
+    # tree (new)
+    help = "Show a tree view of datasets/files in a root (similar to unix tree)."
+    subparser = subparsers.add_parser("tree", aliases=["tr"], help=help)
+    subparser.add_argument("--json", action="store_true")
+    subparser.add_argument("root")
+    subparser.set_defaults(func=cmd_tree)
 
     # copy
     help = "Copy a dataset to a different root."
