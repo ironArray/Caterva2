@@ -14,9 +14,10 @@ import re
 import string
 import webbrowser
 
+import blosc2
+
 # Requirements
 import httpx
-import rich
 
 import caterva2 as cat2
 
@@ -158,12 +159,73 @@ def cmd_browse(client, args):
 def cmd_info(client, args):
     print(f"Getting info for {args.dataset}")
     data = client.get_info(args.dataset)
-
-    # Print
     if args.json:
         print(json.dumps(data))
         return
-    rich.print(data)
+
+    # Helpers
+    def _human_bytes(n):
+        if n is None:
+            return "N/A"
+        n = float(n)
+        for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB"):
+            if n < 1024.0 or unit == "PiB":
+                return f"{n:.2f} {unit}" if unit != "B" else f"{int(n)} {unit}"
+            n /= 1024.0
+        return None
+
+    def _codec_name(cid):
+        try:
+            return blosc2.Codec(cid).name
+        except Exception:
+            return f"id({cid})"
+
+    def _filter_names(fl):
+        names = []
+        for f in fl or []:
+            if f == 0:
+                continue
+            try:
+                names.append(blosc2.Filter(f).name)
+            except Exception:
+                names.append(f"f{f}")
+        return names
+
+    # Extract fields
+    schunk = data.get("schunk") or data
+    cparams = schunk.get("cparams")
+    shape = data.get("shape")
+    nchunks = data.get("nchunks")
+    chunks = data.get("chunks")
+    chunksize = data.get("chunksize")
+    blocks = data.get("blocks")
+    blocksize = cparams.get("blocksize")
+    dtype = data.get("dtype")
+    typesize = cparams.get("typesize")
+    nbytes = schunk.get("nbytes") or data.get("nbytes")
+    cbytes = schunk.get("cbytes") or data.get("cbytes")
+    codec = cparams.get("codec")
+    clevel = cparams.get("clevel")
+    filters = cparams.get("filters")
+    # Pretty print
+    # print()
+    # print("Dataset:")
+    print(f"nchunks  : {nchunks}") if shape is None else print(f"shape : {shape}")
+    print(f"chunksize: {_human_bytes(chunksize)}") if chunks is None else print(f"chunks: {chunks}")
+    print(f"blocksize: {_human_bytes(blocksize)}") if blocks is None else print(f"blocks: {blocks}")
+    print(f"typesize : {_human_bytes(typesize)}") if dtype is None else print(f"dtype : {dtype}")
+    print(f"nbytes: {_human_bytes(nbytes)}")
+    print(f"cbytes: {_human_bytes(cbytes)}")
+    print(f"ratio : {nbytes / cbytes:.2f}x" if nbytes and cbytes else "  ratio : N/A")
+    # print()
+    print("cparams:")
+    print(f"  codec  : {_codec_name(codec)} ({codec})")
+    print(f"  clevel : {clevel}")
+    if filters is not None:
+        fnames = _filter_names(filters)
+        print(f"  filters: [{', '.join(fnames)}]")
+    else:
+        print("  filters: None")
 
 
 @handle_errors
