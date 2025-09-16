@@ -12,6 +12,7 @@ import pathlib
 import random
 import re
 import string
+import webbrowser
 
 # Requirements
 import httpx
@@ -120,6 +121,7 @@ def cmd_tree(client, args):
     _print_tree_node(tree)
 
 
+# url command (returns download URL)
 @handle_errors
 def cmd_url(client, args):
     data = api_utils.get_download_url(args.dataset, args.urlbase)
@@ -127,6 +129,29 @@ def cmd_url(client, args):
         print(json.dumps(data))
         return
     print(data)
+
+
+# handle command (returns handle URL meant for browser exploration)
+@handle_errors
+def cmd_handle(client, args):
+    data = api_utils.get_handle_url(args.dataset, args.urlbase)
+    if args.json:
+        print(json.dumps(data))
+        return
+    print(data)
+
+
+# browse command (opens local browser at the handle URL)
+@handle_errors
+def cmd_browse(client, args):
+    url = api_utils.get_handle_url(args.dataset, args.urlbase)
+    # Try to open in a new browser tab; still print the URL for logging
+    try:
+        webbrowser.open(url, new=2)
+        print(f"Opened browser at: {url}")
+    except Exception:
+        # Fallback: at least print the URL if opening fails
+        print(url)
 
 
 @handle_errors
@@ -277,6 +302,19 @@ def main():
     subparser.add_argument("--json", action="store_true")
     subparser.add_argument("dataset", type=str)
     subparser.set_defaults(func=cmd_url)
+
+    # handle
+    help = "Handle URL (resource handle) for a dataset (returns a URL for browser exploration)."
+    subparser = subparsers.add_parser("handle", help=help)
+    subparser.add_argument("--json", action="store_true")
+    subparser.add_argument("dataset", type=str)
+    subparser.set_defaults(func=cmd_handle)
+
+    # browse
+    help = "Open a local web browser at the dataset handle URL."
+    subparser = subparsers.add_parser("browse", help=help)
+    subparser.add_argument("dataset", type=str)
+    subparser.set_defaults(func=cmd_browse)
 
     # info
     help = "Get metadata about a dataset."

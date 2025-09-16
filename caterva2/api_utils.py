@@ -116,6 +116,12 @@ def get_download_url(path, urlbase):
     return f"{urlbase}/api/download/{path}"
 
 
+def get_handle_url(path, urlbase):
+    # Get the root in path (first element in path)
+    root = path.split("/")[0]
+    return f"{urlbase}/roots/{path}?roots={root}"
+
+
 def b2_unpack(filepath):
     schunk = blosc2.open(filepath)
     outfile = filepath.with_suffix("")
