@@ -6,18 +6,25 @@
 # License: GNU Affero General Public License v3.0
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
-
+import contextlib
 import json
+import os
 import pathlib
 import random
 import re
+import shlex
 import string
+import subprocess
+import sys
 import webbrowser
 
 import blosc2
 
 # Requirements
 import httpx
+import numpy as np
+from rich.console import Console
+from rich.syntax import Syntax
 
 import caterva2 as cat2
 
@@ -234,16 +241,143 @@ def cmd_show(client, args):
     slice_ = params.get("slice_", None)
     data = client.fetch(path, slice_=slice_)
 
-    # Display
+    # JSON output requested -> convert numpy arrays to lists
+    if getattr(args, "json", False):
+        try:
+            # If numpy array, convert to list; bytes handled below
+            if isinstance(data, np.ndarray):
+                print(json.dumps(data.tolist()))
+            else:
+                print(json.dumps(data))
+        except TypeError:
+            # Fallback for non-serializable objects
+            print(json.dumps(str(data)))
+        return
+
+    # Display bytes as decoded text if possible, otherwise indicate binary data
     if isinstance(data, bytes):
         try:
             print(data.decode())
         except UnicodeDecodeError:
             print("Binary data")
-    else:
-        print(data)
-        # TODO: make rich optional in command line
-        # rich.print(data)
+        return
+
+    # If numpy array, produce full (non-truncated) string, colorize and use pager if needed
+    if isinstance(data, np.ndarray):
+        # Determine whether color is enabled (global flag)
+        color_enabled = not getattr(args, "nocolor", False)
+
+        # Produce non-truncated representation but limit line width to ~80 cols so the output
+        # is readable. Use a large threshold to avoid numpy eliding values.
+        try:
+            # Console used for sizing and non-forced rendering
+            console = Console(color_system="truecolor" if color_enabled else None)
+            # Prefer a hard 80-column target, but avoid wider-than-terminal lines:
+            target_width = 80
+            try:
+                term_width = console.size.width or target_width
+            except Exception:
+                term_width = target_width
+            wrap_width = min(target_width, term_width)
+
+            array_str = np.array2string(
+                data,
+                threshold=sys.maxsize,
+                max_line_width=wrap_width,
+            )
+        except Exception:
+            # Fallback to repr if array2string fails for any reason
+            console = Console(color_system="truecolor" if color_enabled else None)
+            array_str = repr(data)
+
+        # Re-wrap long lines at comma+space token boundaries so we never split a numeric token.
+        def _wrap_preserving_tokens(s: str, width: int) -> str:
+            out_lines = []
+            for orig in s.splitlines():
+                if len(orig) <= width:
+                    out_lines.append(orig)
+                    continue
+                # Split at ', ' so numeric tokens remain whole
+                tokens = orig.split(", ")
+                line = ""
+                for i, tok in enumerate(tokens):
+                    sep = ", " if i < len(tokens) - 1 else ""
+                    piece = tok + sep
+                    if not line:
+                        line = piece
+                    elif len(line) + len(piece) <= width:
+                        line += piece
+                    else:
+                        out_lines.append(line)
+                        line = piece
+                if line:
+                    out_lines.append(line)
+            return "\n".join(out_lines)
+
+        wrapped = _wrap_preserving_tokens(array_str, wrap_width)
+
+        # Colorize and page
+        use_syntax = False
+        syntax = None
+        if color_enabled:
+            try:
+                syntax = Syntax(wrapped, "python", theme="monokai", word_wrap=False)
+                use_syntax = True
+            except Exception:
+                syntax = None
+                use_syntax = False
+
+        # Decide whether to page: compare lines to terminal height
+        lines = wrapped.count("\n") + 1
+        term_height = console.size.height or 24
+        if lines > term_height:
+            pager_cmd = os.environ.get("PAGER", "less -R")
+
+            # Preferred approach: run the pager subprocess and stream output to its stdin.
+            try:
+                args_split = shlex.split(pager_cmd)
+                proc = subprocess.Popen(args_split, stdin=subprocess.PIPE, text=True)
+                try:
+                    if color_enabled:
+                        # Use a Console that writes ANSI escapes into the pager stdin.
+                        pager_console = Console(
+                            file=proc.stdin, force_terminal=True, color_system="truecolor"
+                        )
+                        if use_syntax:
+                            pager_console.print(syntax)
+                        else:
+                            pager_console.print(wrapped)
+                    else:
+                        # Plain text: write directly to pager stdin to avoid ANSI sequences.
+                        proc.stdin.write(wrapped)
+                finally:
+                    with contextlib.suppress(Exception):
+                        proc.stdin.close()
+                    proc.wait()
+            except Exception:
+                # Fallback: try console.pager() while ensuring PAGER env var keeps -R option
+                prev_pager = os.environ.get("PAGER")
+                os.environ["PAGER"] = pager_cmd
+                try:
+                    with console.pager():
+                        if color_enabled and use_syntax:
+                            console.print(syntax)
+                        else:
+                            console.print(wrapped)
+                finally:
+                    if prev_pager is None:
+                        del os.environ["PAGER"]
+                    else:
+                        os.environ["PAGER"] = prev_pager
+        else:
+            if color_enabled and use_syntax:
+                console.print(syntax)
+            else:
+                console.print(wrapped)
+        return
+
+    # For other objects, fallback to plain print
+    print(data)
 
 
 @handle_errors
@@ -316,6 +450,8 @@ def main():
     )
     parser.add_argument("--username", default=conf.get("client.username"))
     parser.add_argument("--password", default=conf.get("client.password"))
+    # Make --json a global flag so it applies to all commands that support JSON output
+    parser.add_argument("--json", action="store_true", help="Output JSON when supported by the command")
     subparsers = parser.add_subparsers(required=True)
 
     # roots
@@ -342,14 +478,14 @@ def main():
     help = "Copy a dataset to a different root."
     subparser = subparsers.add_parser("copy", aliases=["cp"], help=help)
     subparser.add_argument("dataset", type=pathlib.Path)
-    subparser.add_argument("dest")
+    subparser.add_argument("dest", type=pathlib.Path)
     subparser.set_defaults(func=cmd_copy)
 
     # move
     help = "Move a dataset to a different root."
     subparser = subparsers.add_parser("move", aliases=["mv"], help=help)
     subparser.add_argument("dataset", type=pathlib.Path)
-    subparser.add_argument("dest")
+    subparser.add_argument("dest", type=pathlib.Path)
     subparser.set_defaults(func=cmd_move)
 
     # remove
@@ -389,6 +525,7 @@ def main():
     help = "Display a dataset."
     subparser = subparsers.add_parser("show", help=help)
     subparser.add_argument("--json", action="store_true")
+    subparser.add_argument("--nocolor", action="store_true", help="Disable ANSI color output for show")
     subparser.add_argument("dataset", type=dataset_with_slice)
     subparser.set_defaults(func=cmd_show)
 
