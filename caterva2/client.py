@@ -36,6 +36,18 @@ def _format_paths(urlbase, path=None):
     return urlbase, path
 
 
+def _looks_like_slice(s: str) -> bool:
+    """Return True if `s` parses as an index/slice expression for `np.index_exp[...]`."""
+    if not isinstance(s, str) or not s.strip():
+        return False
+    try:
+        # restrict eval environment to only numpy (no builtins)
+        eval(f"np.index_exp[{s}]", {"np": np, "__builtins__": {}}, {})
+        return True
+    except Exception:
+        return False
+
+
 class Root:
     def __init__(self, client, name):
         """
@@ -998,11 +1010,13 @@ class Client:
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
             )
-        if isinstance(key, str):  # A filter has been passed
+        if isinstance(key, str):
+            # The key can still be a slice expression in string format (like for CLI utils)
+            params = {"slice_": key} if _looks_like_slice(key) else {"filter": key}
             return api_utils.fetch_data(
                 path,
                 urlbase,
-                {"filter": key},
+                params=params,
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
