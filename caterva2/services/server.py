@@ -2587,7 +2587,7 @@ def main():
     # app.mount("/personal", StaticFiles(directory=settings.personal), name="personal")
 
     # Init database
-    model = models.Subscriber()
+    model = models.Server()
     settings.database = srv_utils.Database(settings.statedir / "db.json", model)
 
     # Register display plugins (delay module load)

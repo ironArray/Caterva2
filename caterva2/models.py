@@ -107,5 +107,5 @@ class Root(pydantic.BaseModel):
     name: str
 
 
-class Subscriber(pydantic.BaseModel):
+class Server(pydantic.BaseModel):
     pass

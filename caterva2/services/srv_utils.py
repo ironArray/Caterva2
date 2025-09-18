@@ -273,10 +273,6 @@ class Database:
         return getattr(self.data, name)
 
 
-#
-# Subscriber related
-#
-
 # <https://fastapi-users.github.io/fastapi-users/10.3/cookbook/create-user-programmatically/>
 UserAuth = collections.namedtuple("UserAuth", ["username", "password"])
 

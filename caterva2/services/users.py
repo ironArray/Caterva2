@@ -7,7 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 
-"""Subscriber user management.
+"""Server user management.
 
 Used for user authentication (for the moment), based on FastAPI Users example:
 https://fastapi-users.github.io/fastapi-users/latest/configuration/full-example/
