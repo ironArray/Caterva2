@@ -65,7 +65,7 @@ mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 
 
 def guess_type(path):
-    mimetype, encoding = mimetypes.guess_type(path)
+    mimetype, _ = mimetypes.guess_type(path)
     return mimetype
 
 
@@ -355,6 +355,8 @@ async def get_info(
         The metadata of the dataset.
     """
     abspath = get_abspath(path, user)
+    if abspath.is_dir():
+        srv_utils.raise_not_found()
     return srv_utils.read_metadata(abspath)
 
 
@@ -578,7 +580,7 @@ async def preview(
     elif mimetype == "application/x-ipynb+json":
         content = await get_file_content(path, user)
         nb = nbformat.reads(content, as_version=4)
-        html, resources = html_exporter.from_notebook_node(nb)
+        html, _ = html_exporter.from_notebook_node(nb)
         return HTMLResponse(html)
 
     else:
