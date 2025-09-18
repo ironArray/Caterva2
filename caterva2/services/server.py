@@ -45,7 +45,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 # Project
-from caterva2 import api_utils, hdf5, models, utils
+from caterva2 import hdf5, models, utils
 from caterva2.services import db, schemas, settings, srv_utils, users
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -72,7 +72,7 @@ def guess_type(path):
 
 def get_disk_usage():
     exclude = {"db.json", "db.sqlite"}
-    return sum(path.stat().st_size for path, _ in utils.walk_files(settings.statedir, exclude=exclude))
+    return sum(path.stat().st_size for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude))
 
 
 def truncate_path(path, size=35):
@@ -332,7 +332,7 @@ async def get_list(
     # Sort the list of datasets and return
     paths = [
         str(relpath.with_suffix("") if relpath.suffix == ".b2" else relpath)
-        for _, relpath in utils.walk_files(directory)
+        for _, relpath in srv_utils.walk_files(directory)
     ]
     return sorted(paths)
 
@@ -430,6 +430,20 @@ def get_abspath(
     return abspath
 
 
+def parse_slice(string):
+    if not string:
+        return None
+    obj = []
+    for segment in string.split(","):
+        if ":" not in segment:
+            segment = int(segment)
+        else:
+            segment = slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
+        obj.append(segment)
+
+    return tuple(obj) if len(obj) > 1 else obj[0]
+
+
 @app.get("/api/fetch/{path:path}")
 async def fetch_data(
     path: pathlib.Path,
@@ -464,7 +478,7 @@ async def fetch_data(
         variable length fields).
     """
 
-    slice_ = api_utils.parse_slice(slice_)
+    slice_ = parse_slice(slice_)
     abspath = get_abspath(path, user)
 
     if abspath.suffix not in {".b2frame", ".b2nd"}:
@@ -1102,7 +1116,7 @@ async def unfold_file(
         newsize = 0
         if os.path.exists(dirname):
             # Traverse the directory and get the size for all files
-            for abspath, _ in utils.walk_files(dirname):
+            for abspath, _ in srv_utils.walk_files(dirname):
                 newsize += os.path.getsize(abspath)
         total_size = get_disk_usage() + newsize
         if total_size > settings.quota:
@@ -1494,7 +1508,7 @@ async def htmx_path_list(
         )
 
     for root, rootdir in filter_roots(roots, user):
-        for abspath, relpath in utils.walk_files(rootdir):
+        for abspath, relpath in srv_utils.walk_files(rootdir):
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             path = f"{root}/{relpath}"
@@ -2445,11 +2459,11 @@ async def jupyterlite_contents(
         stat = abspath.stat()
         return {
             "content": content,
-            "created": utils.epoch_to_iso(stat.st_ctime),
+            "created": srv_utils.epoch_to_iso(stat.st_ctime),
             "format": None if content is None else "json",
             "hash": None,
             "hash_algorithm": None,
-            "last_modified": utils.epoch_to_iso(stat.st_mtime),
+            "last_modified": srv_utils.epoch_to_iso(stat.st_mtime),
             "mimetype": None,
             "name": pathlib.Path(relpath).name,
             "path": relpath,
@@ -2474,7 +2488,7 @@ async def jupyterlite_contents(
         dir_abspath = get_writable_path(path, user)
         dir_relpath = path
 
-        for abspath, relpath in utils.iterdir(dir_abspath):
+        for abspath, relpath in srv_utils.iterdir(dir_abspath):
             relpath = path / relpath
             if abspath.is_dir():
                 content.append(directory(abspath, relpath))
@@ -2494,11 +2508,11 @@ async def jupyterlite_contents(
                 content.append(
                     {
                         "content": None,
-                        "created": utils.epoch_to_iso(stat.st_ctime),
+                        "created": srv_utils.epoch_to_iso(stat.st_ctime),
                         "format": None,
                         "hash": None,
                         "hash_algorithm": None,
-                        "last_modified": utils.epoch_to_iso(stat.st_mtime),
+                        "last_modified": srv_utils.epoch_to_iso(stat.st_mtime),
                         "mimetype": mimetype,
                         "name": relpath.name,
                         "path": relpath,

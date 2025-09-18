@@ -8,41 +8,9 @@
 ###############################################################################
 
 import argparse
-import datetime
 import logging
 import pathlib
 import tomllib as toml
-
-#
-# Datetime related
-#
-
-
-def epoch_to_iso(time):
-    return datetime.datetime.fromtimestamp(time, tz=datetime.UTC).isoformat()
-
-
-#
-# Filesystem helpers
-#
-
-
-def walk_files(root, exclude=None):
-    if exclude is None:
-        exclude = set()
-
-    if root is not None:
-        for path in root.glob("**/*"):
-            if path.is_file():
-                relpath = path.relative_to(root)
-                if str(relpath) not in exclude:
-                    yield path, relpath
-
-
-def iterdir(root):
-    for path in root.iterdir():
-        relpath = path.relative_to(root)
-        yield path, relpath
 
 
 #

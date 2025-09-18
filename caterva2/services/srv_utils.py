@@ -10,6 +10,7 @@
 import asyncio
 import collections
 import contextlib
+import datetime
 import json
 import pathlib
 import random
@@ -184,6 +185,38 @@ def get_relpath(path):
 
 def operands_as_paths(operands):
     return {nm: None if op is None else str(get_relpath(op)) for (nm, op) in operands.items()}
+
+
+#
+# Datetime related
+#
+
+
+def epoch_to_iso(time):
+    return datetime.datetime.fromtimestamp(time, tz=datetime.UTC).isoformat()
+
+
+#
+# Filesystem helpers
+#
+
+
+def iterdir(root):
+    for path in root.iterdir():
+        relpath = path.relative_to(root)
+        yield path, relpath
+
+
+def walk_files(root, exclude=None):
+    if exclude is None:
+        exclude = set()
+
+    if root is not None:
+        for path in root.glob("**/*"):
+            if path.is_file():
+                relpath = path.relative_to(root)
+                if str(relpath) not in exclude:
+                    yield path, relpath
 
 
 #

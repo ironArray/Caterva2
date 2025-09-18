@@ -37,20 +37,6 @@ def slice_to_string(slice_):
     return ", ".join(slice_parts)
 
 
-def parse_slice(string):
-    if not string:
-        return None
-    obj = []
-    for segment in string.split(","):
-        if ":" not in segment:
-            segment = int(segment)
-        else:
-            segment = slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
-        obj.append(segment)
-
-    return tuple(obj) if len(obj) > 1 else obj[0]
-
-
 def get_auth_cookie(urlbase, user_auth, timeout=5):
     """
     Authenticate to a subscriber as a user and get an authorization cookie.
