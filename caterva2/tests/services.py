@@ -41,10 +41,11 @@ import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import httpx
 import pytest
+
+from caterva2.services import srv_utils
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = "_caterva2"
@@ -99,7 +100,7 @@ class ManagedServices:
     def __init__(self, state_dir, reuse_state=True, roots=None, configuration=None):
         super().__init__()
 
-        self.state_dir = Path(state_dir).resolve()
+        self.state_dir = pathlib.Path(state_dir).resolve()
         self.reuse_state = reuse_state
         self.roots = list(roots)
         self.configuration = configuration
@@ -108,7 +109,8 @@ class ManagedServices:
         self._endpoints = {}
         self._setup_done = False
 
-    def _start_proc(self, name, *args, check=None):
+    def _start_server(self, *args, check=None):
+        name = "subscriber"
         if check is not None and check():
             raise RuntimeError(
                 f'check for service "{name}" succeeded before start'
@@ -122,7 +124,7 @@ class ManagedServices:
 
         popen_args = [
             sys.executable,
-            f"-mcaterva2.services.{name[:3]}",
+            "-mcaterva2.services.server",
             f"--conf={BASE_DIR / conf_file}",
             f"--statedir={self.state_dir / name}",
             *([f"--http={check.host}"] if check else []),
@@ -177,7 +179,7 @@ class ManagedServices:
 
     def start_all(self):
         self._setup()
-        self._start_proc("subscriber", check=sub_check(self.configuration))
+        self._start_server(check=sub_check(self.configuration))
 
     def stop_all(self):
         for proc in self._procs.values():
@@ -216,6 +218,24 @@ def services(configuration, examples_dir):
     srvs.wait_for_all()
 
 
+def make_sub_user(services):
+    if not os.environ.get("CATERVA2_SECRET"):
+        return None
+
+    state_dir = services.state_dir / "subscriber"
+    return srv_utils.add_user(
+        "user@example.com", password="foobar11", is_superuser=True, state_dir=state_dir
+    )
+
+
+@pytest.fixture(scope="session")
+def sub_user(services):
+    # TODO: This does not work with external services,
+    # as their state directory is unknown.
+    # One would need to register a new user via the API there.
+    return make_sub_user(services)
+
+
 # Inspired by <https://towerbabbel.com/go-defer-in-python/>.
 def defers(func):
     @functools.wraps(func)
@@ -232,7 +252,7 @@ def defers(func):
 
 @defers
 def main(defer):
-    from . import conf, files, sub_auth
+    from . import conf, files
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
 
@@ -253,7 +273,7 @@ def main(defer):
             raise ValueError(
                 f"root name {rname!r} already in use; " f"please set a different name for {rsource!r}"
             )
-        root = TestRoot(rname, Path(rsource))
+        root = TestRoot(rname, pathlib.Path(rsource))
         roots.append(root)
         rnames.add(root.name)
 
@@ -262,7 +282,7 @@ def main(defer):
     srvs = ManagedServices(state_dir, reuse_state=True, roots=roots, configuration=configuration)
     try:
         srvs.start_all()
-        sub_auth.make_sub_user(srvs)
+        make_sub_user(srvs)
         srvs.wait_for_all()
     finally:
         srvs.stop_all()

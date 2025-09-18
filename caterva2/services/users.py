@@ -86,7 +86,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         print(f"User {user.email} with id {user.id} has been added.")
 
     async def on_after_forgot_password(self, user: User, token: str, request: Request | None = None):
-        from caterva2.services.sub import make_url, templates
+        from caterva2.services.server import make_url, templates
 
         template = templates.get_template("emails/forgot-password.html")
         url = make_url(request, "html-reset-password", token=token)

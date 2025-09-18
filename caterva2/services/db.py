@@ -42,7 +42,7 @@ async_session_maker = None
 
 async def create_db_and_tables(statedir: Path):
     global engine, async_session_maker  # keep global as in original example
-    engine = create_async_engine(f'sqlite+aiosqlite:///{statedir}/db.sqlite')
+    engine = create_async_engine(f"sqlite+aiosqlite:///{statedir}/db.sqlite")
     async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
 
     async with engine.begin() as conn:

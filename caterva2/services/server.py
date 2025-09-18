@@ -46,8 +46,7 @@ from fastapi.templating import Jinja2Templates
 
 # Project
 from caterva2 import api_utils, hdf5, models, utils
-from caterva2.services import settings, srv_utils
-from caterva2.services.subscriber import db, ncores, schemas, users
+from caterva2.services import db, schemas, settings, srv_utils, users
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -62,6 +61,8 @@ locks = {}
 
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
 mimetypes.add_type("application/x-ipynb+json", ".ipynb")
+
+ncores = os.cpu_count() // 2
 
 
 def guess_type(path):

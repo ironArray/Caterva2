@@ -26,11 +26,7 @@ from sqlalchemy.future import select
 
 # Project
 from caterva2 import models
-from caterva2.services.subscriber import db as sub_db
-from caterva2.services.subscriber import schemas as sub_schemas
-from caterva2.services.subscriber import users as sub_users
-
-from . import settings
+from caterva2.services import db, schemas, settings, users
 
 
 def compress_file(path):
@@ -292,19 +288,19 @@ async def aadd_user(username, password, is_superuser, state_dir=None):
 
     sub_state = state_dir
     sub_state.mkdir(parents=True, exist_ok=True)
-    await sub_db.create_db_and_tables(sub_state)
+    await db.create_db_and_tables(sub_state)
     cx = contextlib.asynccontextmanager
     async with (
-        cx(sub_db.get_async_session)() as session,
-        cx(sub_db.get_user_db)(session) as udb,
-        cx(sub_users.get_user_manager)(udb) as umgr,
+        cx(db.get_async_session)() as session,
+        cx(db.get_user_db)(session) as udb,
+        cx(users.get_user_manager)(udb) as umgr,
     ):
         # Check that the user does not exist
         try:
             await umgr.get_by_email(user.username)
             return user
         except UserNotExists:
-            schema = sub_schemas.UserCreate(
+            schema = schemas.UserCreate(
                 email=user.username, password=user.password, is_superuser=is_superuser
             )
             await umgr.create(schema)
@@ -318,9 +314,9 @@ def add_user(username, password, is_superuser, state_dir=None):
 
 async def adel_user(username: str):
     async with (
-        contextlib.asynccontextmanager(sub_db.get_async_session)() as session,
-        contextlib.asynccontextmanager(sub_db.get_user_db)(session) as udb,
-        contextlib.asynccontextmanager(sub_users.get_user_manager)(udb) as umgr,
+        contextlib.asynccontextmanager(db.get_async_session)() as session,
+        contextlib.asynccontextmanager(db.get_user_db)(session) as udb,
+        contextlib.asynccontextmanager(users.get_user_manager)(udb) as umgr,
     ):
         user = await umgr.get_by_email(username)
         if user:
@@ -333,8 +329,8 @@ def del_user(username):
 
 async def alist_users(username=None):
     async with (
-        contextlib.asynccontextmanager(sub_db.get_async_session)() as session,
-        contextlib.asynccontextmanager(sub_db.get_user_db)(session) as udb,
+        contextlib.asynccontextmanager(db.get_async_session)() as session,
+        contextlib.asynccontextmanager(db.get_user_db)(session) as udb,
     ):
         query = select(udb.user_table)
         if username:

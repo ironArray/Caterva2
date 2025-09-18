@@ -107,7 +107,7 @@ only-include = ["caterva2", "root-example"]
 Home = "https://github.com/ironArray/Caterva2"
 
 [project.scripts]
-cat2sub = "caterva2.services.sub:main"
+cat2sub = "caterva2.services.server:main"
 cat2agent = "caterva2.clients.agent:main"
 cat2cli = "caterva2.clients.cli:main"
 cat2tbrowser = "caterva2.clients.tbrowser:main"

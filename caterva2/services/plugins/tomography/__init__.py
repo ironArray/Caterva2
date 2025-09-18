@@ -10,11 +10,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 # Project
-from caterva2.services.sub import optional_user
-
-from ...sub import get_container, resize_image
-from ...sub import templates as sub_templates
-from ...subscriber import db
+from caterva2.services import db
+from caterva2.services.server import get_container, optional_user, resize_image
+from caterva2.services.server import templates as sub_templates
 
 app = FastAPI()
 BASE_DIR = pathlib.Path(__file__).resolve().parent
