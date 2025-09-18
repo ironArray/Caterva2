@@ -118,8 +118,10 @@ def get_download_url(path, urlbase):
 
 def get_handle_url(path, urlbase):
     # Get the root in path (first element in path)
-    root = path.split("/")[0]
-    return f"{urlbase}/roots/{path}?roots={root}"
+    # root = path.split("/")[0]
+    # return f"{urlbase}/roots/{path}?roots={root}"
+    # We don't want to show other datasets in the same root
+    return f"{urlbase}/roots/{path}"
 
 
 def b2_unpack(filepath):
