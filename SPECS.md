@@ -7,11 +7,10 @@ This document describes the minimal specifications for the project.  It is meant
 ## Vocabulary
 
 - **Root**: The root of a group of datasets that are published together.  It is identified by a name.
-- **Dataset**: A dataset is a file that is published by the client.  It is identified by a path.
+- **Dataset**: A dataset is a file that is uploaded by the client.  It is identified by a path.
   E.g. `foo/bar.b2nd` is a dataset path with root `foo`.
-- **Client**: The client is the entity that makes datasets available to servers.  It is responsible for creating a root and adding datasets to it.
 - **Server**: The server is the entity that follows changes in a root and allows the download of datasets from clients.
-- **User Client**: The user client is a server consumer (e.g. a command line tool) for the user to access the datasets; it connects to a server.
+- **Client**: The client is a server consumer (e.g. a command line tool or a web interface) for the user to access the datasets; it connects to a server, and can add/download datasets (or slices) to it.
 
 ## Services
 
@@ -24,9 +23,9 @@ The two services (client and server) have a number of common options:
 
 In production deployments it's recommended to use Systemd services.
 
-## User Client commands
+## Client commands
 
-The user client must implement the following commands:
+The client must implement the following commands:
 
 - `roots`: List all the available roots in the server.
 - `subscribe <root>`: Request access to the datasets in a root.
@@ -49,47 +48,29 @@ loglevel = "warning"
 ```
 
 
-## User Client implementation
+## Client implementation
 
-The user client must be implemented in Python 3 (3.11 being the minimal supported version).  It must be a library with a command line interface that connects to a server and sends commands to it.  The server must be running before the user client is started. If the server is not running, the user client must print an error message and exit. The client is expected to be running before the server is started; if not, the server will only serve its cached data.
+The client must be implemented in Python 3 (3.11 being the minimal supported version).  It must be a library with a command line interface that connects to a server and sends commands to it.  The server must be running before the client can be used. If the server is not running, the client must print an error message and exit. The client is expected to be running before the server is started; if not, the server will only serve its cached data.
 
 ### Command line interface
 
-- When a `roots` command is issued, the user client must send a request to the server to list all the available roots.  The server will reply with a list of roots (if possible, with flags indicating if a root is subscribed).
+- When a `roots` command is issued, the client must send a request to the server to list all the available roots.  The server will reply with a list of roots (if possible, with flags indicating if a root is subscribed).
 
-- When a `subscribe` command is issued, the user client must send a request to the server to subscribe to the given root.  The server will reply with a success or failure message.  If successful, the server must store the root metadata in its local cache.
+- When a `subscribe` command is issued, the client must send a request to the server to subscribe to the given root.  The server will reply with a success or failure message.  If successful, the server must store the root metadata in its local cache.
 
-- When a `list` command is issued, the user client must send a request to the server to list the datasets in the given root.  The server will reply with a list of datasets.
+- When a `list` command is issued, the client must send a request to the server to list the datasets in the given root.  The server will reply with a list of datasets.
 
-- When a `url` command is issued, the user client must show the URL from where the given dataset may be downloaded.
+- When a `url` command is issued, the client must show the URL from where the given dataset may be downloaded.
 
-- When an `info` command is issued, the user client must send a request to the server to get the metadata of the given dataset.  The server will reply with the [metadata](#metadata).  See below for the [metadata](#metadata) format.
+- When an `info` command is issued, the client must send a request to the server to get the metadata of the given dataset.  The server will reply with the [metadata](#metadata).  See below for the [metadata](#metadata) format.
 
-- When a `show` command is issued, the user client must send a request to the server to retrieve the data of the given dataset.  The server will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 NDim and `.b2frame` for Blosc2 frames; an n-dim NumPy array and a 1-dim NumPy array will be shown respectively.  All other extensions will be delivered as a raw buffer (e.g. `foo/path/README.md` will be shown as text).
+- When a `show` command is issued, the client must send a request to the server to retrieve the data of the given dataset.  The server will reply with the data.  The format is inferred from the extension of the output file: `.b2nd` for Blosc2 NDim and `.b2frame` for Blosc2 frames; an n-dim NumPy array and a 1-dim NumPy array will be shown respectively.  All other extensions will be delivered as a raw buffer (e.g. `foo/path/README.md` will be shown as text).
 
-- When a `download` command is issued, the user client must send a request to the server to retrieve the data of the dataset.  The server will reply with the data and user client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`).
+- When a `download` command is issued, the client must send a request to the server to retrieve the data of the dataset.  The server will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`).
 
 The sequence diagram below summarizes how different messages flow between the components of the system.
 
 ![Figure: Caterva2 sequence diagram](./doc/_static/caterva2-seq.svg)
-
-## Cache management details
-
-Whenever the server gets a request to `subscribe` to a root, it must check if metadata (not the data itself) for all the datasets in a root is already in the cache.  If it is, it must check if the root has changed in the client.  If it has, it must update the cache.  If it hasn't, it must use the cached data.  If the root metadata is not in the cache, it must fetch it and add it to the cache.
-
-Metadata can be fetched and consolidated as uninitialized datasets in cache by using the API described in the [Metadata](#metadata) section below.
-
-There will be not an in-memory cache in the server, but a folder in the filesystem.  The reason is that cache files that are accessed frequently will be cached automatically by the OS, so there is no need to duplicate it (at least initially).  The folder will be called `$(cwd)/_caterva2/cache/` and it will contain the metadata and data of the datasets.  The data and metadata will be stored in Blosc2 format.
-
-Updates to the cache for a given root should happen in an atomic fashion.  The server should get and store all new required information in a temporary location of the same device where the current database and cache are located, and only once the storage operation is complete shall it replace the old data.
-
-When a client has to serve a data file that is not in Blosc2 format (e.g. a text file), it will be compressed locally (initially in one go with the technique shown in [section "Compressing general files"](#compressing-general-files)), and stored in `$(cwd)/_caterva2/cache/`. The file will be named `$(dataset_path).b2` (e.g. `foo/bar.txt` will be stored as `$(cwd)/_caterva2/cache/foo/bar.txt.b2`).
-
-The client will serve the data in its own cache as-is, without decompressing it. The server will store and send the data as-is too, and only the user client will be responsible to decompress it (it will receive a Blosc2 frame than can be opened with `blosc2.open()` and data can be retrieved using slicing).
-
-Whenever a `show` or `download` command is issued, the server must check if the data in dataset is already in the cache.  If it is, it must check if the dataset has changed in the client; for this, it will ask the client for the `mtime` in the dataset, and compare it against the `mtime` field in the general JSON database.  If it has changed, it must update the cache.  If it hasn't, it must use the cached data.  If the data of the dataset is not in the cache, it must fetch it and add it to the cache.
-
-`show` or `download` commands will make the server download the whole data from client and will store it in its cache folder. When a `slice` is provided (only for the `show` command), server will download only the chunks in `[slice]` that are not in cache yet.
 
 ## Metadata
 
@@ -199,28 +180,9 @@ You can find an example of a data root in the `root-example` folder.  It contain
       a = np.arange(120, dtype="complex128").reshape(2, 3, 4, 5)
       blosc2.asarray(a+a*1j, chunks=(1, 2, 3, 4), blocks=(1, 2, 2, 2), urlpath="dir2/ds-4d.b2nd", mode="w")
 
-## Communication failures
-
-As we will be checking for the validity of the data in the cache (see above), we will be able to implement communication failure handling in a next version. For the time being, we will just assume that the communication is always successful, but we can start thinking on actions to be done when something fails.
-
-This is a list of possible actions:
-
-* When a server sends a command to the client, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the server will just serve its cached data to the user client.  In the latter case, if there is no cached data, it will return an error message instead.
-
-* As a particular case of the former, when the user client requests data from the server using `show` or `download`, the server should first get and store locally all the data from the client needed to fulfill the user client's request.  If the transfer of any piece of data fails, the server should return an error message before starting the transfer of data to the user client.
-
-* When a user client sends a command to the server, it will wait for a reply.  If the communication fails or a reply is not received in a certain amount of time, the user client will print an error message and exit.
-
-* When a server needs to update its database and cache for a given root, if the communication fails or a reply from the client is not received in a certain amount of time, or there is some other local problem (like lack of storage space), since the update should be atomic, the temporary data should be discarded and the cached one used according to the previous points.
-
-* When a client is down, and the root files are added/updated, when the client comes up again, it should announce the new/updated root files to the server.  The server should then update its local database and cache for those roots.
-
-
-TODO: think about other situations.
-
 ## Data transmission
 
-Whenever possible, data should be transmitted in [Blosc2 frame format](https://github.com/Blosc/c-blosc2/blob/main/README_CFRAME_FORMAT.rst).
+Whenever possible, data should be transmitted in [Blosc2 frame format](https://github.com/Blosc/c-blosc2/blob/main/README_CFRAME_FORMAT.rst).  That is, when a dataset (or a slice of it) is requested, the server should send the data in Blosc2 frame format.  The client should be able to read the data in this format return it to the user.  As Blosc2 frames can be read as-is, there will be no penalty in de-serializing the data.
 
 ## Compressing general files
 
@@ -243,7 +205,7 @@ Out[5]: True
 
 For the time being, `.b2` files can be made in one shot (i.e. a single `schunk.append_data()` call), but in a next version we should be able to compress files larger than available memory by using a chunked algorithm (i.e. reading and writing chunk-by-chunk).
 
-## Internal database
+## Internal database (TODO: this is obsolete)
 
 There will be an internal database for clients and servers for storing different metadata.  It will be a JSON file called `$(cwd)/_caterva2/db.json` and it will contain the following fields (J. David: please check this):
 
@@ -263,4 +225,6 @@ The ``meta`` and ``vlmeta`` fields above are the same as described in the [Metad
 
 ## TODO
 
-- Add API to remove a root (only the client that creates it can remove it)
+- Revise the document for clarity and completeness.
+- The original pubsub model may still live in parts if this document; try to remove it.
+- Add examples of the client commands.
