@@ -158,15 +158,15 @@
 * When visualizing an image, resize it to fit the window.
 
 ### Web backend
-* Blosc2 Proxy class adoption. That allows the server to fetch data from a client in chunks that are needed, instead of the whole dataset at once. This is useful for large datasets, where the server may not have enough memory to hold the whole dataset.
+* Blosc2 Proxy class adoption. That allows the subscriber to fetch data from a publisher in chunks that are needed, instead of the whole dataset at once. This is useful for large datasets, where the subscriber may not have enough memory to hold the whole dataset.
 * New @personal and @shared areas in the server, where users can create new datasets and upload files accessible to them and to a group of users, respectively.
 * New @public area in the server, where users can publish datasets that are accessible to everyone.
-* Allow for the server to run standalone, without a client.
+* Allow for the subscriber to run standalone, without a publisher.
 * New quota configuration in the server, to limit the amount of data that can be stored.
 * Support for Unix Domain Sockets.
 
 ### Client API
-* New upload/remove/move/copy commands in the server.
+* New upload/remove/move/copy commands in the subscriber.
 * New adduser/deluser/listusers APIs.
 * New c2context context manager to handle the connection to the server.
 * Support for new lazy expressions in Python-Blosc2 3.0 (with support for saving reductions).
@@ -192,7 +192,7 @@
 * Web client: New Download button to download a dataset as a file.
 * Web client: New Delete button to delete a dataset from @personal area.
 * Web client: Support to detect tomographies automatically using heuristics -- 3D integer datasets in greyscale and RGB(A) (using a 4th dim).
-* Client API: Support for server user authentication in client code.
+* Client API: Support for subscriber user authentication in client code.
 * Client API: Support for creating lazy expressions in the @personal area.  The resulting data is not computed on creation, but on demand.
 
 
