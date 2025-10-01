@@ -107,12 +107,18 @@ only-include = ["caterva2", "root-example"]
 Home = "https://github.com/ironArray/Caterva2"
 
 [project.scripts]
-cat2sub = "caterva2.services.server:main"
-cat2agent = "caterva2.clients.agent:main"
-cat2cli = "caterva2.clients.cli:main"
-cat2tbrowser = "caterva2.clients.tbrowser:main"
+# Main commands with unified naming scheme
+cat2-server = "caterva2.services.server:main"
+cat2-agent = "caterva2.clients.agent:main"
+cat2-client = "caterva2.clients.cli:main"
+cat2-admin = "caterva2.tools.admin:main"
+
+# Utilities for import/export and browsing
 cat2import = "caterva2.tools.hdf5_to_cat2:main"
 cat2export = "caterva2.tools.cat2_to_hdf5:main"
+cat2tbrowser = "caterva2.clients.tbrowser:main"
+
+# Legacy standalone utility (deprecated, use cat2-admin adduser instead)
 cat2adduser = "caterva2.tools.adduser:main"
 
 [tool.ruff]

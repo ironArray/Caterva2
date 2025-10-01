@@ -10,7 +10,8 @@
 """
 Add a user to the subscriber database.
 
-Contrarily to `cat2cli adduser`, this script does not require a running Caterva2 subscriber.
+Contrarily to `cat2-client adduser`, this script does not require a running Caterva2 subscriber.
+Note: This script is deprecated. Use `cat2-admin adduser` instead.
 """
 
 from caterva2 import utils

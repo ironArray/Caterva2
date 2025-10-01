@@ -1,23 +1,23 @@
 (Using-the-command-line-client)=
 # Using the command-line client
 
-For quick queries to a server or for use in shell scripts, Caterva2 ships the `cat2cli` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `subscriber` in order to be able to query something.
+For quick queries to a server or for use in shell scripts, Caterva2 ships the `cat2-client` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `subscriber` in order to be able to query something.
 
 ```sh
 python -m pip install caterva2[clients,subscriber]
 ```
 
-To create a user, you can use the `cat2adduser` command line client. For example:
+To create a user, you can use the `cat2-admin adduser` command. For example:
 
 ```sh
-cat2adduser user@example.com foobar11
+cat2-admin adduser user@example.com foobar11
 ```
 
-Now that the services are running, we can use the `cat2cli` client to talk
+Now that the services are running, we can use the `cat2-client` client to talk
 to the server. In another shell, let's list all the available roots in the system:
 
 ```sh
-cat2cli --user "user@example.com" --pass "foobar11" roots
+cat2-client --user "user@example.com" --pass "foobar11" roots
 ```
 
 ```
@@ -28,20 +28,20 @@ cat2cli --user "user@example.com" --pass "foobar11" roots
 First let's upload a file from the `root-example`folder to the `@personal` root:
 
 ```sh
-cat2cli --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
 ```
 
 Now, one can list the datasets in the `@personal` root and see that the uploaded file appears
 
 ```sh
-cat2cli --username user@example.com --password foobar11 list @personal
+cat2-client --username user@example.com --password foobar11 list @personal
 >> ds-1d.b2nd
 ```
 
 Let's ask the server for more info about the dataset:
 
 ```sh
-cat2cli --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
 ```
 
 ```
@@ -70,8 +70,12 @@ Getting info for @personal/ds-1d.b2nd
 
 This command returns a JSON object with the dataset's metadata, including its shape, chunks, blocks, data type, and compression parameters. The `schunk` field contains information about the underlying Blosc2 super-chunk that stores the dataset's data.
 
-There are more commands available in the `cat2cli` client; ask for help with:
+There are more commands available in the `cat2-client` client; ask for help with:
 
 ```sh
-cat2cli --help
+cat2-client --help
 ```
+
+## Note on Command Names
+
+This tutorial uses the new command names (`cat2-client`, `cat2-admin`). The legacy command names (`cat2cli`, `cat2sub`, `cat2agent`) have been removed and are no longer available. Only `cat2adduser` is temporarily kept but deprecated - use `cat2-admin adduser` instead.
