@@ -15,7 +15,7 @@ The client and server hosts need a Caterva2 installation with the `services` ext
 python -m pip install caterva2[services]
 ```
 
-The workstation should be fine with a plain installation, but we'll also install the `clients` extra to perform quick tests with `cat2cli`:
+The workstation should be fine with a plain installation, but we'll also install the `clients` extra to perform quick tests with `cat2-client`:
 
 ```sh
 python -m pip install caterva2[clients]
@@ -113,15 +113,15 @@ urlbase = "https://sub.edu.example.org:3126"  # reverse proxy address
 
 Clients at the example workstation need to know the address of the subscriber that they will use.
 
-The command-line client `cat2cli` provides the `--subscriber` option for that.  Running this at the workstation:
+The command-line client `cat2-client` provides the `--server` option for that.  Running this at the workstation:
 
 ```sh
-cat2cli --subscriber http://sub.edu.example.org:3126 roots
+cat2-client --server http://sub.edu.example.org:3126 roots
 ```
 
-Will retrieve the list of known roots from the subscriber that we set up above.  Should authentication be needed, `--username` and `--password` options may also be used.
+Will retrieve the list of known roots from the server that we set up above.  Should authentication be needed, `--username` and `--password` options may also be used.
 
-Since `cat2cli` also supports `caterva2.toml`, this configuration in the current directory:
+Since `cat2-client` also supports `caterva2.toml`, this configuration in the current directory:
 
 ```toml
 [subscriber]
@@ -135,7 +135,7 @@ urlbase = "http://sub.edu.example.org:3126"  # "https://..." if needed
 Should allow you to run the previous command just like this:
 
 ```sh
-cat2cli roots
+cat2-client roots
 ```
 
 When using the programmatic API, you need to provide the subscriber address explicitly:

@@ -6,11 +6,11 @@ Blosc2 and HDF5 data repositories.
 
 This is a major release that includes a big refactoring for getting rid of
 the PubSub code (which, to be frank, was not bringing too much benefit).
-We have added a new `cat2agent` to watch a directory and sync changes to a
+We have added a new `cat2-agent` to watch a directory and sync changes to a
 Caterva2 server.
 
 Finally, fixed a few bugs and added some new features, such as the
-`cat2agent` command line client, which allows you to watch a directory and
+`cat2-agent` command line client, which allows you to watch a directory and
 sync changes to a Caterva2 server. This is particularly useful for
 automatically uploading new datasets to a Caterva2 server, or for keeping
 a local copy of a remote Caterva2 server.

@@ -31,7 +31,7 @@ client.get("@public/examples/tomo-guess-test.b2nd")
 ```
 - Via the [command line client](https://ironarray.io/caterva2-doc/tutorials/cli.html)
 ```sh
-cat2cli info @public/kevlar/entry/data/data.b2nd
+cat2-client info @public/kevlar/entry/data/data.b2nd
 ```
 - Via the [REST API](https://ironarray.io/caterva2-doc/tutorials/RESTAPI.html) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/) (see [here](https://cat2.cloud/demo/docs)).
 
@@ -123,7 +123,7 @@ See also [configuration.md](configuration.md) in Caterva2 tutorials.
 Then run the server:
 
 ```sh
-CATERVA2_SECRET=c2sikrit cat2sub &  # server
+CATERVA2_SECRET=c2sikrit cat2-server &  # server
 ```
 The `CATERVA2_SECRET` environment variable is obligatory and is explained below in the following section.
 
@@ -145,11 +145,11 @@ client = cat2.Client("https://cat2.cloud/demo", ('user@example.com', 'foobar11')
 - The command line client can be authenticated with the `--user` and `--pass` options
 
 ### The command line client
-Now that the services are running, we can use the `cat2cli` client to talk
+Now that the services are running, we can use the `cat2-client` client to talk
 to the server. In another shell, let's list all the available roots in the system:
 
 ```sh
-cat2cli --user "user@example.com" --pass "foobar11" roots
+cat2-client --user "user@example.com" --pass "foobar11" roots
 ```
 
 ```
@@ -160,20 +160,20 @@ cat2cli --user "user@example.com" --pass "foobar11" roots
 First let's upload a file from the `root-example`folder to the `@personal` root:
 
 ```sh
-cat2cli --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
 ```
 
 Now, one can list the datasets in the `@personal` root and see that the uploaded file appears
 
 ```sh
-cat2cli --username user@example.com --password foobar11 list @personal
+cat2-client --username user@example.com --password foobar11 list @personal
 >> ds-1d.b2nd
 ```
 
 Let's ask the server for more info about the dataset:
 
 ```sh
-cat2cli --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
 ```
 
 ```
@@ -202,10 +202,10 @@ Getting info for @personal/ds-1d.b2nd
 
 This command returns a JSON object with the dataset's metadata, including its shape, chunks, blocks, data type, and compression parameters. The `schunk` field contains information about the underlying Blosc2 super-chunk that stores the dataset's data.
 
-There are more commands available in the `cat2cli` client; ask for help with:
+There are more commands available in the `cat2-client` client; ask for help with:
 
 ```sh
-cat2cli --help
+cat2-client --help
 ```
 
 ### Docs

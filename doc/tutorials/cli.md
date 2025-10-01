@@ -78,4 +78,4 @@ cat2-client --help
 
 ## Note on Command Names
 
-This tutorial uses the new command names (`cat2-client`, `cat2-admin`) and configuration sections (`[server]`). The legacy command names (`cat2cli`, `cat2sub`, `cat2agent`) and configuration section (`[subscriber]`) have been removed and are no longer available. Only `cat2adduser` is temporarily kept but deprecated - use `cat2-admin adduser` instead.
+This tutorial uses the new command names (`cat2-client`, `cat2-admin`) and configuration sections (`[server]`). The legacy command names have been removed and are no longer available. Only `cat2adduser` is temporarily kept but deprecated - use `cat2-admin adduser` instead.

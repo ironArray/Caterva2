@@ -6,9 +6,9 @@ Caterva2 comes with several command-line utilities for different tasks.
 
 The main utilities follow a new unified naming scheme:
 
-- **cat2-client**: Query a server from terminal (formerly cat2cli)
-- **cat2-agent**: Watch a directory and sync changes to a Caterva2 server (formerly cat2agent)
-- **cat2-server**: Launch the server with fine-tuned behavior (formerly cat2sub)
+- **cat2-client**: Query a server from terminal
+- **cat2-agent**: Watch a directory and sync changes to a Caterva2 server
+- **cat2-server**: Launch the server with fine-tuned behavior
 - **cat2-admin**: Server administration commands (new)
 
 ## Additional Utilities
