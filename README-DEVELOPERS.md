@@ -12,7 +12,7 @@ As the config files are already there, this essentially boils down to:
   pre-commit install
 ```
 
-Also, for running the tests, one needs to run manually the subscriber.
+Also, for running the tests, one needs to run manually the server.
 There is a `caterva2.tests.services` script that does this.
 
 ## Build CSS and JS

@@ -77,7 +77,7 @@ dev = [
     "pytest-cov",
     "ruff",
 ]
-# Currently used to enable HDF5 support at the publisher.
+# Currently used to enable HDF5 support at the client.
 hdf5 = [
     "h5py",
     "b2h5py>=0.5.1",

@@ -10,7 +10,7 @@ from time import time
 
 import blosc2
 
-# Small example of how to query a dataset on a subscriber
+# Small example of how to query a dataset on a server
 import httpx
 import numpy as np
 
@@ -22,7 +22,7 @@ ROOT_NAME = "example"
 
 user_auth = None
 # Uncomment the following line and use your username and password
-# if the subscriber requires authentication.
+# if the server requires authentication.
 # user_auth = {'username': 'user@example.com', 'password': 'foobar11'}
 
 client = cat2.Client(URLBASE, auth=user_auth)
@@ -50,7 +50,7 @@ print(f"Time for downloading data (HTTP): {t:.3f}s - {len(data.content) / 2**10:
 mem_array = blosc2.ndarray_from_cframe(data.content)
 print(mem_array.info)
 
-# 2. Fetch the data from the subscriber
+# 2. Fetch the data from the server
 t0 = time()
 mem_array2 = array[:]
 t = time() - t0

@@ -1,7 +1,7 @@
 (Using-the-command-line-client)=
 # Using the command-line client
 
-For quick queries to a subscriber or for use in shell scripts, Caterva2 ships the `cat2cli` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `subscriber` in order to be able to query something.
+For quick queries to a server or for use in shell scripts, Caterva2 ships the `cat2cli` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `subscriber` in order to be able to query something.
 
 ```sh
 python -m pip install caterva2[clients,subscriber]
@@ -14,7 +14,7 @@ cat2adduser user@example.com foobar11
 ```
 
 Now that the services are running, we can use the `cat2cli` client to talk
-to the subscriber. In another shell, let's list all the available roots in the system:
+to the server. In another shell, let's list all the available roots in the system:
 
 ```sh
 cat2cli --user "user@example.com" --pass "foobar11" roots
@@ -38,7 +38,7 @@ cat2cli --username user@example.com --password foobar11 list @personal
 >> ds-1d.b2nd
 ```
 
-Let's ask the subscriber for more info about the dataset:
+Let's ask the server for more info about the dataset:
 
 ```sh
 cat2cli --username user@example.com --password foobar11 info @personal/ds-1d.b2nd

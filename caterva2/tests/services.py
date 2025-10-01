@@ -1,6 +1,6 @@
 """Caterva2 services for tests.
 
-This ensures that Caterva2 subscriber service is running before proceeding to tests.
+This ensures that Caterva2 server service is running before proceeding to tests.
 It has three modes of operation:
 
 - Standalone script: when run as a script, it starts the services as children

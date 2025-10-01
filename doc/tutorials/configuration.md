@@ -3,19 +3,19 @@
 
 We've seen that the `cat2cli` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).
 
-The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.  For instance, below is a sample configuration file for the subscriber program and some client app:
+The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.  For instance, below is a sample configuration file for the server program and some client app:
 
 ```toml
-# Example configuration for a standalone subscriber
+# Example configuration for a standalone server
 #
-# It's possible to run only the subscriber. Then the configuration has only a
-# section for the subscriber. And maybe another one for the client.
+# It's possible to run only the server. Then the configuration has only a
+# section for the server. And maybe another one for the client.
 
-# The subscriber section must define:
+# The server section must define:
 #
-# - statedir: the directory where the subcriber's data will be stored (default: _caterva2/sub)
-# - http: where the subscriber listens to (a unix socket or a host/port) (default: localhost:8002)
-# - urlbase: the base url users will use to reach the subscriber (default: http://localhost:8002)
+# - statedir: the directory where the server's data will be stored (default: _caterva2/sub)
+# - http: where the server listens to (a unix socket or a host/port) (default: localhost:8002)
+# - urlbase: the base url users will use to reach the server (default: http://localhost:8002)
 # - quota: if defined, it will limit the disk usage (default: 0, no limit)
 # - maxusers: if defined, it will limit the number of users (default: 0, no limit)
 # - login: if true, users will need to authenticate (default: true)

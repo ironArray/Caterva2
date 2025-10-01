@@ -1,5 +1,5 @@
 """
-Configuration for the subscriber only.
+Configuration for the server only.
 
 TODO Move toml config here.
 """
