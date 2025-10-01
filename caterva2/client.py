@@ -14,7 +14,7 @@ from blosc2 import NDArray, SChunk
 from . import api_utils, utils
 
 sub_urlbase_default = "http://localhost:8000"
-"""The default base of URLs provided by the subscriber."""
+"""The default base of URLs provided by the server."""
 
 
 def _format_paths(urlbase, path=None):
@@ -760,7 +760,7 @@ class Client:
         Parameters
         ----------
         urlbase : str, optional
-            Base URL of the subscriber to query. Default to
+            Base URL of the server to query. Default to
             :py:obj:`caterva2.sub_urlbase_default`.
         auth : tuple, BasicAuth, optional
 
@@ -1481,7 +1481,7 @@ class Client:
 
     def adduser(self, newuser, password=None, superuser=False):
         """
-        Adds a user to the subscriber.
+        Adds a user to the server.
 
         Parameters
         ----------
@@ -1517,7 +1517,7 @@ class Client:
 
     def deluser(self, user):
         """
-        Deletes a user from the subscriber.
+        Deletes a user from the server.
 
         Parameters
         ----------
@@ -1546,7 +1546,7 @@ class Client:
 
     def listusers(self, username=None):
         """
-        Lists the users in the subscriber.
+        Lists the users in the server.
 
         Parameters
         ----------
@@ -1556,7 +1556,7 @@ class Client:
         Returns
         -------
         list of dict
-            A list of user dictionaries in the subscriber.
+            A list of user dictionaries in the server.
 
         Examples
         --------

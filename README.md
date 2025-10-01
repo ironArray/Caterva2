@@ -64,15 +64,15 @@ You may install Caterva2 in several ways:
   python -m pip install -e .
   ```
 
-When a user uses a client (web GUI, REST API, Python API, or command line) to query datasets, the client will connect to a Caterva2 **subscriber** service, which
-accesses the relevant datasets stored either locally or remotely. The subscriber services may be managed via the command line by installing the `caterva2` package with the `[subscriber]` extra feature (we also wish to use the command line client, so we will also install the `clients` extra too):
+When a user uses a client (web GUI, REST API, Python API, or command line) to query datasets, the client will connect to a Caterva2 **server** service, which
+accesses the relevant datasets stored either locally or remotely. The server services may be managed via the command line by installing the `caterva2` package with the `[server]` extra feature (we also wish to use the command line client, so we will also install the `clients` extra too):
 
   ```sh
-  python -m pip install caterva2 [subscriber, clients]
+  python -m pip install caterva2 [server, clients]
   ```
 In general, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  The following extras are supported:
 
-- `subscriber` for running the Caterva2 subscriber service
+- `subscriber` for running the Caterva2 server service
 - `clients` to use Caterva2 client programs (command-line or terminal)
 - `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
 - `plugins` to enable web GUI features like the tomography display
@@ -117,18 +117,18 @@ Now:
 - create a virtual environment and install Caterva2 with the `[subscriber,clients]` extras (see above).
 - copy the configuration file `caterva2.sample.toml` to `caterva2.toml`.
 
-Subscribers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
+Servers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
 See also [configuration.md](configuration.md) in Caterva2 tutorials.
 
-Then run the subscriber:
+Then run the server:
 
 ```sh
-CATERVA2_SECRET=c2sikrit cat2sub &  # subscriber
+CATERVA2_SECRET=c2sikrit cat2sub &  # server
 ```
 The `CATERVA2_SECRET` environment variable is obligatory and is explained below in the following section.
 
 ### User authentication
-The Caterva2 subscriber includes some support for authenticating users.  To enable it, run the subscriber with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations. Note that new accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
+The Caterva2 server includes some support for authenticating users.  To enable it, run the server with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations. Note that new accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
 
 To create a user, you can use the `cat2adduser` command line client. For example:
 
@@ -146,7 +146,7 @@ client = cat2.Client("https://cat2.cloud/demo", ('user@example.com', 'foobar11')
 
 ### The command line client
 Now that the services are running, we can use the `cat2cli` client to talk
-to the subscriber. In another shell, let's list all the available roots in the system:
+to the server. In another shell, let's list all the available roots in the system:
 
 ```sh
 cat2cli --user "user@example.com" --pass "foobar11" roots
@@ -170,7 +170,7 @@ cat2cli --username user@example.com --password foobar11 list @personal
 >> ds-1d.b2nd
 ```
 
-Let's ask the subscriber for more info about the dataset:
+Let's ask the server for more info about the dataset:
 
 ```sh
 cat2cli --username user@example.com --password foobar11 info @personal/ds-1d.b2nd

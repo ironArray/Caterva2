@@ -5,12 +5,11 @@ The services that we used til now are enough for testing, but not for a real dep
 
 In this section we'll setup a more realistic deployment for a fictional organization:
 
-- A broker at host `broker.example.org`.
-- Two publishers at host `pub.lab.example.org` at a data collection laboratory, serving a different root each.
-- A subscriber at host `sub.edu.example.org` at a research & education branch.
+- Two clients at host `pub.lab.example.org` at a data collection laboratory, serving a different root each.
+- A server at host `sub.edu.example.org` at a research & education branch.
 - A custom API client in a workstation at the latter branch.
 
-The broker, publisher and subscriber hosts need a Caterva2 installation with the `services` extra:
+The client and server hosts need a Caterva2 installation with the `services` extra:
 
 ```sh
 python -m pip install caterva2[services]
@@ -24,39 +23,9 @@ python -m pip install caterva2[clients]
 
 (If you're going to try this tutorial on a single machine, just install `caterva2[services,clients]`.)
 
-## Broker
+## Clients
 
-Our example broker shall listen on port 3104 of host `broker.example.org`.  At that host, it may be run like this:
-
-```sh
-cat2bro --http *:3104
-```
-
-The broker will create a `_caterva2/bro` directory for its state files and listen in all network interfaces.  Let's restrict that to just the public interface, and set the directory to `cat2-bro`.  Stop the broker with Ctrl+C and run this (using the host name of your machine or `localhost`):
-
-```sh
-cat2bro --http broker.example.org:3104 --statedir ./cat2-bro
-```
-
-(The ``./`` is not needed, but it shows that the `--statedir` option allows both relative and absolute paths, not necessarily under the current directory.)
-
-Let's put those options in the `caterva2.toml` configuration file:
-
-```toml
-[broker]
-http = "broker.example.org:3104"
-statedir = "./cat2-bro"
-```
-
-You may now stop the broker and run it with just:
-
-```sh
-cat2bro
-```
-
-## Publishers
-
-Here we will setup at the `pub.lab.example.org` host two publishers, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective Caterva2 directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
+Here we will setup at the `pub.lab.example.org` host two clients, each serving one of the roots which we shall name `foo` and `bar`.  We'll create their respective Caterva2 directories with the (arbitrary but meaningful) names `foo-root` and `bar-root`, with simple text files inside:
 
 ```sh
 mkdir foo-root

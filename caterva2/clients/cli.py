@@ -489,7 +489,7 @@ def main():
     subparser.set_defaults(func=cmd_move)
 
     # remove
-    help = "Remove a dataset from the subscriber."
+    help = "Remove a dataset from the server."
     subparser = subparsers.add_parser("remove", aliases=["rm"], help=help)
     subparser.add_argument("dataset", type=pathlib.Path)
     subparser.set_defaults(func=cmd_remove)
@@ -538,7 +538,7 @@ def main():
     subparser.set_defaults(func=cmd_download)
 
     # upload
-    help = "Upload a local dataset to subscriber."
+    help = "Upload a local dataset to server."
     subparser = subparsers.add_parser("upload", help=help)
     subparser.add_argument("localpath", type=pathlib.Path)
     subparser.add_argument("dataset", type=pathlib.Path)
