@@ -50,7 +50,7 @@ base-services = [
     "uvicorn",
     "watchfiles",
 ]
-subscriber = [
+server = [
     "aiosqlite",
     "caterva2[base-services]",
     "fastapi-mail",
@@ -69,7 +69,7 @@ subscriber = [
 services = [
     "caterva2[base-services]",
     "caterva2[hdf5]",
-    "caterva2[subscriber]",
+    "caterva2[server]",
 ]
 dev = [
     "pre-commit",

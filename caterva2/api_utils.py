@@ -39,14 +39,14 @@ def slice_to_string(slice_):
 
 def get_auth_cookie(urlbase, user_auth, timeout=5):
     """
-    Authenticate to a subscriber as a user and get an authorization cookie.
+    Authenticate to a server as a user and get an authorization cookie.
 
     Authentication fields will usually be ``username`` and ``password``.
 
     Parameters
     ----------
     urlbase : str
-        The base of URLs of the subscriber to query.
+        The base of URLs of the server to query.
     user_auth : dict
         A mapping of fields and values used as data to be posted for
         authenticating the user.
@@ -55,7 +55,7 @@ def get_auth_cookie(urlbase, user_auth, timeout=5):
     -------
     str
         An authentication token that may be used as a cookie in further
-        requests to the subscriber.
+        requests to the server.
 
     Examples
     --------

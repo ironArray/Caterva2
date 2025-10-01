@@ -21,7 +21,7 @@ The configuration file may hold settings for different programs, with a separate
 # - login: if true, users will need to authenticate (default: true)
 # - register: if true, users will be able to register (default: false)
 #
-[subscriber]
+[server]
 statedir = "_caterva2/sub"
 #http = "_caterva2/sub/uvicorn.socket"
 http = "localhost:8002"
@@ -31,7 +31,7 @@ maxusers = 5
 register = true  # allow users to register
 
 # The client section defines the credentials for the client to authenticate
-# against the subscriber.
+# against the server.
 [client]
 username = ""
 password = ""

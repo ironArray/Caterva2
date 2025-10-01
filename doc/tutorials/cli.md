@@ -1,10 +1,10 @@
 (Using-the-command-line-client)=
 # Using the command-line client
 
-For quick queries to a server or for use in shell scripts, Caterva2 ships the `cat2-client` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `subscriber` in order to be able to query something.
+For quick queries to a server or for use in shell scripts, Caterva2 ships the `cat2-client` program.  To use it, you need to install Caterva2 with the `clients` extra, as well as `server` in order to be able to query something.
 
 ```sh
-python -m pip install caterva2[clients,subscriber]
+python -m pip install caterva2[clients,server]
 ```
 
 To create a user, you can use the `cat2-admin adduser` command. For example:
@@ -78,4 +78,4 @@ cat2-client --help
 
 ## Note on Command Names
 
-This tutorial uses the new command names (`cat2-client`, `cat2-admin`). The legacy command names (`cat2cli`, `cat2sub`, `cat2agent`) have been removed and are no longer available. Only `cat2adduser` is temporarily kept but deprecated - use `cat2-admin adduser` instead.
+This tutorial uses the new command names (`cat2-client`, `cat2-admin`) and configuration sections (`[server]`). The legacy command names (`cat2cli`, `cat2sub`, `cat2agent`) and configuration section (`[subscriber]`) have been removed and are no longer available. Only `cat2adduser` is temporarily kept but deprecated - use `cat2-admin adduser` instead.

@@ -8,9 +8,9 @@
 ###############################################################################
 
 """
-Add a user to the subscriber database.
+Add a user to the server database.
 
-Contrarily to `cat2-client adduser`, this script does not require a running Caterva2 subscriber.
+Contrarily to `cat2-client adduser`, this script does not require a running Caterva2 server.
 Note: This script is deprecated. Use `cat2-admin adduser` instead.
 """
 
@@ -20,7 +20,7 @@ from caterva2.services import srv_utils
 
 def main():
     # Load configuration (args)
-    conf = utils.get_conf("subscriber")
+    conf = utils.get_conf("server")
     parser = utils.get_parser(
         statedir=conf.get(".statedir", "_caterva2/sub"),
     )

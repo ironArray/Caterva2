@@ -24,7 +24,7 @@ from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
 @pytest.fixture
 def fill_public(client, examples_dir):
     # Manually copy some files to the public area (TEST_STATE_DIR)
-    dest_dir = pathlib.Path(TEST_STATE_DIR) / "subscriber/public"
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
     fnames = [str(fname.relative_to(examples_dir)) for fname in examples_dir.rglob("*") if fname.is_file()]
     for fname in fnames:
         orig = examples_dir / fname
@@ -937,8 +937,8 @@ def test_adduser_maxexceeded(auth_client, configuration):
         pytest.skip("authentication support needed")
 
     # TODO: make this to work; currently this returns None
-    # maxusers = configuration.get("subscriber.maxusers")
-    # For now, keep in sync with subscriber.maxusers in caterva2/tests/caterva2-login.toml
+    # maxusers = configuration.get("server.maxusers")
+    # For now, keep in sync with server.maxusers in caterva2/tests/caterva2-login.toml
     maxusers = 5
     # Add maxusers users; we already have one user, so the next loop should fail
     # when reaching the creation of last user

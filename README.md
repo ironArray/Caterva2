@@ -72,7 +72,7 @@ accesses the relevant datasets stored either locally or remotely. The server ser
   ```
 In general, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  The following extras are supported:
 
-- `subscriber` for running the Caterva2 server service
+- `server` for running the Caterva2 server service
 - `clients` to use Caterva2 client programs (command-line or terminal)
 - `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
 - `plugins` to enable web GUI features like the tomography display
@@ -114,7 +114,7 @@ dir1/                   ds-1d-b.b2nd            ds-1d.b2nd              ds-hello
 
 Now:
 
-- create a virtual environment and install Caterva2 with the `[subscriber,clients]` extras (see above).
+- create a virtual environment and install Caterva2 with the `[server,clients]` extras (see above).
 - copy the configuration file `caterva2.sample.toml` to `caterva2.toml`.
 
 Servers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).

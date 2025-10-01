@@ -13,7 +13,7 @@
 # - login: if true, users will need to authenticate (default: true)
 # - register: if true, users will be able to register (default: false)
 #
-[subscriber]
+[server]
 statedir = "_caterva2/sub"
 #http = "_caterva2/sub/uvicorn.socket"
 http = "localhost:8000"

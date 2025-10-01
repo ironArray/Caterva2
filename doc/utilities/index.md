@@ -22,6 +22,8 @@ The main utilities follow a new unified naming scheme:
 The following legacy command is still available but deprecated:
 - `cat2adduser` → use `cat2-admin adduser` instead
 
+**Breaking Change**: Legacy configuration section `[subscriber]` has been removed. Use `[server]` instead.
+
 ```{toctree}
 ---
 maxdepth: 2
