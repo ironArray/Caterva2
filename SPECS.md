@@ -9,20 +9,18 @@ This document describes the minimal specifications for the project.  It is meant
 - **Root**: The root of a group of datasets that are published together.  It is identified by a name.
 - **Dataset**: A dataset is a file that is published by the client.  It is identified by a path.
   E.g. `foo/bar.b2nd` is a dataset path with root `foo`.
-- **Broker**: The broker is the entity that manages the communication between clients and servers.  It is also responsible for keeping a list of roots available to servers.
 - **Client**: The client is the entity that makes datasets available to servers.  It is responsible for creating a root and adding datasets to it.
 - **Server**: The server is the entity that follows changes in a root and allows the download of datasets from clients.
 - **User Client**: The user client is a server consumer (e.g. a command line tool) for the user to access the datasets; it connects to a server.
 
 ## Services
 
-The three services (broker, client and server) have a number of common options:
+The two services (client and server) have a number of common options:
 
 - `--http`: the hostname and port that it listens, e.g. `localhost:8000`
 - `--server`: the base of URLs provided by the server, if different from `http://<HTTP_HOST>:<HTTP_PORT>` (only for server)
 - `--loglevel`: by default `warning`
 - `--statedir`: directory where to store the service state files (cache, logs, pid file, etc.)
-- `--broker`: the hostname and port where the broker runs (only for client and server)
 
 In production deployments it's recommended to use Systemd services.
 
@@ -30,7 +28,7 @@ In production deployments it's recommended to use Systemd services.
 
 The user client must implement the following commands:
 
-- `roots`: List all the available roots in a broker.
+- `roots`: List all the available roots in the server.
 - `subscribe <root>`: Request access to the datasets in a root.
 - `list <root>`: List all the available datasets in a root.  Needs to be subscribed to the root.
 - `url <root>`: Server URL from where a dataset can be downloaded.
@@ -215,7 +213,7 @@ This is a list of possible actions:
 
 * When a server needs to update its database and cache for a given root, if the communication fails or a reply from the client is not received in a certain amount of time, or there is some other local problem (like lack of storage space), since the update should be atomic, the temporary data should be discarded and the cached one used according to the previous points.
 
-* When a client is down, and the root files are added/updated, when the client comes up again, it should announce the new/updated root files to the broker.  The broker should then notify the servers that the root files have changed, and the servers should update their local database and cache.
+* When a client is down, and the root files are added/updated, when the client comes up again, it should announce the new/updated root files to the server.  The server should then update its local database and cache for those roots.
 
 
 TODO: think about other situations.
@@ -265,4 +263,4 @@ The ``meta`` and ``vlmeta`` fields above are the same as described in the [Metad
 
 ## TODO
 
-- Broker: add API to remove a root (only the client that creates it can remove it)
+- Add API to remove a root (only the client that creates it can remove it)
