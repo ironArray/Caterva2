@@ -19,7 +19,7 @@ from .services import TEST_CATERVA2_ROOT
 
 @pytest.fixture
 def sub_urlbase(services):
-    return services.get_urlbase("subscriber")
+    return services.get_urlbase("server")
 
 
 def cli(cargs, binary=False, sub_user=None) -> str or dict:

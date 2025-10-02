@@ -90,7 +90,7 @@ def http_service_check(conf, conf_sect, def_host, path):
 
 
 def sub_check(conf):
-    return http_service_check(conf, "subscriber", get_sub_ep(), "/api/roots")
+    return http_service_check(conf, "server", get_sub_ep(), "/api/roots")
 
 
 TestRoot = collections.namedtuple("TestRoot", ["name", "source"])
@@ -110,7 +110,7 @@ class ManagedServices:
         self._setup_done = False
 
     def _start_server(self, *args, check=None):
-        name = "subscriber"
+        name = "server"
         if check is not None and check():
             raise RuntimeError(
                 f'check for service "{name}" succeeded before start'
@@ -222,7 +222,7 @@ def make_sub_user(services):
     if not os.environ.get("CATERVA2_SECRET"):
         return None
 
-    state_dir = services.state_dir / "subscriber"
+    state_dir = services.state_dir / "server"
     return srv_utils.add_user(
         "user@example.com", password="foobar11", is_superuser=True, state_dir=state_dir
     )

@@ -31,7 +31,7 @@ client.get("@public/examples/tomo-guess-test.b2nd")
 ```
 - Via the [command line client](https://ironarray.io/caterva2-doc/tutorials/cli.html)
 ```sh
-cat2cli info @public/kevlar/entry/data/data.b2nd
+cat2-client info @public/kevlar/entry/data/data.b2nd
 ```
 - Via the [REST API](https://ironarray.io/caterva2-doc/tutorials/RESTAPI.html) using a REST client like [Postman](https://www.postman.com/) or [curl](https://curl.se/) (see [here](https://cat2.cloud/demo/docs)).
 
@@ -72,7 +72,7 @@ accesses the relevant datasets stored either locally or remotely. The server ser
   ```
 In general, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  The following extras are supported:
 
-- `subscriber` for running the Caterva2 server service
+- `server` for running the Caterva2 server service
 - `clients` to use Caterva2 client programs (command-line or terminal)
 - `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
 - `plugins` to enable web GUI features like the tomography display
@@ -114,7 +114,7 @@ dir1/                   ds-1d-b.b2nd            ds-1d.b2nd              ds-hello
 
 Now:
 
-- create a virtual environment and install Caterva2 with the `[subscriber,clients]` extras (see above).
+- create a virtual environment and install Caterva2 with the `[server,clients]` extras (see above).
 - copy the configuration file `caterva2.sample.toml` to `caterva2.toml`.
 
 Servers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).
@@ -123,17 +123,17 @@ See also [configuration.md](configuration.md) in Caterva2 tutorials.
 Then run the server:
 
 ```sh
-CATERVA2_SECRET=c2sikrit cat2sub &  # server
+CATERVA2_SECRET=c2sikrit cat2-server &  # server
 ```
 The `CATERVA2_SECRET` environment variable is obligatory and is explained below in the following section.
 
 ### User authentication
 The Caterva2 server includes some support for authenticating users.  To enable it, run the server with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations. Note that new accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
 
-To create a user, you can use the `cat2adduser` command line client. For example:
+To create a user, you can use the `cat2-admin adduser` command. For example:
 
 ```sh
-cat2adduser user@example.com foobar11
+cat2-admin adduser user@example.com foobar11
 ```
 
 Client queries then require the same user credentials:
@@ -145,11 +145,11 @@ client = cat2.Client("https://cat2.cloud/demo", ('user@example.com', 'foobar11')
 - The command line client can be authenticated with the `--user` and `--pass` options
 
 ### The command line client
-Now that the services are running, we can use the `cat2cli` client to talk
+Now that the services are running, we can use the `cat2-client` client to talk
 to the server. In another shell, let's list all the available roots in the system:
 
 ```sh
-cat2cli --user "user@example.com" --pass "foobar11" roots
+cat2-client --user "user@example.com" --pass "foobar11" roots
 ```
 
 ```
@@ -160,20 +160,20 @@ cat2cli --user "user@example.com" --pass "foobar11" roots
 First let's upload a file from the `root-example`folder to the `@personal` root:
 
 ```sh
-cat2cli --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
 ```
 
 Now, one can list the datasets in the `@personal` root and see that the uploaded file appears
 
 ```sh
-cat2cli --username user@example.com --password foobar11 list @personal
+cat2-client --username user@example.com --password foobar11 list @personal
 >> ds-1d.b2nd
 ```
 
 Let's ask the server for more info about the dataset:
 
 ```sh
-cat2cli --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 info @personal/ds-1d.b2nd
 ```
 
 ```
@@ -191,7 +191,7 @@ Getting info for @personal/ds-1d.b2nd
         'cparams': {'codec': 5, 'codec_meta': 0, 'clevel': 1, 'filters': [0, 0, 0, 0, 0, 1], 'filters_meta': [0, 0, 0, 0, 0, 0], 'typesize': 8, 'blocksize': 80, 'nthreads': 1, 'splitmode': 1, 'tuner': 0, 'use_dict': False, 'filters, meta': [[1, 0]]},
         'cratio': 1.5929908403026682,
         'nbytes': 8000,
-        'urlpath': '/home/lshaw/Caterva2/_caterva2/sub/personal/2fa87091-84c6-44f9-a57e-7f04290630b1/ds-1d.b2nd',
+        'urlpath': '/home/lshaw/Caterva2/_caterva2/state/personal/2fa87091-84c6-44f9-a57e-7f04290630b1/ds-1d.b2nd',
         'vlmeta': {},
         'nchunks': 10,
         'mtime': None
@@ -202,10 +202,10 @@ Getting info for @personal/ds-1d.b2nd
 
 This command returns a JSON object with the dataset's metadata, including its shape, chunks, blocks, data type, and compression parameters. The `schunk` field contains information about the underlying Blosc2 super-chunk that stores the dataset's data.
 
-There are more commands available in the `cat2cli` client; ask for help with:
+There are more commands available in the `cat2-client` client; ask for help with:
 
 ```sh
-cat2cli --help
+cat2-client --help
 ```
 
 ### Docs

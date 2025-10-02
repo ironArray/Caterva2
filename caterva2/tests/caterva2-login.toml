@@ -1,4 +1,4 @@
-[subscriber]
+[server]
 login = true
 register = true
 maxusers = 5

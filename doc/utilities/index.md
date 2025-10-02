@@ -1,13 +1,32 @@
 # Utilities
 
-Although the main role of the Caterva2 package is to provide a Python library for coding Caterva2 clients in Python, it also includes additional utilities to help with particular tasks.  The sections below cover some of them.  Please mind that they may be part of extra Caterva2 features with additional dependencies and requirements.
+Caterva2 comes with several command-line utilities for different tasks.
+
+## Main Commands
+
+The main utilities follow a new unified naming scheme:
+
+- **cat2-client**: Query a server from terminal
+- **cat2-agent**: Watch a directory and sync changes to a Caterva2 server
+- **cat2-server**: Launch the server with fine-tuned behavior
+- **cat2-admin**: Server administration commands (new)
+
+## Additional Utilities
+
+- **cat2import**: Import data from HDF5 to Caterva2
+- **cat2export**: Export data from Caterva2 to HDF5
+- **cat2tbrowser**: Terminal-based browser for datasets
 
 ```{toctree}
 ---
 maxdepth: 2
 ---
 
-cat2cli
+cat2-client
+cat2-agent
+cat2-admin
+cat2-server
+cat2tbrowser
 cat2import
 cat2export
 ```

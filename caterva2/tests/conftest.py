@@ -27,7 +27,7 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def client(services):  # noqa: F811
-    urlbase = services.get_urlbase("subscriber")
+    urlbase = services.get_urlbase("server")
     return cat2.Client(urlbase)
 
 
@@ -36,5 +36,5 @@ def auth_client(services, sub_user):  # noqa: F811
     if not sub_user:
         return None
 
-    urlbase = services.get_urlbase("subscriber")
+    urlbase = services.get_urlbase("server")
     return cat2.Client(urlbase, sub_user)

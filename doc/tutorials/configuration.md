@@ -1,7 +1,7 @@
 (caterva2.toml)=
 # The `caterva2.toml` configuration file
 
-We've seen that the `cat2cli` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).
+We've seen that the `cat2-client` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).
 
 The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.  For instance, below is a sample configuration file for the server program and some client app:
 
@@ -21,7 +21,7 @@ The configuration file may hold settings for different programs, with a separate
 # - login: if true, users will need to authenticate (default: true)
 # - register: if true, users will be able to register (default: false)
 #
-[subscriber]
+[server]
 statedir = "_caterva2/sub"
 #http = "_caterva2/sub/uvicorn.socket"
 http = "localhost:8002"
@@ -31,7 +31,7 @@ maxusers = 5
 register = true  # allow users to register
 
 # The client section defines the credentials for the client to authenticate
-# against the subscriber.
+# against the server.
 [client]
 username = ""
 password = ""

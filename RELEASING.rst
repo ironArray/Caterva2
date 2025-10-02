@@ -36,7 +36,7 @@ the content of ``caterva2.sample.toml`` to ``caterva2.toml``
 and run the following commands::
 
   $ rm -r _caterva2/
-  $ cat2adduser superuser@example.com foobarfoo -S
+  $ cat2-admin adduser superuser@example.com foobarfoo -S
   $ CATERVA2_SECRET="123" cat2sub
 
 And experiment a bit with uploading, browsing and downloading files.
