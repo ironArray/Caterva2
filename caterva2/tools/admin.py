@@ -42,7 +42,7 @@ def main():
     parser.add_argument(
         "--statedir",
         type=utils.get_path_type(),
-        default="_caterva2/sub",
+        default="_caterva2/state",
         help="State directory for the server",
     )
 

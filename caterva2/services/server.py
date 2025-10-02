@@ -15,7 +15,6 @@ import functools
 import io
 import itertools
 import json
-import logging
 import mimetypes
 import os
 import pathlib
@@ -53,8 +52,6 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 # Set CATERVA2_SECRET=XXX in .env file in working directory
 dotenv.load_dotenv()
 
-# Logging
-logger = logging.getLogger("sub")
 
 # State
 locks = {}
@@ -2583,7 +2580,7 @@ def main():
     parser = utils.get_parser(
         http=conf.get(".http", "localhost:8000"),
         loglevel=conf.get(".loglevel", "warning"),
-        statedir=conf.get(".statedir", "_caterva2/sub"),
+        statedir=conf.get(".statedir", "_caterva2/state"),
     )
     args = utils.run_parser(parser)
 

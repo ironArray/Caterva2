@@ -191,7 +191,7 @@ Getting info for @personal/ds-1d.b2nd
         'cparams': {'codec': 5, 'codec_meta': 0, 'clevel': 1, 'filters': [0, 0, 0, 0, 0, 1], 'filters_meta': [0, 0, 0, 0, 0, 0], 'typesize': 8, 'blocksize': 80, 'nthreads': 1, 'splitmode': 1, 'tuner': 0, 'use_dict': False, 'filters, meta': [[1, 0]]},
         'cratio': 1.5929908403026682,
         'nbytes': 8000,
-        'urlpath': '/home/lshaw/Caterva2/_caterva2/sub/personal/2fa87091-84c6-44f9-a57e-7f04290630b1/ds-1d.b2nd',
+        'urlpath': '/home/lshaw/Caterva2/_caterva2/state/personal/2fa87091-84c6-44f9-a57e-7f04290630b1/ds-1d.b2nd',
         'vlmeta': {},
         'nchunks': 10,
         'mtime': None

@@ -43,7 +43,7 @@ There should be a configuration file (by default $CWD/caterva2.toml) where the c
 [server]
 http = "localhost:8000"
 urlbase = "https://cat2.example.com"  # e.g. served by reverse proxy
-statedir = "_caterva2/sub"
+statedir = "_caterva2/state"
 loglevel = "warning"
 ```
 

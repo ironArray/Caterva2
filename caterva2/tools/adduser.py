@@ -22,7 +22,7 @@ def main():
     # Load configuration (args)
     conf = utils.get_conf("server")
     parser = utils.get_parser(
-        statedir=conf.get(".statedir", "_caterva2/sub"),
+        statedir=conf.get(".statedir", "_caterva2/state"),
     )
     parser.add_argument("username")
     parser.add_argument("password", nargs="?")
