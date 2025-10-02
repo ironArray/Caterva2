@@ -56,5 +56,3 @@ cat2-admin --statedir /custom/path adduser charlie
 ## Configuration
 
 `cat2-admin` uses the same configuration system as other Caterva2 tools. It can read settings from a TOML configuration file (`caterva2.toml` in the current directory unless overridden).
-
-**Note**: This replaces the legacy `cat2adduser` command, which is no longer available.

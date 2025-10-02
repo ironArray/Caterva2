@@ -17,20 +17,16 @@ The main utilities follow a new unified naming scheme:
 - **cat2export**: Export data from Caterva2 to HDF5
 - **cat2tbrowser**: Terminal-based browser for datasets
 
-## Legacy Commands
-
-The following legacy command is still available but deprecated:
-- `cat2adduser` → use `cat2-admin adduser` instead
-
-**Breaking Change**: Legacy configuration section `[subscriber]` has been removed. Use `[server]` instead.
-
 ```{toctree}
 ---
 maxdepth: 2
 ---
 
 cat2-client
+cat2-agent
 cat2-admin
+cat2-server
+cat2tbrowser
 cat2import
 cat2export
 ```

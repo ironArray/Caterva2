@@ -118,8 +118,7 @@ cat2import = "caterva2.tools.hdf5_to_cat2:main"
 cat2export = "caterva2.tools.cat2_to_hdf5:main"
 cat2tbrowser = "caterva2.clients.tbrowser:main"
 
-# Legacy standalone utility (deprecated, use cat2-admin adduser instead)
-cat2adduser = "caterva2.tools.adduser:main"
+
 
 [tool.ruff]
 line-length = 109

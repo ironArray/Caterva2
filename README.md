@@ -130,10 +130,10 @@ The `CATERVA2_SECRET` environment variable is obligatory and is explained below 
 ### User authentication
 The Caterva2 server includes some support for authenticating users.  To enable it, run the server with the environment variable `CATERVA2_SECRET` set to some non-empty, secure string that will be used for various user management operations. Note that new accounts may be registered, but their addresses are not verified.  Password recovery does not work either.
 
-To create a user, you can use the `cat2adduser` command line client. For example:
+To create a user, you can use the `cat2-admin adduser` command. For example:
 
 ```sh
-cat2adduser user@example.com foobar11
+cat2-admin adduser user@example.com foobar11
 ```
 
 Client queries then require the same user credentials:
