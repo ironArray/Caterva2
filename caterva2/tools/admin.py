@@ -8,13 +8,9 @@
 ###############################################################################
 
 """
-Administration commands for Caterva2 server.
-
-This module provides commands for server administration tasks such as user management.
-These commands are meant to be used on the same machine as the server.
+Admin tool for Caterva2.  Currently only supports adding users.
 """
 
-import argparse
 import sys
 
 from caterva2 import utils
@@ -23,51 +19,34 @@ from caterva2.services import srv_utils
 
 def adduser_command(args):
     """Add a user to the server database."""
-    # Load configuration
-    # conf = utils.get_conf("server")
-
-    # Add user
     statedir = args.statedir.resolve()
     user = srv_utils.add_user(args.username, args.password, args.superuser, state_dir=statedir)
+    print(f"User '{args.username}' added successfully.")
     print("Password:", user.password)
 
 
 def main():
-    """Main entry point for cat2-admin command."""
-    parser = argparse.ArgumentParser(
-        prog="cat2-admin", description="Administration commands for Caterva2 server"
+    # Load configuration (args)
+    conf = utils.get_conf("server")
+    parser = utils.get_parser(
+        statedir=conf.get(".statedir", "_caterva2/state"),
     )
 
-    # Global options
-    parser.add_argument(
-        "--statedir",
-        type=utils.get_path_type(),
-        default="_caterva2/state",
-        help="State directory for the server",
-    )
+    subparsers = parser.add_subparsers(dest="command", required=True, help="sub-command help")
 
-    # Subcommands
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # adduser subcommand
-    adduser_parser = subparsers.add_parser("adduser", help="Add a user to the server database")
-    adduser_parser.add_argument("username", help="Username for the new user")
-    adduser_parser.add_argument("password", nargs="?", help="Password for the new user (optional)")
+    # Subparser for 'adduser'
+    adduser_parser = subparsers.add_parser("adduser", help="Add a new user.")
+    adduser_parser.add_argument("username", help="The username to be added.")
+    adduser_parser.add_argument("password", nargs="?", help="The password for the new user.")
     adduser_parser.add_argument(
-        "--superuser", "-S", action="store_true", default=False, help="Make user a superuser"
+        "--superuser", "-S", action="store_true", default=False, help="Make the user a superuser."
     )
     adduser_parser.set_defaults(func=adduser_command)
 
-    # Parse arguments
+    # Parse args and call the function
     args = parser.parse_args()
-
-    if not hasattr(args, "func"):
-        parser.print_help()
-        sys.exit(1)
-
-    # Execute the command
     args.func(args)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
