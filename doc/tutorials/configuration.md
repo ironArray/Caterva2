@@ -22,10 +22,10 @@ The configuration file may hold settings for different programs, with a separate
 # - register: if true, users will be able to register (default: false)
 #
 [server]
-statedir = "_caterva2/sub"
+statedir = "_caterva2/state"
 #http = "_caterva2/sub/uvicorn.socket"
-http = "localhost:8002"
-urlbase = "http://localhost:8002"
+http = "localhost:8000"
+urlbase = "http://localhost:8000"
 quota = "10G"
 maxusers = 5
 register = true  # allow users to register
@@ -37,4 +37,4 @@ username = ""
 password = ""
 ```
 
-Some of the supported settings will be explained in [](Running-independent-Caterva2-services).  See [caterva2.sample.toml](https://github.com/ironArray/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
+See [caterva2.sample.toml](https://github.com/ironArray/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.
