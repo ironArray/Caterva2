@@ -15,16 +15,16 @@ One must access to a server, either local or remote, to use the client API. Here
 ```python
 client = cat2.Client("https://cat2.cloud/demo")
 client.get_roots()
-# {'@public': {'name': '@public', 'http': '', 'subscribed': True}}
+# {'@public': {'name': '@public'}}
 ```
 or, if one has created a user, using the user credentials:
 
 ```python
 client = cat2.Client("https://cat2.cloud/demo", ("user@example.com", "password1"))
 client.get_roots()
-# {'@public': {'name': '@public', 'http': '', 'subscribed': True},
-# '@personal': {'name': '@personal', 'http': '', 'subscribed': True},
-# '@shared': {'name': '@shared', 'http': '', 'subscribed': True}}
+# {'@public': {'name': '@public'},
+#  '@personal': {'name': '@personal'},
+#  '@shared': {'name': '@shared'}}
 ```
 which gives (read/write) access to three roots (`@public`, `@personal` and `@shared`).
 We may get a list of datasets in the `@public` root for `client` via `client.get_list("@public")`:
@@ -55,10 +55,12 @@ So `@public/examples/tomo-guess-test.b2nd` is a `(10,100,100)` dataset of 16-bit
 
 ```python
 myslice = client.fetch(
-    "@public/examples/tomo-guess-test.b2nd", slice_=(slice(5), slice(10, 12), slice(3))
+    "@public/examples/tomo-guess-test.b2nd",
+    slice_=(slice(5, 6), slice(10, 12), slice(3)),
 )
 print(myslice)
-# array([51003, 51103], dtype=uint16)
+# [[[51000 51001 51002]
+#   [51100 51101 51102]]]
 ```
 Finally, one may download and save a file locally, or upload a local file to the server, using the `download` and `upload`commands:
 
@@ -66,14 +68,16 @@ Finally, one may download and save a file locally, or upload a local file to the
 client.download(
     "@public/examples/tomo-guess-test.b2nd", "mylocalfile.b2nd"
 )  # saves local file as mylocalfile.b2nd
+# PosixPath('mylocalfile.b2nd')
 client.upload(
     "mylocalfile.b2nd", "@public/uploadedfile.b2nd"
 )  # uploads local file to @public/uploadedfile.b2nd
+# PurePosixPath('@public/uploadedfile.b2nd')
 ```
 
 ## The object-oriented client API
 
-The top level client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (fully described in [](ref-API-Root), [](ref-API-File) and  [](ref-API-Dataset)), similar to that of h5py.
+The top level client API is simple but not very pythonic.  Fortunately, Caterva2 also provides a light and concise object-oriented client API (fully described in [](ref-API-Root), [](ref-API-File) and  [](ref-API-Dataset)), similar to that of ``python-blosc2``.
 
 First, let's create a `caterva2.Root` instance defining a local variable pointing to the root, using the `client` object we created above, which has already been authenticated. We can then print out the list of datasets in the root using `.file_list`:
 
@@ -96,6 +100,7 @@ Getting data from the dataset is very concise, as `caterva2.Dataset` instances s
 
 ```python
 myslice = ds[5, 10:12, 3]
+print(repr(myslice))
 # array([51003, 51103], dtype=uint16)
 ```
 results in the same slice as the (much more verbose) `client.fetch()` call in the previous section.
@@ -110,9 +115,11 @@ Finally, you may download and upload files in the following way:
 
 ```python
 ds.download("mylocalfile.b2nd")  # saves local file as mylocalfile.b2nd
+# PosixPath('mylocalfile.b2nd')
 myroot.upload(
     "mylocalfile.b2nd", "uploadedfile.b2nd"
 )  # uploads local file to @public/uploadedfile.b2nd
+# <Dataset: @public/uploadedfile.b2nd>
 ```
 
 ### On datasets and files
