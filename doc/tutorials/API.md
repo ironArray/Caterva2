@@ -133,10 +133,6 @@ print(type(myroot["examples/ds-hello.b2frame"][:10]))  # -> <class 'bytes'>
 print(
     type(myroot["examples/ds-hello.b2frame"].slice(slice(0, 10)))
 )  # -> <class 'blosc2.schunk.SChunk'>
-print(type(myroot["examples/README.md"][:10]))  # -> <class 'bytes'>
-print(
-    type(myroot["examples/README.md"].slice(slice(0, 10)))
-)  # -> <class 'blosc2.schunk.SChunk'>
 ```
 
 In addition, `Dataset` supports direct access to `dtype`, `blocks`, `chunks` and `shape` attributes via the dot notation (`File' instances do not possess these attributes):
