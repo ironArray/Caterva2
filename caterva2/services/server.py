@@ -881,7 +881,7 @@ async def concat(
     """
     abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
     list_of_arrays = [blosc2.open(path) for path in abspaths]
-    blosc2.concatenate(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
+    blosc2.concat(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
     return str(destpath)
 
 

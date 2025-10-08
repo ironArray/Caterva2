@@ -528,7 +528,7 @@ class File:
         """
         return self.client.copy(self.path, dst)
 
-    def concatenate(self, srcs, dst, axis):
+    def concat(self, srcs, dst, axis):
         """
         Concatenate the file with srcs along axis to a new location dst.
 
@@ -558,11 +558,11 @@ class File:
         >>> root.upload('root-example/dir2/ds-4d.b2nd', "b.b2nd")
         <Dataset: @personal/b.b2nd>
         >>> file = root['a.b2nd']
-        >>> file.concatenate('@personal/b.b2nd', '@personal/c.b2nd', axis=0)
+        >>> file.concat('@personal/b.b2nd', '@personal/c.b2nd', axis=0)
         PurePosixPath('@personal/c.b2nd')
         """
         srcs = [srcs] if not isinstance(srcs, list) else srcs  # assure that srcs is list
-        return self.client.concatenate([self.path] + srcs, dst, axis)
+        return self.client.concat([self.path] + srcs, dst, axis)
 
     def stack(self, srcs, dst, axis):
         """
@@ -1347,7 +1347,7 @@ class Client:
         )
         return pathlib.PurePosixPath(result)
 
-    def concatenate(self, srcs, dst, axis):
+    def concat(self, srcs, dst, axis):
         """
         Concatenate the srcs along axis to a new location dst.
 
@@ -1376,7 +1376,7 @@ class Client:
         <Dataset: @personal/a.b2nd>
         >>> root.upload('root-example/dir2/ds-4d.b2nd', "b.b2nd")
         <Dataset: @personal/b.b2nd>
-        >>> client.concatenate(['@personal/a.b2nd', '@personal/b.b2nd'], '@personal/c.b2nd', axis=0)
+        >>> client.concat(['@personal/a.b2nd', '@personal/b.b2nd'], '@personal/c.b2nd', axis=0)
         PurePosixPath('@personal/c.b2nd')
         """
         urlbase, _ = _format_paths(self.urlbase)
