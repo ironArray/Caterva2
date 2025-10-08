@@ -6,22 +6,25 @@ curl -X 'GET' \
   'https://cat2.cloud/demo/api/roots' \
   -H 'accept: application/json'
 ```
+
 ```json
 {
   "@public": {
-    "name": "@public",
-    "http": "",
-    "subscribed": true
+    "name": "@public"
   }
 }
 ```
+
 We can query the list of files in the `@public` root via:
+
 ```
 curl -X 'GET' \
   'https://cat2.cloud/demo/api/list/@public' \
   -H 'accept: application/json'
 ```
+
 which gives:
+
 ```
 [
   "examples/README.md",
@@ -57,7 +60,7 @@ curl -X 'GET' \
   "schunk": {
     ...
   },
-  "mtime": "2025-05-25T22:00:09.161597Z"
+  "mtime": "2025-10-05T22:00:10.944111Z"
 }
 
 ```
