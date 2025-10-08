@@ -113,11 +113,8 @@ cat2-agent = "caterva2.clients.agent:main"
 cat2-client = "caterva2.clients.cli:main"
 cat2-admin = "caterva2.tools.admin:main"
 
-# Utilities for import/export and browsing
-cat2import = "caterva2.tools.hdf5_to_cat2:main"
-cat2export = "caterva2.tools.cat2_to_hdf5:main"
+# Utilities for text browsing (experimental)
 cat2tbrowser = "caterva2.clients.tbrowser:main"
-
 
 
 [tool.ruff]

@@ -67,7 +67,6 @@ In general, if you intend to run Caterva2 services, client programs, or the test
 - `clients` to use Caterva2 client programs (command-line or terminal)
 - `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
 - `plugins` to enable web GUI features like the tomography display
-- `tools` for additional utilities like `cat2import` and `cat2export` (see below)
 - `tests` if you want to run the Caterva2 test suite
 
 ### Testing
