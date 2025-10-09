@@ -27,7 +27,7 @@ def parse_size(size):
     return int(number * units[unit])
 
 
-conf = utils.get_server_conf()
+conf = utils.get_server_conf()  # FIXME This does not consider the --conf option
 
 urlbase = conf.get(".urlbase", "http://localhost:8000")
 login = conf.get(".login", True)
