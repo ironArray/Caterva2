@@ -440,13 +440,13 @@ def cmd_listusers(client, args):
 
 def main():
     # Build the parser
-    conf = utils.get_conf()
+    conf = utils.get_conf("client")
     parser = utils.get_parser()
     parser.add_argument(
         "--server",
         dest="urlbase",
         type=utils.urlbase_type,
-        default=conf.get("server.url", cat2.sub_urlbase_default),
+        default=conf.get("client.server", cat2.sub_urlbase_default),
     )
     parser.add_argument("--username", default=conf.get("client.username"))
     parser.add_argument("--password", default=conf.get("client.password"))
