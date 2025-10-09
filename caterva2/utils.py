@@ -67,9 +67,9 @@ def run_parser(parser):
 def get_client_parser(conf, loglevel="warning", statedir=None, description=None):
     parser = _get_parser("cat2-client.toml", loglevel=loglevel, statedir=statedir, description=description)
     parser.add_argument(
-        "--server",
+        "--url",
         type=urlbase_type,
-        default=conf.get("client.server", "http://localhost:8000"),
+        default=conf.get("client.url", "http://localhost:8000"),
     )
     parser.add_argument("--username", default=conf.get("client.username"))
     parser.add_argument("--password", default=conf.get("client.password"))

@@ -25,8 +25,8 @@ class TreeApp(App):
         auth_cookie = None
         if args.username and args.password:
             user_auth = {"username": args.username, "password": args.password}
-            auth_cookie = api_utils.get_auth_cookie(args.server, user_auth)
-        self.data = api.get_list(args.root, args.server, auth_cookie=auth_cookie)
+            auth_cookie = api_utils.get_auth_cookie(args.url, user_auth)
+        self.data = api.get_list(args.root, args.url, auth_cookie=auth_cookie)
 
     def compose(self) -> ComposeResult:
         path = self.root / pathlib.Path(self.data[0])

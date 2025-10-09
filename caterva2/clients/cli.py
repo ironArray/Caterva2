@@ -132,7 +132,7 @@ def cmd_tree(client, args):
 # url command (returns download URL)
 @handle_errors
 def cmd_url(client, args):
-    data = api_utils.get_download_url(args.dataset, args.server)
+    data = api_utils.get_download_url(args.dataset, args.url)
     if args.json:
         print(json.dumps(data))
         return
@@ -142,7 +142,7 @@ def cmd_url(client, args):
 # handle command (returns handle URL meant for browser exploration)
 @handle_errors
 def cmd_handle(client, args):
-    data = api_utils.get_handle_url(args.dataset, args.server)
+    data = api_utils.get_handle_url(args.dataset, args.url)
     if args.json:
         print(json.dumps(data))
         return
@@ -152,7 +152,7 @@ def cmd_handle(client, args):
 # browse command (opens local browser at the handle URL)
 @handle_errors
 def cmd_browse(client, args):
-    url = api_utils.get_handle_url(args.dataset, args.server)
+    url = api_utils.get_handle_url(args.dataset, args.url)
     # Try to open in a new browser tab; still print the URL for logging
     try:
         webbrowser.open(url, new=2)
@@ -559,7 +559,7 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    client = cat2.Client(args.server, (args.username, args.password))
+    client = cat2.Client(args.url, (args.username, args.password))
     args.func(client, args)
 
 

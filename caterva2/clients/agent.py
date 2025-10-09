@@ -67,7 +67,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize Caterva2 client
-    client = cat2.Client(args.server, (args.username, args.password))
+    client = cat2.Client(args.url, (args.username, args.password))
     local_dir = pathlib.Path(args.directory).absolute()  # Ensure we have absolute path
 
     # Initial synchronization
@@ -76,7 +76,7 @@ def main():
 
     # Start watching for changes
     print(f"\nWatching directory {args.directory} for changes...")
-    print(f"Remote destination: {args.path} on {args.server}")
+    print(f"Remote destination: {args.path} on {args.url}")
     print("Press Ctrl+C to stop\n")
 
     try:
