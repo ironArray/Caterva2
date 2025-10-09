@@ -1,40 +1,34 @@
 (caterva2.toml)=
 # The `caterva2.toml` configuration file
 
-We've seen that the `cat2-client` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file, by default `caterva2.toml` in the current directory (though you may override it with the `--conf` option).
+We've seen that the `cat2-client` program accepts some command-line options to tune its operation (check the `--help` option).  This is even more important for services as we shall see in following sections.  Thus, Caterva2 programs support getting some settings from a TOML configuration file.
+
+## Configuration File Search Path
+
+Caterva2 follows standard Unix/Linux conventions for locating configuration files. When looking for `caterva2.toml` (or `cat2-server.toml`), the search order is:
+
+1. **Command-line option**: `--conf <path>` (if explicitly specified)
+2. **Current directory**: `./caterva2.toml`
+3. **Home directory**: `~/.caterva2.toml`
+4. **System-wide** (Unix/Linux only): `/etc/caterva2.toml`
+
+The first existing file found in this order will be used. If no configuration file is found, the program will use default settings.
+
+This approach is similar to how tools like `git`, `vim`, and `ssh` locate their configuration files, making it familiar to Unix/Linux users.
 
 The configuration file may hold settings for different programs, with a separate section for each program.  Thus, a program may check the file for its own settings, but also for those of other programs which may be of use to itself.  This allows compact configurations in a single file.  For instance, below is a sample configuration file for the server program and some client app:
 
 ```toml
-# Example configuration for a standalone server
-#
-# It's possible to run only the server. Then the configuration has only a
-# section for the server. And maybe another one for the client.
-
-# The server section must define:
-#
-# - statedir: the directory where the server's data will be stored (default: _caterva2/sub)
-# - listen: where the server listens to (a unix socket or a host/port) (default: localhost:8002)
-# - urlbase: the base url users will use to reach the server (default: http://localhost:8002)
-# - quota: if defined, it will limit the disk usage (default: 0, no limit)
-# - maxusers: if defined, it will limit the number of users (default: 0, no limit)
-# - login: if true, users will need to authenticate (default: true)
-# - register: if true, users will be able to register (default: false)
-#
-[server]
-statedir = "_caterva2/state"
-#listen = "_caterva2/sub/uvicorn.socket"
-listen = "localhost:8000"
-urlbase = "http://localhost:8000"
-quota = "10G"
-maxusers = 5
-register = true  # allow users to register
-
-# The client section defines the credentials for the client to authenticate
-# against the server.
-[client]
+# Example configuration for caterva2 clients in general
+[default]
+url = "https://cat2.cloud/demo"
 username = ""
 password = ""
+
+[localuser]
+url = "http://localhost:8000"
+username = "user@example.com"
+password = "foobar11"
 ```
 
 See [caterva2.sample.toml](https://github.com/ironArray/Caterva2/blob/main/caterva2.sample.toml) in Caterva2's source for all possible settings and their purpose.

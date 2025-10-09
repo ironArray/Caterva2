@@ -10,6 +10,7 @@
 import argparse
 import logging
 import pathlib
+import sys
 import tomllib as toml
 
 
@@ -112,6 +113,48 @@ def _add_conf_argument(default, parser):
     )
 
 
+def _find_config_file(filename):
+    """Find configuration file using a standard search path.
+
+    Search order:
+    1. Current directory (./filename)
+    2. User home directory (~/.filename or ~/filename without extension prefix)
+    3. System-wide config (/etc/filename) - Unix/Linux only
+
+    Args:
+        filename: The default config filename (e.g., 'caterva2.toml')
+
+    Returns:
+        pathlib.Path of the first found config file, or Path(filename) if none found
+    """
+    # First, check if --conf was explicitly provided
+    parser = argparse.ArgumentParser(add_help=False)
+    _add_conf_argument(filename, parser)
+    opts = parser.parse_known_args()[0]
+
+    # If --conf was explicitly provided (not default), use it as-is
+    if opts.conf != pathlib.Path(filename):
+        return opts.conf
+
+    # Search path: current dir -> home dir -> /etc (Unix only)
+    search_paths = [
+        pathlib.Path.cwd() / filename,  # Current directory
+        pathlib.Path.home() / f".{filename}",  # Home with dot prefix
+    ]
+
+    # Add /etc path on Unix-like systems (not Windows)
+    if sys.platform != "win32":
+        search_paths.append(pathlib.Path("/etc") / filename)
+
+    # Return first existing file, or the default if none found
+    for path in search_paths:
+        if path.exists():
+            return path
+
+    # If no config file found, return the default (current dir) path
+    return pathlib.Path(filename)
+
+
 def _get_conf(filename, prefix=None):
     """Get settings from the configuration file, if existing.
 
@@ -122,12 +165,10 @@ def _get_conf(filename, prefix=None):
     the key starts with a dot, like ``.path.to.item``, `prefix` is prepended
     to it.
     """
-    parser = argparse.ArgumentParser(add_help=False)
-    _add_conf_argument(filename, parser)
-    opts = parser.parse_known_args()[0]
+    config_path = _find_config_file(filename)
 
     try:
-        with open(opts.conf, "rb") as conf_file:
+        with open(config_path, "rb") as conf_file:
             conf = toml.load(conf_file)
             return Conf(conf, prefix=prefix)
     except FileNotFoundError:

@@ -1,5 +1,10 @@
 # Example configuration for caterva2 clients in general
-[localdemo]
-url = "http://localhost:8000"
+[default]
+url = "https://cat2.cloud/demo"
 username = ""
 password = ""
+
+[localuser]
+url = "http://localhost:8000"
+username = "user@example.com"
+password = "foobar11"

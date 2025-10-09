@@ -94,9 +94,10 @@ Tests will use a copy of Caterva2's `root-example` directory.  After they finish
 For this quick start, let's:
 
 - create a virtual environment and install Caterva2 with the `[server,clients]` extras (see above).
-- copy the configuration file `caterva2.sample.toml` to `caterva2.toml`.
+- copy the configuration file `caterva2.sample.toml` to `caterva2.toml`, `~/.caterva2.toml`, or `/etc/caterva2.toml`.
+- copy the server configuration file `cat2-server.sample.toml` to `cat2-server.toml`, `~/.cat2-server.toml`, or `/etc/cat2-server.toml`.
 
-Servers (and clients, to a limited extent) may get their configuration from a `caterva2.toml` file at the current directory (or an alternative file given with the `--conf` option).  See also [configuration.md](configuration.md) in Caterva2 tutorials.
+Clients will search for configuration in the following order: current directory (`./caterva2.toml`), home directory (`~/.caterva2.toml`), and system-wide (`/etc/caterva2.toml` on Unix). You can also specify an alternative file with the `--conf` option.  See also [configuration.md](configuration.md) in Caterva2 tutorials for more details.  Server will look for `cat2-server.toml` instead, either in the current directory, home directory, or system-wide; you can also specify an alternative file with the `--conf` option.
 
 Then run the server:
 
@@ -104,7 +105,7 @@ Then run the server:
 CATERVA2_SECRET=c2sikrit cat2-server &  # server
 ```
 
-The `CATERVA2_SECRET` environment variable is obligatory and is explained below in the following section.
+The `CATERVA2_SECRET` environment variable is mandatory and is explained below in the following section.
 
 Now, let's see the directories that have been created by the server:
 
@@ -122,7 +123,7 @@ _caterva2
 6 directories, 2 files
 ```
 
-We see that we have a state directory with several subdirectories.  The `personal` directory is where we will store our personal datasets.  The `public` directory is where we will store datasets that are shared with the public.  The `shared` directory is where we will store datasets that are shared with other users.  The `media` directory is where the server will store temporary media files (images, videos, etc.) that are used by the web GUI.
+We see that we have a state directory with several subdirectories.  The `personal` directory is where we will store our personal datasets.  The `public` directory is where we will store datasets that are shared with the public.  The `shared` directory is where we will store datasets that are shared with other users.  The `media` directory is where the server will store temporary media files (images, videos, etc.) that are used by the web GUI for internal purposes.  The `db.json` and `db.sqlite` files are where the server will store its metadata.
 
 For populating the server with datasets, let's copy the `root-example` directory from the Caterva2 source code:
 
