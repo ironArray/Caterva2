@@ -113,9 +113,9 @@ class ManagedServices:
             )
 
         if os.environ.get("CATERVA2_SECRET"):
-            conf_file = "cat2-server-login.toml"
+            conf_file = "caterva2-server-login.toml"
         else:
-            conf_file = "cat2-server-nologin.toml"
+            conf_file = "caterva2-server-nologin.toml"
 
         popen_args = [
             sys.executable,

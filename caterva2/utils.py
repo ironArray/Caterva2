@@ -68,7 +68,7 @@ def get_client_parser(description=None):
 
 
 def get_server_parser():
-    parser = _get_parser("cat2-server.toml")
+    parser = _get_parser("caterva2-server.toml")
     parser.add_argument("--listen", type=Socket, help="Listen to given hostname:port or unix socket")
     parser.add_argument("--statedir", type=pathlib.Path, help="Default _caterva2/state")
     return parser
@@ -179,5 +179,5 @@ def get_client_conf(conf="caterva2.toml", server="default"):
     return _get_conf(conf, server)
 
 
-def get_server_conf(conf="cat2-server.toml"):
+def get_server_conf(conf="caterva2-server.toml"):
     return _get_conf(conf, "server")

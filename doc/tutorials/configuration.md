@@ -5,7 +5,7 @@ We've seen that the `cat2-client` program accepts some command-line options to t
 
 ## Configuration File Search Path
 
-Caterva2 follows standard Unix/Linux conventions for locating configuration files. When looking for `caterva2.toml` (or `cat2-server.toml`), the search order is:
+Caterva2 follows standard Unix/Linux conventions for locating configuration files. When looking for `caterva2.toml` (or `caterva2-server.toml`), the search order is:
 
 1. **Command-line option**: `--conf <path>` (if explicitly specified)
 2. **Current directory**: `./caterva2.toml`

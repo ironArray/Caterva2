@@ -95,9 +95,9 @@ For this quick start, let's:
 
 - create a virtual environment and install Caterva2 with the `[server,clients]` extras (see above).
 - copy the configuration file `caterva2.sample.toml` to `caterva2.toml`, `~/.caterva2.toml`, or `/etc/caterva2.toml`.
-- copy the server configuration file `cat2-server.sample.toml` to `cat2-server.toml`, `~/.cat2-server.toml`, or `/etc/cat2-server.toml`.
+- copy the server configuration file `caterva2-server.sample.toml` to `caterva2-server.toml`, `~/.caterva2-server.toml`, or `/etc/caterva2-server.toml`.
 
-Clients will search for configuration in the following order: current directory (`./caterva2.toml`), home directory (`~/.caterva2.toml`), and system-wide (`/etc/caterva2.toml` on Unix). You can also specify an alternative file with the `--conf` option.  See also [configuration.md](configuration.md) in Caterva2 tutorials for more details.  Server will look for `cat2-server.toml` instead, either in the current directory, home directory, or system-wide; you can also specify an alternative file with the `--conf` option.
+Clients will search for configuration in the following order: current directory (`./caterva2.toml`), home directory (`~/.caterva2.toml`), and system-wide (`/etc/caterva2.toml` on Unix). You can also specify an alternative file with the `--conf` option.  See also [configuration.md](configuration.md) in Caterva2 tutorials for more details.  Server will look for `caterva2-server.toml` instead, either in the current directory, home directory, or system-wide; you can also specify an alternative file with the `--conf` option.
 
 Then run the server:
 
