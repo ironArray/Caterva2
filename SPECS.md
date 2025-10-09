@@ -65,10 +65,6 @@ The client must be implemented in Python 3 (3.11 being the minimal supported ver
 
 - When a `download` command is issued, the client must send a request to the server to retrieve the data of the dataset.  The server will reply with the data and client should be responsible to store it in its local `<output_dir>` folder. The name of the file will be the same as the dataset path (e.g. `foo/bar.b2nd` will be stored as `<output_dir>/foo/bar.b2nd`).
 
-The sequence diagram below summarizes how different messages flow between the components of the system.
-
-![Figure: Caterva2 sequence diagram](./doc/_static/caterva2-seq.svg)
-
 ## Metadata
 
 - `meta`: The metadata of the dataset.
