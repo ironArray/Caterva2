@@ -17,7 +17,7 @@ Another relevant generic option besides `--help` is `--server`, which overrides 
 
 `--help` is also available as a command option which shows the options and arguments accepted by that command (e.g. `cat2-client roots --help`).  Another command option is `--json`, which forces the output of commands that accept it to be in JSON format, as that may be more amenable for parsing by other programs.
 
-`cat2-client` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the generic `--conf` option).  It may get the server address from there (`urlbase` or `http` settings in `[server]` section), as well as user authentication options (in the `[client]` section).  Command-line options override settings read from the configuration file.
+`cat2-client` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the generic `--conf` option).  It may get the server address from there (`urlbase` or `listen` settings in `[server]` section), as well as user authentication options (in the `[client]` section).  Command-line options override settings read from the configuration file.
 
 For a short tutorial on `cat2-client`, see [](Using-the-command-line-client).
 

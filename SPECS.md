@@ -16,7 +16,7 @@ This document describes the minimal specifications for the project.  It is meant
 
 The two services (client and server) have a number of common options:
 
-- `--http`: the hostname and port that it listens, e.g. `localhost:8000`
+- `--listen`: the hostname and port that it listens, e.g. `localhost:8000`
 - `--server`: the base of URLs provided by the server, if different from `http://<HTTP_HOST>:<HTTP_PORT>` (only for server)
 - `--loglevel`: by default `warning`
 - `--statedir`: directory where to store the service state files (cache, logs, pid file, etc.)
@@ -40,7 +40,7 @@ There should be a configuration file (by default $CWD/caterva2.toml) where the c
 
 ```
 [server]
-http = "localhost:8000"
+listen = "localhost:8000"
 urlbase = "https://cat2.example.com"  # e.g. served by reverse proxy
 statedir = "_caterva2/state"
 loglevel = "warning"

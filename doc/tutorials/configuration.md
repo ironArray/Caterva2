@@ -14,7 +14,7 @@ The configuration file may hold settings for different programs, with a separate
 # The server section must define:
 #
 # - statedir: the directory where the server's data will be stored (default: _caterva2/sub)
-# - http: where the server listens to (a unix socket or a host/port) (default: localhost:8002)
+# - listen: where the server listens to (a unix socket or a host/port) (default: localhost:8002)
 # - urlbase: the base url users will use to reach the server (default: http://localhost:8002)
 # - quota: if defined, it will limit the disk usage (default: 0, no limit)
 # - maxusers: if defined, it will limit the number of users (default: 0, no limit)
@@ -23,8 +23,8 @@ The configuration file may hold settings for different programs, with a separate
 #
 [server]
 statedir = "_caterva2/state"
-#http = "_caterva2/sub/uvicorn.socket"
-http = "localhost:8000"
+#listen = "_caterva2/sub/uvicorn.socket"
+listen = "localhost:8000"
 urlbase = "http://localhost:8000"
 quota = "10G"
 maxusers = 5
