@@ -1,29 +1,5 @@
-# Example configuration for a standalone server
-#
-# It's possible to run only the server. Then the configuration has only a
-# section for the server. And maybe another one for the client.
-
-# The server section must define:
-#
-# - statedir: the directory where the server's data will be stored (default: _caterva2/state)
-# - listen: where the server listens to (a unix socket or a host/port) (default: localhost:8000)
-# - urlbase: the base url users will use to reach the server (default: http://localhost:8000)
-# - quota: if defined, it will limit the disk usage (default: 0, no limit)
-# - maxusers: if defined, it will limit the number of users (default: 0, no limit)
-# - login: if true, users will need to authenticate (default: true)
-# - register: if true, users will be able to register (default: false)
-#
-[server]
-statedir = "_caterva2/state"
-#listen = "_caterva2/state/uvicorn.socket"
-listen = "localhost:8000"
-urlbase = "http://localhost:8000"
-quota = "10G"
-maxusers = 5
-register = true  # allow users to register
-
-# The client section defines the credentials for the client to authenticate
-# against the server.
-[client]
+# Example configuration for caterva2 clients in general
+[localdemo]
+url = "http://localhost:8000"
 username = ""
 password = ""

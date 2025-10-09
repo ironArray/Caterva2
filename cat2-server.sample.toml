@@ -1,0 +1,21 @@
+# Example configuration for a standalone server
+#
+# It's possible to run only the server. Then the configuration has only a
+# section for the server. And maybe another one for the client.
+
+# The server section must define:
+#
+# - listen: where the server listens to (a unix socket or a host/port) (default: localhost:8000)
+# - urlbase: the base url users will use to reach the server (default: http://localhost:8000)
+# - quota: if defined, it will limit the disk usage (default: 0, no limit)
+# - maxusers: if defined, it will limit the number of users (default: 0, no limit)
+# - login: if true, users will need to authenticate (default: true)
+# - register: if true, users will be able to register (default: false)
+#
+[server]
+# listen = "_caterva2/state/uvicorn.socket"  # server supports listening from UNIX sockets
+listen = "localhost:8000"
+urlbase = "http://localhost:8000"
+quota = "10G"
+maxusers = 5
+register = true  # allow users to register

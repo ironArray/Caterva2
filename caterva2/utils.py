@@ -58,7 +58,7 @@ def config_log(args, conf):
 
 
 def get_client_parser(description=None):
-    parser = _get_parser("cat2-client.toml", description=description)
+    parser = _get_parser("caterva2.toml", description=description)
     parser.add_argument("--server", default="default")
     parser.add_argument("--url", type=urlbase_type, help="Default http://localhost:8000")
     parser.add_argument("--username")
@@ -134,7 +134,7 @@ def _get_conf(filename, prefix=None):
         return Conf({}, prefix=prefix)
 
 
-def get_client_conf(conf="cat2-client.toml", server="default"):
+def get_client_conf(conf="caterva2.toml", server="default"):
     return _get_conf(conf, server)
 
 
