@@ -11,10 +11,6 @@ The main utilities follow a new unified naming scheme:
 - **cat2-server**: Launch the server with fine-tuned behavior
 - **cat2-admin**: Server administration commands (new)
 
-## Additional Utilities
-
-- **cat2tbrowser**: Terminal-based browser for datasets (experimental)
-
 ```{toctree}
 ---
 maxdepth: 2
@@ -24,5 +20,4 @@ cat2-client
 cat2-agent
 cat2-admin
 cat2-server
-cat2tbrowser
 ```
