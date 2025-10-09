@@ -17,9 +17,9 @@ __version__ = "2025.8.7.dev0"
 __all__ = [
     "BasicAuth",
     "Client",
-    "Root",
-    "File",
     "Dataset",
+    "File",
+    "Root",
     "sub_urlbase_default",
 ]
 """List of symbols exported by the Caterva2 package."""

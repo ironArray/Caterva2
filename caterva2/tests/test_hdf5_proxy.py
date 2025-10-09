@@ -313,7 +313,7 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
     root = pathlib.Path("@shared")
     remote_root = auth_client.get(root)
     with contextlib.chdir(tmp_path):
-        hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
+        hdf5_path, remote_dir, _ = create_and_unfold_hdf5(tmp_path, remote_root)
         h5f = h5py.File(hdf5_path, "r")
         remote_a = remote_dir / (ds_a + ".b2nd")
         assert remote_a in remote_root

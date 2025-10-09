@@ -297,7 +297,7 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
     if not auth_client:
         return pytest.skip("authentication support needed")
 
-    fnames, mypublic = fill_auth
+    _, mypublic = fill_auth
     myshared = auth_client.get("@shared")
     fname = "ds-1d.b2nd" if not fields else "ds-1d-fields.b2nd"
     # Copy a 1d dataset to the shared area
