@@ -59,7 +59,7 @@ def dataset_with_slice(path):
 
 
 @handle_errors
-def cmd_roots(client, args):
+def cmd_roots(client, args, url):
     data = client.get_roots()
     if args.json:
         print(json.dumps(data))
@@ -70,7 +70,7 @@ def cmd_roots(client, args):
 
 
 @handle_errors
-def cmd_list(client, args):
+def cmd_list(client, args, url):
     data = client.get_list(args.root)
     if args.json:
         print(json.dumps(data))
@@ -114,7 +114,7 @@ def _print_tree_node(node, prefix=""):
 
 
 @handle_errors
-def cmd_tree(client, args):
+def cmd_tree(client, args, url):
     """
     Print a hierarchical tree of datasets/files in the specified root/path.
     """
@@ -131,8 +131,8 @@ def cmd_tree(client, args):
 
 # url command (returns download URL)
 @handle_errors
-def cmd_url(client, args):
-    data = api_utils.get_download_url(args.dataset, args.url)
+def cmd_url(client, args, url):
+    data = api_utils.get_download_url(args.dataset, url)
     if args.json:
         print(json.dumps(data))
         return
@@ -141,8 +141,8 @@ def cmd_url(client, args):
 
 # handle command (returns handle URL meant for browser exploration)
 @handle_errors
-def cmd_handle(client, args):
-    data = api_utils.get_handle_url(args.dataset, args.url)
+def cmd_handle(client, args, url):
+    data = api_utils.get_handle_url(args.dataset, url)
     if args.json:
         print(json.dumps(data))
         return
@@ -151,8 +151,8 @@ def cmd_handle(client, args):
 
 # browse command (opens local browser at the handle URL)
 @handle_errors
-def cmd_browse(client, args):
-    url = api_utils.get_handle_url(args.dataset, args.url)
+def cmd_browse(client, args, url):
+    url = api_utils.get_handle_url(args.dataset, url)
     # Try to open in a new browser tab; still print the URL for logging
     try:
         webbrowser.open(url, new=2)
@@ -163,7 +163,7 @@ def cmd_browse(client, args):
 
 
 @handle_errors
-def cmd_info(client, args):
+def cmd_info(client, args, url):
     print(f"Getting info for {args.dataset}")
     data = client.get_info(args.dataset)
     if args.json:
@@ -236,7 +236,7 @@ def cmd_info(client, args):
 
 
 @handle_errors
-def cmd_show(client, args):
+def cmd_show(client, args, url):
     path, params = args.dataset
     slice_ = params.get("slice_", None)
     data = client.fetch(path, slice_=slice_)
@@ -381,37 +381,37 @@ def cmd_show(client, args):
 
 
 @handle_errors
-def cmd_move(client, args):
+def cmd_move(client, args, url):
     moved = client.move(args.dataset, args.dest)
     print(f"Dataset {args.dataset} moved to {moved}")
 
 
 @handle_errors
-def cmd_copy(client, args):
+def cmd_copy(client, args, url):
     copied = client.copy(args.dataset, args.dest)
     print(f"Dataset {args.dataset} copied to {copied}")
 
 
 @handle_errors
-def cmd_download(client, args):
+def cmd_download(client, args, url):
     path = client.download(args.dataset, args.localpath)
     print(f"Dataset saved to {path}")
 
 
 @handle_errors
-def cmd_upload(client, args):
+def cmd_upload(client, args, url):
     path = client.upload(args.localpath, args.dataset)
     print(f"Dataset stored in {path}")
 
 
 @handle_errors
-def cmd_remove(client, args):
+def cmd_remove(client, args, url):
     removed = client.remove(args.dataset)
     print(f"Dataset (or directory contents) removed: {removed}")
 
 
 @handle_errors
-def cmd_adduser(client, args):
+def cmd_adduser(client, args, url):
     newpass = args.newpass or "".join(random.choice(string.ascii_letters) for _ in range(8))
     message = client.adduser(
         args.newuser,
@@ -422,13 +422,13 @@ def cmd_adduser(client, args):
 
 
 @handle_errors
-def cmd_deluser(client, args):
+def cmd_deluser(client, args, url):
     message = client.deluser(args.user)
     print(message)
 
 
 @handle_errors
-def cmd_listusers(client, args):
+def cmd_listusers(client, args, url):
     data = client.listusers(args.user)
     if args.json:
         print(json.dumps(data))
@@ -558,14 +558,15 @@ def main():
     subparser.set_defaults(func=cmd_listusers)
 
     # Go
-    args = utils.run_parser(parser)
+    args = parser.parse_args()
     conf = utils.get_client_conf(args.conf, args.server)
+    utils.config_log(args, conf)
 
     url = args.url or conf.get(".url", "http://localhost:8000")
     username = args.username or conf.get(".username")
     password = args.password or conf.get(".password")
     client = cat2.Client(url, (username, password))
-    args.func(client, args)
+    args.func(client, args, url)
 
 
 if __name__ == "__main__":

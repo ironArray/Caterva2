@@ -45,27 +45,20 @@ class Socket(str):
             self.uds = string
 
 
-def _get_parser(filename, loglevel="warning", statedir=None, description=None):
+def _get_parser(filename, description=None):
     parser = argparse.ArgumentParser(description=description)
     _add_conf_argument(filename, parser)  # just for help purposes
-    if statedir is not None:
-        parser.add_argument("--statedir", default=statedir, type=pathlib.Path)
-    parser.add_argument("--loglevel", default=loglevel)
+    parser.add_argument("--loglevel")
     return parser
 
 
-def run_parser(parser):
-    args = parser.parse_args()
-
-    # Logging
-    loglevel = args.loglevel.upper()
-    logging.basicConfig(level=loglevel)
-
-    return args
+def config_log(args, conf):
+    loglevel = args.loglevel or conf.get(".loglevel", "warning")
+    logging.basicConfig(level=loglevel.upper())
 
 
-def get_client_parser(loglevel="warning", description=None):
-    parser = _get_parser("cat2-client.toml", loglevel=loglevel, description=description)
+def get_client_parser(description=None):
+    parser = _get_parser("cat2-client.toml", description=description)
     parser.add_argument("--server", default="default")
     parser.add_argument("--url", type=urlbase_type, help="Default http://localhost:8000")
     parser.add_argument("--username")
@@ -73,8 +66,11 @@ def get_client_parser(loglevel="warning", description=None):
     return parser
 
 
-def get_server_parser(loglevel="warning", statedir=None):
-    return _get_parser("cat2-server.toml", loglevel=loglevel, statedir=statedir)
+def get_server_parser():
+    parser = _get_parser("cat2-server.toml")
+    parser.add_argument("--listen", type=Socket, help="Listen to given hostname:port or unix socket")
+    parser.add_argument("--statedir", type=pathlib.Path, help="Default _caterva2/state")
+    return parser
 
 
 #
@@ -142,5 +138,5 @@ def get_client_conf(conf="cat2-client.toml", server="default"):
     return _get_conf(conf, server)
 
 
-def get_server_conf():
-    return _get_conf("cat2-server.toml", "server")
+def get_server_conf(conf="cat2-server.toml"):
+    return _get_conf(conf, "server")

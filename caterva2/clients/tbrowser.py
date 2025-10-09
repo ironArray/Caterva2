@@ -54,8 +54,10 @@ def main():
     # Load configuration (args)
     parser = utils.get_client_parser()
     parser.add_argument("--root", default="foo")
-    args = utils.run_parser(parser)
+
+    args = parser.parse_args()
     conf = utils.get_client_conf(args.conf)
+    utils.config_log(args, conf)
 
     # Start client
     app = TreeApp(args, conf)

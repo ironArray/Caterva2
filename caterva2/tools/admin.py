@@ -11,15 +11,17 @@
 Admin tool for Caterva2.  Currently only supports adding users.
 """
 
+import pathlib
 import sys
 
 from caterva2 import utils
 from caterva2.services import srv_utils
 
 
-def adduser_command(args):
+def adduser_command(args, conf):
     """Add a user to the server database."""
-    statedir = args.statedir.resolve()
+    statedir = args.statedir or pathlib.Path(conf.get(".statedir", "_caterva2/state"))
+    statedir = statedir.resolve()
     user = srv_utils.add_user(args.username, args.password, args.superuser, state_dir=statedir)
     print(f"User '{args.username}' added successfully.")
     print("Password:", user.password)
@@ -27,10 +29,7 @@ def adduser_command(args):
 
 def main():
     # Load configuration (args)
-    conf = utils.get_server_conf()
-    parser = utils.get_server_parser(
-        statedir=conf.get(".statedir", "_caterva2/state"),
-    )
+    parser = utils.get_server_parser()
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="sub-command help")
 
@@ -45,7 +44,9 @@ def main():
 
     # Parse args and call the function
     args = parser.parse_args()
-    args.func(args)
+    conf = utils.get_server_conf(args.conf)
+    utils.config_log(args, conf)
+    args.func(args, conf)
 
 
 if __name__ == "__main__":

@@ -2579,21 +2579,14 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
 
 def main():
     # Load configuration (args)
-    conf = utils.get_server_conf()
-    parser = utils.get_server_parser(
-        loglevel=conf.get(".loglevel", "warning"),
-        statedir=conf.get(".statedir", "_caterva2/state"),
-    )
-    parser.add_argument(
-        "--listen",
-        default=conf.get(".listen", "localhost:8000"),
-        type=utils.Socket,
-        help="Listen to given hostname:port or unix socket",
-    )
-    args = utils.run_parser(parser)
+    parser = utils.get_server_parser()
+    args = parser.parse_args()
+    conf = utils.get_server_conf(args.conf)
+    utils.config_log(args, conf)
 
     # Directories
-    settings.statedir = args.statedir.resolve()
+    statedir = args.statedir or pathlib.Path(conf.get(".statedir", "_caterva2/state"))
+    settings.statedir = statedir.resolve()
     settings.shared = settings.statedir / "shared"
     settings.shared.mkdir(exist_ok=True, parents=True)
     settings.public = settings.statedir / "public"
@@ -2629,7 +2622,7 @@ def main():
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
-    listen = args.listen
+    listen = args.listen or utils.Socket(conf.get(".listen", "localhost:8000"))
     if listen.uds:
         uvicorn.run(app, uds=listen.uds, root_path=root_path)
     else:

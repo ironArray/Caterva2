@@ -935,7 +935,7 @@ def test_adduser_maxexceeded(auth_client, server_conf):
         pytest.skip("authentication support needed")
 
     # TODO: make this to work; currently this returns None
-    # maxusers = server_conf.get("server.maxusers")
+    # maxusers = server_conf.get(".maxusers")
     # For now, keep in sync with server.maxusers in caterva2/tests/caterva2-login.toml
     maxusers = 5
     # Add maxusers users; we already have one user, so the next loop should fail

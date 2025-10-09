@@ -72,23 +72,20 @@ def service_ep_getter(first):
 get_sub_ep = service_ep_getter("localhost:8000")
 
 
-def make_get_http(host, path="/"):
+def server_check(conf):
+    listen = conf.get(".listen", get_sub_ep())
+
     def check():
-        url = f"http://{host}{path}"
+        url = f"http://{listen}/api/roots"
         try:
             r = httpx.get(url, timeout=0.5)
             return 100 <= r.status_code < 500  # not internal errors
         except httpx.ConnectError:
             return False
 
-    check.__name__ = f"get_http_{host}"  # more descriptive
-    check.host = host  # to get final value
+    check.__name__ = f"get_http_{listen}"  # more descriptive
+    check.host = listen  # to get final value
     return check
-
-
-def server_check(conf):
-    listen = conf.get("server.listen", get_sub_ep())
-    return make_get_http(listen, "/api/roots")
 
 
 TestRoot = collections.namedtuple("TestRoot", ["name", "source"])
@@ -104,7 +101,7 @@ class ManagedServices:
         self.configuration = configuration
 
         self._procs = {}
-        self._endpoints = {}
+        self._endpoint = None
         self._setup_done = False
 
     def _start_server(self, *args, check=None):
@@ -135,7 +132,7 @@ class ManagedServices:
         if check is None:
             return
 
-        self._endpoints[name] = check.host
+        self._endpoint = check.host
 
         start_timeout_secs = 10
         start_sleep_secs = 1
@@ -192,11 +189,8 @@ class ManagedServices:
         for proc in self._procs.values():
             proc.wait()
 
-    def get_endpoint(self, service):
-        return self._endpoints.get(service)
-
-    def get_urlbase(self, service):
-        return f"http://{self.get_endpoint(service)}"
+    def get_urlbase(self):
+        return f"http://{self._endpoint}"
 
 
 @pytest.fixture(scope="session")

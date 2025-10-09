@@ -63,6 +63,8 @@ def main():
 
     args = parser.parse_args()
     conf = utils.get_client_conf(args.conf)
+    utils.config_log(args, conf)
+
     url = args.url or conf.get(".url", "http://localhost:8000")
     username = args.username or conf.get(".username")
     password = args.password or conf.get(".password")

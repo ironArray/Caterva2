@@ -12,14 +12,7 @@ import json
 import subprocess
 import sys
 
-import pytest
-
 from .services import TEST_CATERVA2_ROOT
-
-
-@pytest.fixture
-def sub_urlbase(services):
-    return services.get_urlbase("server")
 
 
 def cli(cargs, binary=False, sub_user=None) -> str or dict:
@@ -41,6 +34,7 @@ def test_roots(sub_user):
     assert roots[TEST_CATERVA2_ROOT]["name"] == TEST_CATERVA2_ROOT
 
 
-def test_url(sub_urlbase, sub_user):
+def test_url(services, sub_user):
+    urlbase = services.get_urlbase()
     out = cli(["url", f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"], sub_user=sub_user)
-    assert out == f"{sub_urlbase}/api/download/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    assert out == f"{urlbase}/api/download/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
