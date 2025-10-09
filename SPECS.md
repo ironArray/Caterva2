@@ -28,8 +28,7 @@ In production deployments it's recommended to use Systemd services.
 The client must implement the following commands:
 
 - `roots`: List all the available roots in the server.
-- `subscribe <root>`: Request access to the datasets in a root.
-- `list <root>`: List all the available datasets in a root.  Needs to be subscribed to the root.
+- `list <root>`: List all the available datasets in a root.
 - `url <root>`: Server URL from where a dataset can be downloaded.
 - `info <dataset>`: Get metadata about a dataset.
 - `show <dataset[slice]>`: Show the data of a dataset. `slice` is optional.
@@ -54,9 +53,7 @@ The client must be implemented in Python 3 (3.11 being the minimal supported ver
 
 ### Command line interface
 
-- When a `roots` command is issued, the client must send a request to the server to list all the available roots.  The server will reply with a list of roots (if possible, with flags indicating if a root is subscribed).
-
-- When a `subscribe` command is issued, the client must send a request to the server to subscribe to the given root.  The server will reply with a success or failure message.  If successful, the server must store the root metadata in its local cache.
+- When a `roots` command is issued, the client must send a request to the server to list all the available roots.  The server will reply with a list of roots.
 
 - When a `list` command is issued, the client must send a request to the server to list the datasets in the given root.  The server will reply with a list of datasets.
 
@@ -213,7 +210,6 @@ There will be an internal database for clients and servers for storing different
 * `roots`: A list of roots.  Each root is a dictionary with the following fields:
   * `name`: The name of the root.
   * `url`: The client URL where the root is accessible (e.g. `http://localhost:5000/foo`).
-  * `subscribed`: A boolean indicating if the root is subscribed.
   * `mtime`: The modification time of the root in the client.
   * `datasets`: A list of datasets.  Each dataset is a dictionary with the following fields:
     * `path`: The path of the dataset.

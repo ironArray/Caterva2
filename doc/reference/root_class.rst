@@ -3,7 +3,7 @@
 Root class
 ==========
 
-A root is a remote repository that can be subscribed to.
+A root is a remote repository.
 
 .. currentmodule:: caterva2
 

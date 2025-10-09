@@ -3,7 +3,6 @@ import functools
 import io
 import pathlib
 import sys
-import warnings
 from collections.abc import Sequence
 from pathlib import PurePosixPath
 
@@ -51,14 +50,14 @@ def _looks_like_slice(s: str) -> bool:
 class Root:
     def __init__(self, client, name):
         """
-        Represents a remote repository that can be subscribed to.
+        Represents a remote root directory.
 
         Parameters
         ----------
         client : Client
             The client used to interact with the remote repository.
         name : str
-            Name of the root to subscribe to.
+            Name of the root.
 
         Examples
         --------
@@ -804,8 +803,6 @@ class Client:
         >>> roots_dict = client.get_roots()
         >>> sorted(roots_dict.keys())
         ['@public', 'b2tests', 'example', 'h5example', 'h5lung_j2k', 'h5numbers_j2k']
-        >>> client.subscribe('b2tests')
-        'Ok'
         >>> roots_dict['b2tests']
         {'name': 'b2tests'}
         """
@@ -851,33 +848,6 @@ class Client:
         root = Root(self, root_name)
         return root[file_path]
 
-    def subscribe(self, root):
-        """
-        Subscribes to a specified root.
-
-        Parameters
-        ----------
-        root : str
-            Name of the root to subscribe to.
-
-        Returns
-        -------
-        str
-            Server response as a string.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> root_name = 'h5numbers_j2k'
-        >>> client.subscribe(root_name)
-        'Ok'
-        >>> client.get_roots()[root_name]
-        {'name': 'h5numbers_j2k'}
-        """
-        warnings.warn("subscribe() is deprecated, it does nothing, just remove the call")
-        return "Ok"
-
     def get_list(self, path):
         """
         Lists datasets in a specified path.
@@ -896,8 +866,6 @@ class Client:
         --------
         >>> import caterva2 as cat2
         >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> client.subscribe('example')
-        'Ok'
         >>> client.get_list('example')[:3]
         ['README.md', 'dir1/ds-2d.b2nd', 'dir1/ds-3d.b2nd']
         """
@@ -924,8 +892,6 @@ class Client:
         --------
         >>> import caterva2 as cat2
         >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> client.subscribe('example')
-        'Ok'
         >>> path = 'example/ds-2d-fields.b2nd'
         >>> info = client.get_info(path)
         >>> info.keys()
@@ -1053,8 +1019,6 @@ class Client:
         --------
         >>> import caterva2 as cat2
         >>> client = cat2.Client('https://demo.caterva2.net')
-        >>> client.subscribe('example')
-        'Ok'
         >>> info_schunk = client.get_info('example/ds-2d-fields.b2nd')['schunk']
         >>> info_schunk['nchunks']
         1

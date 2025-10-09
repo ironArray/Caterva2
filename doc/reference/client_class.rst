@@ -3,14 +3,14 @@
 Client class
 ============
 
-A client is a remote repository that can be subscribed to. It is the main entry point for using the Caterva2 API.
+A client is a remote repository. It is the main entry point for using the Caterva2 API.
 
 .. currentmodule:: caterva2
 
 
 .. autoclass:: Client
     :members:
-    :exclude-members: get, get_roots, get_list, subscribe, fetch, get_chunk, download, upload, adduser, deluser, listusers, lazyexpr
+    :exclude-members: get, get_roots, get_list, fetch, get_chunk, download, upload, adduser, deluser, listusers, lazyexpr
 
     :Special Methods:
     .. autosummary::
@@ -19,7 +19,6 @@ A client is a remote repository that can be subscribed to. It is the main entry 
        get
        get_roots
        get_list
-       subscribe
        fetch
        get_chunk
        download
@@ -35,12 +34,11 @@ A client is a remote repository that can be subscribed to. It is the main entry 
     .. automethod:: __init__
 
 
-    Getting roots, files, datasets, subscribing...
+    Getting roots, files, datasets
     ----------------------------------------------
     .. automethod:: get
     .. automethod:: get_roots
     .. automethod:: get_list
-    .. automethod:: subscribe
 
 
     Fetch / download / upload datasets

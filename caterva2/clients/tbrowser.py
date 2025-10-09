@@ -26,7 +26,6 @@ class TreeApp(App):
         if args.username and args.password:
             user_auth = {"username": args.username, "password": args.password}
             auth_cookie = api_utils.get_auth_cookie(args.urlbase, user_auth)
-        api.subscribe(args.root, args.urlbase, auth_cookie=auth_cookie)
         self.data = api.get_list(args.root, args.urlbase, auth_cookie=auth_cookie)
 
     def compose(self) -> ComposeResult:
