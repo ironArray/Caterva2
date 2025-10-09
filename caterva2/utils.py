@@ -45,8 +45,8 @@ class Socket(str):
             self.uds = string
 
 
-def _get_parser(filename, loglevel="warning", statedir=None):
-    parser = argparse.ArgumentParser()
+def _get_parser(filename, loglevel="warning", statedir=None, description=None):
+    parser = argparse.ArgumentParser(description=description)
     _add_conf_argument(filename, parser)  # just for help purposes
     if statedir is not None:
         parser.add_argument("--statedir", default=statedir, type=pathlib.Path)
@@ -64,8 +64,16 @@ def run_parser(parser):
     return args
 
 
-def get_client_parser(loglevel="warning", statedir=None):
-    return _get_parser("cat2-client.toml", loglevel=loglevel, statedir=statedir)
+def get_client_parser(conf, loglevel="warning", statedir=None, description=None):
+    parser = _get_parser("cat2-client.toml", loglevel=loglevel, statedir=statedir, description=description)
+    parser.add_argument(
+        "--server",
+        type=urlbase_type,
+        default=conf.get("client.server", "http://localhost:8000"),
+    )
+    parser.add_argument("--username", default=conf.get("client.username"))
+    parser.add_argument("--password", default=conf.get("client.password"))
+    return parser
 
 
 def get_server_parser(loglevel="warning", statedir=None):

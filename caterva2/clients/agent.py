@@ -6,6 +6,7 @@ import sys
 import watchfiles
 
 import caterva2 as cat2
+from caterva2 import utils
 
 
 def validate_path(path: str) -> str:
@@ -53,19 +54,20 @@ def sync_initial_state(local_dir: pathlib.Path, remote_path: str, client: cat2.C
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Watch a directory and sync changes to a Caterva2 server")
+    conf = utils.get_client_conf()
+    parser = utils.get_client_parser(
+        conf, description="Watch a directory and sync changes to a Caterva2 server"
+    )
+
     parser.add_argument("directory", type=str, help="Local directory path to watch for changes")
-    parser.add_argument("url", type=str, help="Caterva2 server base URL")
     parser.add_argument(
         "path", type=validate_path, help="Remote path (format: @personal|@shared|@public/path/to/dir)"
     )
-    parser.add_argument("username", type=str, help="Username for Caterva2 authentication")
-    parser.add_argument("password", type=str, help="Password for Caterva2 authentication")
 
     args = parser.parse_args()
 
     # Initialize Caterva2 client
-    client = cat2.Client(args.url, (args.username, args.password))
+    client = cat2.Client(args.server, (args.username, args.password))
     local_dir = pathlib.Path(args.directory).absolute()  # Ensure we have absolute path
 
     # Initial synchronization
@@ -74,7 +76,7 @@ def main():
 
     # Start watching for changes
     print(f"\nWatching directory {args.directory} for changes...")
-    print(f"Remote destination: {args.path} on {args.url}")
+    print(f"Remote destination: {args.path} on {args.server}")
     print("Press Ctrl+C to stop\n")
 
     try:

@@ -12,9 +12,6 @@ from blosc2 import NDArray, SChunk
 
 from . import api_utils, utils
 
-sub_urlbase_default = "http://localhost:8000"
-"""The default base of URLs provided by the server."""
-
 
 def _format_paths(urlbase, path=None):
     if urlbase is None and sys.platform == "emscripten":
@@ -758,9 +755,8 @@ class Client:
 
         Parameters
         ----------
-        urlbase : str, optional
-            Base URL of the server to query. Default to
-            :py:obj:`caterva2.sub_urlbase_default`.
+        urlbase : str
+            Base URL of the server to query.
         auth : tuple, BasicAuth, optional
 
         Examples
@@ -912,9 +908,6 @@ class Client:
         ----------
         path : str
             Path to the dataset.
-        urlbase : str, optional
-            Base URL to query. Defaults to
-            :py:obj:`caterva2.sub_urlbase_default`.
         slice_ : int, slice, tuple of ints and slices, or None
             Specifies the slice to fetch. If None, the whole dataset is fetched.
 

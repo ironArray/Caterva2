@@ -132,7 +132,7 @@ def cmd_tree(client, args):
 # url command (returns download URL)
 @handle_errors
 def cmd_url(client, args):
-    data = api_utils.get_download_url(args.dataset, args.urlbase)
+    data = api_utils.get_download_url(args.dataset, args.server)
     if args.json:
         print(json.dumps(data))
         return
@@ -142,7 +142,7 @@ def cmd_url(client, args):
 # handle command (returns handle URL meant for browser exploration)
 @handle_errors
 def cmd_handle(client, args):
-    data = api_utils.get_handle_url(args.dataset, args.urlbase)
+    data = api_utils.get_handle_url(args.dataset, args.server)
     if args.json:
         print(json.dumps(data))
         return
@@ -152,7 +152,7 @@ def cmd_handle(client, args):
 # browse command (opens local browser at the handle URL)
 @handle_errors
 def cmd_browse(client, args):
-    url = api_utils.get_handle_url(args.dataset, args.urlbase)
+    url = api_utils.get_handle_url(args.dataset, args.server)
     # Try to open in a new browser tab; still print the URL for logging
     try:
         webbrowser.open(url, new=2)
@@ -441,15 +441,7 @@ def cmd_listusers(client, args):
 def main():
     # Build the parser
     conf = utils.get_client_conf()
-    parser = utils.get_client_parser()
-    parser.add_argument(
-        "--server",
-        dest="urlbase",
-        type=utils.urlbase_type,
-        default=conf.get("client.server", cat2.sub_urlbase_default),
-    )
-    parser.add_argument("--username", default=conf.get("client.username"))
-    parser.add_argument("--password", default=conf.get("client.password"))
+    parser = utils.get_client_parser(conf)
     # Make --json a global flag so it applies to all commands that support JSON output
     parser.add_argument("--json", action="store_true", help="Output JSON when supported by the command")
     subparsers = parser.add_subparsers(required=True)
@@ -567,7 +559,7 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    client = cat2.Client(args.urlbase, (args.username, args.password))
+    client = cat2.Client(args.server, (args.username, args.password))
     args.func(client, args)
 
 

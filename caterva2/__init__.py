@@ -9,7 +9,7 @@
 
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
 
-from .client import BasicAuth, Client, Dataset, File, Root, sub_urlbase_default
+from .client import BasicAuth, Client, Dataset, File, Root
 
 __version__ = "2025.8.7.dev0"
 """The version in use of the Caterva2 package."""
@@ -20,6 +20,5 @@ __all__ = [
     "Dataset",
     "File",
     "Root",
-    "sub_urlbase_default",
 ]
 """List of symbols exported by the Caterva2 package."""
