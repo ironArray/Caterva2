@@ -1390,6 +1390,9 @@ async def html_home(
     # Dependencies
     user: db.User = Depends(optional_user),
 ):
+    if not user:
+        roots = ["@public"]
+
     # Disk usage
     size = get_disk_usage()
     context = {
