@@ -45,6 +45,7 @@ import time
 import httpx
 import pytest
 
+from caterva2 import utils
 from caterva2.services import srv_utils
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -115,9 +116,9 @@ class ManagedServices:
             )
 
         if os.environ.get("CATERVA2_SECRET"):
-            conf_file = "caterva2-login.toml"
+            conf_file = "cat2-server-login.toml"
         else:
-            conf_file = "caterva2-nologin.toml"
+            conf_file = "cat2-server-nologin.toml"
 
         popen_args = [
             sys.executable,
@@ -199,13 +200,13 @@ class ManagedServices:
 
 
 @pytest.fixture(scope="session")
-def services(configuration, examples_dir):
+def services(server_conf, examples_dir):
     # TODO: Consider using a temporary directory to avoid
     # polluting the current directory with test files
     # and tests being influenced by the presence of a configuration file.
     roots = [TestRoot(TEST_CATERVA2_ROOT, examples_dir)]
 
-    srvs = ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=configuration)
+    srvs = ManagedServices(TEST_STATE_DIR, reuse_state=False, roots=roots, configuration=server_conf)
 
     try:
         srvs.start_all()
@@ -249,7 +250,7 @@ def defers(func):
 
 @defers
 def main(defer):
-    from . import conf, files
+    from . import files
 
     roots = [TestRoot(TEST_DEFAULT_ROOT, files.get_examples_dir())]
 
@@ -275,8 +276,8 @@ def main(defer):
         rnames.add(root.name)
 
     # TODO: Consider allowing path to configuration file, pass here.
-    configuration = conf.get_configuration()
-    srvs = ManagedServices(state_dir, reuse_state=True, roots=roots, configuration=configuration)
+    server_conf = utils.get_server_conf()
+    srvs = ManagedServices(state_dir, reuse_state=True, roots=roots, configuration=server_conf)
     try:
         srvs.start_all()
         make_sub_user(srvs)

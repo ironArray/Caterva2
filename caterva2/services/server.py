@@ -2579,8 +2579,8 @@ def guess_dset_ctype(path: pathlib.Path, meta) -> str | None:
 
 def main():
     # Load configuration (args)
-    conf = utils.get_conf("server")
-    parser = utils.get_parser(
+    conf = utils.get_server_conf()
+    parser = utils.get_server_parser(
         loglevel=conf.get(".loglevel", "warning"),
         statedir=conf.get(".statedir", "_caterva2/state"),
     )

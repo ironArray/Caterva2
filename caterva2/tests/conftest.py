@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 import caterva2 as cat2
+from caterva2 import utils
 
-from .conf import configuration  # noqa: F401
 from .files import examples_dir  # noqa: F401
 from .services import services, sub_user  # noqa: F401
 
@@ -38,3 +38,15 @@ def auth_client(services, sub_user):  # noqa: F811
 
     urlbase = services.get_urlbase("server")
     return cat2.Client(urlbase, sub_user)
+
+
+@pytest.fixture(scope="session")
+def client_conf():
+    """Caterva2 client configuration"""
+    return utils.get_client_conf()
+
+
+@pytest.fixture(scope="session")
+def server_conf():
+    """Caterva2 server configuration"""
+    return utils.get_server_conf()

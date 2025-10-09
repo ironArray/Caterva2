@@ -440,8 +440,8 @@ def cmd_listusers(client, args):
 
 def main():
     # Build the parser
-    conf = utils.get_conf("client")
-    parser = utils.get_parser()
+    conf = utils.get_client_conf()
+    parser = utils.get_client_parser()
     parser.add_argument(
         "--server",
         dest="urlbase",

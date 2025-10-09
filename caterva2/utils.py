@@ -45,9 +45,9 @@ class Socket(str):
             self.uds = string
 
 
-def get_parser(loglevel="warning", statedir=None):
+def _get_parser(filename, loglevel="warning", statedir=None):
     parser = argparse.ArgumentParser()
-    _add_preliminary_args(parser)  # just for help purposes
+    _add_conf_argument(filename, parser)  # just for help purposes
     if statedir is not None:
         parser.add_argument("--statedir", default=statedir, type=pathlib.Path)
     parser.add_argument("--loglevel", default=loglevel)
@@ -62,6 +62,14 @@ def run_parser(parser):
     logging.basicConfig(level=loglevel)
 
     return args
+
+
+def get_client_parser(loglevel="warning", statedir=None):
+    return _get_parser("cat2-client.toml", loglevel=loglevel, statedir=statedir)
+
+
+def get_server_parser(loglevel="warning", statedir=None):
+    return _get_parser("cat2-server.toml", loglevel=loglevel, statedir=statedir)
 
 
 #
@@ -94,16 +102,16 @@ class Conf:
         return conf
 
 
-def _add_preliminary_args(parser):
+def _add_conf_argument(default, parser):
     parser.add_argument(
         "--conf",
-        default="caterva2.toml",
+        default=default,
         type=pathlib.Path,
         help=("path to alternative configuration file " "(may not exist)"),
     )
 
 
-def get_conf(prefix=None):
+def get_conf(filename, prefix=None):
     """Get settings from the configuration file, if existing.
 
     If the configuration file does not exist, return an empty configuration.
@@ -114,7 +122,7 @@ def get_conf(prefix=None):
     to it.
     """
     parser = argparse.ArgumentParser(add_help=False)
-    _add_preliminary_args(parser)
+    _add_conf_argument(filename, parser)
     opts = parser.parse_known_args()[0]
 
     try:
@@ -123,3 +131,11 @@ def get_conf(prefix=None):
             return Conf(conf, prefix=prefix)
     except FileNotFoundError:
         return Conf({}, prefix=prefix)
+
+
+def get_client_conf():
+    return get_conf("cat2-client.toml", "client")
+
+
+def get_server_conf():
+    return get_conf("cat2-server.toml", "server")
