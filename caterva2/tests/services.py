@@ -85,12 +85,9 @@ def make_get_http(host, path="/"):
     return check
 
 
-def http_service_check(conf, conf_sect, def_host, path):
-    return make_get_http(conf.get(f"{conf_sect}.http", def_host), path)
-
-
-def sub_check(conf):
-    return http_service_check(conf, "server", get_sub_ep(), "/api/roots")
+def server_check(conf):
+    listen = conf.get("server.listen", get_sub_ep())
+    return make_get_http(listen, "/api/roots")
 
 
 TestRoot = collections.namedtuple("TestRoot", ["name", "source"])
@@ -127,7 +124,7 @@ class ManagedServices:
             "-mcaterva2.services.server",
             f"--conf={BASE_DIR / conf_file}",
             f"--statedir={self.state_dir / name}",
-            *([f"--http={check.host}"] if check else []),
+            *([f"--listen={check.host}"] if check else []),
             *args,
         ]
         popen = subprocess.Popen(popen_args, stdout=sys.stdout, stderr=sys.stderr)
@@ -179,7 +176,7 @@ class ManagedServices:
 
     def start_all(self):
         self._setup()
-        self._start_server(check=sub_check(self.configuration))
+        self._start_server(check=server_check(self.configuration))
 
     def stop_all(self):
         for proc in self._procs.values():

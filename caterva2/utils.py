@@ -45,13 +45,9 @@ class Socket(str):
             self.uds = string
 
 
-def get_parser(loglevel="warning", statedir=None, http=None):
+def get_parser(loglevel="warning", statedir=None):
     parser = argparse.ArgumentParser()
     _add_preliminary_args(parser)  # just for help purposes
-    if http is not None:
-        parser.add_argument(
-            "--http", default=http, type=Socket, help="Listen to given hostname:port or unix socket"
-        )
     if statedir is not None:
         parser.add_argument("--statedir", default=statedir, type=pathlib.Path)
     parser.add_argument("--loglevel", default=loglevel)

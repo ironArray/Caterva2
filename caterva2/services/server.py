@@ -2581,9 +2581,14 @@ def main():
     # Load configuration (args)
     conf = utils.get_conf("server")
     parser = utils.get_parser(
-        http=conf.get(".http", "localhost:8000"),
         loglevel=conf.get(".loglevel", "warning"),
         statedir=conf.get(".statedir", "_caterva2/state"),
+    )
+    parser.add_argument(
+        "--listen",
+        default=conf.get(".listen", "localhost:8000"),
+        type=utils.Socket,
+        help="Listen to given hostname:port or unix socket",
     )
     args = utils.run_parser(parser)
 
@@ -2624,11 +2629,11 @@ def main():
 
     # Run
     root_path = str(furl.furl(settings.urlbase).path)
-    http = args.http
-    if http.uds:
-        uvicorn.run(app, uds=http.uds, root_path=root_path)
+    listen = args.listen
+    if listen.uds:
+        uvicorn.run(app, uds=listen.uds, root_path=root_path)
     else:
-        uvicorn.run(app, host=http.host, port=http.port, root_path=root_path)
+        uvicorn.run(app, host=listen.host, port=listen.port, root_path=root_path)
 
 
 if __name__ == "__main__":
