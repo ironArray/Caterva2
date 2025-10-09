@@ -64,15 +64,12 @@ def run_parser(parser):
     return args
 
 
-def get_client_parser(conf, loglevel="warning", statedir=None, description=None):
-    parser = _get_parser("cat2-client.toml", loglevel=loglevel, statedir=statedir, description=description)
-    parser.add_argument(
-        "--url",
-        type=urlbase_type,
-        default=conf.get("client.url", "http://localhost:8000"),
-    )
-    parser.add_argument("--username", default=conf.get("client.username"))
-    parser.add_argument("--password", default=conf.get("client.password"))
+def get_client_parser(loglevel="warning", description=None):
+    parser = _get_parser("cat2-client.toml", loglevel=loglevel, description=description)
+    parser.add_argument("--server", default="default")
+    parser.add_argument("--url", type=urlbase_type, help="Default http://localhost:8000")
+    parser.add_argument("--username")
+    parser.add_argument("--password")
     return parser
 
 
@@ -119,7 +116,7 @@ def _add_conf_argument(default, parser):
     )
 
 
-def get_conf(filename, prefix=None):
+def _get_conf(filename, prefix=None):
     """Get settings from the configuration file, if existing.
 
     If the configuration file does not exist, return an empty configuration.
@@ -141,9 +138,9 @@ def get_conf(filename, prefix=None):
         return Conf({}, prefix=prefix)
 
 
-def get_client_conf():
-    return get_conf("cat2-client.toml", "client")
+def get_client_conf(conf="cat2-client.toml", server="default"):
+    return _get_conf(conf, server)
 
 
 def get_server_conf():
-    return get_conf("cat2-server.toml", "server")
+    return _get_conf("cat2-server.toml", "server")

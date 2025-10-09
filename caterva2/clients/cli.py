@@ -440,8 +440,8 @@ def cmd_listusers(client, args):
 
 def main():
     # Build the parser
-    conf = utils.get_client_conf()
-    parser = utils.get_client_parser(conf)
+    parser = utils.get_client_parser()
+
     # Make --json a global flag so it applies to all commands that support JSON output
     parser.add_argument("--json", action="store_true", help="Output JSON when supported by the command")
     subparsers = parser.add_subparsers(required=True)
@@ -559,7 +559,12 @@ def main():
 
     # Go
     args = utils.run_parser(parser)
-    client = cat2.Client(args.url, (args.username, args.password))
+    conf = utils.get_client_conf(args.conf, args.server)
+
+    url = args.url or conf.get(".url", "http://localhost:8000")
+    username = args.username or conf.get(".username")
+    password = args.password or conf.get(".password")
+    client = cat2.Client(url, (username, password))
     args.func(client, args)
 
 

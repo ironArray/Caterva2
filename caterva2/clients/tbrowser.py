@@ -19,14 +19,19 @@ from caterva2 import api, api_utils, utils
 
 
 class TreeApp(App):
-    def __init__(self, args):
+    def __init__(self, args, conf):
         super().__init__()
+
+        url = args.url or conf.get(".url", "http://localhost:8000")
+        username = args.username or conf.get(".username")
+        password = args.password or conf.get(".password")
+
         self.root = args.root
         auth_cookie = None
-        if args.username and args.password:
-            user_auth = {"username": args.username, "password": args.password}
-            auth_cookie = api_utils.get_auth_cookie(args.url, user_auth)
-        self.data = api.get_list(args.root, args.url, auth_cookie=auth_cookie)
+        if username and password:
+            user_auth = {"username": username, "password": password}
+            auth_cookie = api_utils.get_auth_cookie(url, user_auth)
+        self.data = api.get_list(args.root, url, auth_cookie=auth_cookie)
 
     def compose(self) -> ComposeResult:
         path = self.root / pathlib.Path(self.data[0])
@@ -47,13 +52,13 @@ class TreeApp(App):
 
 def main():
     # Load configuration (args)
-    conf = utils.get_client_conf()
-    parser = utils.get_client_parser(conf)
+    parser = utils.get_client_parser()
     parser.add_argument("--root", default="foo")
     args = utils.run_parser(parser)
+    conf = utils.get_client_conf(args.conf)
 
     # Start client
-    app = TreeApp(args)
+    app = TreeApp(args, conf)
     app.run()
 
 

@@ -54,10 +54,7 @@ def sync_initial_state(local_dir: pathlib.Path, remote_path: str, client: cat2.C
 
 
 def main():
-    conf = utils.get_client_conf()
-    parser = utils.get_client_parser(
-        conf, description="Watch a directory and sync changes to a Caterva2 server"
-    )
+    parser = utils.get_client_parser(description="Watch a directory and sync changes to a Caterva2 server")
 
     parser.add_argument("directory", type=str, help="Local directory path to watch for changes")
     parser.add_argument(
@@ -65,6 +62,11 @@ def main():
     )
 
     args = parser.parse_args()
+    conf = utils.get_client_conf(args.conf)
+    url = args.url or conf.get(".url", "http://localhost:8000")
+    username = args.username or conf.get(".username")
+    password = args.password or conf.get(".password")
+    client = cat2.Client(url, (username, password))
 
     # Initialize Caterva2 client
     client = cat2.Client(args.url, (args.username, args.password))
