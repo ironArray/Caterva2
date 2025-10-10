@@ -1,0 +1,8 @@
+# Comfiguration file for pytest purposes
+
+# The test suite needs these params
+[pytest]
+url = "http://localhost:8000"
+# url = "https://cat2.cloud/demo" # this should fail
+username = ""
+password = ""

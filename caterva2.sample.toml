@@ -1,7 +1,6 @@
 # Example configuration for caterva2 clients in general
 
-# This assumes a server running in localhost.
-# The test suite needs these defaults
+# This assumes a server running in localhost
 [default]
 url = "http://localhost:8000"
 username = ""

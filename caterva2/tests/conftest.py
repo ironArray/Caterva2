@@ -1,3 +1,4 @@
+import os
 import platform
 import sys
 
@@ -43,7 +44,10 @@ def auth_client(services, sub_user):  # noqa: F811
 @pytest.fixture(scope="session")
 def client_conf():
     """Caterva2 client configuration"""
-    return utils.get_client_conf()
+    # Always use the caterva2.toml in the tests directory
+    parent = os.path.dirname(os.path.abspath(__file__))
+    config_file = os.path.join(parent, "caterva2.toml")
+    return utils.get_client_conf(conf=config_file, server="pytest")
 
 
 @pytest.fixture(scope="session")

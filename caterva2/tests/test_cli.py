@@ -9,6 +9,7 @@
 
 
 import json
+import os
 import subprocess
 import sys
 
@@ -18,6 +19,10 @@ from .services import TEST_CATERVA2_ROOT
 def cli(cargs, binary=False, sub_user=None) -> str or dict:
     cli_path = "caterva2.clients.cli"
     args = [sys.executable, "-m" + str(cli_path)]
+    # Always use the caterva2.toml in the tests directory
+    parent = os.path.dirname(os.path.abspath(__file__))
+    config_file = os.path.join(parent, "caterva2.toml")
+    args += ["--conf", config_file, "--server", "pytest"]
     if sub_user:
         args += ["--username", sub_user.username, "--password", sub_user.password]
     args += cargs
