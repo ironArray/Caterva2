@@ -1,10 +1,20 @@
 # Example configuration for caterva2 clients in general
+
+# This assumes a server running in localhost.
+# The test suite needs these defaults
 [default]
-url = "https://cat2.cloud/demo"
+url = "http://localhost:8000"
 username = ""
 password = ""
 
+# Server in locahost, but with username/password provided
 [localuser]
 url = "http://localhost:8000"
 username = "user@example.com"
 password = "foobar11"
+
+# Cat2Cloud demo server (public mode)
+[demo]
+url = "https://cat2.cloud/demo"
+username = ""
+password = ""
