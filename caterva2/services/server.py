@@ -259,6 +259,28 @@ def url(path: str) -> str:
     return f"{settings.urlbase}/{path}"
 
 
+def url_with_query(request, hx_current_url=None, **extra_params):
+    """
+    Build a URL with updated query parameters.
+
+    Uses hx_current_url if available (HTMX), otherwise falls back to request.url.
+    """
+    base_url = hx_current_url or str(request.url)
+    f = furl.furl(base_url)
+
+    # Update or remove query params
+    for key, value in extra_params.items():
+        if value is None:
+            f.query.params.pop(key, None)  # remove if present
+        else:
+            # Normalize boolean: True → '1', False → '0'
+            if isinstance(value, bool):
+                value = "1" if value else "0"
+            f.query.params[key] = value
+
+    return f.url
+
+
 def brand_logo():
     path = "media/logo.webp"
     if not (settings.statedir / path).exists():
@@ -270,6 +292,7 @@ def brand_logo():
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["filesizeformat"] = custom_filesizeformat
 templates.env.globals["url"] = url
+templates.env.globals["url_with_query"] = url_with_query
 
 
 # Add CSS/JS to templates namespace
@@ -1380,6 +1403,15 @@ async def favicon():
     return FileResponse(BASE_DIR / "static/logo-caterva2-16x16.png")
 
 
+def is_fullscreen(request, hx_current_url=None):
+    url_to_check = hx_current_url or str(request.url)
+    if url_to_check:
+        parsed = furl.furl(url_to_check)
+        return parsed.query.params.get("fullscreen") == "1"
+
+    return False
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/roots/{path:path}")
 async def html_home(
@@ -1397,6 +1429,7 @@ async def html_home(
     # Disk usage
     size = get_disk_usage()
     context = {
+        "is_fullscreen": is_fullscreen(request),
         "user_login_enabled": user_login_enabled(),
         "roots_url": make_url(request, "htmx_root_list", {"roots": roots}),
         "username": user.email if user else None,
@@ -1592,6 +1625,8 @@ async def htmx_path_info(
     # Context
     tabs = []
     context = {
+        "hx_current_url": hx_current_url,
+        "is_fullscreen": is_fullscreen(request, hx_current_url),
         "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
         "meta": meta,
         "path": path,

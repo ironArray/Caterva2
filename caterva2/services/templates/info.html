@@ -17,6 +17,13 @@
         </li>
     {% endfor %}
     <li class="nav-item ms-auto">
+        <a href="{{ url_with_query(request, hx_current_url=hx_current_url, fullscreen=(None if is_fullscreen else 1)) }}"
+           class="nav-link notab text-decoration-none">
+            <i class="fa-solid fa-{{ 'minimize' if is_fullscreen else 'maximize' }}"></i>
+            {{ "Exit full screen" if is_fullscreen else "Full screen" }}
+        </a>
+    </li>
+    <li class="nav-item">
         <a href="{{ url("api/download/") }}{{ path }}" class="nav-link notab text-decoration-none">
             <i class="fa-solid fa-download"></i> Download
         </a>

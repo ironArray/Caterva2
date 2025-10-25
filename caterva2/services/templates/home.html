@@ -67,21 +67,28 @@
 </span>
 
 <!-- Main section -->
-<div id="page">
-    <div id="root-list-wrapper" hx-get="{{ roots_url }}" hx-trigger="load"></div>
-    <div id="prompt-wrapper">
-        {% include "includes/prompt.html" %}
-    </div>
-    <div id="path-list-wrapper">
-        {% include 'includes/loading.html' %}
-        <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>
-        </div>
-    </div>
-    <div id="meta-wrapper">
+{% if is_fullscreen %}
+    <div id="fullscreen">
         {% include 'includes/loading.html' %}
         <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
     </div>
-</div>
+{% else %}
+    <div id="page">
+        <div id="root-list-wrapper" hx-get="{{ roots_url }}" hx-trigger="load"></div>
+        <div id="prompt-wrapper">
+            {% include "includes/prompt.html" %}
+        </div>
+        <div id="path-list-wrapper">
+            {% include 'includes/loading.html' %}
+            <div id="path-list"{% if paths_url %} hx-get="{{ paths_url }}" hx-trigger="load"{% endif %}>
+            </div>
+        </div>
+        <div id="meta-wrapper">
+            {% include 'includes/loading.html' %}
+            <div id="meta"{% if meta_url %} hx-get="{{ meta_url }}" hx-trigger="load"{% endif %}></div>
+        </div>
+    </div>
+{% endif %}
 
 <script>
 htmx.on('htmx:beforeSwap', function (evt) {
