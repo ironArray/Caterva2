@@ -990,7 +990,7 @@ def test_deluser(auth_client):
     # Check that the user has been deleted
     with pytest.raises(Exception) as e_info:
         _ = auth_client.deluser(username)
-    assert "Bad Request" in str(e_info)
+    assert "UserNotExists" in str(e_info)
 
 
 def test_deluser_unauthorized(client, auth_client):

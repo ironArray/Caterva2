@@ -203,7 +203,7 @@ def get_client_and_url(server, url, return_async_client=False):
     return client, url
 
 
-def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None, server=None, raise_for_status=True):
+def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None, server=None):
     client, url = get_client_and_url(server, url)
     if auth_cookie:
         headers = headers.copy() if headers else {}
@@ -215,8 +215,29 @@ def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None, server=No
             f"Timeout after {timeout} seconds while trying to access {url}. "
             f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
         ) from e
-    if raise_for_status:
+
+    try:
         response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Only customize for 400 errors
+        if exc.response.status_code == 400:
+            detail = None
+            try:
+                body = exc.response.json()
+                detail = body.get("detail")
+            except (ValueError, AttributeError, TypeError):
+                # Fallback to raw text if JSON decoding fails
+                detail = exc.response.text.strip() or None
+
+            if detail:
+                # Build a new message that replaces the MDN link with the detail
+                message = f"{exc.request.method} request to {exc.response.url} failed: {detail}"
+                raise httpx.HTTPStatusError(
+                    message=message, request=exc.request, response=exc.response
+                ) from exc
+        # Re-raise original for non-400 errors
+        raise
+
     return response
 
 
@@ -228,12 +249,9 @@ def get(
     model=None,
     auth_cookie=None,
     server=None,
-    raise_for_status=True,
     return_response=False,
 ):
-    response = _xget(
-        url, params, headers, timeout, auth_cookie, server=server, raise_for_status=raise_for_status
-    )
+    response = _xget(url, params, headers, timeout, auth_cookie, server=server)
     if return_response:
         return response
 

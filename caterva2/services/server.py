@@ -479,11 +479,10 @@ async def fetch_data(
     abspath = get_abspath(path, user)
 
     if abspath.suffix not in {".b2frame", ".b2nd"}:
-        detail = (
+        srv_utils.raise_bad_request(
             "The fetch API only supports datasets (.b2nd and .b2); "
             "use the download API if you only want to download the file"
         )
-        raise fastapi.HTTPException(status_code=400, detail=detail)
 
     if filter:
         if field:
@@ -538,7 +537,10 @@ async def fetch_data(
         # As we are going to serialize the slice right away, it is not clear in which
         # situations a contiguous slice is faster than a non-contiguous one.
         # Let's just use the contiguous one for now, until more testing is done.
-        data = array.slice(slice_, contiguous=True).to_cframe()
+        try:
+            data = array.slice(slice_, contiguous=True).to_cframe()
+        except IndexError as exc:
+            srv_utils.raise_bad_request(str(exc))  # 400 Bad Request
     else:
         # SChunk
         data = schunk[slice_]  # SChunck => bytes
@@ -708,17 +710,15 @@ async def lazyexpr(
         The path of the newly created (or overwritten) dataset.
     """
 
-    def error(msg):
-        return fastapi.HTTPException(status_code=400, detail=msg)  # bad request
-
     try:
         result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute)
     except (SyntaxError, ValueError, TypeError) as exc:
-        raise error(f"Invalid name or expression: {exc}") from exc
+        raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
-        raise error(f"Expression error: {ke.args[0]} is not in the list of available datasets") from ke
+        detail = f"Expression error: {ke.args[0]} is not in the list of available datasets"
+        raise srv_utils.raise_bad_request(detail) from ke
     except RuntimeError as exc:
-        raise error(f"Runtime error: {exc}") from exc
+        raise srv_utils.raise_bad_request(f"Runtime error: {exc}") from exc
 
     return result_path
 
