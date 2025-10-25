@@ -153,6 +153,7 @@ def cmd_handle(client, args, url):
 @handle_errors
 def cmd_browse(client, args, url):
     url = api_utils.get_handle_url(args.dataset, url)
+    url += "?fullscreen=1"
     # Try to open in a new browser tab; still print the URL for logging
     try:
         webbrowser.open(url, new=2)
