@@ -356,18 +356,22 @@ def del_user(username):
     return asyncio.run(adel_user(username))
 
 
-async def alist_users(username=None):
+async def alist_users(username=None, exclude=None):
+    exclude = exclude or set()
     async with (
         contextlib.asynccontextmanager(db.get_async_session)() as session,
         contextlib.asynccontextmanager(db.get_user_db)(session) as udb,
     ):
-        query = select(udb.user_table)
+        # udb.user_table is likely your SQLModel class (e.g., User)
+        UserClass = udb.user_table
+        user_table = UserClass.__table__  # <-- this is the actual SQLAlchemy Table
+
+        selected_columns = [col for col in user_table.c if col.name not in exclude]
+        query = select(*selected_columns)
+
         if username:
-            query = query.where(udb.user_table.email == username)
+            query = query.where(user_table.c.email == username)
+
         result = await session.execute(query)
-        # Return a list of dictionaries
-        return result.scalars().all()
-
-
-def list_users(username=None):
-    return asyncio.run(alist_users(username))
+        rows = result.fetchall()
+        return [row._asdict() for row in rows]

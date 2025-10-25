@@ -1359,7 +1359,8 @@ if user_login_enabled():
         """
         if not user:
             raise srv_utils.raise_unauthorized("Listing users requires authentication")
-        return await srv_utils.alist_users(username)
+        exclude = {"hashed_password"}
+        return await srv_utils.alist_users(username, exclude=exclude)
 
     # TODO: Support user verification
 
