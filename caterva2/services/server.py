@@ -1334,7 +1334,7 @@ if user_login_enabled():
             error_message = str(exc) if str(exc) else exc.__class__.__name__
             raise srv_utils.raise_bad_request(f"Error in deleting {username}: {error_message}") from exc
         # Remove the personal directory of the user
-        userid = str(users[0].id)
+        userid = str(users[0]["id"])
         print(f"User {username} with id {userid} has been deleted")
         shutil.rmtree(settings.personal / userid, ignore_errors=True)
         return f"User deleted: {username}"
