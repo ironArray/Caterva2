@@ -761,7 +761,7 @@ def test_lazyexpr_getchunk(auth_client, fill_public):
     np.testing.assert_array_equal(out, out_expr)
 
 
-def test_lazyexpr_fields(auth_client):
+def test_lazyexpr_fields(auth_client, fill_public):
     if not auth_client:
         pytest.skip("authentication support needed")
 
