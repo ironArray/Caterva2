@@ -1618,15 +1618,25 @@ async def htmx_path_info(
         response.headers["HX-Push-Url"] = push_url
         return response
 
+    if hx_trigger != "meta":
+        push_url = make_url(request, "html_home", path=path)
+        # Keep query
+        current_query = furl.furl(hx_current_url).query
+        if current_query:
+            push_url = f"{push_url}?{current_query.encode()}"
+    else:
+        push_url = None
+
     # Read metadata
     abspath = get_abspath(path, user)
     meta = srv_utils.read_metadata(abspath)
 
     # Context
+    current_url = push_url or hx_current_url
     tabs = []
     context = {
-        "hx_current_url": hx_current_url,
-        "is_fullscreen": is_fullscreen(request, hx_current_url),
+        "current_url": current_url,
+        "is_fullscreen": is_fullscreen(request, current_url),
         "can_delete": user and path.parts[0] in {"@personal", "@shared", "@public"},
         "meta": meta,
         "path": path,
@@ -1683,13 +1693,7 @@ async def htmx_path_info(
     response = templates.TemplateResponse(request, "info.html", context=context)
 
     # Push URL only when clicked, not on load/reload
-    if hx_trigger != "meta":
-        push_url = make_url(request, "html_home", path=path)
-        # Keep query
-        current_query = furl.furl(hx_current_url).query
-        if current_query:
-            push_url = f"{push_url}?{current_query.encode()}"
-
+    if push_url is not None:
         response.headers["HX-Push-Url"] = push_url
 
     return response
