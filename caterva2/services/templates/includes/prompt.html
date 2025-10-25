@@ -17,19 +17,20 @@
 </form>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasPromptHelp"
-     aria-labelledby="offcanvasPromptHelpLabel" style="width: 600px">
+     aria-labelledby="offcanvasPromptHelpLabel" style="width: 700px">
   <div class="offcanvas-header">
     <h4 class="offcanvas-title" id="offcanvasPromptHelpLabel">Prompt Help</h4>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
   </div>
   <div class="offcanvas-body">
       <h5>List of commands</h5>
-      <dl class="row">
+      <dl>
           {% for command in commands %}
-            <dt class="col-sm-4">{{ command.expected }}</dt>
-            <dd class="col-sm-8">{{ command.__doc__ }}</dd>
+            <dt>{{ command.expected }}</dt>
+            <dd>{{ command.__doc__ }}</dd>
           {% endfor %}
       </dl>
+      <hr>
       <h5>Expressions</h5>
       <pre>x = &lt;expression&gt; # locals</pre>
       <p>
