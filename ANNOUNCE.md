@@ -1,19 +1,16 @@
-Announcing Caterva2 2025.8.7
-=============================
+Announcing Caterva2 2025.10.25
+==============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 and HDF5 data repositories.
 
-This is a major release that includes a big refactoring for getting rid of
-the PubSub code (which, to be frank, was not bringing too much benefit).
-We have added a new `cat2-agent` to watch a directory and sync changes to a
-Caterva2 server.
+This is a major release, where we are freezing the API and bumping the
+package to Production/Stable status.  That means that from now on, we will
+only do backward-compatible changes to the API, and we will focus on
+stability and performance improvements.
 
-Finally, fixed a few bugs and added some new features, such as the
-`cat2-agent` command line client, which allows you to watch a directory and
-sync changes to a Caterva2 server. This is particularly useful for
-automatically uploading new datasets to a Caterva2 server, or for keeping
-a local copy of a remote Caterva2 server.
+This release includes several new features, performance improvements,
+and bug fixes.
 
 For more info, you can have a look at the release notes in:
 

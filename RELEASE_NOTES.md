@@ -1,8 +1,99 @@
 # Release notes
 
-## Changes from 2025.8.7 to XXX
+## Changes from 2025.8.7 to 2025.10.25
 
-#XXX version-specific blurb XXX#
+### New features
+
+* Fetch and download of HDF5 is possible now.  The HDF5 datasets are
+  fetched as HDF5Proxy instances, which allows to access the data
+  on-demand, without downloading the whole dataset at once.
+
+* The client API now requires blosc2, and sends a "Accept-Encoding: blosc2"
+  header. That allows the server to send Blosc2-compressed data directly,
+  avoiding the overhead of sending uncompressed data through the network.
+
+### New command-line tools
+
+Command line tools have been restructured.  Now there are three main tools:
+
+* New `cat2-client` command-line tool to interact with a Caterva2 server
+  from the command line.  It supports listing datasets, downloading them,
+  uploading new datasets, deleting datasets, browsing datasets, and many
+  other features.
+
+* New `cat2-server` command-line tool to run a Caterva2 server
+  from the command line.  Server configuration is possible through
+  a caterva2-server.toml file, where you can specify the urlbase, quota
+  limits, authentication settings, and other options.
+
+* New `cat2-admin` command-line tool to manage users in a Caterva2 server.
+  For the time being it only supports adding new users, but more features will
+  be added in the future.
+
+* New `cat2-agent` command-line tool to run a Caterva2 agent.
+  An agent is a lightweight client that can synchronize datasets between
+  a local directory and a Caterva2 server.
+
+Previous command-line tools like `cat2cli` or `cat2sub` have been deprecated
+in favor of the previously mentioned tools.
+
+### Fixes and improvements
+
+* Don't leak secrets in /api/listusers.
+
+* Error handling has been improved in several places.  Now,
+  more informative error messages are shown when something goes wrong.
+
+* Fix 500 error in /api/info/<path-to-dir> (return 404).
+
+* Add mtime property to `info` command in `cat2-client`.
+
+* Paginate and colorize values for `show` command in `cat2-client`.
+
+* New `tree` command in `cat2-client` to show the dataset hierarchy
+  as a tree.
+
+* New `browse` command in `cat2-client` to browse a dataset on a
+  local browser (with support for tomographies).
+
+* New `handle` command in `cat2-client` to show the dataset handle
+  (unique identifier) of a dataset.
+
+* Improve presentation of the prompt help for the web client.
+
+### Documentation improvements
+
+* Comprehensive overhaul of quick start tutorial in README:
+  https://ironarray.io/caterva2-doc/getting_started/index.html#quick-start
+
+* Updated tutorial for the client configuration (caterva2.toml):
+  https://ironarray.io/caterva2-doc/tutorials/configuration.html
+
+* Updated tutorial for the command-line tools:
+  https://ironarray.io/caterva2-doc/tutorials/cli.html
+
+* Updated tutorial for the rest API:
+  https://ironarray.io/caterva2-doc/tutorials/RESTAPI.html
+
+### Other changes
+
+* Removed legacy `cat2import` and `cat2export` utilities.
+
+* Remainders of the PubSub code have been removed from the codebase.  Now
+  Caterva2 only supports a client-server architecture.
+
+* Slices of regular files are not supported anymore.  Only Blosc2-compressed
+  datasets and HDF5 datasets can be sliced.
+
+* `Client.concatenate()` has been renamed to `Client.concat()` for consistency
+  with Array API.
+
+* `Client.subscribe()` has been removed, as it was part of the PubSub
+  architecture.
+
+* Anonymous access to the server show @public contents by default now.
+
+* Changed --http to --listen in cli commands for starting servers.
 
 ## Changes from 2025.6.26 to 2025.8.7
 
