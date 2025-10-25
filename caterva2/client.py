@@ -1156,7 +1156,8 @@ class Client:
         cframe = ndarray.to_cframe()
         file = io.BytesIO(cframe)
 
-        client, url = api_utils.get_client_and_url(None, f"{self.urlbase}/api/append/{remotepath}")
+        client = api_utils.get_client()
+        url = f"{self.urlbase}/api/append/{remotepath}"
         headers = {"Cookie": self.cookie}
         response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
         response.raise_for_status()

@@ -14,9 +14,6 @@ import re
 import blosc2
 import httpx
 
-# Caterva2
-from caterva2 import utils
-
 
 def slice_to_string(slice_):
     if slice_ is None or slice_ == () or slice_ == slice(None):
@@ -65,8 +62,8 @@ def get_auth_cookie(urlbase, user_auth, timeout=5):
     >>> cat2.upload('root-example/ds-sc-attr.b2nd', '@personal/attr.b2nd', urlbase, auth_cookie)
     PosixPath('@personal/attr.b2nd')
     """
+    client = get_client()
     url = f"{urlbase}/auth/jwt/login"
-    client, url = get_client_and_url(None, url)
 
     if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
         user_auth = user_auth._asdict()
@@ -126,7 +123,7 @@ _attachment_b2fname_rx = re.compile(r';\s*filename\*?\s*=\s*"([^"]+\.b2)"')
 
 
 def download_url(url, localpath, auth_cookie=None):
-    client, url = get_client_and_url(None, url)
+    client = get_client()
 
     localpath = pathlib.Path(localpath)
     localpath.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +153,8 @@ def download_url(url, localpath, auth_cookie=None):
 
 
 def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
-    client, url = get_client_and_url(None, f"{urlbase}/api/upload/{remotepath}")
+    client = get_client()
+    url = f"{urlbase}/api/upload/{remotepath}"
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     with open(localpath, "rb") as f:
@@ -166,7 +164,8 @@ def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
 
 
 def unfold_file(remotepath, urlbase, auth_cookie=None):
-    client, url = get_client_and_url(None, f"{urlbase}/api/unfold/{remotepath}")
+    client = get_client()
+    url = f"{urlbase}/api/unfold/{remotepath}"
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     response = client.post(url, headers=headers)
@@ -179,32 +178,17 @@ def unfold_file(remotepath, urlbase, auth_cookie=None):
 #
 
 
-def get_client_and_url(server, url, return_async_client=False):
+def get_client(return_async_client=False):
     if return_async_client:
         client_class = httpx.AsyncClient
-        transport_class = httpx.AsyncHTTPTransport
     else:
         client_class = httpx.Client
-        transport_class = httpx.HTTPTransport
 
-    transport = None
-    if server is not None:
-        if type(server) is str:
-            server = utils.Socket(server)
-
-        assert url.startswith("/"), f'expected absolute path, got "{url}"'
-        if server.uds:
-            transport = transport_class(uds=server.uds)
-            url = f"http://localhost{url}"
-        else:
-            url = f"http://{server}{url}"
-
-    client = client_class(transport=transport)
-    return client, url
+    return client_class()
 
 
-def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None, server=None):
-    client, url = get_client_and_url(server, url)
+def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None):
+    client = get_client()
     if auth_cookie:
         headers = headers.copy() if headers else {}
         headers["Cookie"] = auth_cookie
@@ -248,10 +232,9 @@ def get(
     timeout=5,
     model=None,
     auth_cookie=None,
-    server=None,
     return_response=False,
 ):
-    response = _xget(url, params, headers, timeout, auth_cookie, server=server)
+    response = _xget(url, params, headers, timeout, auth_cookie)
     if return_response:
         return response
 
@@ -259,8 +242,8 @@ def get(
     return json if model is None else model(**json)
 
 
-def post(url, json=None, auth_cookie=None, server=None, timeout=5):
-    client, url = get_client_and_url(server, url)
+def post(url, json=None, auth_cookie=None, timeout=5):
+    client = get_client()
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     try:
         response = client.post(url, json=json, headers=headers, timeout=timeout)
