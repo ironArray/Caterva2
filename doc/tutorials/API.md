@@ -1,4 +1,4 @@
-# Using the client APIs
+# Using the Python client APIs
 
 To follow these instructions, make sure that you have installed ``caterva2`` and ``blosc2``.
 

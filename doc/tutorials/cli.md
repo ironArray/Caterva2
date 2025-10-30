@@ -13,6 +13,11 @@ To create a user, you can use the `cat2-admin adduser` command. For example:
 cat2-admin adduser user@example.com foobar11
 ```
 
+To start the server use the following command:
+```sh
+CATERVA2_SECRET=c2sikrit cat2-server &
+```
+
 Now that the services are running, we can use the `cat2-client` client to talk
 to the server. In another shell, let's list all the available roots in the system:
 
@@ -26,10 +31,15 @@ cat2-client --user "user@example.com" --pass "foobar11" roots
 @shared
 ```
 
-First let's upload a file from the `root-example`folder to the `@personal` root:
+First let's generate a file and save it locally. Run the following script in the terminal to save a `b2nd` file to your current directory.
+```
+python -c "import blosc2; blosc2.arange(0, 1000, 1, blocks = (10,), chunks=(100,), urlpath='ds-1d.b2nd')"
+```
+
+Let's upload the file to the `@personal` root:
 
 ```sh
-cat2-client --username user@example.com --password foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
+cat2-client --username user@example.com --password foobar11 upload ds-1d.b2nd @personal/ds-1d.b2nd
 ```
 
 ```
@@ -59,12 +69,12 @@ chunks: [100]
 blocks: [10]
 dtype : int64
 nbytes: 7.81 KiB
-cbytes: 4.90 KiB
-ratio : 1.59x
-mtime : 2025-10-08T11:09:03.955154Z
+cbytes: 3.86 KiB
+ratio : 2.02x
+mtime : 2025-10-30T11:16:17.012415Z
 cparams:
   codec  : ZSTD (5)
-  clevel : 1
+  clevel : 5
   filters: [SHUFFLE]
 ```
 
