@@ -80,7 +80,7 @@ cparams:
 
 As you see, this command returns digested information of the dataset's metadata.
 
-You can also see the contents of the dataset:
+You can also see the contents of the dataset from the terminal.
 
 ```sh
 cat2-client --username user@example.com --password foobar11 show @personal/ds-1d.b2nd
@@ -88,13 +88,13 @@ cat2-client --username user@example.com --password foobar11 show @personal/ds-1d
 
 When the dataset is small, the contents are printed to the screen, otherwise a pager is used.
 
-If you want to use a browser to view the contents of the dataset:
+If you want to use a browser to view the contents of the dataset you can do that too. First authenticate yourself via the browser window accessible via the url associated with your server instance (probably something like `http://localhost:8000`). Then run the following command in the terminal to visualise the dataset directly.
 
 ```shell
-cat2-client --username user@example.com --password foobar11 browse @personal/ds-1d.b2nd
+cat2-client browse @personal/ds-1d.b2nd
 ```
 
-Although you will need to authenticate with the server first; after that, this command will open a new tab in your default browser with the contents of the dataset.
+You do need to authenticate with the server first; after that, this command will open a new tab in your default browser with the contents of the dataset.
 
 There are more commands available in the `cat2-client` client; ask for help with:
 
