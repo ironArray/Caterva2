@@ -1,4 +1,4 @@
-# Using the client APIs
+# Using the Python client APIs
 
 To follow these instructions, make sure that you have installed ``caterva2`` and ``blosc2``.
 
@@ -17,7 +17,7 @@ client = cat2.Client("https://cat2.cloud/demo")
 client.get_roots()
 # {'@public': {'name': '@public'}}
 ```
-or, if one has created a user, using the user credentials:
+or - if one has created a user - using the user credentials:
 
 ```python
 client = cat2.Client("https://cat2.cloud/demo", ("user@example.com", "password1"))
