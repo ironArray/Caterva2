@@ -46,7 +46,7 @@ cat2-client --username user@example.com --password foobar11 upload ds-1d.b2nd @p
 Dataset stored in @personal/ds-1d.b2nd
 ```
 
-Now, one can list the datasets in the `@personal` root and see that the uploaded file appears
+Now, one may list the datasets in the `@personal` root and see that the uploaded file appears
 
 ```sh
 cat2-client --username user@example.com --password foobar11 list @personal
