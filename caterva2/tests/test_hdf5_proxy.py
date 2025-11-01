@@ -302,6 +302,7 @@ def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
         "a ** 2.3 + b / 2.3",
         "sqrt(a) ** sin(b)",
         "where(a < 50, a + 50, b)",
+        "matmul(a, b)",
     ],
 )
 def test_expression(expression, examples_dir, tmp_path, auth_client):
@@ -331,5 +332,8 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
         # Check the data
         na = h5f[ds_a][:]
         nb = h5f[ds_b][:]
-        nresult = ne.evaluate(expression, {"a": na, "b": nb})
+        if expression != "matmul(a, b)":
+            nresult = ne.evaluate(expression, {"a": na, "b": nb})
+        else:
+            nresult = np.matmul(na, nb)
         np.testing.assert_allclose(result[:], nresult)

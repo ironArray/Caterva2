@@ -386,6 +386,10 @@ class HDF5Proxy(blosc2.Operand):
         return self.b2arr.shape
 
     @property
+    def ndim(self) -> tuple[int, ...]:
+        return self.b2arr.ndim
+
+    @property
     def chunks(self):
         return self.b2arr.chunks
 
