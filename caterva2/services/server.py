@@ -31,6 +31,7 @@ import blosc2
 import dotenv
 import fastapi
 import furl
+import httpx
 import markdown
 import nbconvert
 import nbformat
@@ -956,7 +957,7 @@ def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
 @app.post("/api/upload/{path:path}")
 async def upload_file(
     path: pathlib.Path,
-    file: UploadFile,
+    file: UploadFile | str,
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -966,8 +967,8 @@ async def upload_file(
     ----------
     path : pathlib.Path
         The path to store the uploaded file.
-    file : UploadFile
-        The file to upload.
+    file : UploadFile | str
+        The file to upload (from local or remote source).
 
     Returns
     -------
@@ -983,10 +984,16 @@ async def upload_file(
     if abspath.is_dir():
         abspath /= file.filename
         path /= file.filename
-
+    print(abspath)
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
-    data = await file.read()
+    if isinstance(file, str):
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+        data = response.content
+    else:
+        data = await file.read()
     if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
