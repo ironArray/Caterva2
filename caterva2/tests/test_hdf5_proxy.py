@@ -297,7 +297,13 @@ def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
 # Exercises the expression evaluation with HDF5 proxies
 @pytest.mark.parametrize(
     "expression",
-    ["a + 50", "a ** 2.3 + b / 2.3", "sqrt(a) ** sin(b)", "where(a < 50, a + 50, b)", "matmul(a, b)"],
+    [
+        "a + 50",
+        "a ** 2.3 + b / 2.3",
+        "sqrt(a) ** sin(b)",
+        "where(a < 50, a + 50, b)",
+        "matmul(a, b)",
+    ],
 )
 def test_expression(expression, examples_dir, tmp_path, auth_client):
     if not auth_client:
