@@ -324,6 +324,8 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
         operands = {"a": str(remote_root) + "/" + str(remote_a), "b": str(remote_root) + "/" + str(remote_b)}
         lxpath = auth_client.lazyexpr("myexpr", expression, operands)
         assert lxpath == pathlib.Path("@personal/myexpr.b2nd")
+        if expression == "matmul(a, b)":  # check evaluated eagerly for linalg
+            assert "expression" not in auth_client.get_info(lxpath)
 
         # Compute the expression
         result = auth_client.get_slice(lxpath)
