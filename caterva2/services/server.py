@@ -36,6 +36,7 @@ import nbconvert
 import nbformat
 import PIL.Image
 import uvicorn
+from blosc2 import linalg_funcs_list as linalg_funcs
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
@@ -706,6 +707,8 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     path = settings.personal / str(user.id)
     path.mkdir(exist_ok=True, parents=True)
     urlpath = f"{path / name}.b2nd"
+    if any(method in expr for method in linalg_funcs):
+        compute = True
     if compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
