@@ -157,13 +157,19 @@ def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
     url = f"{urlbase}/api/upload/{remotepath}"
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
-    try:
-        with open(localpath, "rb") as f:
-            response = client.post(url, files={"file": f}, headers=headers)
-            response.raise_for_status()
-    except FileNotFoundError:  # possibly a remote download url
-        response = client.post(url, files=localpath, headers=headers)
+    with open(localpath, "rb") as f:
+        response = client.post(url, files={"file": f}, headers=headers)
         response.raise_for_status()
+    return pathlib.PurePosixPath(response.json())
+
+
+def download_from_url(localpath, remotepath, urlbase, auth_cookie=None):
+    client = get_client()
+    url = f"{urlbase}/api/download_from_url/{remotepath}"
+
+    headers = {"Cookie": auth_cookie} if auth_cookie else None
+    response = client.post(url, data={"url": localpath}, headers=headers)
+    response.raise_for_status()
     return pathlib.PurePosixPath(response.json())
 
 

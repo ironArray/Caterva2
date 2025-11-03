@@ -239,6 +239,32 @@ class Root:
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
+    def download_from_url(self, localpath, remotepath=None):
+        """
+        Downloads a third party file via url to this root.
+
+        Parameters
+        ----------
+        localpath : str
+            Path of the file to upload.
+        remotepath : Path, optional
+            Remote path where the file will be uploaded.  If not provided, the
+            file will be uploaded to the top level of this root.
+
+        Returns
+        -------
+        File
+            A instance of :class:`File` or :class:`Dataset`.
+
+        """
+        if remotepath is None:
+            remotepath = pathlib.PurePosixPath(self.name) / localpath
+        else:
+            remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
+        uploadpath = self.client.download_from_url(localpath, remotepath)
+        # Remove the first component of the upload path (the root name) and return a new File/Dataset
+        return self[str(uploadpath.relative_to(self.name))]
+
 
 class File:
     def __init__(self, root, path):
@@ -1112,6 +1138,30 @@ class Client:
         """
         urlbase, dataset = _format_paths(self.urlbase, dataset)
         return api_utils.upload_file(
+            localpath,
+            dataset,
+            urlbase,
+            auth_cookie=self.cookie,
+        )
+
+    def download_from_url(self, localpath, dataset):
+        """
+        Downloads a remote dataset to a remote repository.
+
+        Parameters
+        ----------
+        localpath : Path
+            Url to the remote third party dataset.
+        dataset : Path
+            Remote path to upload the dataset to.
+
+        Returns
+        -------
+        Path
+            Path of the uploaded file on the server.
+        """
+        urlbase, _ = _format_paths(self.urlbase)
+        return api_utils.download_from_url(
             localpath,
             dataset,
             urlbase,

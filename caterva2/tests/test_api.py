@@ -629,22 +629,22 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
             assert "Not Found" in str(e_info.value)
 
 
-def test_upload_remote(examples_dir, tmp_path, auth_client):
+def test_download_fromurl(examples_dir, tmp_path, auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
     root = "@public"
     path, remotepath = (
-        "https://github.com/ironArray/data-cat2-demo/blob/main/hdf5root-example.h5",
-        "myfile.h5",
+        "https://github.com/ironArray/data-cat2-demo/blob/main/root-example/ds-1d.b2nd",
+        "myfile.b2nd",
     )
 
     remote_root = auth_client.get(root)
     myroot = auth_client.get(TEST_CATERVA2_ROOT)
     with contextlib.chdir(tmp_path):
-        # Now, upload the file to the remote root
-        remote_ds = remote_root.upload(path, remotepath)
-        # Check whether the file has been uploaded with the correct name
+        # Now, download the file to the remote root
+        remote_ds = remote_root.download_from_url(path, remotepath)
+        # Check whether the file has been downloaded with the correct name
         if remotepath:
             if remotepath.endswith("/"):
                 assert remote_ds.name == remotepath + path.name
