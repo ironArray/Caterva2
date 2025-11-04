@@ -957,7 +957,7 @@ def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
 @app.post("/api/upload/{path:path}")
 async def upload_file(
     path: pathlib.Path,
-    file: UploadFile | str,
+    file: UploadFile,
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -967,8 +967,8 @@ async def upload_file(
     ----------
     path : pathlib.Path
         The path to store the uploaded file.
-    file : UploadFile | str
-        The file to upload (from local or remote source).
+    file : UploadFile
+        The file to upload (from local source).
 
     Returns
     -------
@@ -1022,7 +1022,7 @@ async def upload_file(
 @app.post("/api/download_from_url/{path:path}")
 async def download_from_url(
     path: pathlib.Path,
-    file_url: str,
+    file: str = fastapi.Form(...),
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -1053,7 +1053,7 @@ async def download_from_url(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:
-        response = await client.get(url)
+        response = await client.get(file)
         response.raise_for_status()
     data = response.content
 

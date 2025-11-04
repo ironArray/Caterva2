@@ -641,6 +641,7 @@ def test_download_fromurl(examples_dir, tmp_path, auth_client):
 
     remote_root = auth_client.get(root)
     myroot = auth_client.get(TEST_CATERVA2_ROOT)
+    arr_ = myroot["ds-1d.b2nd"]
     with contextlib.chdir(tmp_path):
         # Now, download the file to the remote root
         remote_ds = remote_root.download_from_url(path, remotepath)
@@ -652,6 +653,7 @@ def test_download_fromurl(examples_dir, tmp_path, auth_client):
                 assert remote_ds.name == remotepath
         else:
             assert remote_ds.name == str(path)
+        np.testing.assert_array_equal(remote_ds[:], arr_[:])
         # Check removing the file
         remote_removed = pathlib.Path(remote_ds.remove())
         assert remote_removed == remote_ds.path
