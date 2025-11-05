@@ -22,7 +22,7 @@ cat2-agent [GENERIC_OPTION...] DIRECTORY PATH
 
 The agent uses the same generic options (`--url`, `--username`, `--password`, `--conf`) and configuration file (`caterva2.toml`) as `cat2-client` for server connection settings.
 
-### Behavior
+## Behavior
 
 On startup, `cat2-agent` performs an initial synchronization:
 1.  It lists files in both the local directory and the remote path.

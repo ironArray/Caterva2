@@ -20,9 +20,9 @@ cat2-admin [GLOBAL_OPTIONS...] COMMAND [COMMAND_OPTIONS...] COMMAND_ARGUMENTS...
 - `--statedir PATH`: Specify the state directory for the server (default: `_caterva2/state`)
 - `--help`: Show help message and exit
 
-### Commands
+## Commands
 
-#### `adduser` - Add a user to the server database
+### `adduser` - Add a user to the server database
 
 Add a new user to the server database.
 

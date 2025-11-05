@@ -22,7 +22,7 @@ These options can be used with any command:
 -   `--username <USER>` and `--password <PASS>`: Provide credentials for server authentication.
 -   `--conf <PATH>`: Specifies the path to a TOML configuration file.
 
-### Commands
+## Commands
 
 `cat2-client` operates through a series of commands. You can get a list of all available commands by running:
 
@@ -38,7 +38,7 @@ cat2-client roots --help
 
 A common option for many commands is `--json`, which forces the output to be in JSON format, making it easier to parse with other programs.
 
-### Configuration
+## Configuration
 
 `cat2-client` can be configured using a TOML file, which is looked for as `caterva2.toml` in the current directory by default. The path can be overridden with the `--conf` generic option. Any command-line options provided will take precedence over settings from the configuration file.
 
