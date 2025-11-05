@@ -17,5 +17,6 @@ maxdepth: 2
 ---
 
 cat2-client
+cat2-agent
 cat2-admin
 ```
