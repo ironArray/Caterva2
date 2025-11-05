@@ -228,8 +228,10 @@ def test_concat(auth_client, fill_auth, examples_dir):
         expression="concat([a, b, c], axis=0)",
         operands={"a": newpath, "b": newpath2, "c": newpath3},
     )
-
-    assert mypersonal[resultname + ".b2nd"].shape[0] == 3 * myshared[copyname].shape[0]
+    result_ds = mypersonal[resultname + ".b2nd"]
+    assert result_ds.shape[0] == 3 * myshared[copyname].shape[0]
+    # check eager evaluation
+    assert "expression" not in auth_client.get_info(result_ds)
 
     # Check the data
     fname = examples_dir / "ds-1d.b2nd"
@@ -270,8 +272,10 @@ def test_stack(auth_client, fill_auth, examples_dir):
         expression="stack([a, b, c], axis=1)",
         operands={"a": newpath, "b": newpath2, "c": newpath3},
     )
-    assert mypersonal[resultname + ".b2nd"].shape[1] == 3
-    assert mypersonal[resultname + ".b2nd"].shape == news
+    result_ds = mypersonal[resultname + ".b2nd"]
+    assert result_ds.shape == news
+    # check eager evaluation
+    assert "expression" not in auth_client.get_info(result_ds)
 
     # Check the data
     fname = examples_dir / fstr
