@@ -225,7 +225,7 @@ def test_concat(auth_client, fill_auth, examples_dir):
     resultname = "result"
     finalpath = auth_client.lazyexpr(
         resultname,
-        expression="concat(a, b, c, axis=0)",
+        expression="concat([a, b, c], axis=0)",
         operands={"a": newpath, "b": newpath2, "c": newpath3},
     )
 
@@ -267,7 +267,7 @@ def test_stack(auth_client, fill_auth, examples_dir):
     resultname = "result"
     finalpath = auth_client.lazyexpr(
         resultname,
-        expression="stack(a, b, c, axis=1)",
+        expression="stack([a, b, c], axis=1)",
         operands={"a": newpath, "b": newpath2, "c": newpath3},
     )
     assert mypersonal[resultname + ".b2nd"].shape[1] == 3
