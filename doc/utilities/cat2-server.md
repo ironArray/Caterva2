@@ -7,6 +7,8 @@ This program launches the Caterva2 server, which handles API requests, serves th
 python -m pip install caterva2[server]
 ```
 
+## Usage
+
 Running `cat2-server --help` provides information on its usage:
 
 ```

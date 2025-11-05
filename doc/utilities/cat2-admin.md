@@ -3,8 +3,6 @@
 
 This program provides administration commands for managing a Caterva2 server. These commands are meant to be used on the same machine as the server and typically require access to the server's state directory.
 
-## Installation
-
 To use `cat2-admin`, you need to install Caterva2 with the server extra:
 
 ```sh
@@ -19,7 +17,7 @@ cat2-admin [GLOBAL_OPTIONS...] COMMAND [COMMAND_OPTIONS...] COMMAND_ARGUMENTS...
 
 ### Global Options
 
-- `--statedir PATH`: Specify the state directory for the server (default: `_caterva2/sub`)
+- `--statedir PATH`: Specify the state directory for the server (default: `_caterva2/state`)
 - `--help`: Show help message and exit
 
 ### Commands

@@ -7,6 +7,8 @@ This program watches a local directory and synchronizes its contents to a direct
 python -m pip install caterva2[base-services]
 ```
 
+## Usage
+
 Running `cat2-agent --help` provides information on its usage:
 
 ```
@@ -18,6 +20,8 @@ cat2-agent [GENERIC_OPTION...] DIRECTORY PATH
 -   `DIRECTORY`: The local directory path to watch for changes.
 -   `PATH`: The remote path on the server where contents will be synchronized. The path must start with a valid root (`@personal`, `@shared`, or `@public`) and have at least one subdirectory level (e.g., `@personal/my-sync-folder`).
 
+The agent uses the same generic options (`--url`, `--username`, `--password`, `--conf`) and configuration file (`caterva2.toml`) as `cat2-client` for server connection settings.
+
 ### Behavior
 
 On startup, `cat2-agent` performs an initial synchronization:
@@ -28,5 +32,3 @@ On startup, `cat2-agent` performs an initial synchronization:
 After the initial sync, the agent continuously watches the local directory for file changes:
 -   **Added/Modified Files**: When a file is created or modified locally, it is uploaded to the server.
 -   **Deleted Files**: When a file is deleted locally, it is also removed from the server.
-
-The agent uses the same generic options (`--url`, `--username`, `--password`, `--conf`) and configuration file (`caterva2.toml`) as `cat2-client` for server connection settings.
