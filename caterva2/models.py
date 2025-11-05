@@ -86,12 +86,6 @@ class MoveCopyPayload(pydantic.BaseModel):
     dst: str
 
 
-class ConcatStackPayload(pydantic.BaseModel):
-    axis: int
-    srcs: list[str]
-    dst: str
-
-
 class AddUserPayload(pydantic.BaseModel):
     username: str
     password: str | None
