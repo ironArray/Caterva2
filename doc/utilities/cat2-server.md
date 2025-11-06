@@ -1,5 +1,5 @@
 (cat2-server)=
-# `cat2-server` -- The Caterva2 Server
+# `cat2-server` -- Launching the Caterva2 server
 
 This program launches the Caterva2 server, which handles API requests, serves the web interface, and manages data storage. To use it, the `server` extra needs to be installed:
 
