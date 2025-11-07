@@ -386,7 +386,7 @@ class HDF5Proxy(blosc2.Operand):
         return self.b2arr.shape
 
     @property
-    def ndim(self) -> tuple[int, ...]:
+    def ndim(self) -> int:
         return self.b2arr.ndim
 
     @property
@@ -415,12 +415,16 @@ class HDF5Proxy(blosc2.Operand):
         return self.b2arr.schunk
 
     @property
-    def cbytes(self):
-        return self.b2arr.cbytes
+    def cbytes(self) -> int:
+        return self.dset.id.get_storage_size()
 
     @property
-    def cratio(self):
-        return self.b2arr.cratio
+    def cratio(self) -> float:
+        return self.nbytes / self.cbytes
+
+    @property
+    def nbytes(self) -> int:
+        return self.b2arr.nbytes
 
     @property
     def fields(self) -> Mapping[str, numpy.dtype]:
