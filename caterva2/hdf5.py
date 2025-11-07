@@ -415,6 +415,14 @@ class HDF5Proxy(blosc2.Operand):
         return self.b2arr.schunk
 
     @property
+    def cbytes(self):
+        return self.b2arr.cbytes
+
+    @property
+    def cratio(self):
+        return self.b2arr.cratio
+
+    @property
     def fields(self) -> Mapping[str, numpy.dtype]:
         return self.b2arr.fields
 
