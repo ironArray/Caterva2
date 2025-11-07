@@ -119,11 +119,10 @@ def read_metadata(obj):
     # Read metadata
     if isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
-        vlmeta = array.schunk.vlmeta
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
-        if "_ftype" in vlmeta and vlmeta["_ftype"] == "hdf5":
+        if "_ftype" in schunk.vlmeta and schunk.vlmeta["_ftype"] == "hdf5":
             array = hdf5.HDF5Proxy(array)
             schunk.cratio = array.cratio  # overwrite cratio (which will be 0) with HDF5Proxy value
             schunk.cbytes = array.cbytes
