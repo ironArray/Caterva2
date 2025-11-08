@@ -68,6 +68,7 @@ server = [
     "markdown",
     "nbconvert",
     "pillow",
+    "pygments",
     "python-dotenv",
     "python-multipart",
     "jupyterlite-core[contents]==0.6.2",
