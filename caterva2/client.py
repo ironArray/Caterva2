@@ -719,6 +719,17 @@ class Client:
                     self.urlbase, {"username": username, "password": password}, timeout=self.timeout
                 )
 
+    def __enter__(self):
+        """Enter context manager - HTTP clients created lazily on first use."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager - close HTTP clients."""
+        from .api_utils import close_clients
+
+        close_clients()
+        return False
+
     def get_roots(self):
         """
         Retrieves the list of available roots.

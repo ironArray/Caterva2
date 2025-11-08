@@ -14,6 +14,35 @@ import re
 import blosc2
 import httpx
 
+# Shared HTTP client instances for connection pooling
+_http_client = None
+_async_http_client = None
+
+
+def get_client(return_async_client=False):
+    """Get a shared HTTP client instance with HTTP/2 support and connection pooling."""
+    global _http_client, _async_http_client
+
+    if return_async_client:
+        if _async_http_client is None:
+            _async_http_client = httpx.AsyncClient(http2=True)
+        return _async_http_client
+    else:
+        if _http_client is None:
+            _http_client = httpx.Client(http2=True)
+        return _http_client
+
+
+def close_clients():
+    """Close shared HTTP clients. Call this when done with the API."""
+    global _http_client, _async_http_client
+    if _http_client is not None:
+        _http_client.close()
+        _http_client = None
+    if _async_http_client is not None:
+        _async_http_client.close()
+        _async_http_client = None
+
 
 def slice_to_string(slice_):
     if slice_ is None or slice_ == () or slice_ == slice(None):
@@ -176,15 +205,6 @@ def unfold_file(remotepath, urlbase, auth_cookie=None):
 #
 # HTTP client helpers
 #
-
-
-def get_client(return_async_client=False):
-    if return_async_client:
-        client_class = httpx.AsyncClient
-    else:
-        client_class = httpx.Client
-
-    return client_class()
 
 
 def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None):
