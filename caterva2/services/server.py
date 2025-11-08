@@ -34,6 +34,7 @@ import markdown
 import nbconvert
 import nbformat
 import PIL.Image
+import pygments
 import uvicorn
 from blosc2 import linalg_funcs_list as linalg_funcs
 
@@ -1573,15 +1574,17 @@ async def htmx_path_info(
 
     # Tabs: Display (b2)
     mimetype = guess_type(path)
-    known_mimetypes = {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
-    if mimetype and (mimetype in known_mimetypes or mimetype.startswith("image/")):
-        tabs.append(
-            {
-                "name": "display",
-                "url": url(f"display/{path}"),
-                "label": "Display",
-            }
-        )
+    if mimetype:
+        type_, _ = mimetype.split("/")
+        known_mimetypes = {"application/json", "application/pdf", "application/x-ipynb+json"}
+        if type_ in {"image", "text"} or mimetype in known_mimetypes:
+            tabs.append(
+                {
+                    "name": "display",
+                    "url": url(f"display/{path}"),
+                    "label": "Display",
+                }
+            )
 
     # Tabs: Display (b2nd)
     if hasattr(meta, "shape"):
@@ -2273,10 +2276,22 @@ async def html_display(
             f'<a href="{href}" target="_blank" class="btn btn-primary mb-1"><i class="fa-solid fa-gear"></i> Run</a>'
             f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
         )
-    elif mimetype == "text/markdown":
+    elif mimetype.startswith("text/"):
         content = await get_file_content(path, user)
         content = content.decode("utf-8")
-        return markdown.markdown(content)
+        if mimetype == "text/markdown":
+            return markdown.markdown(content)
+
+        try:
+            lexer = pygments.lexers.get_lexer_for_mimetype(mimetype)
+        except pygments.util.ClassNotFound:
+            lexer = None
+
+        if lexer:
+            formatter = pygments.formatters.HtmlFormatter(style="default")
+            return pygments.highlight(content, lexer, formatter)
+        else:
+            return f"<pre>{content}</pre>"
     elif mimetype.startswith("image/"):
         src = f"{url('api/preview/')}{path}"
         img = await get_image(path, user)

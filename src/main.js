@@ -1,4 +1,5 @@
 import './main.scss'
+import './pygments.css'
 
 // Import all of Bootstrap's JS
 import * as bootstrap from 'bootstrap'
