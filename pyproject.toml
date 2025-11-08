@@ -47,12 +47,15 @@ dependencies = [
 path = "caterva2/__init__.py"
 
 [project.optional-dependencies]
+agent = [
+    "watchfiles",
+]
+
 base-services = [
     "fastapi>=0.109",
     "pydantic>=2",
     "safer",
     "uvicorn",
-    "watchfiles",
 ]
 server = [
     "aiosqlite",

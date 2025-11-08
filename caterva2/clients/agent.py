@@ -65,11 +65,12 @@ def sync_initial_state(local_dir: pathlib.Path, remote_path: str, client: cat2.C
 def main():
     parser = utils.get_client_parser(description="Watch a directory and sync changes to a Caterva2 server")
 
-    parser.add_argument("directory", type=str, help="Local directory path to watch for changes")
+    parser.add_argument("localdir", type=str, help="Local directory path to watch for changes")
     parser.add_argument(
-        "path", type=validate_path, help="Remote path (format: @personal|@shared|@public/path/to/dir)"
+        "remotepath", type=validate_path, help="Remote path (format: @personal|@shared|@public/path/to/dir)"
     )
 
+    # Parse arguments
     args = parser.parse_args()
     conf = utils.get_client_conf(args.conf)
     utils.config_log(args, conf)
@@ -77,23 +78,32 @@ def main():
     url = args.url or conf.get(".url", "http://localhost:8000")
     username = args.username or conf.get(".username")
     password = args.password or conf.get(".password")
-    client = cat2.Client(url, (username, password))
+
+    if username is None:
+        raise argparse.ArgumentTypeError(
+            "Missing username, either pass --username or set it in caterva2.toml"
+        )
+
+    if password is None:
+        raise argparse.ArgumentTypeError(
+            "Missing password, either pass --password or set it in caterva2.toml"
+        )
 
     # Initialize Caterva2 client
-    client = cat2.Client(args.url, (args.username, args.password))
-    local_dir = pathlib.Path(args.directory).absolute()  # Ensure we have absolute path
+    client = cat2.Client(url, (username, password))
+    local_dir = pathlib.Path(args.localdir).absolute()  # Ensure we have absolute path
 
     # Initial synchronization
     print("Performing initial synchronization...")
-    sync_initial_state(local_dir, args.path, client)
+    sync_initial_state(local_dir, args.remotepath, client)
 
     # Start watching for changes
-    print(f"\nWatching directory {args.directory} for changes...")
-    print(f"Remote destination: {args.path} on {args.url}")
+    print(f"\nWatching directory {args.localdir} for changes...")
+    print(f"Remote destination: {args.remotepath} on {args.url}")
     print("Press Ctrl+C to stop\n")
 
     try:
-        for changes in watchfiles.watch(args.directory):
+        for changes in watchfiles.watch(args.localdir):
             for change_type, file_path in changes:
                 if not file_path.endswith("/"):  # Skip directory changes
                     try:
@@ -104,7 +114,7 @@ def main():
 
                         # Get relative path from watched directory
                         rel_path = str(file_path_obj.relative_to(local_dir))
-                        remote_full_path = f"{args.path}/{rel_path}"
+                        remote_full_path = f"{args.remotepath}/{rel_path}"
 
                         if change_type in {watchfiles.Change.added, watchfiles.Change.modified}:
                             client.upload(str(file_path_obj), remote_full_path)

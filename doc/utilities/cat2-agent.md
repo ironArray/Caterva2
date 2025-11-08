@@ -1,10 +1,10 @@
 (cat2-agent)=
 # `cat2-agent` -- Directory synchronization agent
 
-This program watches a local directory and synchronizes its contents to a directory on a Caterva2 server. To use it, the `base-services` extra needs to be installed:
+This program watches a local directory and synchronizes its contents to a directory on a Caterva2 server. To use it, the `agent` extra needs to be installed:
 
 ```sh
-python -m pip install caterva2[base-services]
+python -m pip install caterva2[agent]
 ```
 
 ## Usage
@@ -12,13 +12,13 @@ python -m pip install caterva2[base-services]
 Running `cat2-agent --help` provides information on its usage:
 
 ```
-cat2-agent [GENERIC_OPTION...] DIRECTORY PATH
+cat2-agent [GENERIC_OPTION...] LOCALDIR REMOTEPATH
 ```
 
 ### Arguments
 
--   `DIRECTORY`: The local directory path to watch for changes.
--   `PATH`: The remote path on the server where contents will be synchronized. The path must start with a valid root (`@personal`, `@shared`, or `@public`) and have at least one subdirectory level (e.g., `@personal/my-sync-folder`).
+-   `LOCALDIR`: The local directory path to watch for changes.
+-   `REMOTEPATH`: The remote path on the server where contents will be synchronized. The path must start with a valid root (`@personal`, `@shared`, or `@public`) and have at least one subdirectory level (e.g., `@personal/my-sync-folder`).
 
 The agent uses the same generic options (`--url`, `--username`, `--password`, `--conf`) and configuration file (`caterva2.toml`) as `cat2-client` for server connection settings.
 
