@@ -31,7 +31,7 @@ cat2-admin adduser [OPTIONS] USERNAME [PASSWORD]
 ```
 
 **Arguments:**
-- `USERNAME`: Username for the new user
+- `USERNAME`: Email address for the new user
 - `PASSWORD`: Password for the new user (optional, will be generated if not provided)
 
 **Options:**
@@ -42,10 +42,10 @@ cat2-admin adduser [OPTIONS] USERNAME [PASSWORD]
 
 ```sh
 # Add a regular user with auto-generated password
-cat2-admin adduser alice
+cat2-admin adduser alice@example.com
 
 # Add a superuser with a specific password
-cat2-admin adduser bob mypassword --superuser
+cat2-admin adduser bob@example.com mypassword --superuser
 
 # Add a user to a custom state directory
 cat2-admin --statedir /custom/path adduser charlie
