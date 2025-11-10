@@ -244,8 +244,9 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
             assert b2f.dtype == h5ds.dtype
             assert b2f.shape == (h5ds.shape or ())
             b2nd_pointer = auth_client.get(remote_path)
-            assert b2f.cbytes == b2nd_pointer.meta["schunk"]["cbytes"]
-            assert b2f.cratio == b2nd_pointer.meta["schunk"]["cratio"]
+            if b2f.shape != ():  # skip empty datasets
+                assert b2f.cbytes == b2nd_pointer.meta["schunk"]["cbytes"]
+                assert b2f.cratio == b2nd_pointer.meta["schunk"]["cratio"]
             if b2f.shape == ():
                 continue
             if h5ds.chunks:
