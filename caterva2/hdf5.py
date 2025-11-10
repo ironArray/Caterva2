@@ -420,7 +420,7 @@ class HDF5Proxy(blosc2.Operand):
 
     @property
     def cratio(self) -> float:
-        return self.nbytes / self.cbytes
+        return 0 if self.cbytes == 0 else self.nbytes / self.cbytes
 
     @property
     def nbytes(self) -> int:
