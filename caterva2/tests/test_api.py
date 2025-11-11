@@ -635,7 +635,7 @@ def test_download_fromurl(examples_dir, tmp_path, auth_client):
 
     root = "@public"
     path, remotepath = (
-        "https://github.com/ironArray/data-cat2-demo/blob/main/root-example/ds-1d.b2nd",
+        "https://github.com/ironArray/data-cat2-demo/raw/refs/heads/main/root-example/ds-1d.b2nd",
         "myfile.b2nd",
     )
 
