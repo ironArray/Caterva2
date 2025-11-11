@@ -239,17 +239,17 @@ class Root:
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
-    def download_from_url(self, localpath, remotepath=None):
+    def load_from_url(self, localpath, remotepath=None):
         """
-        Downloads a third party file via url to this root.
+        Loads a third party file via url to this root.
 
         Parameters
         ----------
         localpath : str
-            Path of the file to upload.
+            Url path of the file to get.
         remotepath : Path, optional
-            Remote path where the file will be uploaded.  If not provided, the
-            file will be uploaded to the top level of this root.
+            Remote path where the file will be placed.  If not provided, the
+            file will be placed in the top level of this root.
 
         Returns
         -------
@@ -261,7 +261,7 @@ class Root:
             remotepath = pathlib.PurePosixPath(self.name) / localpath
         else:
             remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
-        uploadpath = self.client.download_from_url(localpath, remotepath)
+        uploadpath = self.client.load_from_url(localpath, remotepath)
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
@@ -1144,16 +1144,16 @@ class Client:
             auth_cookie=self.cookie,
         )
 
-    def download_from_url(self, localpath, dataset):
+    def load_from_url(self, localpath, dataset):
         """
-        Downloads a remote dataset to a remote repository.
+        Loads a remote dataset to a remote repository.
 
         Parameters
         ----------
         localpath : Path
             Url to the remote third party dataset.
         dataset : Path
-            Remote path to upload the dataset to.
+            Remote path to place the dataset into.
 
         Returns
         -------
@@ -1161,7 +1161,7 @@ class Client:
             Path of the uploaded file on the server.
         """
         urlbase, _ = _format_paths(self.urlbase)
-        return api_utils.download_from_url(
+        return api_utils.load_from_url(
             localpath,
             dataset,
             urlbase,

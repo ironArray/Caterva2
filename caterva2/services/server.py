@@ -1019,21 +1019,21 @@ async def upload_file(
     return str(path)
 
 
-@app.post("/api/download_from_url/{path:path}")
-async def download_from_url(
+@app.post("/api/load_from_url/{path:path}")
+async def load_from_url(
     path: pathlib.Path,
     file: str = fastapi.Form(...),
     user: db.User = Depends(current_active_user),
 ):
     """
-    Download a file from a url to a root.
+    Load a file from a url to a root.
 
     Parameters
     ----------
     path : pathlib.Path
-        The path to store the uploaded file.
+        The path to store the file.
     file : str
-        The file to upload (from remote source).
+        The url to get the file (from remote source).
 
     Returns
     -------

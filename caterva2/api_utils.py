@@ -163,9 +163,9 @@ def upload_file(localpath, remotepath, urlbase, auth_cookie=None):
     return pathlib.PurePosixPath(response.json())
 
 
-def download_from_url(localpath, remotepath, urlbase, auth_cookie=None):
+def load_from_url(localpath, remotepath, urlbase, auth_cookie=None):
     client = get_client()
-    url = f"{urlbase}/api/download_from_url/{remotepath}"
+    url = f"{urlbase}/api/load_from_url/{remotepath}"
 
     headers = {"Cookie": auth_cookie} if auth_cookie else None
     response = client.post(url, data={"file": localpath}, headers=headers)

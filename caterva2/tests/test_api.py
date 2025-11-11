@@ -629,7 +629,7 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
             assert "Not Found" in str(e_info.value)
 
 
-def test_download_fromurl(examples_dir, tmp_path, auth_client):
+def test_loadfromurl(examples_dir, tmp_path, auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
@@ -644,7 +644,7 @@ def test_download_fromurl(examples_dir, tmp_path, auth_client):
     arr_ = myroot["ds-1d.b2nd"]
     with contextlib.chdir(tmp_path):
         # Now, download the file to the remote root
-        remote_ds = remote_root.download_from_url(path, remotepath)
+        remote_ds = remote_root.load_from_url(path, remotepath)
         # Check whether the file has been downloaded with the correct name
         if remotepath:
             if remotepath.endswith("/"):
