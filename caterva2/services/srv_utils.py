@@ -26,7 +26,7 @@ from fastapi_users.exceptions import UserNotExists
 from sqlalchemy.future import select
 
 # Project
-from caterva2 import models
+from caterva2 import hdf5, models
 from caterva2.services import db, schemas, settings, users
 
 
@@ -122,6 +122,10 @@ def read_metadata(obj):
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
+        if "_ftype" in schunk.vlmeta and schunk.vlmeta["_ftype"] == "hdf5":
+            array = hdf5.HDF5Proxy(array)
+            schunk.cratio = array.cratio  # overwrite cratio (which will be 0) with HDF5Proxy value
+            schunk.cbytes = array.cbytes
         return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime)
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
