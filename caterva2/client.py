@@ -1285,11 +1285,10 @@ class Client:
         if isinstance(expression, blosc2.LazyExpr):
             operands = expression.operands
             expression = expression.expression
+        if operands is not None:
+            operands = {k: str(v) for k, v in operands.items()}
         else:
-            if operands is not None:
-                operands = {k: str(v) for k, v in operands.items()}
-            else:
-                operands = {}
+            operands = {}
         expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
         dataset = api_utils.post(
             f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
