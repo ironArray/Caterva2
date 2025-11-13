@@ -682,11 +682,11 @@ def test_lazyexpr(auth_client):
 
     # test streamlined API
     a = auth_client.get(oppt)
-    ls = blosc2.lazyexpr(f"linspace(0,1, {a.shape[0]})")
+    ls = blosc2.lazyexpr(f"linspace(0, 1, {a.shape[0]})")
     mylazyexpr = a + 0
     mylazyexpr += 2 * ls
     res = a[:] + 2 * ls[:]
-    lxpath = auth_client.lazyexpr(lxname, mylazyexpr)
+    lxpath = auth_client.upload_lazyexpr("@shared/newexpr.b2nd", mylazyexpr)
     b = auth_client.fetch(lxpath)
     np.testing.assert_array_equal(res, b[:])
 

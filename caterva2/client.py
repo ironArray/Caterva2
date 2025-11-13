@@ -1282,14 +1282,55 @@ class Client:
         """
         urlbase, _ = _format_paths(self.urlbase)
         # Convert possible Path objects in operands to strings so that they can be serialized
-        if isinstance(expression, blosc2.LazyExpr):
-            operands = expression.operands
-            expression = expression.expression
         if operands is not None:
             operands = {k: str(v) for k, v in operands.items()}
         else:
             operands = {}
         expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
+        dataset = api_utils.post(
+            f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
+        )
+        return pathlib.PurePosixPath(dataset)
+
+    def upload_lazyexpr(self, remotepath, expression, compute=False):
+        """
+        Creates a lazy expression dataset.
+
+        A dataset at the specified path will be created or overwritten if already
+        exists.
+
+        Parameters
+        ----------
+        remotepath : str
+            Path to save the lazy expression to.
+        expression : blosc2.LazyExpr
+            Expression to be evaluated.
+        operands : dict
+            Mapping of variables in the expression to their corresponding dataset paths.
+        compute : bool, optional
+            If false, generate lazyexpr and do not compute anything.
+            If true, compute lazy expression on creation and save (full) result.
+            Default false.
+
+        Returns
+        -------
+        Path
+            Path of the created dataset.
+        """
+        urlbase, _ = _format_paths(self.urlbase)
+        if not isinstance(expression, blosc2.LazyExpr):
+            raise ValueError("argument ``expression`` must be blosc2.LazyExpr instance.")
+        operands = expression.operands
+        if operands is not None:
+            operands = {k: str(v) for k, v in operands.items()}
+        else:
+            operands = {}
+        expr = {
+            "name": remotepath,
+            "expression": expression.expression,
+            "operands": operands,
+            "compute": compute,
+        }
         dataset = api_utils.post(
             f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
         )

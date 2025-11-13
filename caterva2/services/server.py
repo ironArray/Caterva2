@@ -665,7 +665,7 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     Parameters
     ----------
     name : str
-        The name of the dataset to be created (without extension).
+        The path (or name) of the dataset to be created with (or without) extension.
     expr : str
         The expression to be evaluated.  It must result in a lazy expression.
     operands : dictionary of strings mapping to strings
@@ -699,14 +699,22 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
 
     # Create the lazy expression dataset
     arr = blosc2.lazyexpr(expr, var_dict)
-    if not isinstance(arr, blosc2.LazyExpr):
-        cname = type(arr).__name__
-        raise TypeError(f"Evaluates to {cname} instead of lazy expression")
 
-    # Save to filesystem
-    path = settings.personal / str(user.id)
-    path.mkdir(exist_ok=True, parents=True)
-    urlpath = f"{path / name}.b2nd"
+    # Handle name or path
+    if len(name.split(".")) > 1:  # provided a full path
+        # Get the absolute path for this user
+        urlpath = get_writable_path(name, user)
+        abspath = urlpath.parent
+        if name.suffix != ".b2nd":
+            raise ValueError('If path extension provided must be ".b2nd".')
+        path = name
+    else:  # just provided a name
+        abspath = settings.personal / str(user.id)
+        urlpath = f"{abspath / name}.b2nd"
+        path = f"@personal/{name}.b2nd"
+
+    abspath.mkdir(exist_ok=True, parents=True)
+
     if any(method in expr for method in linalg_funcs):
         compute = True
     if compute:
@@ -714,12 +722,12 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     else:
         arr.save(urlpath=urlpath, mode="w")
 
-    return f"@personal/{name}.b2nd"
+    return path
 
 
 @app.post("/api/lazyexpr/")
 async def lazyexpr(
-    expr: models.NewLazyExpr,
+    expr: models.Cat2LazyExpr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
