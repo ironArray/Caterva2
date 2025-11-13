@@ -680,6 +680,16 @@ def test_lazyexpr(auth_client):
     b = auth_client.fetch(lxpath)
     np.testing.assert_array_equal(a[:], b[:])
 
+    # test streamlined API
+    a = auth_client.get(oppt)
+    ls = blosc2.lazyexpr(f"linspace(0,1, {a.shape[0]})")
+    mylazyexpr = a + 0
+    mylazyexpr += 2 * ls
+    res = a[:] + 2 * ls[:]
+    lxpath = auth_client.lazyexpr(lxname, mylazyexpr)
+    b = auth_client.fetch(lxpath)
+    np.testing.assert_array_equal(res, b[:])
+
 
 # More exercises for the expression evaluation with Blosc2 arrays
 @pytest.mark.parametrize(

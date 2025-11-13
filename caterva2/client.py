@@ -561,7 +561,7 @@ class File:
         return self.client.remove(self.path)
 
 
-class Dataset(File):
+class Dataset(File, blosc2.Operand):
     def __init__(self, root, path):
         """
         Represents a dataset within a Blosc2 container.
@@ -1253,7 +1253,7 @@ class Client:
         ----------
         name : str
             Name of the dataset to be created (without extension).
-        expression : str
+        expression : str | blosc2.LazyExpr
             Expression to be evaluated, which must yield a lazy expression.
         operands : dict
             Mapping of variables in the expression to their corresponding dataset paths.
@@ -1282,10 +1282,14 @@ class Client:
         """
         urlbase, _ = _format_paths(self.urlbase)
         # Convert possible Path objects in operands to strings so that they can be serialized
-        if operands is not None:
-            operands = {k: str(v) for k, v in operands.items()}
+        if isinstance(expression, blosc2.LazyExpr):
+            operands = expression.operands
+            expression = expression.expression
         else:
-            operands = {}
+            if operands is not None:
+                operands = {k: str(v) for k, v in operands.items()}
+            else:
+                operands = {}
         expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
         dataset = api_utils.post(
             f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
