@@ -1253,7 +1253,7 @@ class Client:
         ----------
         name : str
             Name of the dataset to be created (without extension).
-        expression : str | blosc2.LazyExpr
+        expression : str
             Expression to be evaluated, which must yield a lazy expression.
         operands : dict
             Mapping of variables in the expression to their corresponding dataset paths.
