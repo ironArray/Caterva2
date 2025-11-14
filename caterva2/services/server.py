@@ -693,7 +693,7 @@ def make_expr(
     # Parse expression
     expr = expr.strip()
     if not expr or (not remotepath and not name):
-        raise ValueError("Name/path and expression should not be empty")
+        raise ValueError("Name/remotepath and expression should not be empty")
     vars = blosc2.get_expr_operands(expr)
 
     # Open expression datasets
@@ -741,7 +741,7 @@ async def upload_lazyexpr(
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
-    Upload a lazy expression dataset in general directory.
+    Upload a lazy expression dataset (to any root).
 
     The JSON request body must contain a "name"=None for the dataset to be created,
     an "expression" to be evaluated, which must result in
