@@ -713,7 +713,7 @@ def make_expr(
         # Get the absolute path for this user
         urlpath = get_writable_path(remotepath, user)
         abspath = urlpath.parent
-        if name.suffix != ".b2nd":
+        if urlpath.suffix != ".b2nd":
             raise ValueError('If path extension provided must be ".b2nd".')
         path = str(remotepath)
     else:  # just provided a name

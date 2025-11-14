@@ -75,7 +75,7 @@ class LazyArray(pydantic.BaseModel):
 
 
 class Cat2LazyExpr(pydantic.BaseModel):
-    name: str
+    name: str | None
     expression: str
     operands: dict[str, str]
     compute: bool
