@@ -622,6 +622,40 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
             assert "Not Found" in str(e_info.value)
 
 
+def test_loadfromurl(examples_dir, tmp_path, auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    root = "@public"
+    path, remotepath = (
+        "https://github.com/ironArray/data-cat2-demo/raw/refs/heads/main/root-example/ds-1d.b2nd",
+        "myfile.b2nd",
+    )
+
+    remote_root = auth_client.get(root)
+    myroot = auth_client.get(TEST_CATERVA2_ROOT)
+    arr_ = myroot["ds-1d.b2nd"]
+    with contextlib.chdir(tmp_path):
+        # Now, download the file to the remote root
+        remote_ds = remote_root.load_from_url(path, remotepath)
+        # Check whether the file has been downloaded with the correct name
+        if remotepath:
+            if remotepath.endswith("/"):
+                assert remote_ds.name == remotepath + path.name
+            else:
+                assert remote_ds.name == remotepath
+        else:
+            assert remote_ds.name == str(path)
+        np.testing.assert_array_equal(remote_ds[:], arr_[:])
+        # Check removing the file
+        remote_removed = pathlib.Path(remote_ds.remove())
+        assert remote_removed == remote_ds.path
+        # Check that the file has been removed
+        with pytest.raises(Exception) as e_info:
+            _ = remote_root[remote_removed]
+        assert "Not Found" in str(e_info.value)
+
+
 def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path):
     if auth_client:
         pytest.skip("not authentication needed")

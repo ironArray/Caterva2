@@ -30,6 +30,7 @@ import blosc2
 import dotenv
 import fastapi
 import furl
+import httpx
 import markdown
 import nbconvert
 import nbformat
@@ -896,7 +897,7 @@ async def upload_file(
     path : pathlib.Path
         The path to store the uploaded file.
     file : UploadFile
-        The file to upload.
+        The file to upload (from local source).
 
     Returns
     -------
@@ -916,6 +917,75 @@ async def upload_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
+    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+        schunk = blosc2.SChunk(data=data)
+        newsize = schunk.nbytes
+    else:
+        newsize = len(data)
+
+    if settings.quota:
+        try:
+            oldsize = abspath.stat().st_size
+        except FileNotFoundError:
+            oldsize = 0
+
+        total_size = get_disk_usage() - oldsize + newsize
+        if total_size > settings.quota:
+            detail = "Upload failed because quota limit has been exceeded."
+            raise fastapi.HTTPException(detail=detail, status_code=400)
+
+    # If regular file, compress it
+    abspath.parent.mkdir(exist_ok=True, parents=True)
+    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+        data = schunk.to_cframe()
+        abspath = abspath.with_suffix(abspath.suffix + ".b2")
+
+    # Write the file
+    with open(abspath, "wb") as f:
+        f.write(data)
+
+    # Return the urlpath
+    return str(path)
+
+
+@app.post("/api/load_from_url/{path:path}")
+async def load_from_url(
+    path: pathlib.Path,
+    remote_url: str = fastapi.Form(...),
+    user: db.User = Depends(current_active_user),
+):
+    """
+    Load a file from a url to a root.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to store the file.
+    remote_url : str
+        The url from which to get the file (from remote source).
+
+    Returns
+    -------
+    str
+        The path of the uploaded file.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Uploading requires authentication")
+
+    # Get the absolute path for this user
+    abspath = get_writable_path(path, user)
+    # We may upload a new file, or replace an existing file
+    if abspath.is_dir():
+        abspath /= remote_url.filename
+        path /= remote_url.filename
+
+    # Check quota
+    # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:
+        response = await client.get(remote_url)
+        response.raise_for_status()
+    data = response.content
+
     if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
