@@ -1317,7 +1317,7 @@ class Client:
         Path
             Path of the created dataset.
         """
-        urlbase, _ = _format_paths(self.urlbase)
+        urlbase, remotepath = _format_paths(self.urlbase, remotepath)
         if not isinstance(expression, blosc2.LazyExpr):
             raise ValueError("argument ``expression`` must be blosc2.LazyExpr instance.")
         operands = expression.operands
@@ -1326,13 +1326,16 @@ class Client:
         else:
             operands = {}
         expr = {
-            "name": remotepath,
+            "name": None,
             "expression": expression.expression,
             "operands": operands,
             "compute": compute,
         }
         dataset = api_utils.post(
-            f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
+            f"{self.urlbase}/api/upload_lazyexpr/{remotepath}",
+            expr,
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
         )
         return pathlib.PurePosixPath(dataset)
 
