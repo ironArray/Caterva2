@@ -655,7 +655,14 @@ async def get_chunk(
     return responses.StreamingResponse(downloader)
 
 
-def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, compute: bool = False) -> str:
+def make_expr(
+    name: str | None,
+    expr: str,
+    operands: dict[str, str],
+    user: db.User,
+    compute: bool = False,
+    remotepath: pathlib.Path | None = None,
+) -> str:
     """
     Create a lazy expression dataset in personal space.
 
@@ -666,12 +673,14 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     Parameters
     ----------
     name : str
-        The name of the dataset to be created (without extension).
+        The name of the dataset to be created without extension.
     expr : str
         The expression to be evaluated.  It must result in a lazy expression.
     operands : dictionary of strings mapping to strings
         The variables used in the expression and which dataset paths they
         refer to.
+    remotepath: pathlib.Path
+        Where to save the lazy expression. Only valid if name is None.
 
     Returns
     -------
@@ -683,10 +692,9 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
     # Parse expression
-    name = name.strip()
     expr = expr.strip()
-    if not name or not expr:
-        raise ValueError("Name or expression should not be empty")
+    if not expr or (not remotepath and not name):
+        raise ValueError("Name/remotepath and expression should not be empty")
     vars = blosc2.get_expr_operands(expr)
 
     # Open expression datasets
@@ -700,14 +708,23 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
 
     # Create the lazy expression dataset
     arr = blosc2.lazyexpr(expr, var_dict)
-    if not isinstance(arr, blosc2.LazyExpr):
-        cname = type(arr).__name__
-        raise TypeError(f"Evaluates to {cname} instead of lazy expression")
 
-    # Save to filesystem
-    path = settings.personal / str(user.id)
-    path.mkdir(exist_ok=True, parents=True)
-    urlpath = f"{path / name}.b2nd"
+    # Handle name or path
+    if name is None:  # provided a path
+        # Get the absolute path for this user
+        urlpath = get_writable_path(remotepath, user)
+        abspath = urlpath.parent
+        if urlpath.suffix != ".b2nd":
+            raise ValueError('If path extension provided must be ".b2nd".')
+        path = str(remotepath)
+    else:  # just provided a name
+        name = name.strip()
+        abspath = settings.personal / str(user.id)
+        urlpath = f"{abspath / name}.b2nd"
+        path = f"@personal/{name}.b2nd"
+
+    abspath.mkdir(exist_ok=True, parents=True)
+
     if any(method in expr for method in linalg_funcs):
         compute = True
     if compute:
@@ -715,12 +732,46 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     else:
         arr.save(urlpath=urlpath, mode="w")
 
-    return f"@personal/{name}.b2nd"
+    return path
+
+
+@app.post("/api/upload_lazyexpr/{path:path}")
+async def upload_lazyexpr(
+    path: pathlib.Path,
+    expr: models.Cat2LazyExpr,
+    user: db.User = Depends(current_active_user),
+) -> str:
+    """
+    Upload a lazy expression dataset (to any root).
+
+    The JSON request body must contain a "name"=None for the dataset to be created,
+    an "expression" to be evaluated, which must result in
+    a lazy expression, and an "operands" object which maps variable names used
+    in the expression to the dataset paths that they refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
+    if expr.name is not None:
+        raise ValueError("Cannot provide name and path.")
+    try:
+        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute, path)
+    except (SyntaxError, ValueError, TypeError) as exc:
+        raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
+    except KeyError as ke:
+        detail = f"Expression error: {ke.args[0]} is not in the list of available datasets"
+        raise srv_utils.raise_bad_request(detail) from ke
+    except RuntimeError as exc:
+        raise srv_utils.raise_bad_request(f"Runtime error: {exc}") from exc
+
+    return result_path
 
 
 @app.post("/api/lazyexpr/")
 async def lazyexpr(
-    expr: models.NewLazyExpr,
+    expr: models.Cat2LazyExpr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """

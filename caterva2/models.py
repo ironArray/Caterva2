@@ -74,8 +74,8 @@ class LazyArray(pydantic.BaseModel):
     mtime: datetime.datetime | None
 
 
-class NewLazyExpr(pydantic.BaseModel):
-    name: str
+class Cat2LazyExpr(pydantic.BaseModel):
+    name: str | None
     expression: str
     operands: dict[str, str]
     compute: bool

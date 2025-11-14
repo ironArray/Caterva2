@@ -587,7 +587,7 @@ class File:
         return self.client.remove(self.path)
 
 
-class Dataset(File):
+class Dataset(File, blosc2.Operand):
     def __init__(self, root, path):
         """
         Represents a dataset within a Blosc2 container.
@@ -1339,6 +1339,53 @@ class Client:
         expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
         dataset = api_utils.post(
             f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
+        )
+        return pathlib.PurePosixPath(dataset)
+
+    def upload_lazyexpr(self, remotepath, expression, compute=False):
+        """
+        Creates a lazy expression dataset.
+
+        A dataset at the specified path will be created or overwritten if already
+        exists.
+
+        Parameters
+        ----------
+        remotepath : str
+            Path to save the lazy expression to.
+        expression : blosc2.LazyExpr
+            Expression to be evaluated.
+        operands : dict
+            Mapping of variables in the expression to their corresponding dataset paths.
+        compute : bool, optional
+            If false, generate lazyexpr and do not compute anything.
+            If true, compute lazy expression on creation and save (full) result.
+            Default false.
+
+        Returns
+        -------
+        Path
+            Path of the created dataset.
+        """
+        urlbase, remotepath = _format_paths(self.urlbase, remotepath)
+        if not isinstance(expression, blosc2.LazyExpr):
+            raise ValueError("argument ``expression`` must be blosc2.LazyExpr instance.")
+        operands = expression.operands
+        if operands is not None:
+            operands = {k: str(v) for k, v in operands.items()}
+        else:
+            operands = {}
+        expr = {
+            "name": None,
+            "expression": expression.expression,
+            "operands": operands,
+            "compute": compute,
+        }
+        dataset = api_utils.post(
+            f"{self.urlbase}/api/upload_lazyexpr/{remotepath}",
+            expr,
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
         )
         return pathlib.PurePosixPath(dataset)
 
