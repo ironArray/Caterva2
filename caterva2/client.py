@@ -239,13 +239,13 @@ class Root:
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
-    def load_from_url(self, localpath, remotepath=None):
+    def load_from_url(self, path_to_url, remotepath=None):
         """
         Loads a third party file via url to this root.
 
         Parameters
         ----------
-        localpath : str
+        path_to_url : str
             Url path of the file to get.
         remotepath : Path, optional
             Remote path where the file will be placed.  If not provided, the
@@ -258,10 +258,10 @@ class Root:
 
         """
         if remotepath is None:
-            remotepath = pathlib.PurePosixPath(self.name) / localpath
+            remotepath = pathlib.PurePosixPath(self.name) / path_to_url
         else:
             remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
-        uploadpath = self.client.load_from_url(localpath, remotepath)
+        uploadpath = self.client.load_from_url(path_to_url, remotepath)
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
@@ -1144,13 +1144,13 @@ class Client:
             auth_cookie=self.cookie,
         )
 
-    def load_from_url(self, localpath, dataset):
+    def load_from_url(self, path_to_url, dataset):
         """
         Loads a remote dataset to a remote repository.
 
         Parameters
         ----------
-        localpath : Path
+        path_to_url : Path
             Url to the remote third party dataset.
         dataset : Path
             Remote path to place the dataset into.
@@ -1162,7 +1162,7 @@ class Client:
         """
         urlbase, _ = _format_paths(self.urlbase)
         return api_utils.load_from_url(
-            localpath,
+            path_to_url,
             dataset,
             urlbase,
             auth_cookie=self.cookie,

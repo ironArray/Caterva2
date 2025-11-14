@@ -1022,7 +1022,7 @@ async def upload_file(
 @app.post("/api/load_from_url/{path:path}")
 async def load_from_url(
     path: pathlib.Path,
-    file: str = fastapi.Form(...),
+    remote_url: str = fastapi.Form(...),
     user: db.User = Depends(current_active_user),
 ):
     """
@@ -1032,8 +1032,8 @@ async def load_from_url(
     ----------
     path : pathlib.Path
         The path to store the file.
-    file : str
-        The url to get the file (from remote source).
+    remote_url : str
+        The url from which to get the file (from remote source).
 
     Returns
     -------
@@ -1047,13 +1047,13 @@ async def load_from_url(
     abspath = get_writable_path(path, user)
     # We may upload a new file, or replace an existing file
     if abspath.is_dir():
-        abspath /= file.filename
-        path /= file.filename
+        abspath /= remote_url.filename
+        path /= remote_url.filename
 
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     async with httpx.AsyncClient(follow_redirects=True, timeout=None) as client:
-        response = await client.get(file)
+        response = await client.get(remote_url)
         response.raise_for_status()
     data = response.content
 
