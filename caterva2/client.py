@@ -729,6 +729,9 @@ class Client:
         >>> client = cat2.Client("https://cat2.cloud/demo")
         >>> auth_client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
         """
+        http2 = sys.platform != "emscripten"
+        self.httpx_client = httpx.Client(http2=http2)
+
         self.urlbase = utils.urlbase_type(urlbase)
         self.cookie = None
         self.timeout = timeout
@@ -745,6 +748,18 @@ class Client:
                 self.cookie = self._get_auth_cookie(
                     {"username": username, "password": password}, timeout=self.timeout
                 )
+
+    def close(self):
+        self.httpx_client.close()
+
+    def __enter__(self):
+        """Enter context manager - HTTP clients created lazily on first use."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager - close HTTP clients."""
+        self.close()
+        return False
 
     def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5):
         response = self._xget(
@@ -782,7 +797,7 @@ class Client:
             An authentication token that may be used as a cookie in further
             requests to the server.
         """
-        client = self._get_client()
+        client = self.httpx_client
         url = f"{self.urlbase}/auth/jwt/login"
 
         if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
@@ -814,12 +829,8 @@ class Client:
         json = response.json()
         return json if model is None else model(**json)
 
-    def _get_client(self):
-        http2 = sys.platform != "emscripten"
-        return httpx.Client(http2=http2)
-
     def _post(self, url, json=None, auth_cookie=None, timeout=5):
-        client = self._get_client()
+        client = self.httpx_client
         headers = {"Cookie": auth_cookie} if auth_cookie else None
         try:
             response = client.post(url, json=json, headers=headers, timeout=timeout)
@@ -832,7 +843,7 @@ class Client:
         return response.json()
 
     def _xget(self, url, params=None, headers=None, timeout=5, auth_cookie=None):
-        client = self._get_client()
+        client = self.httpx_client
         if auth_cookie:
             headers = headers.copy() if headers else {}
             headers["Cookie"] = auth_cookie
@@ -1113,7 +1124,7 @@ class Client:
         return data.content
 
     def _download_url(self, url, localpath, auth_cookie=None):
-        client = self._get_client()
+        client = self.httpx_client
 
         localpath = pathlib.Path(localpath)
         localpath.parent.mkdir(parents=True, exist_ok=True)
@@ -1182,7 +1193,7 @@ class Client:
         return self._download_url(url, str(path), auth_cookie=self.cookie)
 
     def _upload_file(self, localpath, remotepath, urlbase, auth_cookie=None):
-        client = self._get_client()
+        client = self.httpx_client
         url = f"{urlbase}/api/upload/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
@@ -1231,7 +1242,7 @@ class Client:
         )
 
     def _load_from_url(self, path_to_url, remotepath, urlbase, auth_cookie=None):
-        client = self._get_client()
+        client = self.httpx_client
         url = f"{urlbase}/api/load_from_url/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
@@ -1301,7 +1312,7 @@ class Client:
         cframe = ndarray.to_cframe()
         file = io.BytesIO(cframe)
 
-        client = self._get_client()
+        client = self.httpx_client
         url = f"{self.urlbase}/api/append/{remotepath}"
         headers = {"Cookie": self.cookie}
         response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
