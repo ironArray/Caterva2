@@ -814,14 +814,9 @@ class Client:
         json = response.json()
         return json if model is None else model(**json)
 
-    def _get_client(self, return_async_client=False):
-        if return_async_client:
-            client_class = httpx.AsyncClient
-        else:
-            client_class = httpx.Client
-
+    def _get_client(self):
         http2 = sys.platform != "emscripten"
-        return client_class(http2=http2)
+        return httpx.Client(http2=http2)
 
     def _post(self, url, json=None, auth_cookie=None, timeout=5):
         client = self._get_client()
