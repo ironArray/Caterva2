@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from pathlib import PurePosixPath
 
 import blosc2
+import httpx
 import numpy as np
 from blosc2 import NDArray, SChunk
 
@@ -90,7 +91,7 @@ class Root:
         """
         Retrieves a list of files in this root.
         """
-        return api_utils.get(
+        return self.client._get(
             f"{self.urlbase}/api/list/{self.name}", auth_cookie=self.cookie, timeout=self.client.timeout
         )
 
@@ -303,7 +304,7 @@ class File:
         _, root = _format_paths(root.urlbase, root.name)
         self.name = name
         self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
-        self.meta = api_utils.get(
+        self.meta = self.root.client._get(
             f"{self.urlbase}/api/info/{self.path}", auth_cookie=self.cookie, timeout=self.root.client.timeout
         )
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
@@ -741,9 +742,136 @@ class Client:
             else:
                 raise ValueError("auth must be BasicAuth or a tuple (username, password)")
             if username and password:
-                self.cookie = api_utils.get_auth_cookie(
-                    self.urlbase, {"username": username, "password": password}, timeout=self.timeout
+                self.cookie = self._get_auth_cookie(
+                    {"username": username, "password": password}, timeout=self.timeout
                 )
+
+    def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5):
+        response = self._xget(
+            f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, timeout=timeout
+        )
+        data = response.content
+        # Try different deserialization methods
+        try:
+            data = blosc2.ndarray_from_cframe(data)
+        except RuntimeError:
+            data = blosc2.schunk_from_cframe(data)
+        if as_blosc2:
+            return data
+        if hasattr(data, "ndim"):  # if b2nd or b2frame
+            # catch 0d case where [:] fails
+            return data[()] if data.ndim == 0 else data[:]
+        else:
+            return data[:]
+
+    def _get_auth_cookie(self, user_auth, timeout=5):
+        """
+        Authenticate to a server as a user and get an authorization cookie.
+
+        Authentication fields will usually be ``username`` and ``password``.
+
+        Parameters
+        ----------
+        user_auth : dict
+            A mapping of fields and values used as data to be posted for
+            authenticating the user.
+
+        Returns
+        -------
+        str
+            An authentication token that may be used as a cookie in further
+            requests to the server.
+        """
+        client = self._get_client()
+        url = f"{self.urlbase}/auth/jwt/login"
+
+        if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
+            user_auth = user_auth._asdict()
+        try:
+            resp = client.post(url, data=user_auth, timeout=timeout)
+        except httpx.ReadTimeout as e:
+            raise TimeoutError(
+                f"Timeout after {timeout} seconds while trying to access {url}. "
+                f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+            ) from e
+        resp.raise_for_status()
+        return "=".join(list(resp.cookies.items())[0])
+
+    def _get(
+        self,
+        url,
+        params=None,
+        headers=None,
+        timeout=5,
+        model=None,
+        auth_cookie=None,
+        return_response=False,
+    ):
+        response = self._xget(url, params, headers, timeout, auth_cookie)
+        if return_response:
+            return response
+
+        json = response.json()
+        return json if model is None else model(**json)
+
+    def _get_client(self, return_async_client=False):
+        if return_async_client:
+            client_class = httpx.AsyncClient
+        else:
+            client_class = httpx.Client
+
+        http2 = sys.platform != "emscripten"
+        return client_class(http2=http2)
+
+    def _post(self, url, json=None, auth_cookie=None, timeout=5):
+        client = self._get_client()
+        headers = {"Cookie": auth_cookie} if auth_cookie else None
+        try:
+            response = client.post(url, json=json, headers=headers, timeout=timeout)
+        except httpx.ReadTimeout as e:
+            raise TimeoutError(
+                f"Timeout after {timeout} seconds while trying to access {url}. "
+                f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+            ) from e
+        response.raise_for_status()
+        return response.json()
+
+    def _xget(self, url, params=None, headers=None, timeout=5, auth_cookie=None):
+        client = self._get_client()
+        if auth_cookie:
+            headers = headers.copy() if headers else {}
+            headers["Cookie"] = auth_cookie
+        try:
+            response = client.get(url, params=params, headers=headers, timeout=timeout)
+        except httpx.ReadTimeout as e:
+            raise TimeoutError(
+                f"Timeout after {timeout} seconds while trying to access {url}. "
+                f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+            ) from e
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # Only customize for 400 errors
+            if exc.response.status_code == 400:
+                detail = None
+                try:
+                    body = exc.response.json()
+                    detail = body.get("detail")
+                except (ValueError, AttributeError, TypeError):
+                    # Fallback to raw text if JSON decoding fails
+                    detail = exc.response.text.strip() or None
+
+                if detail:
+                    # Build a new message that replaces the MDN link with the detail
+                    message = f"{exc.request.method} request to {exc.response.url} failed: {detail}"
+                    raise httpx.HTTPStatusError(
+                        message=message, request=exc.request, response=exc.response
+                    ) from exc
+            # Re-raise original for non-400 errors
+            raise
+
+        return response
 
     def get_roots(self):
         """
@@ -766,7 +894,7 @@ class Client:
         {'name': 'b2tests'}
         """
         urlbase, _ = _format_paths(self.urlbase)
-        return api_utils.get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie, timeout=self.timeout)
+        return self._get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie, timeout=self.timeout)
 
     def get(self, path):
         """
@@ -829,9 +957,7 @@ class Client:
         ['README.md', 'dir1/ds-2d.b2nd', 'dir1/ds-3d.b2nd']
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        return api_utils.get(
-            f"{self.urlbase}/api/list/{path}", auth_cookie=self.cookie, timeout=self.timeout
-        )
+        return self._get(f"{self.urlbase}/api/list/{path}", auth_cookie=self.cookie, timeout=self.timeout)
 
     def get_info(self, path):
         """
@@ -859,9 +985,7 @@ class Client:
         [100, 200]
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        return api_utils.get(
-            f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout
-        )
+        return self._get(f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout)
 
     def fetch(self, path, slice_=None):
         """
@@ -924,7 +1048,7 @@ class Client:
         """
         urlbase, path = _format_paths(self.urlbase, path)
         if field:  # blosc2 doesn't support indexing of multiple fields
-            return api_utils.fetch_data(
+            return self._fetch_data(
                 path,
                 urlbase,
                 {"field": field},
@@ -935,7 +1059,7 @@ class Client:
         if isinstance(key, str):
             # The key can still be a slice expression in string format (like for CLI utils)
             params = {"slice_": key} if _looks_like_slice(key) else {"filter": key}
-            return api_utils.fetch_data(
+            return self._fetch_data(
                 path,
                 urlbase,
                 params=params,
@@ -946,7 +1070,7 @@ class Client:
         else:  # Convert slices to strings
             slice_ = api_utils.slice_to_string(key)
             # Fetch and return the data as a Blosc2 object / NumPy array
-            return api_utils.fetch_data(
+            return self._fetch_data(
                 path,
                 urlbase,
                 {"slice_": slice_},
@@ -985,13 +1109,42 @@ class Client:
         6.453000645300064
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        data = api_utils._xget(
+        data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
             {"nchunk": nchunk},
             auth_cookie=self.cookie,
             timeout=self.timeout,
         )
         return data.content
+
+    def _download_url(self, url, localpath, auth_cookie=None):
+        client = self._get_client()
+
+        localpath = pathlib.Path(localpath)
+        localpath.parent.mkdir(parents=True, exist_ok=True)
+        if localpath.is_dir():
+            # Get the filename from the URL
+            localpath /= url.split("/")[-1]
+
+        headers = {}
+        headers["Accept-Encoding"] = "blosc2"
+        if auth_cookie:
+            headers["Cookie"] = auth_cookie
+
+        with client.stream("GET", url, headers=headers) as r:
+            r.raise_for_status()
+            decompress = r.headers.get("Content-Encoding") == "blosc2"
+            if decompress:
+                localpath = localpath.with_suffix(localpath.suffix + ".b2")
+
+            with open(localpath, "wb") as f:
+                for data in r.iter_bytes():
+                    f.write(data)
+
+        if decompress:
+            localpath = api_utils.b2_unpack(localpath)
+
+        return localpath
 
     def download(self, dataset, localpath=None):
         """
@@ -1031,7 +1184,17 @@ class Client:
             path = localpath / dataset.name
         else:
             path = localpath
-        return api_utils.download_url(url, str(path), auth_cookie=self.cookie)
+        return self._download_url(url, str(path), auth_cookie=self.cookie)
+
+    def _upload_file(self, localpath, remotepath, urlbase, auth_cookie=None):
+        client = self._get_client()
+        url = f"{urlbase}/api/upload/{remotepath}"
+
+        headers = {"Cookie": auth_cookie} if auth_cookie else None
+        with open(localpath, "rb") as f:
+            response = client.post(url, files={"file": f}, headers=headers)
+            response.raise_for_status()
+        return pathlib.PurePosixPath(response.json())
 
     def upload(self, localpath, dataset):
         """
@@ -1065,12 +1228,21 @@ class Client:
         True
         """
         urlbase, dataset = _format_paths(self.urlbase, dataset)
-        return api_utils.upload_file(
+        return self._upload_file(
             localpath,
             dataset,
             urlbase,
             auth_cookie=self.cookie,
         )
+
+    def _load_from_url(self, path_to_url, remotepath, urlbase, auth_cookie=None):
+        client = self._get_client()
+        url = f"{urlbase}/api/load_from_url/{remotepath}"
+
+        headers = {"Cookie": auth_cookie} if auth_cookie else None
+        response = client.post(url, data={"remote_url": path_to_url}, headers=headers)
+        response.raise_for_status()
+        return pathlib.PurePosixPath(response.json())
 
     def load_from_url(self, path_to_url, dataset):
         """
@@ -1089,7 +1261,7 @@ class Client:
             Path of the uploaded file on the server.
         """
         urlbase, _ = _format_paths(self.urlbase)
-        return api_utils.load_from_url(
+        return self._load_from_url(
             path_to_url,
             dataset,
             urlbase,
@@ -1134,7 +1306,7 @@ class Client:
         cframe = ndarray.to_cframe()
         file = io.BytesIO(cframe)
 
-        client = api_utils.get_client()
+        client = self._get_client()
         url = f"{self.urlbase}/api/append/{remotepath}"
         headers = {"Cookie": self.cookie}
         response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
@@ -1168,7 +1340,7 @@ class Client:
         PurePosixPath('@personal/dir/data')
         """
         urlbase, path = _format_paths(self.urlbase, remotepath)
-        result = api_utils.post(
+        result = self._post(
             f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
         return PurePosixPath(result)
@@ -1204,7 +1376,7 @@ class Client:
         True
         """
         urlbase, path = _format_paths(self.urlbase, path)
-        result = api_utils.post(
+        result = self._post(
             f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
         return pathlib.PurePosixPath(result)
@@ -1241,7 +1413,7 @@ class Client:
         False
         """
         urlbase, _ = _format_paths(self.urlbase)
-        result = api_utils.post(
+        result = self._post(
             f"{self.urlbase}/api/move/",
             {"src": str(src), "dst": str(dst)},
             auth_cookie=self.cookie,
@@ -1284,7 +1456,7 @@ class Client:
         True
         """
         urlbase, _ = _format_paths(self.urlbase)
-        result = api_utils.post(
+        result = self._post(
             f"{self.urlbase}/api/copy/",
             {"src": str(src), "dst": str(dst)},
             auth_cookie=self.cookie,
@@ -1337,7 +1509,7 @@ class Client:
         else:
             operands = {}
         expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
-        dataset = api_utils.post(
+        dataset = self._post(
             f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
         )
         return pathlib.PurePosixPath(dataset)
@@ -1381,7 +1553,7 @@ class Client:
             "operands": operands,
             "compute": compute,
         }
-        dataset = api_utils.post(
+        dataset = self._post(
             f"{self.urlbase}/api/upload_lazyexpr/{remotepath}",
             expr,
             auth_cookie=self.cookie,
@@ -1419,7 +1591,7 @@ class Client:
         True
         """
         urlbase, _ = _format_paths(self.urlbase)
-        return api_utils.post(
+        return self._post(
             f"{self.urlbase}/api/adduser/",
             {"username": newuser, "password": password, "superuser": superuser},
             auth_cookie=self.cookie,
@@ -1452,7 +1624,7 @@ class Client:
         True
         """
         urlbase, _ = _format_paths(self.urlbase)
-        return api_utils.get(f"{self.urlbase}/api/deluser/{user}", auth_cookie=self.cookie)
+        return self._get(f"{self.urlbase}/api/deluser/{user}", auth_cookie=self.cookie)
 
     def listusers(self, username=None):
         """
@@ -1491,4 +1663,4 @@ class Client:
         """
         urlbase, _ = _format_paths(self.urlbase)
         url = f"{self.urlbase}/api/listusers/" + (f"?username={username}" if username else "")
-        return api_utils.get(url, auth_cookie=self.cookie)
+        return self._get(url, auth_cookie=self.cookie)
