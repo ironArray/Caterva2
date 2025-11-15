@@ -9,6 +9,7 @@
 import os
 import pathlib
 import re
+import sys
 
 # Requirements
 import blosc2
@@ -194,7 +195,8 @@ def get_client(return_async_client=False):
     else:
         client_class = httpx.Client
 
-    return client_class()
+    http2 = sys.platform != "emscripten"
+    return client_class(http2=http2)
 
 
 def _xget(url, params=None, headers=None, timeout=5, auth_cookie=None):
