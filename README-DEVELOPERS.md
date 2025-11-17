@@ -81,7 +81,7 @@ hatch build
 For installing the wheels, you can run:
 
 ```shell
-hatch install
+pip install dist/name_of_wheel_file.whl
 ```
 
 Then, you can run the tests:

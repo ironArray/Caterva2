@@ -38,7 +38,6 @@ and run the following commands::
   $ rm -r _caterva2/
   $ cat2-admin adduser superuser@example.com foobarfoo -S
   $ CATERVA2_SECRET="123" cat2-server &
-  # $ python -m caterva2.examples.demo_upload  # TODO: update this example
 
 And experiment a bit with uploading, browsing and downloading files.
 
