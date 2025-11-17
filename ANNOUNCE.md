@@ -1,4 +1,4 @@
-Announcing Caterva2 2025.10.25
+Announcing Caterva2 2025.11.17
 ==============================
 
 Caterva2 is a high-performance storage and computation system for

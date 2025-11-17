@@ -39,7 +39,7 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "blosc2>=3.2.0",
+    "blosc2>=3.11.1",
     "httpx[http2]",
 ]
 

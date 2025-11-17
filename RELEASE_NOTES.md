@@ -1,10 +1,6 @@
 # Release notes
 
-## Changes from 2025.10.25 to X.Y.Z
-
-#XXX version-specific blurb XXX#
-
-## Changes from 2025.8.7 to 2025.10.25
+## Changes from 2025.8.7 to 2025.11.17
 
 ### New features
 
@@ -15,6 +11,10 @@
 * The client API now requires blosc2, and sends a "Accept-Encoding: blosc2"
   header. That allows the server to send Blosc2-compressed data directly,
   avoiding the overhead of sending uncompressed data through the network.
+
+* Extended lazy expression functionalities, in web and python client
+
+* Loading files from third-party url directly to server enables via ``load_from_url``
 
 ### New command-line tools
 
