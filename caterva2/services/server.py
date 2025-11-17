@@ -693,7 +693,7 @@ def make_expr(
     # Parse expression
     expr = expr.strip()
     if not expr or (not remotepath and not name):
-        raise ValueError("Name/remotepath and expression should not be empty")
+        raise ValueError("name/remotepath and expression should not be empty")
     vars = blosc2.get_expr_operands(expr)
 
     # Open expression datasets
