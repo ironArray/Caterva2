@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 2025.11.17 to XXXX.XX.XX
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 2025.8.7 to 2025.11.17
 
 ### New features
