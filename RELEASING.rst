@@ -74,10 +74,10 @@ Tagging and releasing
 
 Check that the release is available at https://pypi.org/project/caterva2/ and test it with::
 
-  $ pip uninstall caterva2
-  $ pip install caterva2[tests]
-  $ python -m caterva2.tests
-  $ CATERVA2_SECRET="c2sikrit" python -m caterva2.tests
+  pip uninstall caterva2
+  pip install caterva2[tests]
+  python -m caterva2.tests
+  CATERVA2_SECRET="c2sikrit" python -m caterva2.tests
 
 Announcing
 ----------
