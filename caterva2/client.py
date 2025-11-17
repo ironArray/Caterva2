@@ -780,6 +780,24 @@ class Client:
             return data[:]
 
     def _get_auth_cookie(self, user_auth, timeout=5):
+        """
+        Authenticate to a server as a user and get an authorization cookie.
+
+        Authentication fields will usually be ``username`` and ``password``.
+
+        Parameters
+        ----------
+        user_auth : dict
+            A mapping of fields and values used as data to be posted for
+            authenticating the user.
+
+        Returns
+        -------
+        str or None
+            An authentication token that may be used as a cookie in further
+            requests to the server. Returns None in browser environments
+            (Pyodide) where cookies are managed automatically by the browser.
+        """
         client = self.httpx_client
         url = f"{self.urlbase}/auth/jwt/login"
 
