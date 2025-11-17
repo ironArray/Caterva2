@@ -79,10 +79,6 @@ Check that the release is available at https://pypi.org/project/caterva2/ and te
   $ python -m caterva2.tests
   $ CATERVA2_SECRET="c2sikrit" python -m caterva2.tests
 
-- Go to ``https://github.com/ironArray/website2`` repo, and do a release of
-    the website2 project, which will update the website with the new release.
-
-
 Announcing
 ----------
 
@@ -100,10 +96,6 @@ Post-release actions
 
 - Create new headers for adding new features in ``RELEASE_NOTES.md``
   and add this place-holder instead::
-
-    #XXX version-specific blurb XXX#
-
-- Replace the version-specific blurb of ``ANNOUNCE.md`` with this placeholder::
 
     #XXX version-specific blurb XXX#
 
