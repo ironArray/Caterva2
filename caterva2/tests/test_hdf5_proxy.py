@@ -243,6 +243,10 @@ def test_unfold_download(examples_dir, tmp_path, auth_client):
                 continue
             assert b2f.dtype == h5ds.dtype
             assert b2f.shape == (h5ds.shape or ())
+            b2nd_pointer = auth_client.get(remote_path)
+            if b2f.shape != ():  # skip empty datasets
+                assert b2f.cbytes == b2nd_pointer.meta["schunk"]["cbytes"]
+                assert b2f.cratio == b2nd_pointer.meta["schunk"]["cratio"]
             if b2f.shape == ():
                 continue
             if h5ds.chunks:
@@ -302,6 +306,7 @@ def test_unfold_fetch(fetch_or_slice, examples_dir, tmp_path, auth_client):
         "a ** 2.3 + b / 2.3",
         "sqrt(a) ** sin(b)",
         "where(a < 50, a + 50, b)",
+        "matmul(a, b)",
     ],
 )
 def test_expression(expression, examples_dir, tmp_path, auth_client):
@@ -323,6 +328,8 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
         operands = {"a": str(remote_root) + "/" + str(remote_a), "b": str(remote_root) + "/" + str(remote_b)}
         lxpath = auth_client.lazyexpr("myexpr", expression, operands)
         assert lxpath == pathlib.Path("@personal/myexpr.b2nd")
+        if expression == "matmul(a, b)":  # check evaluated eagerly for linalg
+            assert "expression" not in auth_client.get_info(lxpath)
 
         # Compute the expression
         result = auth_client.get_slice(lxpath)
@@ -331,5 +338,8 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
         # Check the data
         na = h5f[ds_a][:]
         nb = h5f[ds_b][:]
-        nresult = ne.evaluate(expression, {"a": na, "b": nb})
+        if expression != "matmul(a, b)":
+            nresult = ne.evaluate(expression, {"a": na, "b": nb})
+        else:
+            nresult = np.matmul(na, nb)
         np.testing.assert_allclose(result[:], nresult)

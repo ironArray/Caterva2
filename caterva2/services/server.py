@@ -18,7 +18,6 @@ import json
 import mimetypes
 import os
 import pathlib
-import re
 import shutil
 import string
 import tarfile
@@ -36,7 +35,9 @@ import markdown
 import nbconvert
 import nbformat
 import PIL.Image
+import pygments
 import uvicorn
+from blosc2 import linalg_funcs_list as linalg_funcs
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
@@ -654,7 +655,14 @@ async def get_chunk(
     return responses.StreamingResponse(downloader)
 
 
-def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, compute: bool = False) -> str:
+def make_expr(
+    name: str | None,
+    expr: str,
+    operands: dict[str, str],
+    user: db.User,
+    compute: bool = False,
+    remotepath: pathlib.Path | None = None,
+) -> str:
     """
     Create a lazy expression dataset in personal space.
 
@@ -665,12 +673,14 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
     Parameters
     ----------
     name : str
-        The name of the dataset to be created (without extension).
+        The name of the dataset to be created without extension.
     expr : str
         The expression to be evaluated.  It must result in a lazy expression.
     operands : dictionary of strings mapping to strings
         The variables used in the expression and which dataset paths they
         refer to.
+    remotepath: pathlib.Path
+        Where to save the lazy expression. Only valid if name is None.
 
     Returns
     -------
@@ -682,10 +692,9 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
     # Parse expression
-    name = name.strip()
     expr = expr.strip()
-    if not name or not expr:
-        raise ValueError("Name or expression should not be empty")
+    if not expr or (not remotepath and not name):
+        raise ValueError("Name/remotepath and expression should not be empty")
     vars = blosc2.get_expr_operands(expr)
 
     # Open expression datasets
@@ -699,25 +708,70 @@ def make_expr(name: str, expr: str, operands: dict[str, str], user: db.User, com
 
     # Create the lazy expression dataset
     arr = blosc2.lazyexpr(expr, var_dict)
-    if not isinstance(arr, blosc2.LazyExpr):
-        cname = type(arr).__name__
-        raise TypeError(f"Evaluates to {cname} instead of lazy expression")
 
-    # Save to filesystem
-    path = settings.personal / str(user.id)
-    path.mkdir(exist_ok=True, parents=True)
-    urlpath = f"{path / name}.b2nd"
+    # Handle name or path
+    if name is None:  # provided a path
+        # Get the absolute path for this user
+        urlpath = get_writable_path(remotepath, user)
+        abspath = urlpath.parent
+        if urlpath.suffix != ".b2nd":
+            raise ValueError('If path extension provided must be ".b2nd".')
+        path = str(remotepath)
+    else:  # just provided a name
+        name = name.strip()
+        abspath = settings.personal / str(user.id)
+        urlpath = f"{abspath / name}.b2nd"
+        path = f"@personal/{name}.b2nd"
+
+    abspath.mkdir(exist_ok=True, parents=True)
+
+    if any(method in expr for method in linalg_funcs):
+        compute = True
     if compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
         arr.save(urlpath=urlpath, mode="w")
 
-    return f"@personal/{name}.b2nd"
+    return path
+
+
+@app.post("/api/upload_lazyexpr/{path:path}")
+async def upload_lazyexpr(
+    path: pathlib.Path,
+    expr: models.Cat2LazyExpr,
+    user: db.User = Depends(current_active_user),
+) -> str:
+    """
+    Upload a lazy expression dataset (to any root).
+
+    The JSON request body must contain a "name"=None for the dataset to be created,
+    an "expression" to be evaluated, which must result in
+    a lazy expression, and an "operands" object which maps variable names used
+    in the expression to the dataset paths that they refer to.
+
+    Returns
+    -------
+    str
+        The path of the newly created (or overwritten) dataset.
+    """
+    if expr.name is not None:
+        raise ValueError("Cannot provide name and path.")
+    try:
+        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute, path)
+    except (SyntaxError, ValueError, TypeError) as exc:
+        raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
+    except KeyError as ke:
+        detail = f"Expression error: {ke.args[0]} is not in the list of available datasets"
+        raise srv_utils.raise_bad_request(detail) from ke
+    except RuntimeError as exc:
+        raise srv_utils.raise_bad_request(f"Runtime error: {exc}") from exc
+
+    return result_path
 
 
 @app.post("/api/lazyexpr/")
 async def lazyexpr(
-    expr: models.NewLazyExpr,
+    expr: models.Cat2LazyExpr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
@@ -851,80 +905,6 @@ async def copy(
     else:
         shutil.copy(abspath, dest_abspath)
 
-    return str(destpath)
-
-
-def concatstackhelper(payload: models.ConcatStackPayload, user: db.User = Depends(current_active_user)):
-    if not user:
-        raise srv_utils.raise_unauthorized("Stacking or concatenating files requires authentication")
-
-    srcs, dst = payload.srcs, payload.dst
-    # src should start with a special root or known root
-    for src in srcs:
-        if not src.startswith(("@personal", "@shared", "@public")):
-            raise fastapi.HTTPException(
-                status_code=400,
-                detail="Only stacking/concatenating from @personal or @shared or @public roots is allowed",
-            )
-    # dst should start with a special root and if not try and massage it
-    if not dst.startswith(("@personal", "@shared", "@public")):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Only stacking/concatenating to @personal or @shared or @public roots is allowed",
-        )
-
-    destpath = pathlib.Path(dst)
-    dest_abspath = get_abspath(destpath, user, may_not_exist=True)
-
-    abspaths = [get_abspath(pathlib.Path(src), user) for src in srcs]
-
-    # dst should be a .b2nd array and if not try and massage it
-    if not dest_abspath.suffix:
-        dest_abspath = dest_abspath.with_suffix(".b2nd")
-        destpath = destpath.with_suffix(".b2nd")
-    else:
-        if not (dest_abspath.suffix == ".b2nd"):
-            raise fastapi.HTTPException(
-                status_code=400, detail="Stack/concat destination must be a .b2nd file"
-            )
-    return abspaths, dest_abspath, destpath
-
-
-@app.post("/api/concat/")
-async def concat(
-    payload: models.ConcatStackPayload,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Concatenate datasets
-
-    Returns
-    -------
-    str
-        The path of the concatenated dataset.
-    """
-    abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
-    list_of_arrays = [blosc2.open(path) for path in abspaths]
-    blosc2.concat(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
-    return str(destpath)
-
-
-@app.post("/api/stack/")
-async def stack(
-    payload: models.ConcatStackPayload,
-    user: db.User = Depends(current_active_user),
-):
-    """
-    Stack datasets
-
-    Returns
-    -------
-    str
-        The path of the stacked dataset.
-    """
-    abspaths, dest_abspath, destpath = concatstackhelper(payload, user)
-    list_of_arrays = [blosc2.open(path) for path in abspaths]
-    blosc2.stack(list_of_arrays, payload.axis, urlpath=str(dest_abspath), mode="w")
     return str(destpath)
 
 
@@ -1715,15 +1695,17 @@ async def htmx_path_info(
 
     # Tabs: Display (b2)
     mimetype = guess_type(path)
-    known_mimetypes = {"application/json", "application/pdf", "application/x-ipynb+json", "text/markdown"}
-    if mimetype and (mimetype in known_mimetypes or mimetype.startswith("image/")):
-        tabs.append(
-            {
-                "name": "display",
-                "url": url(f"display/{path}"),
-                "label": "Display",
-            }
-        )
+    if mimetype:
+        type_, _ = mimetype.split("/")
+        known_mimetypes = {"application/json", "application/pdf", "application/x-ipynb+json"}
+        if type_ in {"image", "text"} or mimetype in known_mimetypes:
+            tabs.append(
+                {
+                    "name": "display",
+                    "url": url(f"display/{path}"),
+                    "label": "Display",
+                }
+            )
 
     # Tabs: Display (b2nd)
     if hasattr(meta, "shape"):
@@ -2066,60 +2048,6 @@ class UnfoldCmd:
         return htmx_redirect(hx_current_url, url)
 
 
-class ConcatCmd:
-    """Concatenate arrays."""
-
-    names = ("concat",)
-    expected = "dst = concat([<src1>, ... <srcN>], axis) or dst = concat([<src1>, ... <srcN>])"
-    nargs = 5  # can be more if more than 2 sources
-
-    @classmethod
-    async def call(cls, request, user, argv, operands, hx_current_url):
-        dst = argv[1]  # expect to receive [concat, dst, src1, src2, ..., srcN, axis]
-        list_of_arrays = []
-        i = 2
-        while True:
-            src = operands.get(argv[i], argv[i])  # get the path
-            i += 1
-            if isinstance(src, int):
-                break
-            list_of_arrays.append(src)
-        axis = src
-        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
-        result_path = await concat(payload, user)
-        # Redirect to display new dataset
-        result_path = await display_first(result_path, user)
-        url = make_url(request, "html_home", path=result_path)
-        return htmx_redirect(hx_current_url, url)
-
-
-class StackCmd:
-    """Stack arrays."""
-
-    names = ("stack",)
-    expected = "dst = stack([<src1>, ... <srcN>], axis) or dst = stack([<src1>, ... <srcN>])"
-    nargs = 5  # can be more if more than 2 sources
-
-    @classmethod
-    async def call(cls, request, user, argv, operands, hx_current_url):
-        dst = argv[1]
-        list_of_arrays = []
-        i = 2
-        while True:
-            src = operands.get(argv[i], argv[i])  # get the path
-            i += 1
-            if isinstance(src, int):
-                break
-            list_of_arrays.append(src)
-        axis = src
-        payload = models.ConcatStackPayload(srcs=list_of_arrays, dst=dst, axis=axis)
-        result_path = await stack(payload, user)
-        # Redirect to display new dataset
-        result_path = await display_first(result_path, user)
-        url = make_url(request, "html_home", path=result_path)
-        return htmx_redirect(hx_current_url, url)
-
-
 commands_list = [
     AddUserCmd,
     DelUserCmd,
@@ -2129,8 +2057,6 @@ commands_list = [
     RemoveCmd,
     AddNotebookCmd,
     UnfoldCmd,
-    ConcatCmd,
-    StackCmd,
 ]
 
 commands = {}
@@ -2170,76 +2096,33 @@ async def htmx_command(
     elif nargs > 1 and argv[1] in {"=", ":="}:
         operator = argv[1]
         compute = operator == ":="
-        if (argv[2][:6] != "concat") and (argv[2][:5] != "stack"):
-            try:
-                result_name, expr = command.split(operator, maxsplit=1)
-                if "#" in expr:  # get alternative operands
-                    expr, alt_ops = expr.split("#", maxsplit=1)
-                    alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
-                    for k, v in alt_ops.items():
-                        operands[k] = v  # overwrite or add operands if necessary
-                result_path = make_expr(result_name, expr, operands, user, compute=compute)
-                url = make_url(request, "html_home", path=result_path)
-                return htmx_redirect(hx_current_url, url)
-            except SyntaxError:
-                return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
-            except ValueError as exc:
-                return htmx_error(request, f"Invalid expression: {exc}")
-            except TypeError as exc:
-                return htmx_error(request, f"Invalid expression: {exc}")
-            except KeyError as exc:
-                error = f"Expression error: {exc.args[0]} is not in the list of available datasets"
-                return htmx_error(request, error)
-            except RuntimeError as exc:
-                return htmx_error(request, f"Runtime error: {exc}")
-        else:  # used dst = concat([src1, ..., srcN], 1)
-            dst, expr = command.split(operator, maxsplit=1)
-            args = re.split(r"[()]", expr)
-            args = [a.strip() for a in args]
-            cmd = commands.get(args[0])
-            err_msg = cmd.expected
-            if cmd not in {ConcatCmd, StackCmd}:
-                return htmx_error(request, "Invalid syntax: Expected concat or stack. " + err_msg)
-            if args[-1] != "":
-                return htmx_error(request, "Invalid syntax: " + err_msg)
-            argv = [args[0], dst.strip()]
-            *sources, ax = args[1].split(",")
-            ax_ = 0
-            try:
-                ax_ = int(ax.split("=")[-1])
-            except Exception:
-                # assume no axis provided, will use default 0
-                sources = args[1].split(",")
-
-            num_sources = len(sources)
-            if num_sources < 2:
-                return htmx_error(request, "Require at least two sources. " + err_msg)
-            for i, s in enumerate(sources):
-                if i == 0:
-                    # get opening parentheses
-                    bracket = next((i for i, item in enumerate(("[", "(", "{")) if s[0] == item), -1)
-                    if bracket != -1:
-                        sources[0] = s[1:]
-                    else:
-                        return htmx_error(request, "Unable to get iterable of sources. " + err_msg)
-                if i == num_sources - 1:
-                    if s[-1] == ["]", ")", "}"][bracket]:  # parentheses must match
-                        sources[-1] = s[:-1]
-                    else:
-                        return htmx_error(request, "Unable to get iterable of sources. " + err_msg)
-            argv += sources
-            argv += [ax_]  # argv = [concat/stack, dst, src1, src2, ..., srcN, axis]
+        try:
+            result_name, expr = command.split(operator, maxsplit=1)
+            if "#" in expr:  # get alternative operands
+                expr, alt_ops = expr.split("#", maxsplit=1)
+                alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
+                for k, v in alt_ops.items():
+                    operands[k] = v  # overwrite or add operands if necessary
+            result_path = make_expr(result_name, expr, operands, user, compute=compute)
+            url = make_url(request, "html_home", path=result_path)
+            return htmx_redirect(hx_current_url, url)
+        except SyntaxError:
+            return htmx_error(request, "Invalid syntax: expected <varname> = <expression>")
+        except ValueError as exc:
+            return htmx_error(request, f"Invalid expression: {exc}")
+        except TypeError as exc:
+            return htmx_error(request, f"Invalid expression: {exc}")
+        except KeyError as exc:
+            error = f"Expression error: {exc.args[0]} is not in the list of available datasets"
+            return htmx_error(request, error)
+        except RuntimeError as exc:
+            return htmx_error(request, f"Runtime error: {exc}")
 
     # Commands
     cmd = commands.get(argv[0])
     if cmd is not None:
-        if (cmd in (ConcatCmd, StackCmd)) and len(argv) < 5:
-            return htmx_error(
-                request, f"Invalid syntax: expected {cmd.expected} (at least 4 args for concat)."
-            )
-        if cmd not in (ConcatCmd, StackCmd) and len(argv) != cmd.nargs:
+        if len(argv) != cmd.nargs:
             return htmx_error(request, f"Invalid syntax: expected {cmd.expected}")
-
         try:
             return await cmd.call(request, user, argv, operands, hx_current_url)
         except Exception as exc:
@@ -2514,10 +2397,22 @@ async def html_display(
             f'<a href="{href}" target="_blank" class="btn btn-primary mb-1"><i class="fa-solid fa-gear"></i> Run</a>'
             f'<iframe src="{src}" class="w-100" height="768px"></iframe>'
         )
-    elif mimetype == "text/markdown":
+    elif mimetype.startswith("text/"):
         content = await get_file_content(path, user)
         content = content.decode("utf-8")
-        return markdown.markdown(content)
+        if mimetype == "text/markdown":
+            return markdown.markdown(content)
+
+        try:
+            lexer = pygments.lexers.get_lexer_for_mimetype(mimetype)
+        except pygments.util.ClassNotFound:
+            lexer = None
+
+        if lexer:
+            formatter = pygments.formatters.HtmlFormatter(style="default")
+            return pygments.highlight(content, lexer, formatter)
+        else:
+            return f"<pre>{content}</pre>"
     elif mimetype.startswith("image/"):
         src = f"{url('api/preview/')}{path}"
         img = await get_image(path, user)

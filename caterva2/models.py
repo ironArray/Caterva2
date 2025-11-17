@@ -74,8 +74,8 @@ class LazyArray(pydantic.BaseModel):
     mtime: datetime.datetime | None
 
 
-class NewLazyExpr(pydantic.BaseModel):
-    name: str
+class Cat2LazyExpr(pydantic.BaseModel):
+    name: str | None
     expression: str
     operands: dict[str, str]
     compute: bool
@@ -83,12 +83,6 @@ class NewLazyExpr(pydantic.BaseModel):
 
 class MoveCopyPayload(pydantic.BaseModel):
     src: str
-    dst: str
-
-
-class ConcatStackPayload(pydantic.BaseModel):
-    axis: int
-    srcs: list[str]
     dst: str
 
 

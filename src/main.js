@@ -1,23 +1,61 @@
 import './main.scss'
+import './pygments.css'
 
 // Import all of Bootstrap's JS
 import * as bootstrap from 'bootstrap'
 
-function activate(selector, trigger) {
+function activate(selector) {
     const url = new URL(document.URL);
     for (let el of document.querySelectorAll(selector)) {
         const href = new URL(el.href)
         if (url.pathname.startsWith(href.pathname)) {
             el.classList.add("active");
-            el.setAttribute("hx-get", el.dataset.url);
         }
         else {
             el.classList.remove("active");
-            el.setAttribute("hx-get", el.dataset.url + el.dataset.path);
         }
-        htmx.process(el);
     }
 }
+
+function loadDataset(event) {
+    event.preventDefault();
+    const link = event.currentTarget;
+
+    // Determine the URL to request:
+    let url;
+    if (link.classList.contains('active')) {
+        // De-select: request base URL WITHOUT path (clears metadata)
+        url = link.dataset.url;
+    } else {
+        // Select: request full URL WITH path
+        url = link.dataset.url + encodeURIComponent(link.dataset.path);
+    }
+
+    // Trigger request and update active state afterwards
+    htmx.ajax('GET', url, {
+        target: '#meta',
+        indicator: '#meta-wrapper .htmx-indicator'
+    }).then(() => {
+        // After request, update active state based on what was clicked
+        if (link.classList.contains('active')) {
+            // We just de-selected: remove active from all
+            activate('#path-list a');
+        } else {
+            // We just selected: activate this one
+            activate('#path-list a', link);
+        }
+    }).catch(() => {
+        // On error, still sync the UI to reflect user intent
+        if (link.classList.contains('active')) {
+            activate('#path-list a');
+        } else {
+            activate('#path-list a', link);
+        }
+    });
+}
+
+// Expose to global scope for HTMX
+window.loadDataset = loadDataset;
 
 function clearContent(selector) {
     document.querySelector(selector).innerHTML = "";

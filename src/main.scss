@@ -19,6 +19,11 @@ body {
     grid-template-columns: auto;
 }
 
+#meta-wrapper {
+    /* Fix overflow with too wide <pre> elements */
+    min-width: 0;
+}
+
 @media (min-width: 800px) and (max-width: 1300px) {
     #page {
         grid-template-columns: 10rem auto;

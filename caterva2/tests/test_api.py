@@ -207,6 +207,7 @@ def test_concat(auth_client, fill_auth, examples_dir):
 
     _, mypublic = fill_auth
     myshared = auth_client.get("@shared")
+    mypersonal = auth_client.get("@personal")
     # Copy a 1d dataset to the shared area
     file = mypublic["ds-1d.b2nd"]
     copyname = "a.b2nd"
@@ -221,26 +222,22 @@ def test_concat(auth_client, fill_auth, examples_dir):
 
     # Test for File class
     file = myshared[copyname]
-    resultname = "result.b2nd"
-    finalpath = file.concat([newpath2, newpath3], f"{myshared.name}/{resultname}", axis=0)
-
-    assert myshared[resultname].shape[0] == 3 * myshared[copyname].shape[0]
+    resultname = "result"
+    finalpath = auth_client.lazyexpr(
+        resultname,
+        expression="concat([a, b, c], axis=0)",
+        operands={"a": newpath, "b": newpath2, "c": newpath3},
+    )
+    result_ds = mypersonal[resultname + ".b2nd"]
+    assert result_ds.shape[0] == 3 * myshared[copyname].shape[0]
+    # check eager evaluation
+    assert "expression" not in auth_client.get_info(result_ds)
 
     # Check the data
     fname = examples_dir / "ds-1d.b2nd"
     a = blosc2.open(fname)
     locres = np.concat([a[:], a[:], a[:]], axis=0)
-    sfile = myshared[resultname]
-    np.testing.assert_array_equal(sfile[:], locres)
-
-    # Test for Client class
-    resultname = "result2.b2nd"
-    finalpath = auth_client.concat([newpath, newpath2, newpath3], f"{myshared.name}/{resultname}", axis=0)
-
-    assert myshared[resultname].shape[0] == 3 * myshared[copyname].shape[0]
-
-    # Check the data
-    sfile = myshared[resultname]
+    sfile = auth_client.get(finalpath)
     return np.testing.assert_array_equal(sfile[:], locres)
 
 
@@ -250,6 +247,7 @@ def test_stack(auth_client, fill_auth, examples_dir):
 
     _, mypublic = fill_auth
     myshared = auth_client.get("@shared")
+    mypersonal = auth_client.get("@personal")
     fstr = "dir1/ds-2d.b2nd"
 
     # Copy a 1d dataset to the shared area
@@ -268,27 +266,22 @@ def test_stack(auth_client, fill_auth, examples_dir):
 
     # Test for File class
     file = myshared[copyname]
-    resultname = "result.b2nd"
-    finalpath = file.stack([newpath2, newpath3], f"{myshared.name}/{resultname}", axis=1)
-    assert myshared[resultname].shape[1] == 3
-    assert myshared[resultname].shape == news
+    resultname = "result"
+    finalpath = auth_client.lazyexpr(
+        resultname,
+        expression="stack([a, b, c], axis=1)",
+        operands={"a": newpath, "b": newpath2, "c": newpath3},
+    )
+    result_ds = mypersonal[resultname + ".b2nd"]
+    assert result_ds.shape == news
+    # check eager evaluation
+    assert "expression" not in auth_client.get_info(result_ds)
 
     # Check the data
     fname = examples_dir / fstr
     a = blosc2.open(fname)
     locres = np.stack([a[:], a[:], a[:]], axis=1)
-    sfile = myshared[resultname]
-    np.testing.assert_array_equal(sfile[:], locres)
-
-    # Test for Client class
-    resultname = "result2.b2nd"
-    finalpath = auth_client.stack([newpath, newpath2, newpath3], f"{myshared.name}/{resultname}", axis=1)
-
-    assert myshared[resultname].shape[1] == 3
-    assert myshared[resultname].shape == news
-
-    # Check the data
-    sfile = myshared[resultname]
+    sfile = auth_client.get(finalpath)
     return np.testing.assert_array_equal(sfile[:], locres)
 
 
@@ -720,6 +713,16 @@ def test_lazyexpr(auth_client):
     a = auth_client.fetch(oppt)
     b = auth_client.fetch(lxpath)
     np.testing.assert_array_equal(a[:], b[:])
+
+    # test streamlined API
+    a = auth_client.get(oppt)
+    ls = blosc2.lazyexpr(f"linspace(0, 1, {a.shape[0]})")
+    mylazyexpr = a + 0
+    mylazyexpr += 2 * ls
+    res = a[:] + 2 * ls[:]
+    lxpath = auth_client.upload_lazyexpr("@shared/newexpr.b2nd", mylazyexpr)
+    b = auth_client.fetch(lxpath)
+    np.testing.assert_array_equal(res, b[:])
 
 
 # More exercises for the expression evaluation with Blosc2 arrays

@@ -1,7 +1,7 @@
 (cat2-client)=
 # `cat2-client` -- Command-line Caterva2 client
 
-This program allows interacting with a Caterva2 server from the command line, in interactive shell sessions or invoked by other programs.  To use it, the `clients` extra needs to be installed:
+This program allows interacting with a Caterva2 server from the command line, in interactive shell sessions or invoked by other programs. To use it, the `clients` extra needs to be installed:
 
 ```sh
 python -m pip install caterva2[clients]
@@ -13,11 +13,34 @@ Running `cat2-client --help` should provide a list of supported commands that ma
 cat2-client [GENERIC_OPTION...] COMMAND [COMMAND_OPTION...] COMMAND_ARGUMENTS...
 ```
 
-Another relevant generic option is `--server`, which selects the server to connect to by name (as defined in a section of the configuration file; see below).  There is also `--url`, which overrides the base of server URLs used by default; it should be a HTTP(S) URL, for example `http://sub.edu.example.org:3126`.  Finally, the generic options `--username` and `--password` may be used in case your server requires user authentication.
+### Generic Options
 
-`--help` is also available as a command option which shows the options and arguments accepted by that command (e.g. `cat2-client roots --help`).  Another command option is `--json`, which forces the output of commands that accept it to be in JSON format, as that may be more amenable for parsing by other programs.
+These options can be used with any command:
 
-`cat2-client` may use a TOML configuration file (`caterva2.toml` in the current directory unless overridden with the generic `--conf` option).  Command-line options override settings read from the configuration file.
+-   `--url <URL>`: Overrides the base URL of the server to connect to (e.g., `http://sub.edu.example.org:3126`).
+-   `--server <NAME>`: Selects the server to connect to by name, as defined in a section of the configuration file.
+-   `--username <USER>` and `--password <PASS>`: Provide credentials for server authentication.
+-   `--conf <PATH>`: Specifies the path to a TOML configuration file.
+
+## Commands
+
+`cat2-client` operates through a series of commands. You can get a list of all available commands by running:
+
+```sh
+cat2-client --help
+```
+
+Each command has its own set of options and arguments. To see the help for a specific command, use the `--help` option after the command name. For example:
+
+```sh
+cat2-client roots --help
+```
+
+A common option for many commands is `--json`, which forces the output to be in JSON format, making it easier to parse with other programs.
+
+## Configuration
+
+`cat2-client` can be configured using a TOML file, which is looked for as `caterva2.toml` in the current directory by default. The path can be overridden with the `--conf` generic option. Any command-line options provided will take precedence over settings from the configuration file.
 
 For a short tutorial on `cat2-client`, see [](Using-the-command-line-client).
 

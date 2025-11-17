@@ -8,6 +8,7 @@
        placeholder="Filter" aria-label="Filter" value="{{ search_text }}"
        hx-get="{{ search_url }}" hx-target="#path-list" hx-trigger="input changed delay:1s"
        hx-ext="morph" hx-swap="morph:innerHTML"
+       hx-on:htmx:after-request="activate('#path-list a')"
        >
 
 <!-- Datasets list -->
@@ -26,10 +27,7 @@
 
            data-url="{{ url('htmx/path-info/') }}"
            data-path="{{ dataset.path }}"
-
-           hx-target="#meta"
-           hx-indicator="#meta-wrapper .htmx-indicator"
-           hx-on:htmx:after-request="activate('#path-list a', this)"
+           onclick="loadDataset(event)"
            >
             {{dataset.label}}
         </a>

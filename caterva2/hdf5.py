@@ -386,6 +386,10 @@ class HDF5Proxy(blosc2.Operand):
         return self.b2arr.shape
 
     @property
+    def ndim(self) -> int:
+        return self.b2arr.ndim
+
+    @property
     def chunks(self):
         return self.b2arr.chunks
 
@@ -409,6 +413,18 @@ class HDF5Proxy(blosc2.Operand):
     def schunk(self):
         # This is basically needed to certificate that it is an NDArray in the LazyArray machinery
         return self.b2arr.schunk
+
+    @property
+    def cbytes(self) -> int:
+        return self.dset.id.get_storage_size()
+
+    @property
+    def cratio(self) -> float:
+        return 0 if self.cbytes == 0 else self.nbytes / self.cbytes
+
+    @property
+    def nbytes(self) -> int:
+        return self.b2arr.nbytes
 
     @property
     def fields(self) -> Mapping[str, numpy.dtype]:
