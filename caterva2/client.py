@@ -1241,16 +1241,16 @@ class Client:
             auth_cookie=self.cookie,
         )
 
-    def _load_from_url(self, path_to_url, remotepath, urlbase, auth_cookie=None):
+    def _load_from_url(self, urlpath, remotepath, urlbase, auth_cookie=None):
         client = self.httpx_client
         url = f"{urlbase}/api/load_from_url/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
-        response = client.post(url, data={"remote_url": path_to_url}, headers=headers)
+        response = client.post(url, data={"remote_url": urlpath}, headers=headers)
         response.raise_for_status()
         return pathlib.PurePosixPath(response.json())
 
-    def load_from_url(self, path_to_url, dataset):
+    def load_from_url(self, urlpath, dataset):
         """
         Loads a remote dataset to a remote repository.
 
@@ -1268,7 +1268,7 @@ class Client:
         """
         urlbase, _ = _format_paths(self.urlbase)
         return self._load_from_url(
-            path_to_url,
+            urlpath,
             dataset,
             urlbase,
             auth_cookie=self.cookie,
