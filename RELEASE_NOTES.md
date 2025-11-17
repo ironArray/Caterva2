@@ -1,8 +1,8 @@
 # Release notes
 
-## Changes from 2025.11.17 to XXXX.XX.XX
+## Changes from 2025.11.17 to 2025.11.17.1
 
-#XXX version-specific blurb XXX#
+* Hot-fix release to solve authentication issues in pyodide
 
 ## Changes from 2025.8.7 to 2025.11.17
 
