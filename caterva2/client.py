@@ -780,27 +780,10 @@ class Client:
             return data[:]
 
     def _get_auth_cookie(self, user_auth, timeout=5):
-        """
-        Authenticate to a server as a user and get an authorization cookie.
-
-        Authentication fields will usually be ``username`` and ``password``.
-
-        Parameters
-        ----------
-        user_auth : dict
-            A mapping of fields and values used as data to be posted for
-            authenticating the user.
-
-        Returns
-        -------
-        str
-            An authentication token that may be used as a cookie in further
-            requests to the server.
-        """
         client = self.httpx_client
         url = f"{self.urlbase}/auth/jwt/login"
 
-        if hasattr(user_auth, "_asdict"):  # named tuple (from tests)
+        if hasattr(user_auth, "_asdict"):
             user_auth = user_auth._asdict()
         try:
             resp = client.post(url, data=user_auth, timeout=timeout)
@@ -810,7 +793,26 @@ class Client:
                 f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
             ) from e
         resp.raise_for_status()
-        return "=".join(list(resp.cookies.items())[0])
+
+        # Try cookies first
+        cookies = list(resp.cookies.items())
+        if cookies:
+            return "=".join(cookies[0])
+
+        # Check Set-Cookie header
+        set_cookie = resp.headers.get("set-cookie")
+        if set_cookie:
+            return set_cookie.split(";")[0]
+
+        # For 204 in Pyodide, cookies are set automatically by browser
+        # Return None instead of empty string to indicate browser-managed auth
+        if resp.status_code == 204 and sys.platform == "emscripten":
+            return None
+
+        raise RuntimeError(
+            f"Authentication failed: no authentication token received. "
+            f"Status: {resp.status_code}, Headers: {dict(resp.headers)}"
+        )
 
     def _get(
         self,
@@ -844,7 +846,9 @@ class Client:
 
     def _xget(self, url, params=None, headers=None, timeout=5, auth_cookie=None):
         client = self.httpx_client
-        if auth_cookie:
+        # Only set Cookie header if auth_cookie is not None
+        # In Pyodide with 204 response, auth_cookie will be None and browser manages cookies
+        if auth_cookie is not None:
             headers = headers.copy() if headers else {}
             headers["Cookie"] = auth_cookie
         try:
