@@ -1337,7 +1337,12 @@ class Client:
             auth_cookie=self.cookie,
             timeout=self.timeout,
         )
-        return pathlib.PurePosixPath(dataset)
+        path = pathlib.PurePosixPath(dataset).as_posix()
+
+        # Return file/dataset object
+        root_name, file_path = path.split("/", 1)
+        root = Root(self, root_name)
+        return root[file_path]
 
     def adduser(self, newuser, password=None, superuser=False):
         """
