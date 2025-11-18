@@ -199,14 +199,14 @@ class Root:
     def __str__(self):
         return self.name
 
-    def upload(self, localpath, remotepath=None):
+    def upload(self, local_dset, remotepath=None):
         """
         Uploads a local file to this root.
 
         Parameters
         ----------
-        localpath : Path
-            Path of the local file to upload.
+        local_dset : Path | in-memory object
+            Path to the local dataset or an in-memory object (convertible to blosc2.SChunk).
         remotepath : Path, optional
             Remote path where the file will be uploaded.  If not provided, the
             file will be uploaded to the top level of this root.
@@ -231,12 +231,15 @@ class Root:
         """
         if remotepath is None:
             # localpath cannot be absolute in this case (too much prone to errors)
-            if pathlib.PurePosixPath(localpath).is_absolute():
-                raise ValueError("When `dataset` is not specified, `localpath` must be a relative path")
-            remotepath = pathlib.PurePosixPath(self.name) / localpath
+            if (
+                not isinstance(local_dset, (str, pathlib.Path))
+                or pathlib.PurePosixPath(local_dset).is_absolute()
+            ):
+                raise ValueError("When `remotepath` is not specified, `localpath` must be a relative path")
+            remotepath = pathlib.PurePosixPath(self.name) / local_dset
         else:
             remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
-        uploadpath = self.client.upload(localpath, remotepath)
+        uploadpath = self.client.upload(local_dset, remotepath)
         # Remove the first component of the upload path (the root name) and return a new File/Dataset
         return self[str(uploadpath.relative_to(self.name))]
 
@@ -1214,17 +1217,30 @@ class Client:
             path = localpath
         return self._download_url(url, str(path), auth_cookie=self.cookie)
 
-    def _upload_file(self, localpath, remotepath, urlbase, auth_cookie=None):
+    def _upload_file(self, local_dset, remotepath, urlbase, auth_cookie=None):
         client = self.httpx_client
         url = f"{urlbase}/api/upload/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
-        with open(localpath, "rb") as f:
+        if isinstance(local_dset, (str, pathlib.Path)):
+            with open(local_dset, "rb") as f:
+                response = client.post(url, files={"file": f}, headers=headers)
+                response.raise_for_status()
+        else:
+            if isinstance(local_dset, blosc2.LazyExpr):
+                return self.upload_lazyexpr(remotepath, local_dset).path
+            ndarray = (
+                blosc2.asarray(local_dset)
+                if hasattr(local_dset, "shape")
+                else blosc2.SChunk(data=local_dset)
+            )
+            cframe = ndarray.to_cframe()
+            f = io.BytesIO(cframe)
             response = client.post(url, files={"file": f}, headers=headers)
             response.raise_for_status()
         return pathlib.PurePosixPath(response.json())
 
-    def upload(self, localpath, dataset):
+    def upload(self, local_dset, remotepath):
         """
         Uploads a local dataset to a remote repository.
 
@@ -1234,9 +1250,9 @@ class Client:
 
         Parameters
         ----------
-        localpath : Path
-            Path to the local dataset.
-        dataset : Path
+        local_dset : Path | in-memory object
+            Path to the local dataset or an in-memory object (convertible to blosc2.SChunk).
+        remotepath : Path
             Remote path to upload the dataset to.
 
         Returns
@@ -1255,10 +1271,10 @@ class Client:
         >>> str(uploaded_path) == newpath
         True
         """
-        urlbase, dataset = _format_paths(self.urlbase, dataset)
+        urlbase, remotepath = _format_paths(self.urlbase, remotepath)
         return self._upload_file(
-            localpath,
-            dataset,
+            local_dset,
+            remotepath,
             urlbase,
             auth_cookie=self.cookie,
         )
