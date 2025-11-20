@@ -69,7 +69,7 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client("https://demo.caterva2.net")
+        >>> client = cat2.Client("https://cat2.cloud/demo")
         >>> root = client.get("example")
         >>> root.file_list[-3:]
         ['ds-sc-attr.b2nd', 'lung-jpeg2000_10x.b2nd', 'tomo-guess-test.b2nd']
@@ -115,7 +115,7 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> root['ds-1d.b2nd']
         <Dataset: example/ds-1d.b2nd>
@@ -143,7 +143,7 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> 'ds-1d.b2nd' in root
         True
@@ -163,7 +163,7 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> for file in root:
         ...     print(file)
@@ -189,7 +189,7 @@ class Root:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> len(root)
         12
@@ -288,7 +288,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> file = root['README.md']
         >>> file
@@ -296,7 +296,7 @@ class File:
         >>> file.name
         'README.md'
         >>> file.urlbase
-        'https://demo.caterva2.net'
+        'https://cat2.cloud/demo'
         >>> file.path
         PurePosixPath('example/README.md')
         >>> file.meta['contiguous']
@@ -337,7 +337,7 @@ class File:
         associated with the file.
 
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> file = root['ds-sc-attr.b2nd']
         >>> file.vlmeta
@@ -358,11 +358,11 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> file = root['ds-1d.b2nd']
         >>> file.get_download_url()
-        'https://demo.caterva2.net/api/fetch/example/ds-1d.b2nd'
+        'https://cat2.cloud/demo/api/fetch/example/ds-1d.b2nd'
         """
         return api_utils.get_download_url(self.path, self.urlbase)
 
@@ -383,7 +383,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> ds = root['ds-1d.b2nd']
         >>> ds[1]
@@ -434,7 +434,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> ds = root['ds-1d.b2nd']
         >>> ds.slice(1)
@@ -465,7 +465,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> file = root['ds-1d.b2nd']
         >>> file.download()
@@ -490,7 +490,7 @@ class File:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> file = root['ds-1d.h5']
         >>> file.unfold()
@@ -609,7 +609,7 @@ class Dataset(File, blosc2.Operand):
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> ds = root['ds-1d.b2nd']
         >>> ds.dtype
@@ -917,7 +917,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> roots_dict = client.get_roots()
         >>> sorted(roots_dict.keys())
         ['@public', 'b2tests', 'example', 'h5example', 'h5lung_j2k', 'h5numbers_j2k']
@@ -944,7 +944,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> root.name
         'example'
@@ -983,7 +983,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> client.get_list('example')[:3]
         ['README.md', 'dir1/ds-2d.b2nd', 'dir1/ds-3d.b2nd']
         """
@@ -1007,7 +1007,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> path = 'example/ds-2d-fields.b2nd'
         >>> info = client.get_info(path)
         >>> info.keys()
@@ -1037,7 +1037,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> client.fetch('example/ds-2d-fields.b2nd', (slice(0, 2), slice(0, 2))
         array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
@@ -1071,7 +1071,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> client.get_slice('example/ds-2d-fields.b2nd', (slice(0, 2), slice(0, 2))[:]
         array([[(0.0000000e+00, 1.       ), (5.0002502e-05, 1.00005  )],
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
@@ -1129,7 +1129,7 @@ class Client:
         Examples
         --------
         >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> info_schunk = client.get_info('example/ds-2d-fields.b2nd')['schunk']
         >>> info_schunk['nchunks']
         1
@@ -1202,7 +1202,7 @@ class Client:
         --------
         >>> import caterva2 as cat2
         >>> path = 'example/ds-2d-fields.b2nd'
-        >>> client = cat2.Client('https://demo.caterva2.net')
+        >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> client.download(path)
         PosixPath('example/ds-2d-fields.b2nd')
         """

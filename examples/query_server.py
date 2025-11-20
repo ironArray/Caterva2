@@ -17,8 +17,8 @@ import numpy as np
 import caterva2 as cat2
 
 # Use the demo server
-URLBASE = "https://demo.caterva2.net/"
-ROOT_NAME = "example"
+URLBASE = "https://cat2.cloud/demo"
+ROOT_NAME = "@public"
 
 user_auth = None
 # Uncomment the following line and use your username and password
@@ -34,7 +34,7 @@ example = client.get(ROOT_NAME)
 # List the datasets in that root
 print(example.file_list)
 # Get a specific dataset
-array = example["dir1/ds-2d.b2nd"]
+array = example["examples/dir1/ds-2d.b2nd"]
 print(array.name, array.path)
 # Get some data out of the dataset
 print(array[:2])
