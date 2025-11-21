@@ -34,6 +34,7 @@ import httpx
 import markdown
 import nbconvert
 import nbformat
+import numpy as np
 import PIL.Image
 import pygments
 import uvicorn
@@ -656,11 +657,8 @@ async def get_chunk(
 
 
 def make_expr(
-    name: str | None,
-    expr: str,
-    operands: dict[str, str],
+    expr: models.Cat2LazyArr,
     user: db.User,
-    compute: bool = False,
     remotepath: pathlib.Path | None = None,
 ) -> str:
     """
@@ -687,27 +685,40 @@ def make_expr(
     str
         The path of the newly created (or overwritten) dataset.
     """
-
     if not user:
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
     # Parse expression
-    expr = expr.strip()
-    if not expr or (not remotepath and not name):
+    name = expr.name
+    vars = expr.operands
+    func = expr.func
+    compute = expr.compute
+    expression = expr.expression
+    if (not expression and not func) or (not remotepath and not name):
         raise ValueError("name/remotepath and expression should not be empty")
-    vars = blosc2.get_expr_operands(expr)
-
     # Open expression datasets
     var_dict = {}
-    for var in vars:
-        path = operands[var]
+    for var, path in vars.items():
         # Detect special roots
         path = pathlib.Path(path)
         abspath = get_writable_path(path, user)
         var_dict[var] = open_b2(abspath, path)
 
-    # Create the lazy expression dataset
-    arr = blosc2.lazyexpr(expr, var_dict)
+    if func is not None:
+        local_ns = {}
+        exec(func, {"np": np, "blosc2": blosc2}, local_ns)
+        if name not in local_ns or not isinstance(local_ns[name], typing.types.FunctionType):
+            raise ValueError(f"User code must define a function called {name}")
+        arr = blosc2.lazyudf(
+            local_ns[name], tuple(var_dict[f"o{i}"] for i in range(len(var_dict))), expr.dtype, expr.shape
+        )
+
+    else:
+        expression = expression.strip()
+        # Create the lazy expression dataset
+        arr = blosc2.lazyexpr(expression, var_dict)
+        if any(method in arr.expression for method in linalg_funcs):
+            compute = True
 
     # Handle name or path
     if name is None:  # provided a path
@@ -725,8 +736,6 @@ def make_expr(
 
     abspath.mkdir(exist_ok=True, parents=True)
 
-    if any(method in expr for method in linalg_funcs):
-        compute = True
     if compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
@@ -735,10 +744,10 @@ def make_expr(
     return path
 
 
-@app.post("/api/upload_lazyexpr/{path:path}")
-async def upload_lazyexpr(
+@app.post("/api/upload_lazyarr/{path:path}")
+async def upload_lazyarr(
     path: pathlib.Path,
-    expr: models.Cat2LazyExpr,
+    expr: models.Cat2LazyArr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
@@ -754,10 +763,8 @@ async def upload_lazyexpr(
     str
         The path of the newly created (or overwritten) dataset.
     """
-    if expr.name is not None:
-        raise ValueError("Cannot provide name and path.")
     try:
-        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute, path)
+        result_path = make_expr(expr, user, path)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
@@ -771,7 +778,7 @@ async def upload_lazyexpr(
 
 @app.post("/api/lazyexpr/")
 async def lazyexpr(
-    expr: models.Cat2LazyExpr,
+    expr: models.Cat2LazyArr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
