@@ -9,6 +9,7 @@
 
 import ast
 import functools
+import inspect
 import io
 import pathlib
 import sys
@@ -1542,7 +1543,7 @@ class Client:
         )
         return pathlib.PurePosixPath(dataset)
 
-    def upload_lazyexpr(self, remotepath, expression, compute=False):
+    def upload_lazyarr(self, remotepath, expression, compute=False):
         """
         Creates a lazy expression dataset.
 
@@ -1568,21 +1569,34 @@ class Client:
             Path of the created dataset.
         """
         urlbase, remotepath = _format_paths(self.urlbase, remotepath)
-        if not isinstance(expression, blosc2.LazyExpr):
-            raise ValueError("argument ``expression`` must be blosc2.LazyExpr instance.")
-        operands = expression.operands
+        operands = expression.operands if hasattr(expression, "operands") else expression.inputs_dict
         if operands is not None:
             operands = {k: str(v) for k, v in operands.items()}
         else:
             operands = {}
-        expr = {
-            "name": None,
-            "expression": expression.expression,
-            "operands": operands,
-            "compute": compute,
-        }
+        if isinstance(expression, blosc2.LazyExpr):
+            expr = {
+                "name": None,
+                "expression": expression.expression,
+                "func": None,
+                "operands": operands,
+                "dtype": str(expression.dtype),
+                "shape": expression.shape,
+                "compute": compute,
+            }
+        elif isinstance(expression, blosc2.LazyUDF):
+            expr = {
+                "name": expression.func.__name__,
+                "expression": None,
+                "func": inspect.getsource(expression.func),
+                "operands": operands,
+                "dtype": str(expression.dtype),
+                "shape": expression.shape,
+                "compute": compute,
+            }
+
         dataset = self._post(
-            f"{self.urlbase}/api/upload_lazyexpr/{remotepath}",
+            f"{self.urlbase}/api/upload_lazyarr/{remotepath}",
             expr,
             auth_cookie=self.cookie,
             timeout=self.timeout,
