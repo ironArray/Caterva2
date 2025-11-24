@@ -800,7 +800,7 @@ async def lazyexpr(
     """
 
     try:
-        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute)
+        result_path = make_expr(expr, user)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:

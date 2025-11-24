@@ -1537,7 +1537,15 @@ class Client:
             operands = {k: str(v) for k, v in operands.items()}
         else:
             operands = {}
-        expr = {"name": name, "expression": expression, "operands": operands, "compute": compute}
+        expr = {
+            "name": name,
+            "expression": expression,
+            "func": None,
+            "operands": operands,
+            "dtype": None,  # calculated server-side
+            "shape": None,  # calculated server-side
+            "compute": compute,
+        }
         dataset = self._post(
             f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
         )

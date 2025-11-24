@@ -79,8 +79,8 @@ class Cat2LazyArr(pydantic.BaseModel):
     expression: str | None
     func: str | None
     operands: dict[str, str]
-    dtype: str
-    shape: tuple
+    dtype: str | None
+    shape: tuple | None
     compute: bool
 
 
