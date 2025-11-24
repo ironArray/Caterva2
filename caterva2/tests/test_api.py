@@ -622,6 +622,48 @@ def test_upload(fnames, remove, root, examples_dir, tmp_path, auth_client):
             assert "Not Found" in str(e_info.value)
 
 
+@pytest.mark.parametrize(
+    "fnames",
+    [
+        (
+            blosc2.ones(
+                10,
+            ),
+            "blosc1d.b2nd",
+        ),
+        (
+            np.ones(
+                10,
+            ),
+            "np1d.b2nd",
+        ),
+        (blosc2.lazyexpr("linspace(0, 8, 10)"), "dir2/ds-1d.b2nd"),
+    ],
+)
+@pytest.mark.parametrize("root", ["@personal", "@shared", "@public"])
+@pytest.mark.parametrize("remove", [False, True])
+def test_upload_frommem(fnames, remove, root, examples_dir, tmp_path, auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    ds, remotepath = fnames
+    remote_root = auth_client.get(root)
+    myroot = auth_client.get(TEST_CATERVA2_ROOT)
+    with contextlib.chdir(tmp_path):
+        # Now, upload the file to the remote root
+        remote_ds = remote_root.upload(ds, remotepath)
+        # Check whether the file has been uploaded with the correct name
+        assert remote_ds.name == remotepath
+        # Check removing the file
+        if remove:
+            remote_removed = pathlib.Path(remote_ds.remove())
+            assert remote_removed == remote_ds.path
+            # Check that the file has been removed
+            with pytest.raises(Exception) as e_info:
+                _ = remote_root[remote_removed]
+            assert "Not Found" in str(e_info.value)
+
+
 def test_loadfromurl(examples_dir, tmp_path, auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
