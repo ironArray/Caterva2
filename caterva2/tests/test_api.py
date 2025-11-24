@@ -145,16 +145,16 @@ def test_move(auth_client, dirpath, final_dir, fill_auth):
             new_fname = f"{dirpath}" if dirpath else ""
         else:
             new_fname = f"{dirpath}/{fname}" if dirpath else fname
-        newpath = file.move(f"{myshared.name}/{new_fname}")
+        newobj = file.move(f"{myshared.name}/{new_fname}")
         assert fname not in mypublic
         if final_dir:
             basename = fname.split("/")[-1]
             new_path = f"{new_fname}/{basename}" if dirpath else basename
-            assert str(newpath) == f"{myshared.name}/{new_path}"
-            assert myshared[new_path].path == newpath
+            assert str(newobj.path) == f"{myshared.name}/{new_path}"
+            assert myshared[new_path].path == newobj.path
         else:
-            assert str(newpath) == f"{myshared.name}/{new_fname}"
-            assert myshared[new_fname].path == newpath
+            assert str(newobj.path) == f"{myshared.name}/{new_fname}"
+            assert myshared[new_fname].path == newobj.path
     return None
 
 
@@ -188,16 +188,16 @@ def test_copy(auth_client, dirpath, final_dir, fill_auth):
             new_fname = f"{dirpath}" if dirpath else ""
         else:
             new_fname = f"{dirpath}/{fname}" if dirpath else fname
-        newpath = file.copy(f"{myshared.name}/{new_fname}")
+        newobj = file.copy(f"{myshared.name}/{new_fname}")
         assert fname in mypublic
         if final_dir:
             basename = fname.split("/")[-1]
             new_path = f"{new_fname}/{basename}" if dirpath else basename
-            assert str(newpath) == f"{myshared.name}/{new_path}"
-            assert myshared[new_path].path == newpath
+            assert str(newobj.path) == f"{myshared.name}/{new_path}"
+            assert myshared[new_path].path == newobj.path
         else:
-            assert str(newpath) == f"{myshared.name}/{new_fname}"
-            assert myshared[new_fname].path == newpath
+            assert str(newobj.path) == f"{myshared.name}/{new_fname}"
+            assert myshared[new_fname].path == newobj.path
     return None
 
 
@@ -211,24 +211,20 @@ def test_concat(auth_client, fill_auth, examples_dir):
     # Copy a 1d dataset to the shared area
     file = mypublic["ds-1d.b2nd"]
     copyname = "a.b2nd"
-    newpath = file.copy(f"@shared/{copyname}")
-    assert newpath == myshared[copyname].path
+    newobj = file.copy(f"@shared/{copyname}")
+    assert newobj.path == myshared[copyname].path
     copyname2 = "b.b2nd"
-    newpath2 = file.copy(f"@shared/{copyname2}")
-    assert newpath2 == myshared[copyname2].path
+    newobj2 = file.copy(f"@shared/{copyname2}")
+    assert newobj2.path == myshared[copyname2].path
     copyname3 = "c.b2nd"
-    newpath3 = file.copy(f"@shared/{copyname3}")
-    assert newpath3 == myshared[copyname3].path
+    newobj3 = file.copy(f"@shared/{copyname3}")
+    assert newobj3.path == myshared[copyname3].path
 
     # Test for File class
     file = myshared[copyname]
-    resultname = "result"
-    finalpath = auth_client.lazyexpr(
-        resultname,
-        expression="concat([a, b, c], axis=0)",
-        operands={"a": newpath, "b": newpath2, "c": newpath3},
-    )
-    result_ds = mypersonal[resultname + ".b2nd"]
+    resultpath = "result.b2nd"
+    lexpr = blosc2.lazyexpr("concat([newobj, newobj2, newobj3], axis=0)")
+    result_ds = mypersonal.upload(lexpr, resultpath)
     assert result_ds.shape[0] == 3 * myshared[copyname].shape[0]
     # check eager evaluation
     assert "expression" not in auth_client.get_info(result_ds)
@@ -237,8 +233,7 @@ def test_concat(auth_client, fill_auth, examples_dir):
     fname = examples_dir / "ds-1d.b2nd"
     a = blosc2.open(fname)
     locres = np.concat([a[:], a[:], a[:]], axis=0)
-    sfile = auth_client.get(finalpath)
-    return np.testing.assert_array_equal(sfile[:], locres)
+    return np.testing.assert_array_equal(result_ds[:], locres)
 
 
 def test_stack(auth_client, fill_auth, examples_dir):
@@ -255,23 +250,23 @@ def test_stack(auth_client, fill_auth, examples_dir):
     s = file.shape
     news = (s[0], 3, *s[1:])
     copyname = "a.b2nd"
-    newpath = file.copy(f"@shared/{copyname}")
-    assert newpath == myshared[copyname].path
+    newobj = file.copy(f"@shared/{copyname}")
+    assert newobj.path == myshared[copyname].path
     copyname2 = "b.b2nd"
-    newpath2 = file.copy(f"@shared/{copyname2}")
-    assert newpath2 == myshared[copyname2].path
+    newobj2 = file.copy(f"@shared/{copyname2}")
+    assert newobj2.path == myshared[copyname2].path
     copyname3 = "c.b2nd"
-    newpath3 = file.copy(f"@shared/{copyname3}")
-    assert newpath3 == myshared[copyname3].path
+    newobj3 = file.copy(f"@shared/{copyname3}")
+    assert newobj3.path == myshared[copyname3].path
 
     # Test for File class
     file = myshared[copyname]
     resultname = "result"
-    finalpath = auth_client.lazyexpr(
-        resultname,
-        expression="stack([a, b, c], axis=1)",
-        operands={"a": newpath, "b": newpath2, "c": newpath3},
+    lexpr = blosc2.lazyexpr(
+        "stack([a, b, c], axis=1)",
+        operands={"a": newobj, "b": newobj2, "c": newobj3},
     )
+    sfile = mypersonal.upload(lexpr, resultname + ".b2nd")
     result_ds = mypersonal[resultname + ".b2nd"]
     assert result_ds.shape == news
     # check eager evaluation
@@ -281,7 +276,6 @@ def test_stack(auth_client, fill_auth, examples_dir):
     fname = examples_dir / fstr
     a = blosc2.open(fname)
     locres = np.stack([a[:], a[:], a[:]], axis=1)
-    sfile = auth_client.get(finalpath)
     return np.testing.assert_array_equal(sfile[:], locres)
 
 
@@ -295,8 +289,8 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
     fname = "ds-1d.b2nd" if not fields else "ds-1d-fields.b2nd"
     # Copy a 1d dataset to the shared area
     file = mypublic[fname]
-    newpath = file.copy(f"@shared/{fname}")
-    assert newpath == myshared[fname].path
+    newobj = file.copy(f"@shared/{fname}")
+    assert newobj.path == myshared[fname].path
     # Append to the dataset
     if fields:
         data = np.asarray(
@@ -306,8 +300,8 @@ def test_append(auth_client, fields, fill_auth, examples_dir):
     else:
         data = [1, 2, 3]
     sfile = myshared[fname]
-    new_shape = sfile.append(data)
-    assert new_shape == (len(data) + file.meta["shape"][0],)
+    new_obj = sfile.append(data)
+    assert new_obj.shape == (len(data) + file.meta["shape"][0],)
 
     # Check the data
     fname = examples_dir / fname
@@ -734,36 +728,34 @@ def test_lazyexpr(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
-    opnm = "ds"
     oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
-    expression = f"{opnm} + 0"
-    operands = {opnm: oppt}
-    lxname = "my_expr"
+    opnm = auth_client.get(oppt)
+    expression = opnm + 0
+    rpath = "@personal/my_expr.b2nd"
 
     opinfo = auth_client.get_info(oppt)
-    lxpath = auth_client.lazyexpr(lxname, expression, operands)
-    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    lxobj = auth_client.upload(expression, rpath)
+    assert lxobj.path == pathlib.Path(rpath)
 
     # Check result metadata.
-    lxinfo = auth_client.get_info(lxpath)
+    lxinfo = auth_client.get_info(lxobj)
     assert lxinfo["shape"] == opinfo["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"]
-    assert lxinfo["expression"] == expression
-    assert lxinfo["operands"] == operands
+    assert lxinfo["expression"] == expression.expression
+    assert lxinfo["operands"] == {k: str(v) for k, v in expression.operands.items()}
 
     # Check result data.
-    a = auth_client.fetch(oppt)
-    b = auth_client.fetch(lxpath)
+    a = opnm
+    b = lxobj
     np.testing.assert_array_equal(a[:], b[:])
 
     # test streamlined API
-    a = auth_client.get(oppt)
+    a = opnm
     ls = blosc2.lazyexpr(f"linspace(0, 1, {a.shape[0]})")
     mylazyexpr = a + 0
     mylazyexpr += 2 * ls
     res = a[:] + 2 * ls[:]
-    lxpath = auth_client.upload_lazyexpr("@shared/newexpr.b2nd", mylazyexpr)
-    b = auth_client.fetch(lxpath)
+    b = auth_client.upload(mylazyexpr, "@shared/newexpr.b2nd")
     np.testing.assert_array_equal(res, b[:])
 
 
@@ -799,11 +791,13 @@ def test_lazyexpr2(expression, examples_dir, tmp_path, auth_client):
         assert ds_b in remote_root
 
         operands = {"a": remote_a, "b": remote_b}
-        lxpath = auth_client.lazyexpr("myexpr", expression, operands)
-        assert lxpath == pathlib.Path("@personal/myexpr.b2nd")
+        rpath = "@personal/myexpr.b2nd"
+        expr = blosc2.lazyexpr(expression, operands)
+        lxobj = auth_client.upload(expr, rpath)
+        assert lxobj.path == pathlib.Path(rpath)
 
         # Compute the expression
-        result = auth_client.get_slice(lxpath)
+        result = auth_client.get_slice(lxobj)
         assert isinstance(result, blosc2.NDArray)
 
         # Check the data
@@ -818,11 +812,12 @@ def test_lazyexpr_getchunk(auth_client, fill_public):
     opnm = "ds"
     oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
     expression = f"{opnm} - 0"
-    operands = {opnm: oppt}
-    lxname = "my_expr"
+    operands = {opnm: auth_client.get(oppt)}
+    expr = blosc2.lazyexpr(expression, operands)
+    rpath = "@personal/my_expr.b2nd"
 
-    lxpath = auth_client.lazyexpr(lxname, expression, operands)
-    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    lxobj = auth_client.upload(expr, rpath)
+    assert lxobj.path == pathlib.Path(rpath)
 
     # Check for chunksize and dtype
     opinfo = auth_client.get_info(oppt)
@@ -831,7 +826,7 @@ def test_lazyexpr_getchunk(auth_client, fill_public):
 
     # Get the first chunks
     chunk_ds = auth_client.get_chunk(oppt, 0)
-    chunk_expr = auth_client.get_chunk(lxpath, 0)
+    chunk_expr = auth_client.get_chunk(lxobj, 0)
     # Check data
     out = np.empty(chunksize, dtype=dtype)
     blosc2.decompress2(chunk_ds, out)
@@ -902,37 +897,36 @@ def test_expr_from_expr(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
-    opnm = "ds"
     oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
-    expression = f"{opnm} + 1"
-    operands = {opnm: oppt}
+    opnm = auth_client.get(oppt)
+    expr = opnm + 1
     lxname = "my_expr"
+    rpath = f"@personal/{lxname}.b2nd"
 
     opinfo = auth_client.get_info(oppt)
-    lxpath = auth_client.lazyexpr(lxname, expression, operands)
-    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
+    lxobj = auth_client.upload(expr, rpath)
+    assert lxobj.path == pathlib.Path(rpath)
 
-    expression2 = f"{opnm} * 2"
-    operands2 = {opnm: f"@personal/{lxname}.b2nd"}
-    lxname = "expr_from_expr"
-    lxpath2 = auth_client.lazyexpr(lxname, expression2, operands2)
-    assert lxpath2 == pathlib.Path(f"@personal/{lxname}.b2nd")
+    expr2 = lxobj * 2
+    rpath = "@personal/expr_from_expr.b2nd"
+    lxobj2 = auth_client.upload(expr2, rpath)
+    assert lxobj2.path == pathlib.Path(rpath)
 
     # Check result metadata.
-    lxinfo = auth_client.get_info(lxpath)
-    lxinfo2 = auth_client.get_info(lxpath2)
+    lxinfo = auth_client.get_info(lxobj)
+    lxinfo2 = auth_client.get_info(lxobj2)
     assert lxinfo["shape"] == opinfo["shape"] == lxinfo2["shape"]
     assert lxinfo["dtype"] == opinfo["dtype"] == lxinfo2["dtype"]
-    assert lxinfo["operands"] == operands
-    assert lxinfo["expression"] == expression
+    assert lxinfo["operands"] == {k: str(v) for k, v in expr.operands.items()}
+    assert lxinfo["expression"] == expr.expression
 
-    assert lxinfo2["operands"] == operands2
-    assert lxinfo2["expression"] == expression2
+    assert lxinfo2["operands"] == {k: str(v) for k, v in expr2.operands.items()}
+    assert lxinfo2["expression"] == expr2.expression
 
     # Check result data.
-    a = auth_client.fetch(oppt)
-    b = auth_client.fetch(lxpath)
-    c = auth_client.fetch(lxpath2)
+    a = opnm
+    b = expr
+    c = expr2
     np.testing.assert_array_equal(a[:] + 1, b[:])
     np.testing.assert_array_equal((a[:] + 1) * 2, c[:])
 
@@ -941,23 +935,13 @@ def test_expr_no_operand(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
 
-    expression = "linspace(0, 10, num=50)"
-    lxname = "my_expr"
+    expression = blosc2.lazyexpr("linspace(0, 10, num=50)")
+    rpath = "@personal/my_expr.b2nd"
 
-    lxpath = auth_client.lazyexpr(lxname, expression)
-    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
-    c = auth_client.get(lxpath)
+    lxobj = auth_client.upload(expression, rpath)
+    assert lxobj.path == pathlib.Path(rpath)
     a = blosc2.linspace(0, 10, num=50)
-    np.testing.assert_array_equal(a[:], c[:])
-
-    # Check error when operand should be present but isn't
-    opnm = "ds"
-    oppt = f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
-    expression = "ds + linspace(0, 10, num=50)"
-    lxname = "my_expr"
-
-    with pytest.raises(Exception) as e_info:
-        lxpath = auth_client.lazyexpr(lxname, expression)
+    np.testing.assert_array_equal(a[:], lxobj[:])
 
 
 def test_expr_force_compute(auth_client):
@@ -966,18 +950,18 @@ def test_expr_force_compute(auth_client):
 
     expression = "linspace(0, 10, num=50)"
     lxname = "my_expr"
+    expr = blosc2.lazyexpr(expression)
+    rpath = f"@personal/{lxname}.b2nd"
 
     # Uncomputed lazyexpr is a blosc2 lazyexpr
-    lxpath = auth_client.lazyexpr(lxname, expression, compute=False)
-    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
-    c = auth_client.get(lxpath)
-    assert c.meta["expression"] == expression
+    lxobj = auth_client.upload(expr, rpath, compute=False)
+    assert lxobj.path == pathlib.Path(rpath)
+    assert lxobj.meta["expression"] == f"({expression})"  # blosc2 forces brackets
 
     # Computed lazyexpr is a blosc2 array
-    lxpath = auth_client.lazyexpr(lxname, expression, compute=True)
-    assert lxpath == pathlib.Path(f"@personal/{lxname}.b2nd")
-    c = auth_client.get(lxpath)
-    assert c.meta.get("expression", None) is None
+    lxobj = auth_client.upload(expr, rpath, compute=True)
+    assert lxobj.path == pathlib.Path(rpath)
+    assert lxobj.meta.get("expression", None) is None
 
 
 # User management
@@ -1114,12 +1098,12 @@ def test_listusers_unauthorized(client, auth_client):
 def test_client_timeout(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
-
-    lxpath = auth_client.lazyexpr("expr", "linspace(0, 100, 1000_0000)", compute=True)
-    assert lxpath == pathlib.Path("@personal/expr.b2nd")
+    expr = blosc2.lazyexpr("linspace(0, 100, 1000_0000)")
+    lxobj = auth_client.upload(expr, "@personal/expr.b2nd", compute=True)
+    assert lxobj.path == pathlib.Path("@personal/expr.b2nd")
     auth_client.timeout = 0.0001
     # Try again
     with pytest.raises(Exception) as e_info:
-        _ = auth_client.lazyexpr("expr", "linspace(0, 100, 1000_0000)", compute=True)
+        _ = auth_client.upload(expr, "@personal/expr.b2nd", compute=True)
     assert "Timeout" in str(e_info)
     auth_client.timeout = 5  # Reset timeout to default value

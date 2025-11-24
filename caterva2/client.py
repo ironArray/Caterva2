@@ -200,7 +200,7 @@ class Root:
     def __str__(self):
         return self.name
 
-    def upload(self, local_dset, remotepath=None):
+    def upload(self, local_dset, remotepath=None, compute=None):
         """
         Uploads a local file to this root.
 
@@ -211,6 +211,8 @@ class Root:
         remotepath : Path, optional
             Remote path where the file will be uploaded.  If not provided, the
             file will be uploaded to the top level of this root.
+        compute: None | bool
+            For LazyArray objects, whether to compute the result eagerly or not.
 
         Returns
         -------
@@ -240,7 +242,7 @@ class Root:
             remotepath = pathlib.PurePosixPath(self.name) / local_dset
         else:
             remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
-        return self.client.upload(local_dset, remotepath)
+        return self.client.upload(local_dset, remotepath, compute)
 
     def load_from_url(self, urlpath, remotepath=None):
         """
@@ -1005,7 +1007,7 @@ class Client:
 
         Parameters
         ----------
-        path : str
+        path : str | Dataset | File
             Path to the dataset.
 
         Returns
@@ -1024,6 +1026,8 @@ class Client:
         >>> info['shape']
         [100, 200]
         """
+        if isinstance(path, (Dataset, File)):
+            path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
         return self._get(f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout)
 
@@ -1033,8 +1037,8 @@ class Client:
 
         Parameters
         ----------
-        path : str
-            Path to the dataset.
+        path : str | Dataset
+            Path or reference to the dataset.
         slice_ : int, slice, tuple of ints and slices, or None
             Specifies the slice to fetch. If None, the whole dataset is fetched.
 
@@ -1060,6 +1064,8 @@ class Client:
 
         Parameters
         ----------
+        path: str, Dataset, File
+            Desired object to slice.
         key : int, slice, sequence of slices or str
             The slice to retrieve.  If a single slice is provided, it will be
             applied to the first dimension.  If a sequence of slices is
@@ -1086,6 +1092,8 @@ class Client:
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
+        if isinstance(path, (Dataset, File)):
+            path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
         if field:  # blosc2 doesn't support indexing of multiple fields
             return self._fetch_data(
@@ -1125,8 +1133,8 @@ class Client:
 
         Parameters
         ----------
-        path : str
-            Path of the dataset.
+        path : str | Dataset
+            Path of the dataset or a Dataset instance.
         nchunk : int
             ID of the unidimensional chunk to retrieve.
 
@@ -1148,6 +1156,8 @@ class Client:
         >>> info_schunk['chunksize'] / len(chunk)
         6.453000645300064
         """
+        if isinstance(path, Dataset):
+            path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
@@ -1226,22 +1236,29 @@ class Client:
             path = localpath
         return self._download_url(url, str(path), auth_cookie=self.cookie)
 
-    def _upload_file(self, local_dset, remotepath, urlbase, auth_cookie=None):
+    def _upload_file(self, local_dset, remotepath, urlbase, auth_cookie=None, compute=None):
         client = self.httpx_client
         url = f"{urlbase}/api/upload/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
         if isinstance(local_dset, (str, pathlib.Path)):
-            if local_dset.suffix == ".b2nd":
+            suffx = local_dset.suffix if hasattr(local_dset, "suffix") else local_dset[-5:]
+            if suffx == ".b2nd":
                 obj = blosc2.open(local_dset)
                 if isinstance(obj, blosc2.LazyArray):  # handle LazyArrays saved on-disk
-                    return self._upload_lazyarr(remotepath, obj)
+                    compute = False if compute is None else compute
+                    return self._upload_lazyarr(remotepath, obj, compute=compute)
+            if compute is not None:
+                raise ValueError("compute argument cannot be specified for non-LazyArray objects.")
             with open(local_dset, "rb") as f:
                 response = client.post(url, files={"file": f}, headers=headers)
                 response.raise_for_status()
         else:
             if isinstance(local_dset, blosc2.LazyArray):
-                return self._upload_lazyarr(remotepath, local_dset)
+                compute = False if compute is None else compute
+                return self._upload_lazyarr(remotepath, local_dset, compute=compute)
+            if compute is not None:
+                raise ValueError("compute argument cannot be specified for non-LazyArray objects.")
             # in-memory object
             ndarray = (
                 blosc2.asarray(local_dset)
@@ -1255,7 +1272,7 @@ class Client:
         path = pathlib.PurePosixPath(response.json())
         return self.get(path)  # return reference to object
 
-    def upload(self, local_dset, remotepath):
+    def upload(self, local_dset, remotepath, compute=None):
         """
         Uploads a local dataset to a remote repository.
 
@@ -1269,6 +1286,8 @@ class Client:
             Path to the local dataset or an in-memory object (convertible to blosc2.SChunk).
         remotepath : Path
             Remote path to upload the dataset to.
+        compute: None | bool
+            For LazyArray objects, boolean flag indicating whether to compute the result eagerly or not.
 
         Returns
         -------
@@ -1292,6 +1311,7 @@ class Client:
             remotepath,
             urlbase,
             auth_cookie=self.cookie,
+            compute=compute,
         )
 
     def _load_from_url(self, urlpath, remotepath, urlbase, auth_cookie=None):
