@@ -240,9 +240,7 @@ class Root:
             remotepath = pathlib.PurePosixPath(self.name) / local_dset
         else:
             remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
-        uploadpath = self.client.upload(local_dset, remotepath)
-        # Remove the first component of the upload path (the root name) and return a new File/Dataset
-        return self[str(uploadpath.relative_to(self.name))]
+        return self.client.upload(local_dset, remotepath)
 
     def load_from_url(self, urlpath, remotepath=None):
         """
@@ -266,9 +264,7 @@ class Root:
             remotepath = pathlib.PurePosixPath(self.name) / urlpath
         else:
             remotepath = pathlib.PurePosixPath(self.name) / pathlib.PurePosixPath(remotepath)
-        uploadpath = self.client.load_from_url(urlpath, remotepath)
-        # Remove the first component of the upload path (the root name) and return a new File/Dataset
-        return self[str(uploadpath.relative_to(self.name))]
+        return self.client.load_from_url(urlpath, remotepath)
 
 
 class File:
@@ -682,8 +678,8 @@ class Dataset(File, blosc2.Operand):
 
         Returns
         -------
-        tuple
-            The new shape of the dataset.
+        out: Caterva2.Dataset
+            A pointer to the (modified) dataset.
 
         Examples
         --------
@@ -754,6 +750,16 @@ class Client:
                 )
 
     def close(self):
+        """
+        Close httpx.Client instance associated with Caterva2 Client.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+            None
+        """
         self.httpx_client.close()
 
     def __enter__(self):
@@ -930,12 +936,12 @@ class Client:
 
     def get(self, path):
         """
-        Returns an object for the given path.
+        Returns an object for the given path or object.
 
         Parameters
         ----------
-        path : Path
-            Path to the root, file or dataset.
+        path : Path | Dataset | File | Root
+            Either the desired object, or Path to the root, file or dataset.
 
         Returns
         -------
@@ -956,6 +962,8 @@ class Client:
         >>> ds[:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
+        if isinstance(path, (File, Dataset, Root)):
+            return path
         # Normalize the path to a POSIX path
         path = pathlib.PurePosixPath(path).as_posix()
         # Check if the path is a root or a file/dataset
@@ -1197,7 +1205,7 @@ class Client:
         Returns
         -------
         Path
-            The path to the downloaded file.
+            The path to the downloaded file on local disk.
 
         Examples
         --------
@@ -1224,12 +1232,17 @@ class Client:
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
         if isinstance(local_dset, (str, pathlib.Path)):
+            if local_dset.suffix == ".b2nd":
+                obj = blosc2.open(local_dset)
+                if isinstance(obj, blosc2.LazyArray):  # handle LazyArrays saved on-disk
+                    return self._upload_lazyarr(remotepath, obj)
             with open(local_dset, "rb") as f:
                 response = client.post(url, files={"file": f}, headers=headers)
                 response.raise_for_status()
         else:
-            if isinstance(local_dset, blosc2.LazyExpr):
-                return self.upload_lazyexpr(remotepath, local_dset).path
+            if isinstance(local_dset, blosc2.LazyArray):
+                return self._upload_lazyarr(remotepath, local_dset)
+            # in-memory object
             ndarray = (
                 blosc2.asarray(local_dset)
                 if hasattr(local_dset, "shape")
@@ -1239,7 +1252,8 @@ class Client:
             f = io.BytesIO(cframe)
             response = client.post(url, files={"file": f}, headers=headers)
             response.raise_for_status()
-        return pathlib.PurePosixPath(response.json())
+        path = pathlib.PurePosixPath(response.json())
+        return self.get(path)  # return reference to object
 
     def upload(self, local_dset, remotepath):
         """
@@ -1258,8 +1272,8 @@ class Client:
 
         Returns
         -------
-        Path
-            Path of the uploaded file on the server.
+        Object : File, Dataset
+            Object representing the file or dataset.
 
         Examples
         --------
@@ -1287,7 +1301,8 @@ class Client:
         headers = {"Cookie": auth_cookie} if auth_cookie else None
         response = client.post(url, data={"remote_url": urlpath}, headers=headers)
         response.raise_for_status()
-        return pathlib.PurePosixPath(response.json())
+        path = pathlib.PurePosixPath(response.json())
+        return self.get(path)  # return reference to object
 
     def load_from_url(self, urlpath, dataset):
         """
@@ -1302,8 +1317,8 @@ class Client:
 
         Returns
         -------
-        Path
-            Path of the uploaded file on the server.
+        Object : File, Dataset
+            Object representing the file or dataset.
         """
         urlbase, _ = _format_paths(self.urlbase)
         return self._load_from_url(
@@ -1326,8 +1341,8 @@ class Client:
 
         Returns
         -------
-        tuple
-            The new shape of the dataset.
+        out: Dataset
+            Object representing the modified dataset.
 
         Examples
         --------
@@ -1350,13 +1365,22 @@ class Client:
         ndarray = blosc2.asarray(array)
         cframe = ndarray.to_cframe()
         file = io.BytesIO(cframe)
+        old_shape = self.get(remotepath).shape
+        append_shape = array.shape
+        loc_shape = (old_shape[0] + append_shape[0],) + old_shape[1:]
 
         client = self.httpx_client
         url = f"{self.urlbase}/api/append/{remotepath}"
         headers = {"Cookie": self.cookie}
         response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
         response.raise_for_status()
-        return tuple(response.json())
+        new_shape = tuple(response.json())
+        if loc_shape == new_shape:
+            return self.get(remotepath)
+        else:
+            raise RuntimeError(
+                f"Append shape incorrect: server-side shape is {new_shape} but should be {loc_shape}."
+            )
 
     def unfold(self, remotepath):
         """
@@ -1372,8 +1396,8 @@ class Client:
 
         Returns
         -------
-        Path
-            The path of the unfolded dataset.
+        out : str
+            Root of the unfolded dataset.
 
         Examples
         --------
@@ -1388,7 +1412,7 @@ class Client:
         result = self._post(
             f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
-        return PurePosixPath(result)
+        return PurePosixPath(result)  # return path to top directory of dset
 
     def remove(self, path):
         """
@@ -1424,7 +1448,7 @@ class Client:
         result = self._post(
             f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
-        return pathlib.PurePosixPath(result)
+        return pathlib.PurePosixPath(result)  # path from which file removed
 
     def move(self, src, dst):
         """
@@ -1439,8 +1463,8 @@ class Client:
 
         Returns
         -------
-        Path
-            New path of the moved dataset or directory.
+        Object : Dataset, File
+            Reference to object in new location.
 
         Examples
         --------
@@ -1464,7 +1488,8 @@ class Client:
             auth_cookie=self.cookie,
             timeout=self.timeout,
         )
-        return pathlib.PurePosixPath(result)
+        path = pathlib.PurePosixPath(result)
+        return self.get(path)  # get reference to object
 
     def copy(self, src, dst):
         """
@@ -1479,8 +1504,8 @@ class Client:
 
         Returns
         -------
-        Path
-            New path of the copied dataset or directory.
+        Object : Dataset, File
+            Reference to copied object in copy location.
 
         Examples
         --------
@@ -1507,67 +1532,10 @@ class Client:
             auth_cookie=self.cookie,
             timeout=self.timeout,
         )
-        return pathlib.PurePosixPath(result)
+        path = pathlib.PurePosixPath(result)
+        return self.get(path)  # get reference to object
 
-    def lazyexpr(self, name, expression, operands=None, compute=False):
-        """
-        Creates a lazy expression dataset in personal space.
-
-        A dataset with the specified name will be created or overwritten if already
-        exists.
-
-        Parameters
-        ----------
-        name : str
-            Name of the dataset to be created (without extension).
-        expression : str
-            Expression to be evaluated, which must yield a lazy expression.
-        operands : dict
-            Mapping of variables in the expression to their corresponding dataset paths.
-        compute : bool, optional
-            If false, generate lazyexpr and do not compute anything.
-            If true, compute lazy expression on creation and save (full) result.
-            Default false.
-
-        Returns
-        -------
-        Path
-            Path of the created dataset.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> # To create a lazyexpr you need to be a registered used
-        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
-        >>> src_path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
-        >>> path = client.upload('root-example/dir1/ds-2d.b2nd', src_path)
-        >>> client.lazyexpr('example-expr', 'a + a', {'a': path})
-        PurePosixPath('@personal/example-expr.b2nd')
-        >>> 'example-expr.b2nd' in client.get_list('@personal')
-        True
-        """
-        urlbase, _ = _format_paths(self.urlbase)
-        # Convert possible Path objects in operands to strings so that they can be serialized
-        if operands is not None:
-            operands = {k: str(v) for k, v in operands.items()}
-        else:
-            operands = {}
-        expr = {
-            "name": name,
-            "expression": expression,
-            "func": None,
-            "operands": operands,
-            "dtype": None,  # calculated server-side
-            "shape": None,  # calculated server-side
-            "compute": compute,
-        }
-        dataset = self._post(
-            f"{self.urlbase}/api/lazyexpr/", expr, auth_cookie=self.cookie, timeout=self.timeout
-        )
-        return pathlib.PurePosixPath(dataset)
-
-    def upload_lazyarr(self, remotepath, expression, compute=False):
+    def _upload_lazyarr(self, remotepath, expression, compute=False):
         """
         Creates a lazy expression dataset.
 
@@ -1589,8 +1557,8 @@ class Client:
 
         Returns
         -------
-        Path
-            Path of the created dataset.
+        Object: Dataset
+            Pointer to server-hosted lazy dataset.
         """
         urlbase, remotepath = _format_paths(self.urlbase, remotepath)
         operands = expression.operands if hasattr(expression, "operands") else expression.inputs_dict
@@ -1628,11 +1596,7 @@ class Client:
             timeout=self.timeout,
         )
         path = pathlib.PurePosixPath(dataset).as_posix()
-
-        # Return file/dataset object
-        root_name, file_path = path.split("/", 1)
-        root = Root(self, root_name)
-        return root[file_path]
+        return self.get(path)  # return reference to object
 
     def adduser(self, newuser, password=None, superuser=False):
         """
