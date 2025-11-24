@@ -1562,7 +1562,7 @@ class Client:
         ----------
         remotepath : str
             Path to save the lazy expression to.
-        expression : blosc2.LazyExpr
+        expression : blosc2.LazyExpr | blosc2.LazyUDF
             Expression to be evaluated.
         operands : dict
             Mapping of variables in the expression to their corresponding dataset paths.
@@ -1602,6 +1602,8 @@ class Client:
                 "shape": expression.shape,
                 "compute": compute,
             }
+        else:
+            raise ValueError("expr must be instance of blosc2.LazyUDF or blosc2.LazyExpr.")
 
         dataset = self._post(
             f"{self.urlbase}/api/upload_lazyarr/{remotepath}",

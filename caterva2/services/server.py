@@ -685,32 +685,28 @@ def make_expr(
     str
         The path of the newly created (or overwritten) dataset.
     """
-
     if not user:
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
     # Parse expression
     name = expr.name
-    operands = expr.operands
+    vars = expr.operands
+    func = expr.func
     compute = expr.compute
-    expr = expr.expression
-    if not expr or (not remotepath and not name):
+    expression = expr.expression
+    if (not expression and not func) or (not remotepath and not name):
         raise ValueError("name/remotepath and expression should not be empty")
-    vars = blosc2.get_expr_operands(expr)
-
     # Open expression datasets
     var_dict = {}
-    for var in vars:
-        path = operands[var]
+    for var, path in vars.items():
         # Detect special roots
         path = pathlib.Path(path)
         abspath = get_writable_path(path, user)
         var_dict[var] = open_b2(abspath, path)
 
-    if hasattr(expr, "func"):
+    if func is not None:
         local_ns = {}
-        exec(expr.func, {"np": np, "blosc2": blosc2}, local_ns)
-
+        exec(func, {"np": np, "blosc2": blosc2}, local_ns)
         if name not in local_ns or not isinstance(local_ns[name], typing.types.FunctionType):
             raise ValueError(f"User code must define a function called {name}")
         arr = blosc2.lazyudf(
@@ -718,9 +714,11 @@ def make_expr(
         )
 
     else:
-        expr = expr.strip()
+        expression = expression.strip()
         # Create the lazy expression dataset
-        arr = blosc2.lazyexpr(expr, var_dict)
+        arr = blosc2.lazyexpr(expression, var_dict)
+        if any(method in arr.expression for method in linalg_funcs):
+            compute = True
 
     # Handle name or path
     if name is None:  # provided a path
@@ -738,8 +736,6 @@ def make_expr(
 
     abspath.mkdir(exist_ok=True, parents=True)
 
-    if any(method in expr for method in linalg_funcs):
-        compute = True
     if compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
