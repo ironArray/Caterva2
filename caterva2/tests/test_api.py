@@ -759,38 +759,33 @@ def test_lazyexpr(auth_client):
     np.testing.assert_array_equal(res, b[:])
 
 
-def test_lazyudf(examples_dir, tmp_path, auth_client):
+def test_lazyudf(auth_client):
+    if not auth_client:
+        pytest.skip("authentication support needed")
     root = pathlib.Path("@shared")
     remote_root = auth_client.get(root)
-    remote_dir = "arrays"
-    ds_a = f"{remote_dir}/3d-blosc2-a.b2nd"
-    ds_b = f"{remote_dir}/3d-blosc2-b.b2nd"
 
-    with contextlib.chdir(tmp_path):
-        os.makedirs(remote_dir, exist_ok=True)
-        a = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
-        blosc2.asarray(a, urlpath=ds_a, chunks=(5, 10, 10))
-        remote_a = remote_root.upload(ds_a)
-        b = np.linspace(-1, 2, 1000).reshape(10, 10, 10)
-        blosc2.asarray(b, urlpath=ds_b, chunks=(3, 5, 5))
-        remote_b = remote_root.upload(ds_b)
-        assert ds_a in remote_root
-        assert ds_b in remote_root
+    a = np.linspace(1, 2, 1000).reshape(10, 10, 10)
+    ds_a = blosc2.asarray(a, chunks=(5, 10, 10))
+    remote_a = remote_root.upload(ds_a, "3d-blosc2-a.b2nd")
+    b = np.linspace(1, 2, 1000).reshape(10, 10, 10)
+    ds_b = blosc2.asarray(b, chunks=(3, 5, 5))
+    remote_b = remote_root.upload(ds_b, "3d-blosc2-b.b2nd")
 
-        def myudf(inputs, output, offset):
-            x1, x2 = inputs
-            output[:] = np.logaddexp(x1, x2)
+    def myudf(inputs, output, offset):
+        x1, x2 = inputs
+        output[:] = np.logaddexp(x1, x2)
 
-        dtype = blosc2.result_type(remote_a, remote_b)
-        ludf = blosc2.lazyudf(myudf, (remote_a, remote_b), dtype=dtype, shape=remote_a.shape)
+    dtype = blosc2.result_type(remote_a, remote_b)
+    ludf = blosc2.lazyudf(myudf, (remote_a, remote_b), dtype=dtype, shape=remote_a.shape)
 
-        # Try uploading with compute True
-        ludf_remote = auth_client.upload(remotepath="@shared/ludf.b2nd", local_dset=ludf, compute=True)
-        np.testing.assert_array_equal(ludf[:], ludf_remote[:])
+    # Try uploading with compute True
+    ludf_remote = auth_client.upload(remotepath="@shared/ludf.b2nd", local_dset=ludf, compute=True)
+    np.testing.assert_array_equal(ludf[:], ludf_remote[:])
 
-        # Try uploading with compute False
-        ludf_remote = auth_client.upload(remotepath="@shared/ludf.b2nd", local_dset=ludf, compute=False)
-        np.testing.assert_array_equal(ludf[:], ludf_remote[:])
+    # Try uploading with compute False
+    ludf_remote = auth_client.upload(remotepath="@shared/ludf.b2nd", local_dset=ludf, compute=False)
+    np.testing.assert_array_equal(ludf[:], ludf_remote[:])
 
 
 # More exercises for the expression evaluation with Blosc2 arrays

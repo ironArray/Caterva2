@@ -729,7 +729,7 @@ def make_expr(
             compute = True
 
     # Handle name or path
-    if name is None:  # provided a path
+    if remotepath is not None:  # provided a path
         # Get the absolute path for this user
         urlpath = get_writable_path(remotepath, user)
         abspath = urlpath.parent
