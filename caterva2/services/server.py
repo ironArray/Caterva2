@@ -522,7 +522,7 @@ async def fetch_data(
     if field:
         container = container[field]
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
+    if isinstance(container, blosc2.NDArray | blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
@@ -554,7 +554,10 @@ async def fetch_data(
 
     if isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
-    elif isinstance(array, blosc2.LazyExpr | blosc2.NDField):
+    elif isinstance(array, blosc2.LazyArray):
+        data = array.compute(() if slice_ is None else slice_)
+        data = data.to_cframe()
+    elif isinstance(array, blosc2.NDField):
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()

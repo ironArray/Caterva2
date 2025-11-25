@@ -327,13 +327,13 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
 
         operands = {"a": remote_root[remote_a], "b": remote_root[remote_b]}
         lexpr = blosc2.lazyexpr(expression, operands)
-        lxpath = remote_root.upload(lexpr, "myexpr.b2nd")
-        assert lxpath.path == pathlib.Path("@shared/myexpr.b2nd")
+        lxobj = remote_root.upload(lexpr, "myexpr.b2nd")
+        assert lxobj.path == pathlib.Path("@shared/myexpr.b2nd")
         if expression == "matmul(a, b)":  # check evaluated eagerly for linalg
-            assert "expression" not in auth_client.get_info(lxpath)
+            assert "expression" not in auth_client.get_info(lxobj)
 
         # Compute the expression
-        result = auth_client.get_slice(lxpath)
+        result = auth_client.get_slice(lxobj)
         assert isinstance(result, blosc2.NDArray)
 
         # Check the data
@@ -343,4 +343,4 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
             nresult = ne.evaluate(expression, {"a": na, "b": nb})
         else:
             nresult = np.matmul(na, nb)
-        np.testing.assert_allclose(result[:], nresult)
+        np.testing.assert_allclose(result[()], nresult)
