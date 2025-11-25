@@ -15,6 +15,7 @@ import functools
 import io
 import itertools
 import json
+import linecache
 import mimetypes
 import os
 import pathlib
@@ -709,7 +710,11 @@ def make_expr(
 
     if func is not None:
         local_ns = {}
-        exec(func, {"np": np, "blosc2": blosc2}, local_ns)
+        filename = f"<{name}>"  # any unique name
+        # Register the source so inspect can find it when saving later on
+        linecache.cache[filename] = (len(func), None, func.splitlines(True), filename)
+        exec(compile(func, filename, "exec"), {"np": np, "blosc2": blosc2}, local_ns)
+
         if name not in local_ns or not isinstance(local_ns[name], typing.types.FunctionType):
             raise ValueError(f"User code must define a function called {name}")
         arr = blosc2.lazyudf(
