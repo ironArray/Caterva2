@@ -784,10 +784,12 @@ def test_lazyudf(auth_client):
     # Try uploading with compute True
     ludf_remote = auth_client.upload(remotepath="@shared/ludf.b2nd", local_dset=ludf, compute=True)
     np.testing.assert_array_equal(ludf[:], ludf_remote[:])
+    assert "expression" not in auth_client.get_info(ludf_remote)
 
     # Try uploading with compute False
     ludf_remote = auth_client.upload(remotepath="@shared/ludf.b2nd", local_dset=ludf, compute=False)
     np.testing.assert_array_equal(ludf[:], ludf_remote[:])
+    assert "expression" in auth_client.get_info(ludf_remote)
 
 
 # More exercises for the expression evaluation with Blosc2 arrays
