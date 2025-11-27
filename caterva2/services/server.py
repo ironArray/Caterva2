@@ -23,6 +23,7 @@ import shutil
 import string
 import tarfile
 import traceback
+import types
 import typing
 import zipfile
 
@@ -664,7 +665,7 @@ async def get_chunk(
 
 
 def make_expr(
-    expr: models.Cat2LazyArr,
+    expr: models.Cat2LazyArr | types.SimpleNamespace,
     user: db.User,
     remotepath: pathlib.Path | None = None,
 ) -> str:
@@ -2121,7 +2122,16 @@ async def htmx_command(
                 alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
                 for k, v in alt_ops.items():
                     operands[k] = v  # overwrite or add operands if necessary
-            result_path = make_expr(result_name, expr, operands, user, compute=compute)
+            expr = {
+                "name": result_name,
+                "expression": expr,
+                "compute": compute,
+                "operands": operands,
+                "func": None,
+                "dtype": None,
+                "shape": None,
+            }
+            result_path = make_expr(types.SimpleNamespace(**expr), user)
             url = make_url(request, "html_home", path=result_path)
             return htmx_redirect(hx_current_url, url)
         except SyntaxError:
