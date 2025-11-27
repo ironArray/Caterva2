@@ -93,7 +93,7 @@ class AddUserPayload(pydantic.BaseModel):
 
 
 class File(pydantic.BaseModel):
-    mtime: float
+    mtime: datetime.datetime | None
     size: int
 
 
