@@ -548,7 +548,11 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and (not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField)) and (not filter):
+    if (
+        whole
+        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField))
+        and (not filter)
+    ):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
@@ -649,7 +653,6 @@ async def get_chunk(
 
         container = open_b2(abspath, path)
         if isinstance(container, blosc2.LazyArray):
-            # We do not support LazyUDF in Caterva2 yet.
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
         else:
