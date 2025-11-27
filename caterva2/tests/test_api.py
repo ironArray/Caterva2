@@ -759,6 +759,12 @@ def test_lazyexpr(auth_client):
     np.testing.assert_array_equal(res, b[:])
 
 
+# Need to define udf outside test function to avoid serialization issues (can't be dynamic)
+def myudf(inputs, output, offset):
+    x1, x2 = inputs
+    output[:] = np.logaddexp(x1, x2)
+
+
 def test_lazyudf(auth_client):
     if not auth_client:
         pytest.skip("authentication support needed")
@@ -771,10 +777,6 @@ def test_lazyudf(auth_client):
     b = np.linspace(1, 2, 1000).reshape(10, 10, 10)
     ds_b = blosc2.asarray(b, chunks=(3, 5, 5))
     remote_b = remote_root.upload(ds_b, "3d-blosc2-b.b2nd")
-
-    def myudf(inputs, output, offset):
-        x1, x2 = inputs
-        output[:] = np.logaddexp(x1, x2)
 
     dtype = blosc2.result_type(remote_a, remote_b)
     ludf = blosc2.lazyudf(myudf, (remote_a, remote_b), dtype=dtype, shape=remote_a.shape)
