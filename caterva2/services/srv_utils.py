@@ -11,6 +11,7 @@ import asyncio
 import collections
 import contextlib
 import datetime
+import inspect
 import json
 import pathlib
 import random
@@ -132,17 +133,22 @@ def read_metadata(obj):
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
         return get_model_from_obj(schunk, models.SChunk, cparams=cparams, mtime=mtime)
-    elif isinstance(obj, blosc2.LazyExpr):
+    elif isinstance(obj, blosc2.LazyArray):
         # overwrite operands and expression with _tosave versions for metadata display
-        operands = operands_as_paths(
-            obj.operands_tosave if hasattr(obj, "operands_tosave") else obj.operands,
-        )
+        if isinstance(obj, blosc2.LazyExpr):
+            operands = operands_as_paths(
+                obj.operands_tosave if hasattr(obj, "operands_tosave") else obj.operands,
+            )
+            expression = obj.expression_tosave if hasattr(obj, "expression_tosave") else obj.expression
+        else:  # blosc2.LazyUDF
+            operands = operands_as_paths(obj.inputs_dict)
+            expression = inspect.getsource(obj.func)
         return get_model_from_obj(
             obj,
             models.LazyArray,
             operands=operands,
             mtime=mtime,
-            expression=obj.expression_tosave if hasattr(obj, "expression_tosave") else obj.expression,
+            expression=expression,
         )
     else:
         raise TypeError(f"unexpected {type(obj)}")

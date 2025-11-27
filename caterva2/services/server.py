@@ -121,9 +121,9 @@ def open_b2(abspath, path):
 
     container = blosc2.open(abspath)
     vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
-    if isinstance(container, blosc2.LazyExpr):
+    if isinstance(container, blosc2.LazyArray):
         # Open the operands properly
-        operands = container.operands
+        operands = container.operands if isinstance(container, blosc2.LazyExpr) else container.inputs_dict
         for key, value in operands.items():
             if value is None:
                 raise ValueError(f'Missing operand "{key}"')
