@@ -2637,13 +2637,18 @@ def main():
 
     # Register display plugins (delay module load)
     try:
-        from .plugins import tomography  # When used as module
+        from .plugins import image, tomography  # When used as module
     except ImportError:
-        from caterva2.services.plugins import tomography  # When used as script
+        from caterva2.services.plugins import image, tomography  # When used as script
 
+    # tomography
     app.mount(f"/plugins/{tomography.name}", tomography.app)
     plugins[tomography.contenttype] = tomography
     tomography.init(settings.urlbase)
+    # image
+    app.mount(f"/plugins/{image.name}", image.app)
+    plugins[image.contenttype] = image
+    image.init(settings.urlbase)
 
     # Mount media
     media = settings.statedir / "media"
