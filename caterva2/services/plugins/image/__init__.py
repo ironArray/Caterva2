@@ -100,7 +100,12 @@ async def __get_image(path, user, ndim, i):
     index = [slice(None) for x in array.shape]
     index[ndim] = slice(i, i + 1, 1)
     content = array[tuple(index)].squeeze()
-    return PIL.Image.fromarray(content)
+    if content.dtype.kind != "u":
+        content = (content - content.min()) / (content.max() - content.min())  # normalise to 0-1
+        content = (content * 255).astype(np.uint8)
+    return PIL.Image.fromarray(
+        content, mode="RGB" + ("A" if content.shape[-1] == 4 else "") if content.ndim == 3 else "L"
+    )
 
 
 @app.get("/image/{path:path}")
