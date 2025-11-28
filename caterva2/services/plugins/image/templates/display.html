@@ -1,0 +1,70 @@
+<div class="d-flex gap-2">
+  <select class="form-select w-auto" name="ndim" hx-on:change="update_ndim(this)">
+    {% for dim in shape[:3] %}
+    <option value="{{ loop.index0 }}" data-size="{{ dim }}">Dim {{ loop.index0 }} ({{ dim }})</option>
+    {% endfor %}
+  </select>
+  <input class="form-control w-auto" type="number" min="0" max="{{ shape.0 - 1}}" name="i" value="0"
+         hx-on:change="update_i(this)">
+  {% with  id="image-spinner" %}
+    {% include 'includes/loading.html' %}
+  {% endwith %}
+</div>
+
+<a href="{{ href }}" target="blank_" id="image-original">{{ width }} x {{ height }} (original size)</a>
+<br>
+<img src="{{ href }}&width=512" id="display-image" onload="stopSpinner()">
+
+<script>
+  function updateURL(src, options) {
+    const url = new URL(src);
+    for (const [key, value] of Object.entries(options)) {
+      url.searchParams.set(key, value);
+    }
+    return url.toString();
+  }
+
+  function updateImage(options) {
+    let img = document.getElementById('display-image');
+    document.getElementById('image-spinner').classList.add('htmx-request');
+    img.src = updateURL(img.src, options);
+  }
+
+  function update_i(input) {
+    const options = {i: input.value};
+    updateImage(options);
+
+    let link = document.getElementById('image-original');
+    if (link) {
+      link.href = updateURL(link.href, options);
+    }
+  }
+
+  function update_ndim(select) {
+    // Update image URL
+    const option = select.selectedOptions[0];
+    const options = {ndim: option.value, i: 0};
+    updateImage(options);
+
+    // Update max of input element
+    const size = option.getAttribute('data-size');
+    const input = document.querySelector('input[name="i"]');
+    input.setAttribute('max', size - 1);
+    input.value = 0;
+
+    // Update link to original size image
+    let link = document.getElementById('image-original');
+    if (link) {
+      link.href = updateURL(link.href, options);
+      const [h, w] = [...select.options].filter(opt => !opt.selected).map(opt => opt.dataset.size);
+      link.textContent = `${w} x ${h} (original size)`;
+    }
+  }
+
+  function stopSpinner() {
+    const spinner = document.getElementById('image-spinner');
+    if (spinner) {
+      spinner.classList.remove('htmx-request');
+    }
+  }
+</script>
