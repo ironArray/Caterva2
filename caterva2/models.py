@@ -74,10 +74,13 @@ class LazyArray(pydantic.BaseModel):
     mtime: datetime.datetime | None
 
 
-class Cat2LazyExpr(pydantic.BaseModel):
+class Cat2LazyArr(pydantic.BaseModel):
     name: str | None
-    expression: str
+    expression: str | None
+    func: str | None
     operands: dict[str, str]
+    dtype: str | None
+    shape: tuple | None
     compute: bool
 
 

@@ -15,6 +15,7 @@ import functools
 import io
 import itertools
 import json
+import linecache
 import mimetypes
 import os
 import pathlib
@@ -22,6 +23,7 @@ import shutil
 import string
 import tarfile
 import traceback
+import types
 import typing
 import zipfile
 
@@ -34,6 +36,7 @@ import httpx
 import markdown
 import nbconvert
 import nbformat
+import numpy as np
 import PIL.Image
 import pygments
 import uvicorn
@@ -119,9 +122,9 @@ def open_b2(abspath, path):
 
     container = blosc2.open(abspath)
     vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
-    if isinstance(container, blosc2.LazyExpr):
+    if isinstance(container, blosc2.LazyArray):
         # Open the operands properly
-        operands = container.operands
+        operands = container.operands if isinstance(container, blosc2.LazyExpr) else container.inputs_dict
         for key, value in operands.items():
             if value is None:
                 raise ValueError(f'Missing operand "{key}"')
@@ -521,7 +524,7 @@ async def fetch_data(
     if field:
         container = container[field]
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField):
+    if isinstance(container, blosc2.NDArray | blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
@@ -546,14 +549,21 @@ async def fetch_data(
             for sl, sh in zip(slice_, shape, strict=False)
         )
 
-    if whole and (not isinstance(array, blosc2.LazyExpr | hdf5.HDF5Proxy | blosc2.NDField)) and (not filter):
+    if (
+        whole
+        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField))
+        and (not filter)
+    ):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
-    elif isinstance(array, blosc2.LazyExpr | blosc2.NDField):
+    elif isinstance(array, blosc2.LazyArray):
+        data = array.compute(() if slice_ is None else slice_)
+        data = data.to_cframe()
+    elif isinstance(array, blosc2.NDField):
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()
@@ -644,7 +654,6 @@ async def get_chunk(
 
         container = open_b2(abspath, path)
         if isinstance(container, blosc2.LazyArray):
-            # We do not support LazyUDF in Caterva2 yet.
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
         else:
@@ -656,11 +665,8 @@ async def get_chunk(
 
 
 def make_expr(
-    name: str | None,
-    expr: str,
-    operands: dict[str, str],
+    expr: models.Cat2LazyArr | types.SimpleNamespace,
     user: db.User,
-    compute: bool = False,
     remotepath: pathlib.Path | None = None,
 ) -> str:
     """
@@ -687,30 +693,47 @@ def make_expr(
     str
         The path of the newly created (or overwritten) dataset.
     """
-
     if not user:
         raise srv_utils.raise_unauthorized("Creating lazy expressions requires authentication")
 
     # Parse expression
-    expr = expr.strip()
-    if not expr or (not remotepath and not name):
+    name = expr.name
+    vars = expr.operands
+    func = expr.func
+    compute = expr.compute
+    expression = expr.expression
+    if (not expression and not func) or (not remotepath and not name):
         raise ValueError("name/remotepath and expression should not be empty")
-    vars = blosc2.get_expr_operands(expr)
-
     # Open expression datasets
     var_dict = {}
-    for var in vars:
-        path = operands[var]
+    for var, path in vars.items():
         # Detect special roots
         path = pathlib.Path(path)
         abspath = get_writable_path(path, user)
         var_dict[var] = open_b2(abspath, path)
 
-    # Create the lazy expression dataset
-    arr = blosc2.lazyexpr(expr, var_dict)
+    if func is not None:
+        local_ns = {}
+        filename = f"<{name}>"  # any unique name
+        # Register the source so inspect can find it when saving later on
+        linecache.cache[filename] = (len(func), None, func.splitlines(True), filename)
+        exec(compile(func, filename, "exec"), {"np": np, "blosc2": blosc2}, local_ns)
+
+        if name not in local_ns or not isinstance(local_ns[name], typing.types.FunctionType):
+            raise ValueError(f"User code must define a function called {name}")
+        arr = blosc2.lazyudf(
+            local_ns[name], tuple(var_dict[f"o{i}"] for i in range(len(var_dict))), expr.dtype, expr.shape
+        )
+
+    else:
+        expression = expression.strip()
+        # Create the lazy expression dataset
+        arr = blosc2.lazyexpr(expression, var_dict)
+        if any(method in arr.expression for method in linalg_funcs):
+            compute = True
 
     # Handle name or path
-    if name is None:  # provided a path
+    if remotepath is not None:  # provided a path
         # Get the absolute path for this user
         urlpath = get_writable_path(remotepath, user)
         abspath = urlpath.parent
@@ -725,8 +748,6 @@ def make_expr(
 
     abspath.mkdir(exist_ok=True, parents=True)
 
-    if any(method in expr for method in linalg_funcs):
-        compute = True
     if compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
@@ -735,10 +756,10 @@ def make_expr(
     return path
 
 
-@app.post("/api/upload_lazyexpr/{path:path}")
-async def upload_lazyexpr(
+@app.post("/api/upload_lazyarr/{path:path}")
+async def upload_lazyarr(
     path: pathlib.Path,
-    expr: models.Cat2LazyExpr,
+    expr: models.Cat2LazyArr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
@@ -754,10 +775,8 @@ async def upload_lazyexpr(
     str
         The path of the newly created (or overwritten) dataset.
     """
-    if expr.name is not None:
-        raise ValueError("Cannot provide name and path.")
     try:
-        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute, path)
+        result_path = make_expr(expr, user, path)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
@@ -771,7 +790,7 @@ async def upload_lazyexpr(
 
 @app.post("/api/lazyexpr/")
 async def lazyexpr(
-    expr: models.Cat2LazyExpr,
+    expr: models.Cat2LazyArr,
     user: db.User = Depends(current_active_user),
 ) -> str:
     """
@@ -789,7 +808,7 @@ async def lazyexpr(
     """
 
     try:
-        result_path = make_expr(expr.name, expr.expression, expr.operands, user, expr.compute)
+        result_path = make_expr(expr, user)
     except (SyntaxError, ValueError, TypeError) as exc:
         raise srv_utils.raise_bad_request(f"Invalid name or expression: {exc}") from exc
     except KeyError as ke:
@@ -2103,7 +2122,16 @@ async def htmx_command(
                 alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
                 for k, v in alt_ops.items():
                     operands[k] = v  # overwrite or add operands if necessary
-            result_path = make_expr(result_name, expr, operands, user, compute=compute)
+            expr = {
+                "name": result_name,
+                "expression": expr,
+                "compute": compute,
+                "operands": operands,
+                "func": None,
+                "dtype": None,
+                "shape": None,
+            }
+            result_path = make_expr(types.SimpleNamespace(**expr), user)
             url = make_url(request, "html_home", path=result_path)
             return htmx_redirect(hx_current_url, url)
         except SyntaxError:
