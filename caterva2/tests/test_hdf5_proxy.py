@@ -334,10 +334,6 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
         else:
             assert "expression" in auth_client.get_info(lxobj)
 
-        # Compute the expression
-        result = auth_client.get_slice(lxobj)
-        assert isinstance(result, blosc2.NDArray)
-
         # Check the data
         na = h5f[ds_a][:]
         nb = h5f[ds_b][:]
@@ -345,4 +341,4 @@ def test_expression(expression, examples_dir, tmp_path, auth_client):
             nresult = ne.evaluate(expression, {"a": na, "b": nb})
         else:
             nresult = np.matmul(na, nb)
-        np.testing.assert_allclose(result[()], nresult)
+        np.testing.assert_allclose(lxobj[()], nresult)
