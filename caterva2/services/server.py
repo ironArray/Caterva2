@@ -128,13 +128,17 @@ def open_b2(abspath, path):
         for key, value in operands.items():
             if value is None:
                 raise ValueError(f'Missing operand "{key}"')
-            metaval = value.schunk.meta if hasattr(value, "schunk") else {}
-            vlmetaval = value.schunk.vlmeta
-            if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
-                # Save operand as Proxy, see blosc2.open doc for more info.
-                # Or, it can be an HDF5 dataset too (which should be handled in the next call)
-                relpath = srv_utils.get_relpath(value)
-                operands[key] = open_b2(value.schunk.urlpath, relpath)
+            if isinstance(value, blosc2.Operand):
+                metaval = value.schunk.meta if hasattr(value, "schunk") else {}
+                vlmetaval = value.schunk.vlmeta
+                if "proxy-source" in metaval or ("_ftype" in vlmetaval and vlmetaval["_ftype"] == "hdf5"):
+                    # Save operand as Proxy, see blosc2.open doc for more info.
+                    # Or, it can be an HDF5 dataset too (which should be handled in the next call)
+                    relpath = srv_utils.get_relpath(value)
+                    operands[key] = open_b2(value.schunk.urlpath, relpath)
+            else:
+                if value.shape != ():
+                    raise ValueError("Something has gone wrong. Non-blosc2.Operands should be scalars.")
 
         if not hasattr(container, "_where_args"):
             # If the container does not have _where_args, it is a LazyExpr
