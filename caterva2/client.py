@@ -1241,8 +1241,8 @@ class Client:
         url = f"{urlbase}/api/upload/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
-        if hasattr(local_dset, "urlpath"):
-            local_dset = local_dset.urlpath
+        if hasattr(local_dset, "urlpath"):  # when passed reference to on-disk object
+            local_dset = local_dset if local_dset.urlpath is None else local_dset.urlpath
         if isinstance(local_dset, (str, pathlib.Path)):
             suffx = local_dset.suffix if hasattr(local_dset, "suffix") else local_dset[-5:]
             if suffx == ".b2nd":
