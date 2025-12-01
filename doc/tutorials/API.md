@@ -20,7 +20,7 @@ client.get_roots()
 or - if one has created a user - using the user credentials:
 
 ```python
-client = cat2.Client("https://cat2.cloud/demo", ("user@example.com", "password1"))
+client = cat2.Client("https://cat2.cloud/demo", ("user@example.com", "foobar11"))
 client.get_roots()
 # {'@public': {'name': '@public'},
 #  '@personal': {'name': '@personal'},
@@ -49,9 +49,9 @@ The `metadata` dictionary contains assorted dataset attributes:
 ```python
 print(metadata)
 # {'shape': [10, 100, 100], 'chunks': [10, 100, 100], 'blocks': [2, 100, 100], 'dtype': 'uint16',
-# 'schunk': {...}, 'mtime': '2025-04-06T22:00:03.912156Z'}
+# 'schunk': {...}, 'mtime': '2025-12-01T09:54:32.514813Z'}
 ```
-So `@public/examples/tomo-guess-test.b2nd` is a `(10,100,100)` dataset of 16-bit unsigned integers. The `schunk` field contains information about the compression of the data. We can get the whole dataset (or just a part of it) and decompress it to a `numpy` array like so:
+So `@public/examples/tomo-guess-test.b2nd` is a `(10, 100, 100)` dataset of 16-bit unsigned integers. The `schunk` field contains information about the compression of the data. We can get the whole dataset (or just a part of it) and decompress it to a `numpy` array like so:
 
 ```python
 myslice = client.fetch(
@@ -72,7 +72,7 @@ client.download(
 client.upload(
     "mylocalfile.b2nd", "@public/uploadedfile.b2nd"
 )  # uploads local file to @public/uploadedfile.b2nd
-# PurePosixPath('@public/uploadedfile.b2nd')
+# <Dataset: @public/uploadedfile.b2nd>
 ```
 
 ## The object-oriented client API
@@ -139,20 +139,45 @@ In addition, `Dataset` supports direct access to `dtype`, `blocks`, `chunks` and
 ```python
 ds.shape  # -> (10, 100, 100)
 ```
-### Evaluating expressions
+### Evaluating expressions and functions
 Caterva2 also allows you to create so-called "lazy expressions" (`blosc2.LazyExpr` instances), which represent computations on array datasets ("operands") accessible via the server.  These expressions are stored in the user's own personal space (`@personal`), and are evaluated on the server when you access them.  The result of the expression is a new dataset, which is also stored in the user's personal space.  The operands are not copied, but rather referenced by the expression, so they are not duplicated in the server's storage.
 
-Lazy expressions are very cheap to create as, on creation, they merely check the metadata of the involved operands to determine if the expression is valid.  The result is not computed on creation of the `LazyExpr``, and rather only executes server-side when the data itself is accessed (e.g. via fetch or download operations). In addition, if only a portion of the data is requested, the expression is only computed for the relevant slice.
+Lazy expressions are very cheap to create as, on creation, they merely check the metadata of the involved operands to determine if the expression is valid.  The result is not computed on creation of the ``LazyExpr``, and rather only executes server-side when the data itself is accessed (e.g. via fetch or download operations). In addition, if only a portion of the data is requested, the expression is only computed for the relevant slice.
 
 This code creates a lazy expression named `plusone` from the 2D dataset used above and stores it in the `@personal` root.
 
 ```python
-client.lazyexpr(
-    "plusone", "x + 1", {"x": "@public/examples/tomo-guess-test.b2nd"}
-)  # -> PurePosixPath('@personal/plusone.b2nd')
+x = myroot["examples/tomo-guess-test.b2nd"]
+expr = x + 1
+myexpr = client.upload(
+    expr, "@personal/plusone.b2nd"
+)  # -> <Dataset: @personal/plusone.b2nd>
 ```
-The path of the new dataset is returned.  Now you can access it as a normal dataset, via either the `Client` or object-oriented interfaces discussed above.
+A reference to the new dataset is returned. One may pass the ``compute=True`` flag to execute the lazy expression server-side and save the resulting ``blosc2.NDArray`` - by default ``compute=False`` and no computation is performed, the lazy epxression wrapper being saved. In eitehr case, you can access it as a normal dataset, with execution ocurring server-side, via either the `Client` or object-oriented interfaces discussed above.
 
 ```python
-client.fetch("@personal/plusone.b2nd", slice_=(slice(0, 2), slice(4, 8)))
+myexpr[4, 4:6, 3:8]
+# [[40404 40405 40406 40407 40408]
+# [40504 40505 40506 40507 40508]]
+```
+
+#### Lazy UDFs
+One can also use a very similar interface to define, upload and compute with ``blosc2.LazyUDF`` instances of user-defined functions (UDFs). One follows the [LazyUDF syntax](https://www.blosc.org/python-blosc2/getting_started/tutorials/03.lazyarray-udf.html) for ``blosc2`` to create a valid UDF and then one may upload is via the standard API.
+
+```python
+def udf1p(inputs, output, offset):
+    a = inputs[0]
+    output[:] = a + 1
+
+
+myudf = blosc2.lazyudf(udf1p, (x,), shape=x.shape, dtype=x.dtype)
+obj = client.upload(myudf, "@personal/udf_plusone.b2nd", compute=False)
+# -> <Dataset: @personal/udf_plusone.b2nd>
+```
+again one may force computation on upload or not. A reference to the new dataset is returned.  Now you can access it as a normal dataset, with execution ocurring server-side, via either the `Client` or object-oriented interfaces discussed above.
+
+```python
+obj[4, 4:6, 3:8]
+# [[40404 40405 40406 40407 40408]
+# [40504 40505 40506 40507 40508]]
 ```

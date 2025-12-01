@@ -1241,6 +1241,8 @@ class Client:
         url = f"{urlbase}/api/upload/{remotepath}"
 
         headers = {"Cookie": auth_cookie} if auth_cookie else None
+        if hasattr(local_dset, "urlpath"):
+            local_dset = local_dset.urlpath
         if isinstance(local_dset, (str, pathlib.Path)):
             suffx = local_dset.suffix if hasattr(local_dset, "suffix") else local_dset[-5:]
             if suffx == ".b2nd":
@@ -1411,7 +1413,7 @@ class Client:
 
         Parameters
         ----------
-        remotepath : Path
+        remotepath : Path | File
             Path of the dataset to unfold.
 
         Returns
@@ -1428,6 +1430,8 @@ class Client:
         >>> client.unfold('@personal/dir/data.h5')
         PurePosixPath('@personal/dir/data')
         """
+        if isinstance(remotepath, File):
+            remotepath = remotepath.path
         urlbase, path = _format_paths(self.urlbase, remotepath)
         result = self._post(
             f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie, timeout=self.timeout
@@ -1444,8 +1448,8 @@ class Client:
 
         Parameters
         ----------
-        path : Path
-            Path of the dataset or directory to remove.
+        path : Path | File instance
+            Path of the dataset (or dataset itself) or directory to remove.
 
         Returns
         -------
@@ -1464,6 +1468,8 @@ class Client:
         >>> removed_path == path
         True
         """
+        if isinstance(path, File):
+            path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
         result = self._post(
             f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
@@ -1476,8 +1482,8 @@ class Client:
 
         Parameters
         ----------
-        src : Path
-            Source path of the dataset or directory.
+        src : Path | File instance
+            Path of the source dataset (or dataset itself) of the dataset or directory.
         dst : Path
             The destination path for the dataset or directory.
 
@@ -1501,6 +1507,8 @@ class Client:
         >>> path.replace('@personal/', '') in client.get_list('@personal')
         False
         """
+        if isinstance(src, File):
+            src = src.path
         urlbase, _ = _format_paths(self.urlbase)
         result = self._post(
             f"{self.urlbase}/api/move/",
@@ -1517,8 +1525,8 @@ class Client:
 
         Parameters
         ----------
-        src : Path
-            Source path of the dataset or directory.
+        src : Path | File instance
+            Path of the source dataset (or dataset itself) of the dataset or directory.
         dst : Path
             Destination path for the dataset or directory.
 
@@ -1545,6 +1553,8 @@ class Client:
         >>> copy_path.replace('@personal/', '') in datasets
         True
         """
+        if isinstance(src, File):
+            src = src.path
         urlbase, _ = _format_paths(self.urlbase)
         result = self._post(
             f"{self.urlbase}/api/copy/",

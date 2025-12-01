@@ -18,12 +18,12 @@ Schematic of hdf5 file structure
 ## Loading a HDF5 file
 HDF5 files are common in many scientific and industrial applications, and so examples abound online. We're going to use some example diffraction data from a synchrotron, provided by the [silx project](http://www.silx.org/). This may be downloaded locally (after importing necessary libraries - see the notebook mentioned at the beginning of this tutorial):
 
-```
+```python
 dir_path = "kevlar"
 if not os.path.exists(f"{dir_path}.h5"):
-    response = requests.get("http://www.silx.
-        org/pub/pyFAI/pyFAI_UM_2020/data_ID13
-        /kevlar.h5")
+    response = requests.get(
+        "http://www.silx.org/pub/pyFAI/pyFAI_UM_2020/data_ID13/kevlar.h5"
+    )
     with open(f"{dir_path}.h5", "wb") as file:
         file.write(response.content)
 ```
@@ -31,13 +31,11 @@ if not os.path.exists(f"{dir_path}.h5"):
 ## Unfolding the file
 In order to handle the `.h5` file using Cat2Cloud, we must expose the hierarchical structure of the HDF5 file on the server, which in our case will be the `demo` server at https://cat2.cloud/demo. This is done by uploading the file to the Caterva2 server and then unfolding it, using a memory-light structure of subdirectories and proxy datasets.
 
-```
+```python
 url = "https://cat2.cloud/demo"
-client = cat2.Client(url,
-                    ("user@example.com", "foobar11"))
+client = cat2.Client(url, ("user@example.com", "foobar11"))
 myroot = client.get("@shared")
-print(f"Before uploading and unfolding:
-        {myroot.file_list}")
+print(f"Before uploading and unfolding: {myroot.file_list}")
 local_address = f"{dir_path}.h5"
 remote_address = myroot.name + "/" + local_address
 apath = client.upload(local_address, remote_address)
@@ -58,13 +56,12 @@ We may now perform operations on the `.b2nd` proxy.
 
 ## Examining the unfolded data
 We can define a local reference which points to the data on the server (specifically the proxy), and we can obtain the easily obtain some of the data and plot it like so:
-```
+```python
 proxy = myroot["kevlar/entry/data/data.b2nd"]
 cmap = plt.cm.viridis
 example_image = proxy[5]
 fig = plt.figure()
-plt.imshow(example_image / 65535,
-           figure=fig, cmap=cmap, vmax=1, vmin=0)
+plt.imshow(example_image / 65535, figure=fig, cmap=cmap, vmax=1, vmin=0)
 ```
 
 ```{figure} images/hdf5-output1.webp
@@ -78,14 +75,12 @@ First visualisation
 
 As is clear, not much detail can be seen in the image; this is due to outlier pixels maxing out the image range. We can use a `lazyexpr` to apply a function to the data, which will be executed on the server side, and then we can visualise the result. The following code applies a conditional expression to the data, increasing the signal pixels.
 
-```
-image = client.lazyexpr("expr",
-                        "where(a < 10, a * 32000, a)",
-                         {"a": proxy.path})
+```python
+expr = blosc2.where(proxy < 10, proxy * 32000, proxy)
+image = client.upload(expr, "@personal/expr.b2nd")
 example_image = client.get(image)[5] / 65535
 fig = plt.figure()
-plt.imshow(example_image, figure=fig,
-            cmap=cmap, vmax=1, vmin=0)
+plt.imshow(example_image, figure=fig, cmap=cmap, vmax=1, vmin=0)
 ```
 The result is an image with the desired diffraction pattern visible, as shown below:
 
