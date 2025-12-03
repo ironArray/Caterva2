@@ -13,6 +13,7 @@ import inspect
 import io
 import pathlib
 import sys
+import textwrap
 from collections.abc import Sequence
 from pathlib import PurePosixPath
 
@@ -1610,7 +1611,7 @@ class Client:
             expr = {
                 "name": expression.func.__name__,
                 "expression": None,
-                "func": inspect.getsource(expression.func),
+                "func": textwrap.dedent(inspect.getsource(self.func)).lstrip(),
                 "operands": operands,
                 "dtype": str(expression.dtype),
                 "shape": expression.shape,

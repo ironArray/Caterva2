@@ -9,6 +9,7 @@
 
 import ast
 import asyncio
+import builtins
 import collections.abc
 import contextlib
 import functools
@@ -29,6 +30,9 @@ import zipfile
 
 # Requirements
 import blosc2
+
+if blosc2._NUMBA_:
+    import numba
 import dotenv
 import fastapi
 import furl
@@ -79,7 +83,7 @@ def get_disk_usage():
 
 def truncate_path(path, size=35):
     """
-    Smart truncaion of a long path for display.
+    Smart truncation of a long path for display.
     """
     assert type(path) is str
 
@@ -719,9 +723,19 @@ def make_expr(
     if func is not None:
         local_ns = {}
         filename = f"<{name}>"  # any unique name
+        SAFE_GLOBALS = {
+            "__builtins__": {
+                name: value for name, value in builtins.__dict__.items() if name != "__import__"
+            },
+            "np": np,
+            "blosc2": blosc2,
+        }
+        if blosc2._NUMBA_:
+            SAFE_GLOBALS["numba"] = numba
+
         # Register the source so inspect can find it when saving later on
-        linecache.cache[filename] = (len(func), None, func.splitlines(True), filename)
-        exec(compile(func, filename, "exec"), {"np": np, "blosc2": blosc2}, local_ns)
+        linecache.cache[filename] = (len(expr), None, expr.splitlines(True), filename)
+        exec(compile(expr, filename, "exec"), SAFE_GLOBALS, local_ns)
 
         if name not in local_ns or not isinstance(local_ns[name], typing.types.FunctionType):
             raise ValueError(f"User code must define a function called {name}")
