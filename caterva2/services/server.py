@@ -31,7 +31,7 @@ import zipfile
 # Requirements
 import blosc2
 
-if blosc2._NUMBA_:
+if blosc2._HAS_NUMBA:
     import numba
 import dotenv
 import fastapi
@@ -730,7 +730,7 @@ def make_expr(
             "np": np,
             "blosc2": blosc2,
         }
-        if blosc2._NUMBA_:
+        if blosc2._HAS_NUMBA:
             SAFE_GLOBALS["numba"] = numba
 
         # Register the source so inspect can find it when saving later on
