@@ -1611,7 +1611,7 @@ class Client:
             expr = {
                 "name": expression.func.__name__,
                 "expression": None,
-                "func": textwrap.dedent(inspect.getsource(self.func)).lstrip(),
+                "func": textwrap.dedent(inspect.getsource(expression.func)).lstrip(),
                 "operands": operands,
                 "dtype": str(expression.dtype),
                 "shape": expression.shape,

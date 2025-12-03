@@ -734,8 +734,8 @@ def make_expr(
             SAFE_GLOBALS["numba"] = numba
 
         # Register the source so inspect can find it when saving later on
-        linecache.cache[filename] = (len(expr), None, expr.splitlines(True), filename)
-        exec(compile(expr, filename, "exec"), SAFE_GLOBALS, local_ns)
+        linecache.cache[filename] = (len(func), None, func.splitlines(True), filename)
+        exec(compile(func, filename, "exec"), SAFE_GLOBALS, local_ns)
 
         if name not in local_ns or not isinstance(local_ns[name], typing.types.FunctionType):
             raise ValueError(f"User code must define a function called {name}")
