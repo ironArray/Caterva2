@@ -1,8 +1,12 @@
 # Release notes
 
-## Changes from 2025.11.17.1 to 2025.12.0
+## Changes from 2025.11.17.1 to 2025.12.3
 
-#XXX version-specific blurb XXX#
+* Upload in-memory objects
+* Upload ``LazyUDF`` objects
+* Change to upload API and return Dataset/File object rather than path in most cases
+* New Image plugin
+* Use prompt box as calculator
 
 ## Changes from 2025.11.17 to 2025.11.17.1
 

@@ -1,10 +1,10 @@
-Announcing Caterva2 2025.11.17.1
+Announcing Caterva2 2025.12.3
 ==============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 and HDF5 data repositories.
 
-This is a hot-fix release, which fixes authentication issues for jupyter notebooks running on pyodide.
+This is a minor release, which introduces certain minor API breaking changes (``client.lazyexpr`` has disappeared, ``upload`` signature has changed slightly).
 
 For more info, you can have a look at the release notes in:
 
