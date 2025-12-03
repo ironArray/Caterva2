@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 2025.12.3 to 2025.12.4.dev0
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 2025.11.17.1 to 2025.12.3
 
 * Upload in-memory objects
