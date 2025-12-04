@@ -55,7 +55,7 @@ jobs:
 
         # Copy wheels
         mkdir -p wheels
-        cp ./dist/*.whl wheels/
+        cp ../dist/*.whl wheels/
         echo "Wheels to publish:"
         ls -lh wheels/
 
