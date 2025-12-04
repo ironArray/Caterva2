@@ -1,69 +1,81 @@
-
-name: Python wheel
+name: Build and Publish Python Wheels for Caterva2
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main  # Rebuild wheels on every commit to main
 
 permissions:
-  contents: read
+  contents: write  # Needed for GITHUB_TOKEN to push
 
 jobs:
-  build:
-
+  build_wheels:
     runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: 3.12
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v3
-      with:
-        python-version: '3.12'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build
-    - name: Build package
-      run: python -m build
+      # Checkout the repository
+      - uses: actions/checkout@v3
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: wheel
-        path: ./dist/*.whl
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Publish wheels to orphan `wheels` branch
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
+      # Install build dependencies
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
 
-        # Create a fresh working directory
-        rm -rf wheels-branch
-        mkdir wheels-branch
-        cd wheels-branch
+      # Build the wheel(s)
+      - name: Build the package
+        run: python -m build
 
-        # Initialize git repo
-        git init
-        git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
-        git fetch origin wheels || true
+      # upload artifact for debugging
+      - name: Upload built wheels (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels
+          path: ./dist/*.whl
 
-        # Create orphan branch
-        git checkout --orphan wheels
-        git reset --hard
+      # Publish wheels to orphan `wheels` branch
+      - name: Publish wheels to wheels branch
+        if: github.repository == 'ironArray/Caterva2'   # Only push from main repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Abort if no wheels were built
+          if [ -z "$(ls -A ./dist/*.whl 2>/dev/null)" ]; then
+            echo "No wheels found, skipping push"
+            exit 0
+          fi
 
-        # Copy wheels
-        mkdir -p wheels
-        cp ../dist/*.whl wheels/
-        echo "Wheels to publish:"
-        ls -lh wheels/
+          # Prepare fresh working directory for orphan branch
+          rm -rf wheels-branch
+          mkdir wheels-branch
+          cd wheels-branch
 
-        # Commit
-        git config user.name "GitHub Actions"
-        git config user.email "actions@github.com"
-        git add wheels
-        git commit -m "Update wheels for release ${{ github.ref_name }}"
+          # Initialize git repo and authenticate
+          git init
+          git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          git fetch origin wheels || true
 
-        # Force push
-        git push origin wheels --force
+          # Create orphan branch (separate history)
+          git checkout --orphan wheels
+          git reset --hard
+
+          # Copy wheels from main repo build output
+          mkdir -p wheels
+          cp ../dist/*.whl wheels/
+          echo "Wheels to publish:"
+          ls -lh wheels/
+
+          # Commit and push
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add wheels
+          git commit -m "Update wheels for commit ${{ github.sha }}"
+          git push origin wheels --force
