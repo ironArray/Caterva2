@@ -33,3 +33,38 @@ jobs:
       with:
         name: wheel
         path: ./dist/*.whl
+
+    - name: Publish wheels to orphan `wheels` branch
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+
+        # Create a fresh working directory
+        rm -rf wheels-branch
+        mkdir wheels-branch
+        cd wheels-branch
+
+        # Initialize git repo
+        git init
+        git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+        git fetch origin wheels || true
+
+        # Create orphan branch
+        git checkout --orphan wheels
+        git reset --hard
+
+        # Copy wheels
+        mkdir -p wheels
+        cp ./dist/*.whl wheels/
+        echo "Wheels to publish:"
+        ls -lh wheels/
+
+        # Commit
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git add wheels
+        git commit -m "Update wheels for release ${{ github.ref_name }}"
+
+        # Force push
+        git push origin wheels --force
