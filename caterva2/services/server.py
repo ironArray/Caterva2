@@ -1994,7 +1994,7 @@ class ListUsersCmd:
     @classmethod
     async def call(cls, request, user, argv, operands, hx_current_url):
         lusers = await list_users()
-        users = [user.email for user in lusers]
+        users = [user["email"] for user in lusers]
         return htmx_message(request, f"Users: {users}")
 
 
