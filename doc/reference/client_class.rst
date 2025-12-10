@@ -10,7 +10,7 @@ A client is a remote repository. It is the main entry point for using the Caterv
 
 .. autoclass:: Client
     :members:
-    :exclude-members: get, get_roots, get_list, fetch, get_chunk, download, upload, adduser, deluser, listusers, lazyexpr
+    :exclude-members: get, get_roots, get_list, fetch, get_chunk, download, upload, adduser, deluser, listusers
 
     :Special Methods:
     .. autosummary::
@@ -26,7 +26,6 @@ A client is a remote repository. It is the main entry point for using the Caterv
        adduser
        deluser
        listusers
-       lazyexpr
 
 
     Constructor
@@ -55,10 +54,6 @@ A client is a remote repository. It is the main entry point for using the Caterv
     .. automethod:: deluser
     .. automethod:: listusers
 
-
-    Evaluating expressions
-    ----------------------
-    .. automethod:: lazyexpr
 
     Utility methods
     ---------------
