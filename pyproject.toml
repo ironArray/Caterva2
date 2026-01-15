@@ -71,8 +71,8 @@ server = [
     "pygments",
     "python-dotenv",
     "python-multipart",
-    "jupyterlite-core[contents]==0.6.2",
-    "jupyterlite-pyodide-kernel==0.6.1",
+    "jupyterlite-core[contents]==0.7.1",
+    "jupyterlite-pyodide-kernel==0.7.0",
 ]
 services = [
     "caterva2[base-services]",
