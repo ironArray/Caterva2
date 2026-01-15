@@ -77,7 +77,7 @@ class Root:
         ['ds-sc-attr.b2nd', 'lung-jpeg2000_10x.b2nd', 'tomo-guess-test.b2nd']
         """
         self.client = client
-        urlbase, name = _format_paths(client.urlbase, name)
+        _, name = _format_paths(client.urlbase, name)
         self.name = name
 
     @property
@@ -934,7 +934,6 @@ class Client:
         >>> roots_dict['b2tests']
         {'name': 'b2tests'}
         """
-        urlbase, _ = _format_paths(self.urlbase)
         return self._get(f"{self.urlbase}/api/roots", auth_cookie=self.cookie, timeout=self.timeout)
 
     def get(self, path):
@@ -999,7 +998,7 @@ class Client:
         >>> client.get_list('example')[:3]
         ['README.md', 'dir1/ds-2d.b2nd', 'dir1/ds-3d.b2nd']
         """
-        urlbase, path = _format_paths(self.urlbase, path)
+        _, path = _format_paths(self.urlbase, path)
         return self._get(f"{self.urlbase}/api/list/{path}", auth_cookie=self.cookie, timeout=self.timeout)
 
     def get_info(self, path):
@@ -1029,7 +1028,7 @@ class Client:
         """
         if isinstance(path, (Dataset, File)):
             path = path.path
-        urlbase, path = _format_paths(self.urlbase, path)
+        _, path = _format_paths(self.urlbase, path)
         return self._get(f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout)
 
     def fetch(self, path, slice_=None):
@@ -1159,7 +1158,7 @@ class Client:
         """
         if isinstance(path, Dataset):
             path = path.path
-        urlbase, path = _format_paths(self.urlbase, path)
+        _, path = _format_paths(self.urlbase, path)
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
             {"nchunk": nchunk},
@@ -1433,7 +1432,7 @@ class Client:
         """
         if isinstance(remotepath, File):
             remotepath = remotepath.path
-        urlbase, path = _format_paths(self.urlbase, remotepath)
+        _, path = _format_paths(self.urlbase, remotepath)
         result = self._post(
             f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
@@ -1471,7 +1470,7 @@ class Client:
         """
         if isinstance(path, File):
             path = path.path
-        urlbase, path = _format_paths(self.urlbase, path)
+        _, path = _format_paths(self.urlbase, path)
         result = self._post(
             f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
@@ -1510,7 +1509,6 @@ class Client:
         """
         if isinstance(src, File):
             src = src.path
-        urlbase, _ = _format_paths(self.urlbase)
         result = self._post(
             f"{self.urlbase}/api/move/",
             {"src": str(src), "dst": str(dst)},
@@ -1556,7 +1554,6 @@ class Client:
         """
         if isinstance(src, File):
             src = src.path
-        urlbase, _ = _format_paths(self.urlbase)
         result = self._post(
             f"{self.urlbase}/api/copy/",
             {"src": str(src), "dst": str(dst)},
@@ -1591,7 +1588,7 @@ class Client:
         Object: Dataset
             Pointer to server-hosted lazy dataset.
         """
-        urlbase, remotepath = _format_paths(self.urlbase, remotepath)
+        _, remotepath = _format_paths(self.urlbase, remotepath)
         operands = expression.operands if hasattr(expression, "operands") else expression.inputs_dict
         if operands is not None:
             operands = {k: str(v) for k, v in operands.items()}
@@ -1658,7 +1655,6 @@ class Client:
         >>> f"User added: username='{username}' password='foo' superuser=False" == message
         True
         """
-        urlbase, _ = _format_paths(self.urlbase)
         return self._post(
             f"{self.urlbase}/api/adduser/",
             {"username": newuser, "password": password, "superuser": superuser},
@@ -1691,7 +1687,6 @@ class Client:
         >>> message == f"User deleted: {username}"
         True
         """
-        urlbase, _ = _format_paths(self.urlbase)
         return self._get(f"{self.urlbase}/api/deluser/{user}", auth_cookie=self.cookie)
 
     def listusers(self, username=None):
@@ -1729,6 +1724,5 @@ class Client:
         >>> superuser_info[0]['is_superuser']
         True
         """
-        urlbase, _ = _format_paths(self.urlbase)
         url = f"{self.urlbase}/api/listusers/" + (f"?username={username}" if username else "")
         return self._get(url, auth_cookie=self.cookie)

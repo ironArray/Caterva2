@@ -199,6 +199,59 @@ function resetForm(ev, form) {
     btn.onclick = null;
 }
 
+function _updateURL(src, options) {
+    const url = new URL(src);
+    for (const [key, value] of Object.entries(options)) {
+        url.searchParams.set(key, value);
+    }
+    return url.toString();
+}
+
+function _updateImage(options) {
+    let img = document.getElementById('display-image');
+    document.getElementById('image-spinner').classList.add('htmx-request');
+    img.src = _updateURL(img.src, options);
+}
+
+function update_i(input) {
+    const options = {i: input.value};
+    _updateImage(options);
+
+    let link = document.getElementById('image-original');
+    if (link) {
+        link.href = _updateURL(link.href, options);
+    }
+}
+
+function update_ndim(select) {
+    // Update image URL
+    const option = select.selectedOptions[0];
+    const options = {ndim: option.value, i: 0};
+    _updateImage(options);
+
+    // Update max of input element
+    const size = option.getAttribute('data-size');
+    const input = document.querySelector('input[name="i"]');
+    input.setAttribute('max', size - 1);
+    input.value = 0;
+
+    // Update link to original size image
+    let link = document.getElementById('image-original');
+    if (link) {
+        link.href = _updateURL(link.href, options);
+        const [h, w] = [...select.options].filter(opt => !opt.selected).map(opt => opt.dataset.size);
+        link.textContent = `${w} x ${h} (original size)`;
+    }
+}
+
+function stopSpinner() {
+    const spinner = document.getElementById('image-spinner');
+    if (spinner) {
+        spinner.classList.remove('htmx-request');
+    }
+}
+
+
 window.activate = activate;
 window.clearContent = clearContent;
 window.openTab = openTab;
@@ -208,5 +261,9 @@ window.submitFormAsJSON = submitFormAsJSON;
 
 window.handleSubmit = handleSubmit;
 window.resetForm = resetForm;
+
+window.update_i = update_i;
+window.update_ndim = update_ndim;
+window.stopSpinner = stopSpinner;
 
 export {bootstrap};
