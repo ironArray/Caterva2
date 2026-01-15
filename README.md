@@ -39,53 +39,54 @@ In addition, as Caterva2 supports authentication, all client interfaces expose a
 
 ## Installation
 
-You may install Caterva2 in several ways:
+### For Users
 
-- Pre-built wheel from PyPI:
-
-  ```sh
-  python -m pip install caterva2
-  ```
-
-- Developer setup:
-
-  ```sh
-  git clone https://github.com/ironArray/Caterva2
-  cd Caterva2
-  python -m pip install -e .
-  ```
-
-When a client is used (web GUI, REST API, Python API, or command line) to query datasets, it will connect to a Caterva2 **server** service, which provides access to the datasets it serves. The server services may be managed via the command line by installing the `caterva2` package with the `[server]` extra feature (we also wish to use the command line client, so we will also install the `clients` extra too):
-
-  ```sh
-  python -m pip install caterva2 [server, clients]
-  ```
-
-In general, if you intend to run Caterva2 services, client programs, or the test suite, you need to enable the proper extra features by appending `[feature1,feature2...]` to the last argument of `pip` commands above.  The following extras are supported:
-
-- `server` for running the Caterva2 server service
-- `clients` to use Caterva2 client programs (command-line or terminal)
-- `blosc2-plugins` to enable extra Blosc2 features like Btune or JPEG 2000 support
-- `plugins` to enable web GUI features like the tomography display
-- `tests` if you want to run the Caterva2 test suite
-
-### Testing
-
-After installing with the `[tests]` extra, you can quickly check that the package is sane by running the test suite (that comes with the package):
+If you only need the **Python client** to access Caterva2 datasets (no server or CLI tools):
 
 ```sh
-$ python -m caterva2.tests
-$ CATERVA2_SECRET=c2sikrit python -m caterva2.tests  # tests requiring authentication
+pip install caterva2[clients]
 ```
 
-You may also run tests from the root of the source code directory:
+If you want to **test the installation** from PyPI (includes Python client, CLI, and test suite):
 
 ```sh
-$ python -m pytest
-$ CATERVA2_SECRET=c2sikrit python -m pytest  # tests requiring authentication
+pip install caterva2[tests]
 ```
 
-Tests will use a copy of Caterva2's `root-example` directory.  After they finish, state files will be left under the `_caterva2_tests` directory for inspection (it will be re-created when tests are run again).
+Then verify it works:
+
+```sh
+python -m caterva2.tests
+CATERVA2_SECRET=c2sikrit python -m caterva2.tests  # tests requiring authentication
+```
+
+### For Developers
+
+To install from source for development (includes server, clients, and test suite):
+
+```sh
+git clone https://github.com/ironArray/Caterva2
+cd Caterva2
+pip install -e .[tests]
+```
+
+Then verify it works:
+
+```sh
+python -m pytest
+CATERVA2_SECRET=c2sikrit python -m pytest  # tests requiring authentication
+```
+
+### Available Extras
+
+The following optional features can be installed by appending `[feature1,feature2,...]` to the install command:
+
+- `clients` - Command-line and terminal client programs
+- `server` - Caterva2 server service
+- `tests` - Test suite dependencies
+- `blosc2-plugins` - Extra Blosc2 features (JPEG 2000 support via blosc2-grok)
+
+**Note:** Tests will use a copy of Caterva2's `root-example` directory. After they finish, state files will be left under the `_caterva2_tests` directory for inspection (it will be re-created when tests are run again).
 
 ## Quick start
 
@@ -93,7 +94,7 @@ Tests will use a copy of Caterva2's `root-example` directory.  After they finish
 
 For this quick start, let's:
 
-- create a virtual environment and install Caterva2 with the `[server,clients]` extras (see above).
+- create a virtual environment and install Caterva2 with server and client support: `pip install caterva2[server,clients]`
 - copy the configuration file `caterva2.sample.toml` to `caterva2.toml`, `~/.caterva2.toml`, or `/etc/caterva2.toml`.
 - copy the server configuration file `caterva2-server.sample.toml` to `caterva2-server.toml`, `~/.caterva2-server.toml`, or `/etc/caterva2-server.toml`.
 
