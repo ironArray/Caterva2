@@ -146,27 +146,123 @@ cat2-admin adduser user@example.com foobar11
 
 ### Command-line client
 
-**List roots:**
+**List available roots:**
 ```sh
-cat2-client --user user@example.com --pass foobar11 roots
-# Output: @public, @personal, @shared
+cat2-client roots
 ```
+<details>
+<summary>Show output</summary>
 
-**Upload a dataset:**
-```sh
-cat2-client --user user@example.com --pass foobar11 upload root-example/ds-1d.b2nd @personal/ds-1d.b2nd
 ```
+@public
+```
+</details>
 
-**Get dataset info:**
+**List datasets:**
 ```sh
-cat2-client --user user@example.com --pass foobar11 info @personal/ds-1d.b2nd
-# Returns: shape, chunks, dtype, compression params, etc.
+cat2-client list @public
 ```
+<details>
+<summary>Show output</summary>
+
+```
+examples/README.md
+examples/Wutujing-River.jpg
+examples/cat2cloud-brochure.pdf
+examples/cube-1k-1k-1k.b2nd
+examples/cubeA.b2nd
+examples/cubeB.b2nd
+examples/dir1/ds-2d.b2nd
+examples/dir1/ds-3d.b2nd
+examples/dir2/ds-4d.b2nd
+examples/ds-1d-b.b2nd
+examples/ds-1d-fields.b2nd
+examples/ds-1d.b2nd
+examples/ds-2d-fields.b2nd
+examples/ds-hello.b2frame
+examples/ds-sc-attr.b2nd
+examples/gaia-ly.b2nd
+examples/hdf5root-example.h5
+examples/ironpill_nb.ipynb
+examples/kevlar-tomo.b2nd
+examples/lazyarray-large.png
+examples/lung-jpeg2000_10x.b2nd
+examples/numbers_color.b2nd
+examples/numbers_gray.b2nd
+examples/sa-1M.b2nd
+examples/slice-time.ipynb
+examples/tomo-guess-test.b2nd
+large/gaia-3d.b2nd
+large/slice-gaia-3d.ipynb
+```
+</details>
 
 **Browse directory tree:**
 ```sh
-cat2-client --user user@example.com --pass foobar11 tree @public
+cat2-client tree @public
 ```
+<details>
+<summary>Show output</summary>
+
+```
+├── examples
+│   ├── README.md
+│   ├── Wutujing-River.jpg
+│   ├── cat2cloud-brochure.pdf
+│   ├── cube-1k-1k-1k.b2nd
+│   ├── cubeA.b2nd
+│   ├── cubeB.b2nd
+│   ├── dir1
+│   │   ├── ds-2d.b2nd
+│   │   └── ds-3d.b2nd
+│   ├── dir2
+│   │   └── ds-4d.b2nd
+│   ├── ds-1d-b.b2nd
+│   ├── ds-1d-fields.b2nd
+│   ├── ds-1d.b2nd
+│   ├── ds-2d-fields.b2nd
+│   ├── ds-hello.b2frame
+│   ├── ds-sc-attr.b2nd
+│   ├── gaia-ly.b2nd
+│   ├── hdf5root-example.h5
+│   ├── ironpill_nb.ipynb
+│   ├── kevlar-tomo.b2nd
+│   ├── lazyarray-large.png
+│   ├── lung-jpeg2000_10x.b2nd
+│   ├── numbers_color.b2nd
+│   ├── numbers_gray.b2nd
+│   ├── sa-1M.b2nd
+│   ├── slice-time.ipynb
+│   └── tomo-guess-test.b2nd
+└── large
+    ├── gaia-3d.b2nd
+    └── slice-gaia-3d.ipynb
+```
+</details>
+
+**Get dataset info:**
+```sh
+cat2-client info @public/examples/ds-1d.b2nd
+```
+<details>
+<summary>Show output</summary>
+
+```
+Getting info for @public/examples/ds-1d.b2nd
+shape : [1000]
+chunks: [100]
+blocks: [10]
+dtype : int64
+nbytes: 7.81 KiB
+cbytes: 4.90 KiB
+ratio : 1.59x
+mtime : 2026-01-15T17:04:50.823466Z
+cparams:
+  codec  : ZSTD (5)
+  clevel : 1
+  filters: [SHUFFLE]
+```
+</details>
 
 For more commands: `cat2-client --help`
 
