@@ -148,13 +148,15 @@ cat2-admin adduser user@example.com foobar11
 
 **List available roots:**
 ```sh
-cat2-client roots
+cat2-client --user user@example.com --pass foobar11 roots
 ```
 <details>
 <summary>Show output</summary>
 
 ```
 @public
+@personal
+@shared
 ```
 </details>
 
