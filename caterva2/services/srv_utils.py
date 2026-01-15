@@ -347,8 +347,18 @@ async def aadd_user(username, password, is_superuser, state_dir=None):
     return user
 
 
+async def _cleanup_db():
+    """Clean up the global database engine and connection pool."""
+    if db.engine is not None:
+        await db.engine.dispose()
+        db.engine = None
+        db.async_session_maker = None
+
+
 def add_user(username, password, is_superuser, state_dir=None):
-    return asyncio.run(aadd_user(username, password, is_superuser, state_dir=state_dir))
+    result = asyncio.run(aadd_user(username, password, is_superuser, state_dir=state_dir))
+    asyncio.run(_cleanup_db())
+    return result
 
 
 async def adel_user(username: str):
@@ -363,7 +373,9 @@ async def adel_user(username: str):
 
 
 def del_user(username):
-    return asyncio.run(adel_user(username))
+    result = asyncio.run(adel_user(username))
+    asyncio.run(_cleanup_db())
+    return result
 
 
 async def alist_users(username=None, exclude=None):
