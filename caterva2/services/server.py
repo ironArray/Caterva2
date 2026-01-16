@@ -234,6 +234,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Clean up the database engine on shutdown
+    if user_login_enabled() and db.engine is not None:
+        await db.engine.dispose()
+
 
 # Visualize the size of a file on a compact and human-readable format
 def custom_filesizeformat(value):
