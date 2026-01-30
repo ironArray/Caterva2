@@ -716,9 +716,18 @@ def make_expr(
     expression = expr.expression
     if (not expression and not func) or (not remotepath and not name):
         raise ValueError("name/remotepath and expression should not be empty")
+
     # Open expression datasets
+    # For expressions, only open the operands actually used
+    # For functions, we need all operands in order
+    if func is None:
+        vars_to_open = blosc2.get_expr_operands(expression.strip())
+    else:
+        vars_to_open = vars.keys()
+
     var_dict = {}
-    for var, path in vars.items():
+    for var in vars_to_open:
+        path = vars[var]
         # Detect special roots
         path = pathlib.Path(path)
         abspath = get_writable_path(path, user)
