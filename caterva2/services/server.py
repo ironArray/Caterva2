@@ -717,17 +717,8 @@ def make_expr(
     if (not expression and not func) or (not remotepath and not name):
         raise ValueError("name/remotepath and expression should not be empty")
 
-    # Open expression datasets
-    # For expressions, only open the operands actually used
-    # For functions, we need all operands in order
-    if func is None:
-        vars_to_open = blosc2.get_expr_operands(expression.strip())
-    else:
-        vars_to_open = vars.keys()
-
     var_dict = {}
-    for var in vars_to_open:
-        path = vars[var]
+    for var, path in vars.items():
         # Detect special roots
         path = pathlib.Path(path)
         abspath = get_writable_path(path, user)
@@ -2148,11 +2139,15 @@ async def htmx_command(
         compute = operator == ":="
         try:
             result_name, expr = command.split(operator, maxsplit=1)
+            alt_ops = {}
             if "#" in expr:  # get alternative operands
                 expr, alt_ops = expr.split("#", maxsplit=1)
                 alt_ops = ast.literal_eval(alt_ops.strip())  # convert str to dict
-                for k, v in alt_ops.items():
-                    operands[k] = v  # overwrite or add operands if necessary
+            opkeys = blosc2.get_expr_operands(expr.strip())  # get operands from expression
+            operands = {k: operands[k] for k in opkeys}
+            for k, v in alt_ops.items():
+                operands[k] = v  # overwrite or add operands if necessary
+
             expr = {
                 "name": result_name,
                 "expression": expr,
