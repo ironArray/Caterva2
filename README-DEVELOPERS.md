@@ -103,3 +103,28 @@ sphinx-build doc doc/html
 ```
 
 and the docs will appear in `doc/html`.
+
+## Deploy latest wheels to GitHub Pages
+The CI workflow (`pages-build-deployment`) is set up to upload the latest wheels generated from the `main` branch to a website hosted by Github Pages (settings for the website can be modified [here](https://github.com/ironArray/Caterva2/settings/pages)). This allows one to use the latest version of Caterva2 directly in WASM (e.g. a browser-hosted Jupyter notebook) (or indeed the version of `blosc2` hosted on the `blosc2` GitHub Pages website) via the following code:
+```
+import sys
+if sys.platform == "emscripten":
+    import requests
+    import micropip
+
+    # Install latest blosc2
+    blosc_latest_url = "https://blosc.github.io/python-blosc2/wheels/latest.txt"
+    blosc_wheel_name = requests.get(blosc_latest_url).text.strip()
+    blosc_wheel_url = f"https://blosc.github.io/python-blosc2/wheels/{blosc_wheel_name}"
+    await micropip.install(blosc_wheel_url)
+    print(f"Installed {blosc_wheel_name} successfully!")
+
+    # Install latest caterva2
+    caterva_latest_url = "https://ironarray.github.io/Caterva2/wheels/latest.txt"
+    caterva_wheel_name = requests.get(caterva_latest_url).text.strip()
+    caterva_wheel_url = f"https://ironarray.github.io/Caterva2/wheels/{caterva_wheel_name}"
+    await micropip.install(caterva_wheel_url)
+    print(f"Installed {caterva_wheel_name} successfully!")
+```
+
+This code is automatically loaded into jupyter notebooks via changes implemented in https://github.com/ironArray/Caterva2/commit/882d9fa930e573fdbc65d62b8dc90722670b8e9a.
