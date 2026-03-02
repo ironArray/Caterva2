@@ -70,7 +70,7 @@ mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 
 ncores = os.cpu_count() // 2
 
-PYODIDE_BOOTSTRAP_CELL_SOURCE = """# Install blosc2 and caterva2 in Pyodide environments
+PYODIDE_BOOTSTRAP_CELL_SOURCE = """# Install blosc2 and caterva2 in Pyodide environments (automatically added)
 import sys
 if sys.platform == "emscripten":
     import requests
