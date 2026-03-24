@@ -21,9 +21,10 @@ maxusers = 5
 register = true  # allow users to register
 
 [server.llm]
-enabled = false
+enabled = true
+# provider = "mock"
 provider = "groq"
-model = "openai/gpt-oss-120b"
-api_key_envvar = "GROQ_API_KEY"
-session_ttl_seconds = 1800
+model = "openai/gpt-oss-20b"
+#model = "openai/gpt-oss-120b"
 allow_public_access = false
+session_ttl_seconds = 1800
