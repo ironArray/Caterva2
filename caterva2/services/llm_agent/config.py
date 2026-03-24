@@ -30,6 +30,7 @@ RULES:
 3. If a tool fails, explain the failure clearly.
 4. Stop after answering the user's request.
 5. When the user asks to inspect actual values or a subset of a dataset, use get_slice.
+6. For get_slice results with many elements (>100), present the summary first and offer to show full data if requested.
 """
 
 

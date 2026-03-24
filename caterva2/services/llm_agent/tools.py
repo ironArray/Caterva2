@@ -91,6 +91,7 @@ TOOLS = [
 DEFAULT_STATS = ["min", "max", "mean", "std"]
 SUPPORTED_STATS = {"min", "max", "mean", "sum", "std", "var", "argmin", "argmax", "any", "all"}
 MAX_SLICE_ELEMENTS = 10_000
+SUMMARY_THRESHOLD = 100
 
 
 def _json_safe(value):
@@ -225,6 +226,26 @@ def _default_slice_for_shape(shape: tuple, max_elements: int) -> tuple:
     return tuple(dims)
 
 
+def _generate_preview(data, max_chars: int = 200) -> str:
+    full_str = str(data.tolist() if hasattr(data, "tolist") else data)
+    if len(full_str) <= max_chars:
+        return full_str
+    return full_str[:max_chars] + "..."
+
+
+def _compute_summary(data) -> dict[str, Any]:
+    arr = np.asarray(data)
+    summary = {
+        "num_elements": int(arr.size),
+        "preview": _generate_preview(arr),
+    }
+    if np.issubdtype(arr.dtype, np.number):
+        summary["min"] = _json_safe(arr.min())
+        summary["max"] = _json_safe(arr.max())
+        summary["mean"] = _json_safe(arr.mean())
+    return summary
+
+
 def get_slice(*, user, path: str, slices: str | None = None):
     dataset = server.open_b2(server.get_abspath(pathlib.Path(path), user), pathlib.Path(path))
     if not hasattr(dataset, "shape"):
@@ -247,14 +268,23 @@ def get_slice(*, user, path: str, slices: str | None = None):
 
     data = dataset[slice_tuple]
     result_shape = list(data.shape) if hasattr(data, "shape") else []
-    return {
+    summary = _compute_summary(data)
+    result = {
         "path": path,
         "dataset_shape": list(shape),
         "dtype": str(dataset.dtype),
         "slice": slice_str_used,
         "result_shape": result_shape,
-        "data": _json_safe(data),
+        "summary": summary,
     }
+    if summary["num_elements"] <= SUMMARY_THRESHOLD:
+        result["data"] = _json_safe(data)
+    else:
+        result["_hint"] = (
+            f"Large result ({summary['num_elements']} elements). "
+            "Present the summary to the user and offer to show full data if requested."
+        )
+    return result
 
 
 TOOL_MAP = {
