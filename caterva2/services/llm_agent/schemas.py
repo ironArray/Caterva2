@@ -80,3 +80,7 @@ class ResetSessionResponse(BaseModel):
 class DeleteSessionResponse(BaseModel):
     session_id: str
     deleted: bool
+
+
+SessionMetadataResponse.model_rebuild(_types_namespace={"datetime": __import__("datetime").datetime})
+CreateSessionResponse.model_rebuild(_types_namespace={"datetime": __import__("datetime").datetime})
