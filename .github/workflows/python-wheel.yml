@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main  # Rebuild wheels on every commit to main
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Wheel channel to publish"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
 
 permissions:
   contents: write  # Needed for GITHUB_TOKEN to push
@@ -13,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHON_VERSION: 3.12
+      PUBLISH_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.channel || 'production' }}
 
     steps:
       # Checkout the repository
@@ -38,7 +49,7 @@ jobs:
       - name: Upload built wheels (optional)
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-${{ env.PUBLISH_CHANNEL }}
           path: ./dist/*.whl
 
       # Publish wheels to orphan `wheels` branch
@@ -47,6 +58,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -eu
 
           # Abort if no wheels were built
           if [ -z "$(ls -A ./dist/*.whl 2>/dev/null)" ]; then
@@ -54,7 +66,16 @@ jobs:
             exit 0
           fi
 
-          # Prepare fresh working directory for orphan branch
+          channel="${PUBLISH_CHANNEL}"
+          if [ "$channel" = "production" ]; then
+            channel_dir="wheels"
+          else
+            channel_dir="wheels-staging"
+          fi
+          echo "Publishing channel: $channel"
+          echo "Target directory: $channel_dir"
+
+          # Prepare working directory for the published branch
           rm -rf wheels-branch
           mkdir wheels-branch
           cd wheels-branch
@@ -64,24 +85,36 @@ jobs:
           git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git fetch origin wheels || true
 
-          # Create orphan branch (separate history)
-          git checkout --orphan wheels
-          git reset --hard
+          # Reuse the existing published branch when present so multiple channels can coexist
+          if git ls-remote --exit-code --heads origin wheels >/dev/null 2>&1; then
+            git checkout -B wheels origin/wheels
+          else
+            git checkout --orphan wheels
+            git reset --hard
+          fi
 
-          # Copy wheels from main repo build output
-          mkdir -p wheels
-          cp ../dist/*.whl wheels/
+          # Replace only the selected channel contents
+          mkdir -p "$channel_dir"
+          find "$channel_dir" -maxdepth 1 -type f -name '*.whl' -delete
+          cp ../dist/*.whl "$channel_dir"/
           echo "Wheels to publish:"
-          ls -lh wheels/
+          ls -lh "$channel_dir"/
 
           # Generate latest.txt (name of newest wheel)
-          latest_wheel=$(ls -1 wheels/*.whl | sort | tail -n 1)
-          echo "$(basename $latest_wheel)" > wheels/latest.txt
-          echo "Latest wheel: $(cat wheels/latest.txt)"
+          latest_wheel=$(ls -1 "$channel_dir"/*.whl | sort | tail -n 1)
+          echo "$(basename "$latest_wheel")" > "$channel_dir/latest.txt"
+          echo "${{ github.sha }}" > "$channel_dir/commit.txt"
+          echo "${{ github.ref_name }}" > "$channel_dir/ref.txt"
+          echo "$channel" > "$channel_dir/channel.txt"
+          echo "Latest wheel: $(cat "$channel_dir/latest.txt")"
 
           # Commit and push
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add wheels
-          git commit -m "Update wheels for commit ${{ github.sha }}"
+          git add "$channel_dir"
+          if git diff --cached --quiet; then
+            echo "No changes to publish"
+            exit 0
+          fi
+          git commit -m "Update ${channel} wheels for commit ${{ github.sha }}"
           git push origin wheels --force

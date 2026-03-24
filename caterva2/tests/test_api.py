@@ -72,6 +72,73 @@ def test_get_root(client, auth_client):
         assert myshared.urlbase == auth_client.urlbase
 
 
+def test_llm_session_lifecycle(client, auth_client, fill_public):
+    active_client = auth_client if auth_client else client
+
+    session = active_client.create_llm_session(name="pytest")
+    session_id = session["session_id"]
+    assert session["message_count"] == 1
+
+    metadata = active_client.get_llm_session(session_id)
+    assert metadata["session_id"] == session_id
+    assert metadata["message_count"] == 1
+
+    roots_reply = active_client.chat_llm(session_id, "List the available roots")
+    assert roots_reply["session_id"] == session_id
+    assert "@public" in roots_reply["assistant"]["text"]
+
+    datasets_reply = active_client.chat_llm(session_id, "List datasets under @public/dir1")
+    assert "@public/dir1/ds-2d.b2nd" in datasets_reply["assistant"]["text"]
+    assert "@public/dir1/ds-3d.b2nd" in datasets_reply["assistant"]["text"]
+
+    info_reply = active_client.chat_llm(session_id, "Show metadata for @public/ds-1d.b2nd")
+    assert '"path": "@public/ds-1d.b2nd"' in info_reply["assistant"]["text"]
+    assert '"dtype"' in info_reply["assistant"]["text"]
+
+    stats_reply = active_client.chat_llm(session_id, "Show stats for @public/ds-1d.b2nd")
+    assert '"min"' in stats_reply["assistant"]["text"]
+    assert '"max"' in stats_reply["assistant"]["text"]
+
+    reset = active_client.reset_llm_session(session_id)
+    assert reset["reset"] is True
+    assert reset["message_count"] == 1
+
+    delete = active_client.delete_llm_session(session_id)
+    assert delete == {"session_id": session_id, "deleted": True}
+
+
+def test_llm_requires_auth_when_login_enabled(auth_client, services):
+    if not auth_client:
+        pytest.skip("authentication support needed")
+        return
+
+    response = httpx.post(f"{services.get_urlbase()}/api/llm-agent/sessions", json={"name": "anon"})
+    assert response.status_code == 401
+
+
+def test_llm_session_ownership(auth_client, services, fill_auth):
+    if not auth_client:
+        return pytest.skip("authentication support needed")
+
+    session = auth_client.create_llm_session(name="owner-check")
+    username = "llm-owner-check@example.com"
+    password = "foobar11"
+    auth_client.adduser(username, password)
+    try:
+        other_client = cat2.Client(services.get_urlbase(), (username, password))
+
+        response = httpx.get(
+            f"{services.get_urlbase()}/api/llm-agent/sessions/{session['session_id']}",
+            headers={"Cookie": other_client.cookie},
+        )
+        assert response.status_code == 403
+    finally:
+        with contextlib.suppress(Exception):
+            auth_client.delete_llm_session(session["session_id"])
+        with contextlib.suppress(Exception):
+            auth_client.deluser(username)
+
+
 def test_get_file(client, fill_public):
     myfile = client.get("@public/README.md")
     assert myfile.name == "README.md"

@@ -19,3 +19,11 @@ urlbase = "http://localhost:8000"
 quota = "10G"
 maxusers = 5
 register = true  # allow users to register
+
+[server.llm]
+enabled = false
+provider = "groq"
+model = "openai/gpt-oss-120b"
+api_key_envvar = "GROQ_API_KEY"
+session_ttl_seconds = 1800
+allow_public_access = false

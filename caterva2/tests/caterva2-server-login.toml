@@ -2,3 +2,9 @@
 login = true
 register = true
 maxusers = 5
+
+[server.llm]
+enabled = true
+provider = "mock"
+allow_public_access = false
+session_ttl_seconds = 300
