@@ -19,3 +19,12 @@ urlbase = "http://localhost:8000"
 quota = "10G"
 maxusers = 5
 register = true  # allow users to register
+
+[server.llm]
+enabled = true
+# provider = "mock"
+provider = "groq"
+model = "openai/gpt-oss-20b"
+#model = "openai/gpt-oss-120b"
+allow_public_access = false
+session_ttl_seconds = 1800

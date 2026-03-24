@@ -1,4 +1,10 @@
 [server]
 login = false
+
+[server.llm]
+enabled = true
+provider = "mock"
+allow_public_access = true
+session_ttl_seconds = 300
 register = false
 maxusers = 5

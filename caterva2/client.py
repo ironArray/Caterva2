@@ -875,6 +875,19 @@ class Client:
         response.raise_for_status()
         return response.json()
 
+    def _delete(self, url, auth_cookie=None, timeout=5):
+        client = self.httpx_client
+        headers = {"Cookie": auth_cookie} if auth_cookie else None
+        try:
+            response = client.delete(url, headers=headers, timeout=timeout)
+        except httpx.ReadTimeout as e:
+            raise TimeoutError(
+                f"Timeout after {timeout} seconds while trying to access {url}. "
+                f"Try increasing the timeout (currently {timeout} s) for Client instance for large datasets."
+            ) from e
+        response.raise_for_status()
+        return response.json()
+
     def _xget(self, url, params=None, headers=None, timeout=5, auth_cookie=None):
         client = self.httpx_client
         # Only set Cookie header if auth_cookie is not None
@@ -1726,3 +1739,85 @@ class Client:
         """
         url = f"{self.urlbase}/api/listusers/" + (f"?username={username}" if username else "")
         return self._get(url, auth_cookie=self.cookie)
+
+    def create_llm_session(self, name=None, root_hint=None, notebook_path=None):
+        """
+        Create a server-side LLM agent session.
+
+        Parameters
+        ----------
+        name : str, optional
+            Optional label for the session.
+        root_hint : str, optional
+            Optional root hint associated with the session.
+        notebook_path : str, optional
+            Optional notebook path for client context.
+
+        Returns
+        -------
+        dict
+            Session metadata as returned by the server.
+        """
+        payload = {"name": name, "root_hint": root_hint, "notebook_path": notebook_path}
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return self._post(
+            f"{self.urlbase}/api/llm-agent/sessions",
+            payload,
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
+        )
+
+    def get_llm_session(self, session_id):
+        """
+        Get metadata for a server-side LLM agent session.
+        """
+        return self._get(
+            f"{self.urlbase}/api/llm-agent/sessions/{session_id}",
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
+        )
+
+    def chat_llm(self, session_id, message, context=None):
+        """
+        Submit a message to a server-side LLM agent session.
+
+        Parameters
+        ----------
+        session_id : str
+            Session identifier returned by ``create_llm_session``.
+        message : str
+            Prompt to send to the agent.
+        context : dict, optional
+            Optional client context metadata.
+
+        Returns
+        -------
+        dict
+            Assistant response payload.
+        """
+        return self._post(
+            f"{self.urlbase}/api/llm-agent/sessions/{session_id}/messages",
+            {"message": message, "context": context},
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
+        )
+
+    def reset_llm_session(self, session_id):
+        """
+        Reset a server-side LLM agent session.
+        """
+        return self._post(
+            f"{self.urlbase}/api/llm-agent/sessions/{session_id}/reset",
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
+        )
+
+    def delete_llm_session(self, session_id):
+        """
+        Delete a server-side LLM agent session.
+        """
+        return self._delete(
+            f"{self.urlbase}/api/llm-agent/sessions/{session_id}",
+            auth_cookie=self.cookie,
+            timeout=self.timeout,
+        )

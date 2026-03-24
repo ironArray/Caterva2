@@ -44,6 +44,75 @@ And experiment a bit with uploading, browsing and downloading files.
 If the tests pass, you are ready to release.
 
 
+Staging wheel channel
+---------------------
+
+Before publishing a production wheel for all JupyterLite users, you can publish
+a staging wheel to a separate GitHub-hosted channel.  This is useful for testing
+changes that affect the browser-side wheel installation, such as new Pyodide
+functionality or notebook helpers, without changing the production
+``wheels/latest.txt`` pointer.
+
+The wheel publishing workflow supports two channels:
+
+- production: ``https://ironarray.github.io/Caterva2/wheels/``
+- staging: ``https://ironarray.github.io/Caterva2/wheels-staging/``
+
+Each channel gets its own ``latest.txt`` file:
+
+- production: ``https://ironarray.github.io/Caterva2/wheels/latest.txt``
+- staging: ``https://ironarray.github.io/Caterva2/wheels-staging/latest.txt``
+
+The staging channel is published by manually running the
+``Build and Publish Python Wheels for Caterva2`` workflow with
+``channel=staging``.
+
+To do a staging release:
+
+- Push the branch you want to test to GitHub.
+
+- Open the workflow page for
+  ``Build and Publish Python Wheels for Caterva2``.
+
+- Click ``Run workflow``.
+
+- Select the branch to build.
+
+- Select ``channel=staging``.
+
+- Run the workflow.
+
+After it finishes, the built wheel will be available under
+``wheels-staging/`` and will not modify the production ``wheels/`` channel.
+
+The workflow also publishes these helper files in the selected channel:
+
+- ``latest.txt``: latest wheel filename in that channel
+- ``commit.txt``: commit SHA used to build the wheel
+- ``ref.txt``: Git ref name used to build the wheel
+- ``channel.txt``: published channel name
+
+Testing a staging wheel from JupyterLite
+----------------------------------------
+
+For notebook testing, point the Pyodide install to the staging channel instead
+of the production one.  For example::
+
+  import sys
+  if sys.platform == "emscripten":
+      import requests
+      import micropip
+
+      caterva_latest_url = "https://ironarray.github.io/Caterva2/wheels-staging/latest.txt"
+      caterva_wheel_name = requests.get(caterva_latest_url).text.strip()
+      caterva_wheel_url = f"https://ironarray.github.io/Caterva2/wheels-staging/{caterva_wheel_name}"
+      await micropip.install(caterva_wheel_url)
+      print(f"Installed staging wheel: {caterva_wheel_name}")
+
+Use a fresh browser tab or kernel when testing a new staging wheel, so Pyodide
+does not reuse a previously installed package from the same session.
+
+
 Check documentation
 -------------------
 

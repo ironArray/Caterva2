@@ -128,3 +128,8 @@ if sys.platform == "emscripten":
 ```
 
 This code is automatically loaded into jupyter notebooks via changes implemented in https://github.com/ironArray/Caterva2/commit/882d9fa930e573fdbc65d62b8dc90722670b8e9a.
+
+For pre-release browser testing, a separate staging wheel channel is also available at
+`https://ironarray.github.io/Caterva2/wheels-staging/latest.txt`.  The staging
+publishing flow and the recommended notebook override are documented in
+`RELEASING.rst`.

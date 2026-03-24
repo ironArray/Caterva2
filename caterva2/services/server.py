@@ -55,6 +55,7 @@ from fastapi.templating import Jinja2Templates
 # Project
 from caterva2 import hdf5, models, utils
 from caterva2.services import db, schemas, settings, srv_utils, users
+from caterva2.services.llm_agent import schemas as llm_schemas
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -1371,6 +1372,121 @@ async def add_notebook(
     srv_utils.compress(data, dst=abspath)
 
     return path
+
+
+def require_llm_user(user):
+    if user is None and settings.login and not settings.llm_allow_public_access:
+        raise srv_utils.raise_unauthorized("LLM agent access requires authentication")
+    return user
+
+
+def require_llm_enabled():
+    if not settings.llm_enabled:
+        raise fastapi.HTTPException(status_code=503, detail="LLM agent is disabled")
+
+
+def session_to_metadata_response(session):
+    return llm_schemas.SessionMetadataResponse(
+        session_id=session.session_id,
+        created_at=session.created_at,
+        expires_at=session.expires_at,
+        model=session.model,
+        owner=session.owner,
+        message_count=len(session.messages),
+    )
+
+
+@app.post("/api/llm-agent/sessions", response_model=llm_schemas.CreateSessionResponse)
+async def create_llm_session(
+    payload: llm_schemas.CreateSessionRequest,
+    user: db.User = Depends(optional_user),
+):
+    require_llm_enabled()
+    user = require_llm_user(user)
+    from caterva2.services.llm_agent import core
+
+    session = core.create_session(user=user, metadata=payload.model_dump(exclude_none=True))
+    return llm_schemas.CreateSessionResponse(**session_to_metadata_response(session).model_dump())
+
+
+@app.get("/api/llm-agent/sessions/{session_id}", response_model=llm_schemas.SessionMetadataResponse)
+async def get_llm_session(
+    session_id: str,
+    user: db.User = Depends(optional_user),
+):
+    require_llm_enabled()
+    user = require_llm_user(user)
+    from caterva2.services.llm_agent import core
+
+    try:
+        session = core.get_session(session_id, user=user)
+    except KeyError as exc:
+        raise fastapi.HTTPException(status_code=404, detail="LLM session not found") from exc
+    except PermissionError as exc:
+        raise fastapi.HTTPException(status_code=403, detail="LLM session belongs to another user") from exc
+    return session_to_metadata_response(session)
+
+
+@app.post("/api/llm-agent/sessions/{session_id}/messages", response_model=llm_schemas.ChatResponse)
+async def post_llm_message(
+    session_id: str,
+    payload: llm_schemas.ChatRequest,
+    user: db.User = Depends(optional_user),
+):
+    require_llm_enabled()
+    user = require_llm_user(user)
+    from caterva2.services.llm_agent import core
+
+    try:
+        return core.run_chat_turn(session_id=session_id, user=user, message=payload.message)
+    except KeyError as exc:
+        raise fastapi.HTTPException(status_code=404, detail="LLM session not found") from exc
+    except PermissionError as exc:
+        raise fastapi.HTTPException(status_code=403, detail="LLM session belongs to another user") from exc
+    except ValueError as exc:
+        raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        detail = str(exc)
+        status_code = 503 if "provider" in detail.lower() or "api key" in detail.lower() else 400
+        raise fastapi.HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@app.post("/api/llm-agent/sessions/{session_id}/reset", response_model=llm_schemas.ResetSessionResponse)
+async def reset_llm_session(
+    session_id: str,
+    user: db.User = Depends(optional_user),
+):
+    require_llm_enabled()
+    user = require_llm_user(user)
+    from caterva2.services.llm_agent import core
+
+    try:
+        session = core.reset_session(session_id, user=user)
+    except KeyError as exc:
+        raise fastapi.HTTPException(status_code=404, detail="LLM session not found") from exc
+    except PermissionError as exc:
+        raise fastapi.HTTPException(status_code=403, detail="LLM session belongs to another user") from exc
+    return llm_schemas.ResetSessionResponse(
+        session_id=session.session_id, reset=True, message_count=len(session.messages)
+    )
+
+
+@app.delete("/api/llm-agent/sessions/{session_id}", response_model=llm_schemas.DeleteSessionResponse)
+async def delete_llm_session(
+    session_id: str,
+    user: db.User = Depends(optional_user),
+):
+    require_llm_enabled()
+    user = require_llm_user(user)
+    from caterva2.services.llm_agent import core
+
+    try:
+        core.delete_session(session_id, user=user)
+    except KeyError as exc:
+        raise fastapi.HTTPException(status_code=404, detail="LLM session not found") from exc
+    except PermissionError as exc:
+        raise fastapi.HTTPException(status_code=403, detail="LLM session belongs to another user") from exc
+    return llm_schemas.DeleteSessionResponse(session_id=session_id, deleted=True)
 
 
 #
