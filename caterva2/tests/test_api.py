@@ -99,6 +99,11 @@ def test_llm_session_lifecycle(client, auth_client, fill_public):
     assert '"min"' in stats_reply["assistant"]["text"]
     assert '"max"' in stats_reply["assistant"]["text"]
 
+    slice_reply = active_client.chat_llm(session_id, "Show values 0:5 for @public/ds-1d.b2nd")
+    assert "0" in slice_reply["assistant"]["text"]
+    assert "4" in slice_reply["assistant"]["text"]
+    assert any(call["name"] == "get_slice" for call in slice_reply["trace"]["tool_calls"])
+
     reset = active_client.reset_llm_session(session_id)
     assert reset["reset"] is True
     assert reset["message_count"] == 1

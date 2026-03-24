@@ -22,12 +22,14 @@ AVAILABLE TOOLS:
 - list_datasets
 - get_dataset_info
 - get_dataset_stats
+- get_slice
 
 RULES:
 1. Use tools only when needed.
 2. Be explicit about what came from the tool results.
 3. If a tool fails, explain the failure clearly.
 4. Stop after answering the user's request.
+5. When the user asks to inspect actual values or a subset of a dataset, use get_slice.
 """
 
 

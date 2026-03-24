@@ -39,6 +39,17 @@ def _extract_path(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _extract_slice_spec(text: str) -> str | None:
+    match = re.search(
+        r"(?:(?:slice|values?)\s+(?:for|from)\s+.*?\s+)?((?:-?\d*:-?\d*:?-?\d*|-?\d+)(?:\s*,\s*(?:-?\d*:-?\d*:?-?\d*|-?\d+))+|(?:-?\d*:-?\d*:?-?\d*|-?\d+))",
+        text,
+    )
+    if not match:
+        return None
+    candidate = match.group(1).strip()
+    return candidate if any(ch.isdigit() for ch in candidate) else None
+
+
 class MockProvider:
     name = "mock"
 
@@ -63,6 +74,12 @@ class MockProvider:
         tool_calls = []
         if "roots" in lower:
             tool_calls.append(NormalizedToolCall(str(uuid.uuid4()), "list_roots", {}))
+        elif any(keyword in lower for keyword in ("slice", "values", "rows", "elements")) and path:
+            arguments = {"path": path}
+            slice_spec = _extract_slice_spec(user_text)
+            if slice_spec:
+                arguments["slices"] = slice_spec
+            tool_calls.append(NormalizedToolCall(str(uuid.uuid4()), "get_slice", arguments))
         elif "stats" in lower and path:
             tool_calls.append(NormalizedToolCall(str(uuid.uuid4()), "get_dataset_stats", {"path": path}))
         elif any(keyword in lower for keyword in ("info", "metadata")) and path:

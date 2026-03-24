@@ -61,10 +61,36 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_slice",
+            "description": (
+                "Retrieve a slice of data values from a dataset. "
+                "Use this when the user asks to inspect actual values rather than only metadata or statistics. "
+                "Limited to 10,000 elements maximum."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "slices": {
+                        "type": "string",
+                        "description": (
+                            "Slice specification using Python syntax such as '0:10', "
+                            "'0:5, 0:3', ':, 0', or '0, :, 0:10'."
+                        ),
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
 ]
 
 DEFAULT_STATS = ["min", "max", "mean", "std"]
 SUPPORTED_STATS = {"min", "max", "mean", "sum", "std", "var", "argmin", "argmax", "any", "all"}
+MAX_SLICE_ELEMENTS = 10_000
 
 
 def _json_safe(value):
@@ -143,11 +169,100 @@ def get_dataset_stats(*, user, path: str, stats: list[str] | None = None, axis: 
     return result
 
 
+def _parse_slice_string(slice_str: str, shape: tuple) -> tuple:
+    parts = [p.strip() for p in slice_str.split(",")]
+    if len(parts) > len(shape):
+        raise ValueError(f"Too many dimensions in slice: got {len(parts)}, dataset has {len(shape)}")
+
+    result = []
+    for part in parts:
+        if part == "" or part == ":":
+            result.append(slice(None))
+        elif ":" in part:
+            components = part.split(":")
+            if len(components) == 2:
+                start = int(components[0]) if components[0] else None
+                stop = int(components[1]) if components[1] else None
+                result.append(slice(start, stop))
+            elif len(components) == 3:
+                start = int(components[0]) if components[0] else None
+                stop = int(components[1]) if components[1] else None
+                step = int(components[2]) if components[2] else None
+                result.append(slice(start, stop, step))
+            else:
+                raise ValueError(f"Invalid slice syntax: '{part}'")
+        else:
+            result.append(int(part))
+    return tuple(result)
+
+
+def _compute_slice_size(slices: tuple, shape: tuple) -> int:
+    size = 1
+    for i, s in enumerate(slices):
+        if i >= len(shape):
+            break
+        dim_size = shape[i]
+        if isinstance(s, int):
+            continue
+        if isinstance(s, slice):
+            start, stop, step = s.indices(dim_size)
+            length = len(range(start, stop, step))
+            size *= max(0, length)
+
+    for i in range(len(slices), len(shape)):
+        size *= shape[i]
+    return size
+
+
+def _default_slice_for_shape(shape: tuple, max_elements: int) -> tuple:
+    if len(shape) == 1:
+        return (slice(0, min(shape[0], max_elements)),)
+
+    dims = []
+    elements_per_dim = int(max_elements ** (1 / len(shape)))
+    for dim_size in shape:
+        dims.append(slice(0, min(dim_size, max(1, elements_per_dim))))
+    return tuple(dims)
+
+
+def get_slice(*, user, path: str, slices: str | None = None):
+    dataset = server.open_b2(server.get_abspath(pathlib.Path(path), user), pathlib.Path(path))
+    if not hasattr(dataset, "shape"):
+        raise TypeError(f"Target is not a dataset: {path}")
+
+    shape = dataset.shape
+    if slices is None:
+        slice_tuple = _default_slice_for_shape(shape, MAX_SLICE_ELEMENTS)
+        slice_str_used = str(slice_tuple)
+    else:
+        slice_tuple = _parse_slice_string(slices, shape)
+        slice_str_used = slices
+
+    estimated_size = _compute_slice_size(slice_tuple, shape)
+    if estimated_size > MAX_SLICE_ELEMENTS:
+        raise ValueError(
+            f"Requested slice would return ~{estimated_size:,} elements, exceeding limit of "
+            f"{MAX_SLICE_ELEMENTS:,}. Please request a smaller slice."
+        )
+
+    data = dataset[slice_tuple]
+    result_shape = list(data.shape) if hasattr(data, "shape") else []
+    return {
+        "path": path,
+        "dataset_shape": list(shape),
+        "dtype": str(dataset.dtype),
+        "slice": slice_str_used,
+        "result_shape": result_shape,
+        "data": _json_safe(data),
+    }
+
+
 TOOL_MAP = {
     "list_roots": list_roots,
     "list_datasets": list_datasets,
     "get_dataset_info": get_dataset_info,
     "get_dataset_stats": get_dataset_stats,
+    "get_slice": get_slice,
 }
 
 
