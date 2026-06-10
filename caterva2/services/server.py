@@ -76,6 +76,16 @@ if sys.platform == "emscripten":
     import requests
     import micropip
 
+    # Ensure micropip understands PEP 783 (pyemscripten) wheel tags, used by
+    # blosc2 wasm32 wheels since 4.4.3.  micropip is pure Python, so it can
+    # upgrade itself even on Pyodide runtimes that bundle an older version.
+    from packaging.version import Version
+    if Version(micropip.__version__) < Version("0.11.1"):
+        await micropip.install("micropip>=0.11.1", reinstall=True)
+        for mod in [m for m in sys.modules if m.split(".")[0] == "micropip"]:
+            del sys.modules[mod]
+        import micropip
+
     # Install latest blosc2
     blosc_latest_url = "https://blosc.github.io/python-blosc2/wheels/latest.txt"
     blosc_wheel_name = requests.get(blosc_latest_url).text.strip()
