@@ -18,20 +18,21 @@ wasm32 wheels got it.  Installing such a wheel requires **micropip >= 0.11.1**
 Relevant version matrix (verified against the pyodide-lock.json of each CDN
 distribution):
 
-| Pyodide | Emscripten / ABI    | bundled micropip | PEP 783 |
-|---------|---------------------|------------------|---------|
-| 0.29.0  | 4.0.9 / `2025_0`    | 0.11.0           | no      |
-| 0.29.3  | 4.0.9 / `2025_0`    | 0.11.0           | no      |
-| 0.29.4  | 4.0.9 / `2025_0`    | 0.11.1           | **yes** |
-| 314.0.0 | (Python 3.14 line)  | 0.11.1           | **yes** |
+| Pyodide | Emscripten / ABI       | bundled micropip | PEP 783 |
+|---------|------------------------|------------------|---------|
+| 0.29.0  | 4.0.9 / `2025_0`       | 0.11.0           | no      |
+| 0.29.3  | 4.0.9 / `2025_0`       | 0.11.0           | no      |
+| 0.29.4  | 4.0.9 / `2025_0`       | 0.11.1           | **yes** |
+| 314.0.0 | 5.0.3 / `2026_0` (Py 3.14) | 0.11.1       | **yes** |
 
 jupyterlite-pyodide-kernel defaults:
 
 | kernel  | default Pyodide |
 |---------|-----------------|
-| 0.7.0 (our pin) | 0.29.0 (via CDN `pyodideUrl` default) |
+| 0.7.0   | 0.29.0 (via CDN `pyodideUrl` default) |
 | 0.7.1   | 0.29.3          |
 | 0.8.0b0 | 0.29.4          |
+| 0.8.0 (final, our pin) | **314.0.0** (Python 3.14 — *not* 0.29.4; see Stage 3) |
 
 ## Stage 1 — done (2026-06-10)
 
@@ -49,39 +50,104 @@ Goal: accept `pyemscripten` wheels without upgrading the JupyterLite stack.
    cell is injected at serve time, this also fixes deployments whose static
    lite site has not been rebuilt yet.
 
-## Stage 2 — when jupyterlite-pyodide-kernel 0.8.0 goes final
+## Stage 2 — superseded by Stage 3 (see below)
 
-(0.8.0b0, 2026-05-25, already bundles Pyodide 0.29.4; wait for the final
-release.)
+This stage assumed `jupyterlite-pyodide-kernel` 0.8.0 would default to Pyodide
+**0.29.4** (as 0.8.0b0 did), making it a safe drop-in for the 0.29.x ABI.  That
+assumption proved **wrong**: the *final* 0.8.0 release (the one we pinned)
+defaults to Pyodide **314.0.0** instead — Python 3.14, PEP 783-native, the
+314.x line that this document originally filed under Stage 3.  So bumping the
+kernel to 0.8.0 *is* the jump to Stage 3; there is no intermediate "0.8.0 on
+0.29.4" step.  The original Stage 2 instructions are kept here only for the
+record:
 
-1. In `pyproject.toml` (`server` extra), bump:
-   - `jupyterlite-core[contents]==0.7.1` → latest 0.8.x
-   - `jupyterlite-pyodide-kernel==0.7.0` → 0.8.x
-   (the two must be bumped together; check the kernel's release notes for the
-   matching core version).
-2. Delete the `pyodideUrl` override from `jupyter-lite.json` (the kernel's
-   default Pyodide is then >= 0.29.4).  Keep the file if other settings have
-   accumulated in it.
-3. `make lite-build`, smoke-test (see below), redeploy.
-4. Keep the micropip self-heal in the bootstrap cell for a transition period:
-   it is a no-op on up-to-date runtimes and still rescues third-party
-   deployments running older caterva2 static sites.
+1. ~~Bump `jupyterlite-core[contents]` and `jupyterlite-pyodide-kernel` from
+   0.7.x to 0.8.x in `pyproject.toml` (`server` extra), together.~~ Done — both
+   pinned to `==0.8.0`.
+2. ~~Delete the `pyodideUrl` override from `jupyter-lite.json` (kernel default
+   is then >= 0.29.4).~~ Done — the file held only that override, so it was
+   removed wholesale (commit `7d89a3f`).  But note the default is 314.0.0, not
+   0.29.4 (see Stage 3).
 
-## Stage 3 — Pyodide 314.x line (later, separate effort)
+To have *stayed* on the 0.29.x ABI we would have had to either keep the 0.7.x
+kernel, or re-add a `jupyter-lite.json` pinning `pyodideUrl` back to v0.29.4
+under the 0.8.0 kernel.  We chose not to, because the 314.x pieces were already
+in place (next section).
 
-Pyodide moved to a new versioning scheme: 314.0.0 (2026-06-09) tracks
-**Python 3.14** and is PEP 783-native; cibuildwheel 4.0 builds against
-314.0.0a2.  This is *not* a drop-in:
+## Stage 3 — Pyodide 314.x line — done (2026-06-25)
 
-- Wait for a jupyterlite-pyodide-kernel release that officially supports the
-  314.x line; do not just point `pyodideUrl` at it under a 0.7/0.8 kernel
-  (different Python minor, different ABI, piplite wheels must match).
-- blosc2 wasm wheels must be built for the matching ABI: bump
-  `CIBW_PYODIDE_VERSION` in python-blosc2's `.github/workflows/wasm.yml`
-  (currently 0.29.3) in lockstep, and keep cp313 vs cp314 in mind
-  (`CIBW_BUILD` is currently `cp313-*`).
-- Re-check any packages the notebooks load from the Pyodide distribution
-  (numpy, matplotlib, …) exist in the 314.x lockfile.
+Pyodide 314.0.0 (2026-06-09) tracks **Python 3.14** and is PEP 783-native; it is
+ESM-only (loaded from `pyodide.mjs`).  `jupyterlite-pyodide-kernel` 0.8.0
+defaults to it (verified in the built site:
+`pyodideUrl = https://cdn.jsdelivr.net/pyodide/v314.0.0/full/pyodide.mjs`).
+
+Why migrating straight here was feasible — the runtime ABI and all blosc2
+dependencies line up (verified against the v314.0.0 `pyodide-lock.json`):
+
+| Pyodide 314.0.0          | blosc2 cp314 wheel               |
+|--------------------------|----------------------------------|
+| python 3.14.0            | `cp314`                          |
+| abi `2026_0`             | `pyemscripten_2026_0`            |
+| platform `emscripten_5_0_3` | (matches)                     |
+
+- blosc2 **cp314** wasm wheel exists:
+  `blosc2-4.5.1-cp314-cp314-pyemscripten_2026_0_wasm32.whl`, published **on
+  PyPI** (the GitHub `wheels` branch still hosts only the cp313/0.29.x wheel).
+- blosc2 runtime deps are all satisfiable on 314.0.0: numpy 2.4.3, ndindex,
+  msgpack, pydantic + pydantic-core, requests are in the lockfile; `numexpr`
+  and `threadpoolctl` are correctly excluded on `wasm32`; `rich`/`textual` are
+  pure-Python (micropip → PyPI).  No `py-cpuinfo` requirement.
+- caterva2 is pure-Python (`py3-none-any`), installs on any runtime.
+- micropip 0.11.1 is bundled, so the bootstrap cell's self-heal is now a no-op.
+
+What was done:
+
+1. `pyproject.toml`: `jupyterlite-core[contents]==0.8.0`,
+   `jupyterlite-pyodide-kernel==0.8.0` (see Stage 2).
+2. `jupyter-lite.json` override removed (see Stage 2) — we now ride the kernel's
+   314.0.0 default.
+3. Bootstrap cell (`caterva2/services/notebook.py`,
+   `PYODIDE_BOOTSTRAP_CELL_SOURCE`): install **by name from PyPI** rather than
+   by GitHub wheel URL, so micropip picks the wheel matching the running ABI:
+   `await micropip.install(["blosc2>=4.5.1", "caterva2"])`.  This replaces the
+   old `latest.txt` + URL construction and works unchanged across the 0.29.x →
+   314.x transition.  The micropip self-heal was kept (harmless no-op on 314.x).
+
+   **The `blosc2>=4.5.1` floor is load-bearing.** Pyodide ships its *own*
+   blosc2 in the distribution lock — e.g. 314.0.0 bundles
+   `blosc2-4.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl` — and micropip
+   resolves a bundled/locked package **before** PyPI when the requirement has no
+   constraint that excludes it.  So a bare `micropip.install("blosc2")` silently
+   installs the stale bundled 4.1.2 instead of the latest release.  The `>=`
+   floor (above any version Pyodide is likely to bundle, and the first blosc2
+   with cp314 wheels on PyPI) forces micropip to fetch a current release from
+   PyPI.  caterva2 is not in the lock, so it already comes from PyPI.  Bump the
+   floor when you need to require something newer.  To *always* pull the
+   absolute latest regardless of what Pyodide bundles you would need a direct
+   wheel URL (the old `latest.txt` model), which needs cp314 wheels on the
+   GitHub `wheels` branch — see the dev-vs-release caveat below.
+4. JupyterLite contents loading: 0.8 gates the server-directory fetch on the
+   `contentsAllJsonFile` config option, which the build only sets when it
+   indexes local `files/` (we index none — caterva2 serves contents
+   dynamically).  Re-added a repo-root `jupyter-lite.json` setting
+   `jupyter-config-data.contentsAllJsonFile = "all.json"` so the browser drive
+   fetches `api/contents/<dir>/all.json` + `files/<path>` from the caterva2
+   server again.  No fork needed for loading (the fork only ever patched
+   *save*-back).
+5. `make lite-build` succeeds with the 0.8.0 stack.
+
+Caveats / follow-ups:
+
+- **Dev vs. release wheels.** Installing by name pulls PyPI *releases*; the old
+  GitHub-URL path pulled the latest *CI/dev* wheel.  To get dev wheels in the
+  browser again, publish cp314 wheels to python-blosc2's `wheels` branch: add
+  `cp314` to `CIBW_BUILD` (currently `cp313-*`) and bump `CIBW_PYODIDE_VERSION`
+  (currently 0.29.3) to the 314.x line in `.github/workflows/wasm.yml`.
+- **Browser smoke test passed** (2026-06-25): a served notebook on Pyodide
+  314.0.0 runs the bootstrap cell and reports
+  `Installed blosc2 4.5.1 and caterva2 2025.12.3 successfully!` — confirming the
+  cp314/`pyemscripten_2026_0` wheel installs and the `>=4.5.1` floor correctly
+  overrides the bundled 4.1.2.
 
 ## Smoke test
 

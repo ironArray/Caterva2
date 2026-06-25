@@ -1,7 +1,9 @@
 .PHONY: install assets lite-build lite-dev lite-test run
 
 VENV = ./venv
-BIN = $(VENV)/bin
+# Override to use a different toolchain, e.g. a conda env already on PATH:
+#   make lite-build BIN=$(dirname $(which jupyter))
+BIN ?= $(VENV)/bin
 
 install:
 	python3 -m venv venv
@@ -19,7 +21,7 @@ assets:
 
 
 lite-build:
-	rm .jupyterlite.doit.db caterva2/services/static/jupyterlite -rf
+	rm -rf .jupyterlite.doit.db caterva2/services/static/jupyterlite
 	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
 
 # Installs our jupyterlite fork from a local copy, for development purposes

@@ -20,12 +20,12 @@ import nbformat
 PYODIDE_BOOTSTRAP_CELL_SOURCE = """# Install blosc2 and caterva2 in Pyodide environments (automatically added)
 import sys
 if sys.platform == "emscripten":
-    import requests
     import micropip
 
     # Ensure micropip understands PEP 783 (pyemscripten) wheel tags, used by
     # blosc2 wasm32 wheels since 4.4.3.  micropip is pure Python, so it can
     # upgrade itself even on Pyodide runtimes that bundle an older version.
+    # No-op on Pyodide >= 0.29.4 / 314.x, which already bundle micropip >= 0.11.1.
     from packaging.version import Version
     if Version(micropip.__version__) < Version("0.11.1"):
         await micropip.install("micropip>=0.11.1", reinstall=True)
@@ -33,19 +33,18 @@ if sys.platform == "emscripten":
             del sys.modules[mod]
         import micropip
 
-    # Install latest blosc2
-    blosc_latest_url = "https://blosc.github.io/python-blosc2/wheels/latest.txt"
-    blosc_wheel_name = requests.get(blosc_latest_url).text.strip()
-    blosc_wheel_url = f"https://blosc.github.io/python-blosc2/wheels/{blosc_wheel_name}"
-    await micropip.install(blosc_wheel_url)
-    print(f"Installed {blosc_wheel_name} successfully!")
-
-    # Install latest caterva2
-    caterva_latest_url = "https://ironarray.github.io/Caterva2/wheels/latest.txt"
-    caterva_wheel_name = requests.get(caterva_latest_url).text.strip()
-    caterva_wheel_url = f"https://ironarray.github.io/Caterva2/wheels/{caterva_wheel_name}"
-    await micropip.install(caterva_wheel_url)
-    print(f"Installed {caterva_wheel_name} successfully!")
+    # Install blosc2 and caterva2 from PyPI, letting micropip pick the wheel that
+    # matches the running Pyodide ABI (e.g. the cp314/pyemscripten_2026_0 blosc2
+    # wheel on Pyodide 314.x, or the cp313/pyemscripten_2025_0 one on 0.29.x).
+    #
+    # The blosc2 floor is important: Pyodide bundles its own (often older) blosc2 in
+    # the distribution lock (e.g. 4.1.2 on 314.0.0), and micropip prefers a bundled
+    # package over PyPI unless the requirement excludes it. The >= constraint forces
+    # micropip to fetch a current release from PyPI instead of the stale bundled one.
+    await micropip.install(["blosc2>=4.5.1", "caterva2"])
+    import blosc2
+    import caterva2
+    print(f"Installed blosc2 {blosc2.__version__} and caterva2 {caterva2.__version__} successfully!")
 """
 
 
