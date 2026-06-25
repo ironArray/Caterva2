@@ -1210,19 +1210,23 @@ async def append_file(
             raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Append the data
-    # The original dataset
-    orig = blosc2.open(abspath)
+    # The original dataset (open in append mode so it can be resized/written)
+    orig = blosc2.open(abspath, mode="a")
     # The data to append is a cframe
     new = blosc2.ndarray_from_cframe(data)
     # Check that the shapes are compatible
     if orig.shape[1:] != new.shape[1:]:
         detail = "The shapes of the original dataset and the data to append are not compatible"
         raise fastapi.HTTPException(detail=detail, status_code=400)
+    # Materialize the new data before resizing: resizing the on-disk array
+    # invalidates the in-memory cframe array buffer.
+    new_data = new[:]
+    new_len = new.shape[0]
     # Compute the new shape and resize the original dataset
-    result_shape = (orig.shape[0] + new.shape[0],) + orig.shape[1:]
+    result_shape = (orig.shape[0] + new_len,) + orig.shape[1:]
     orig.resize(result_shape)
     # Append the new data to orig along the first axis
-    orig[orig.shape[0] - new.shape[0] :] = new
+    orig[orig.shape[0] - new_len :] = new_data
 
     # Return the new shape
     return result_shape
@@ -1865,14 +1869,14 @@ def get_filtered_array(abspath, path, filter, sortby, mtime):
         # Let's create a LazyExpr with the filter
         larr = arr[filter]
         # TODO: do some benchmarking to see if this is worth it
-        idx = larr.indices(sortby).compute()
+        idx = larr.argsort(sortby)
         # TODO: do some benchmarking to see if a numpy array is faster
         # but be aware that this will consume more memory (uncompressed)
-        # idx = larr.indices(sortby)[:]
+        # idx = larr.argsort(sortby)[:]
         arr = larr.sort(sortby).compute()
     elif sortby:
         # NDArray with fields; no need for the compute step
-        idx = arr.indices(sortby)
+        idx = arr.argsort(sortby)
         arr = arr.sort(sortby)
 
     return arr, idx
