@@ -1,0 +1,5 @@
+/*
+    This extension is headless: it only wraps the contents-manager save to
+    mirror notebooks back to the caterva2 server. No styles are needed, but the
+    JupyterLab builder expects a style entry point.
+*/

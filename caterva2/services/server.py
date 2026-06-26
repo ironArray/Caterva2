@@ -55,6 +55,7 @@ from fastapi.templating import Jinja2Templates
 # Project
 from caterva2 import hdf5, models, utils
 from caterva2.services import db, schemas, settings, srv_utils, users
+from caterva2.services.notebook import inject_pyodide_bootstrap_cell
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 
@@ -69,47 +70,6 @@ mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by de
 mimetypes.add_type("application/x-ipynb+json", ".ipynb")
 
 ncores = os.cpu_count() // 2
-
-PYODIDE_BOOTSTRAP_CELL_SOURCE = """# Install blosc2 and caterva2 in Pyodide environments (automatically added)
-import sys
-if sys.platform == "emscripten":
-    import requests
-    import micropip
-
-    # Install latest blosc2
-    blosc_latest_url = "https://blosc.github.io/python-blosc2/wheels/latest.txt"
-    blosc_wheel_name = requests.get(blosc_latest_url).text.strip()
-    blosc_wheel_url = f"https://blosc.github.io/python-blosc2/wheels/{blosc_wheel_name}"
-    await micropip.install(blosc_wheel_url)
-    print(f"Installed {blosc_wheel_name} successfully!")
-
-    # Install latest caterva2
-    caterva_latest_url = "https://ironarray.github.io/Caterva2/wheels/latest.txt"
-    caterva_wheel_name = requests.get(caterva_latest_url).text.strip()
-    caterva_wheel_url = f"https://ironarray.github.io/Caterva2/wheels/{caterva_wheel_name}"
-    await micropip.install(caterva_wheel_url)
-    print(f"Installed {caterva_wheel_name} successfully!")
-"""
-
-
-def inject_pyodide_bootstrap_cell(content: bytes) -> bytes:
-    """Inject a bootstrap cell in notebooks served through JupyterLite."""
-    try:
-        notebook = nbformat.reads(content.decode("utf-8"), as_version=4)
-    except Exception:
-        return content
-
-    for cell in notebook.cells:
-        if cell.get("metadata", {}).get("caterva2_pyodide_bootstrap"):
-            return content
-
-    bootstrap_cell = nbformat.v4.new_code_cell(PYODIDE_BOOTSTRAP_CELL_SOURCE)
-    bootstrap_cell["metadata"]["caterva2_pyodide_bootstrap"] = True
-    notebook.cells.insert(0, bootstrap_cell)
-
-    file = io.StringIO()
-    nbformat.write(notebook, file)
-    return file.getvalue().encode("utf-8")
 
 
 def guess_type(path):
@@ -1200,19 +1160,23 @@ async def append_file(
             raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Append the data
-    # The original dataset
-    orig = blosc2.open(abspath)
+    # The original dataset (open in append mode so it can be resized/written)
+    orig = blosc2.open(abspath, mode="a")
     # The data to append is a cframe
     new = blosc2.ndarray_from_cframe(data)
     # Check that the shapes are compatible
     if orig.shape[1:] != new.shape[1:]:
         detail = "The shapes of the original dataset and the data to append are not compatible"
         raise fastapi.HTTPException(detail=detail, status_code=400)
+    # Materialize the new data before resizing: resizing the on-disk array
+    # invalidates the in-memory cframe array buffer.
+    new_data = new[:]
+    new_len = new.shape[0]
     # Compute the new shape and resize the original dataset
-    result_shape = (orig.shape[0] + new.shape[0],) + orig.shape[1:]
+    result_shape = (orig.shape[0] + new_len,) + orig.shape[1:]
     orig.resize(result_shape)
     # Append the new data to orig along the first axis
-    orig[orig.shape[0] - new.shape[0] :] = new
+    orig[orig.shape[0] - new_len :] = new_data
 
     # Return the new shape
     return result_shape
@@ -1855,14 +1819,14 @@ def get_filtered_array(abspath, path, filter, sortby, mtime):
         # Let's create a LazyExpr with the filter
         larr = arr[filter]
         # TODO: do some benchmarking to see if this is worth it
-        idx = larr.indices(sortby).compute()
+        idx = larr.argsort(sortby)
         # TODO: do some benchmarking to see if a numpy array is faster
         # but be aware that this will consume more memory (uncompressed)
-        # idx = larr.indices(sortby)[:]
+        # idx = larr.argsort(sortby)[:]
         arr = larr.sort(sortby).compute()
     elif sortby:
         # NDArray with fields; no need for the compute step
-        idx = arr.indices(sortby)
+        idx = arr.argsort(sortby)
         arr = arr.sort(sortby)
 
     return arr, idx

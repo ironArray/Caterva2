@@ -1,0 +1,8 @@
+node_modules/
+lib/
+*.tsbuildinfo
+.yarn/
+
+# NOTE: the built `labextension/` output is intentionally NOT ignored. Commit it
+# (like caterva2/services/static/build/) so the caterva2 wheel ships it and
+# downstream installs (e.g. the deploy) need no Node toolchain. See README.md.
