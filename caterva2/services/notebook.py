@@ -44,9 +44,13 @@ def inject_pyodide_bootstrap_cell(content: bytes) -> bytes:
     except Exception:
         return content
 
-    for cell in notebook.cells:
-        if cell.get("metadata", {}).get("caterva2_pyodide_bootstrap"):
-            return content
+    # Drop any previously-injected bootstrap cell(s) and prepend a fresh one, so a
+    # served notebook always carries the *current* bootstrap source. A stale cell may
+    # have been baked into the saved file (e.g. persisted by save-back, or shipped in
+    # the notebook); skipping when one exists would keep serving outdated install code.
+    notebook.cells = [
+        cell for cell in notebook.cells if not cell.get("metadata", {}).get("caterva2_pyodide_bootstrap")
+    ]
 
     bootstrap_cell = nbformat.v4.new_code_cell(PYODIDE_BOOTSTRAP_CELL_SOURCE)
     bootstrap_cell["metadata"]["caterva2_pyodide_bootstrap"] = True

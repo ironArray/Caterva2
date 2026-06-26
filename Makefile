@@ -35,7 +35,10 @@ lite-ext:
 
 lite-build:
 	rm -rf .jupyterlite.doit.db caterva2/services/static/jupyterlite
-	${BIN}/jupyter lite build --output-dir caterva2/services/static/jupyterlite
+	# --lite-dir points at the in-package jupyter-lite.json (contentsAllJsonFile),
+	# so the build picks it up regardless of the working directory (the deploy
+	# builds from elsewhere). See caterva2/services/lite-config/.
+	${BIN}/jupyter lite build --lite-dir caterva2/services/lite-config --output-dir caterva2/services/static/jupyterlite
 
 # Installs our jupyterlite fork from a local copy, for development purposes
 # Before doing this you must run "make build" in our jupyterlite fork
