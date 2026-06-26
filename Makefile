@@ -9,7 +9,7 @@ install:
 	python3 -m venv venv
 	${BIN}/pip install -U pip
 	${BIN}/pip install -e .
-	${BIN}/pip install -e .[services,hdf5,plugins,blosc2-plugins]
+	${BIN}/pip install -e .[services,hdf5,plugins,blosc2-plugins,lite]
 	${BIN}/pip install -e .[clients]
 	${BIN}/pip install -e .[tests]
 	${BIN}/pip install pre-commit

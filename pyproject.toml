@@ -71,7 +71,15 @@ server = [
     "pygments",
     "python-dotenv",
     "python-multipart",
-    "jupyterlite-core[contents]==0.8.0",
+]
+# Build-time only: tools to (re)build the static JupyterLite site with
+# `jupyter lite build` (see `make lite-build`). NOT a server runtime dependency —
+# the server only serves the prebuilt static site — and deliberately kept out of
+# `services`/`tests` so they don't pull the heavy jupyter-server subtree. `[contents]`
+# is omitted on purpose: caterva2 serves notebook contents dynamically (the server's
+# api/contents + files endpoints), so the build needs no local-files indexing.
+lite = [
+    "jupyterlite-core==0.8.0",
     "jupyterlite-pyodide-kernel==0.8.0",
 ]
 services = [
