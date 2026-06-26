@@ -22,26 +22,15 @@ import sys
 if sys.platform == "emscripten":
     import micropip
 
-    # Ensure micropip understands PEP 783 (pyemscripten) wheel tags, used by
-    # blosc2 wasm32 wheels since 4.4.3.  micropip is pure Python, so it can
-    # upgrade itself even on Pyodide runtimes that bundle an older version.
-    # No-op on Pyodide >= 0.29.4 / 314.x, which already bundle micropip >= 0.11.1.
-    from packaging.version import Version
-    if Version(micropip.__version__) < Version("0.11.1"):
-        await micropip.install("micropip>=0.11.1", reinstall=True)
-        for mod in [m for m in sys.modules if m.split(".")[0] == "micropip"]:
-            del sys.modules[mod]
-        import micropip
-
-    # Install blosc2 and caterva2 from PyPI, letting micropip pick the wheel that
-    # matches the running Pyodide ABI (e.g. the cp314/pyemscripten_2026_0 blosc2
-    # wheel on Pyodide 314.x, or the cp313/pyemscripten_2025_0 one on 0.29.x).
+    # Install blosc2 and caterva2 from PyPI; micropip picks the wheel matching the
+    # running Pyodide ABI (e.g. cp314/pyemscripten_2026_0 on the 314.x line).
     #
-    # The blosc2 floor is important: Pyodide bundles its own (often older) blosc2 in
-    # the distribution lock (e.g. 4.1.2 on 314.0.0), and micropip prefers a bundled
-    # package over PyPI unless the requirement excludes it. The >= constraint forces
-    # micropip to fetch a current release from PyPI instead of the stale bundled one.
-    await micropip.install(["blosc2>=4.5.1", "caterva2"])
+    # The blosc2 >= floor is important: Pyodide bundles its own (often older) blosc2
+    # in the distribution lock (e.g. 4.1.2 on 314.0.0), and micropip prefers a
+    # bundled package over PyPI unless the requirement excludes it. The constraint
+    # forces micropip to fetch a current release from PyPI instead of the stale
+    # bundled one.
+    await micropip.install(["blosc2>=4.6.0", "caterva2"])
     import blosc2
     import caterva2
     print(f"Installed blosc2 {blosc2.__version__} and caterva2 {caterva2.__version__} successfully!")

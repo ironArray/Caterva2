@@ -98,7 +98,8 @@ dependencies line up (verified against the v314.0.0 `pyodide-lock.json`):
   and `threadpoolctl` are correctly excluded on `wasm32`; `rich`/`textual` are
   pure-Python (micropip → PyPI).  No `py-cpuinfo` requirement.
 - caterva2 is pure-Python (`py3-none-any`), installs on any runtime.
-- micropip 0.11.1 is bundled, so the bootstrap cell's self-heal is now a no-op.
+- micropip 0.11.1 is bundled, so no micropip self-heal is needed in the
+  bootstrap cell (the Stage-1 upgrade shim was removed).
 
 What was done:
 
@@ -109,18 +110,19 @@ What was done:
 3. Bootstrap cell (`caterva2/services/notebook.py`,
    `PYODIDE_BOOTSTRAP_CELL_SOURCE`): install **by name from PyPI** rather than
    by GitHub wheel URL, so micropip picks the wheel matching the running ABI:
-   `await micropip.install(["blosc2>=4.5.1", "caterva2"])`.  This replaces the
-   old `latest.txt` + URL construction and works unchanged across the 0.29.x →
-   314.x transition.  The micropip self-heal was kept (harmless no-op on 314.x).
+   `await micropip.install(["blosc2>=4.6.0", "caterva2"])`.  This replaces the
+   old `latest.txt` + URL construction.  The Stage-1 micropip self-heal (upgrade
+   to >= 0.11.1) was dropped once we settled on the 314.x line, which already
+   bundles micropip 0.11.1 — the branch could never fire.
 
-   **The `blosc2>=4.5.1` floor is load-bearing.** Pyodide ships its *own*
+   **The `blosc2>=4.6.0` floor is load-bearing.** Pyodide ships its *own*
    blosc2 in the distribution lock — e.g. 314.0.0 bundles
    `blosc2-4.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl` — and micropip
    resolves a bundled/locked package **before** PyPI when the requirement has no
    constraint that excludes it.  So a bare `micropip.install("blosc2")` silently
    installs the stale bundled 4.1.2 instead of the latest release.  The `>=`
-   floor (above any version Pyodide is likely to bundle, and the first blosc2
-   with cp314 wheels on PyPI) forces micropip to fetch a current release from
+   floor (above any version Pyodide is likely to bundle, on a release that has
+   cp314 wheels on PyPI) forces micropip to fetch a current release from
    PyPI.  caterva2 is not in the lock, so it already comes from PyPI.  Bump the
    floor when you need to require something newer.  To *always* pull the
    absolute latest regardless of what Pyodide bundles you would need a direct
