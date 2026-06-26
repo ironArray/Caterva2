@@ -134,7 +134,25 @@ What was done:
    fetches `api/contents/<dir>/all.json` + `files/<path>` from the caterva2
    server again.  No fork needed for loading (the fork only ever patched
    *save*-back).
-5. `make lite-build` succeeds with the 0.8.0 stack.
+5. JupyterLite save-back: re-implemented the fork's `c2upload` patch as a small
+   standalone labextension, `jupyterlite-exts/caterva2-save/`, that wraps the
+   contents-manager `save()` to `POST` the notebook to `api/upload/<path>`
+   (`credentials: same-origin` reuses the caterva2 session cookie).  It is
+   shipped *inside the caterva2 wheel* as a federated extension
+   (`share/jupyter/labextensions/caterva2-save`, via `pyproject.toml`
+   `shared-data` + a `hatch-jupyter-builder` hook with `skip-if-exists`), so
+   `jupyter lite build` discovers and bundles it with no extra package.  Build
+   it with `make lite-ext` (Node + jlpm) and commit the resulting
+   `labextension/`; downstream installs then need no Node.
+6. `make lite-build` succeeds with the 0.8.0 stack.
+
+**The `ironArray/jupyterlite` fork is fully retired.**  Every piece now comes
+from stock upstream: kernel/Pyodide (`jupyterlite-pyodide-kernel==0.8.0`),
+loading (server endpoints + `contentsAllJsonFile`), saving (the bundled
+`caterva2-save` extension), and the build (`jupyter lite build`).  In
+`caterva2-deploy`, the `make lite` target's
+`gh run -R ironArray/jupyterlite download` step can be dropped — just install
+caterva2 (which carries the extension) and build.
 
 Caveats / follow-ups:
 
@@ -148,6 +166,10 @@ Caveats / follow-ups:
   `Installed blosc2 4.5.1 and caterva2 2025.12.3 successfully!` — confirming the
   cp314/`pyemscripten_2026_0` wheel installs and the `>=4.5.1` floor correctly
   overrides the bundled 4.1.2.
+- **Save-back verified** (2026-06-26): editing and saving a served notebook
+  produces `POST /api/upload/<path> 200` on the caterva2 server — the bundled
+  `caterva2-save` extension round-trips edits to the server, matching the old
+  fork behaviour with no fork.
 
 ## Smoke test
 

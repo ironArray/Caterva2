@@ -1,0 +1,68 @@
+{
+  "name": "caterva2-save",
+  "version": "0.1.0",
+  "description": "Mirror JupyterLite notebook saves back to the Caterva2 server",
+  "keywords": [
+    "jupyter",
+    "jupyterlab",
+    "jupyterlab-extension",
+    "jupyterlite",
+    "caterva2"
+  ],
+  "homepage": "https://github.com/ironArray/Caterva2",
+  "bugs": {
+    "url": "https://github.com/ironArray/Caterva2/issues"
+  },
+  "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "ironArray SLU",
+    "email": "contact@ironarray.io"
+  },
+  "files": [
+    "lib/**/*.{d.ts,js,js.map}",
+    "style/**/*.{css,js}"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "style": "style/index.css",
+  "styleModule": "style/index.js",
+  "sideEffects": [
+    "style/*.css",
+    "style/index.js"
+  ],
+  "scripts": {
+    "build": "jlpm build:lib && jlpm build:labextension:dev",
+    "build:prod": "jlpm clean && jlpm build:lib:prod && jlpm build:labextension",
+    "build:lib": "tsc --sourceMap",
+    "build:lib:prod": "tsc",
+    "build:labextension": "jupyter labextension build .",
+    "build:labextension:dev": "jupyter labextension build --development True .",
+    "clean": "jlpm clean:lib",
+    "clean:lib": "rimraf lib tsconfig.tsbuildinfo",
+    "clean:labextension": "rimraf labextension",
+    "clean:all": "jlpm clean:lib && jlpm clean:labextension",
+    "watch": "run-p watch:src watch:labextension",
+    "watch:src": "tsc -w --sourceMap",
+    "watch:labextension": "jupyter labextension watch ."
+  },
+  "dependencies": {
+    "@jupyterlab/application": "^4.4.0",
+    "@jupyterlab/coreutils": "^6.4.0",
+    "@jupyterlab/services": "^7.4.0"
+  },
+  "devDependencies": {
+    "@jupyterlab/builder": "^4.4.0",
+    "npm-run-all2": "^7.0.0",
+    "rimraf": "^5.0.0",
+    "typescript": "~5.5.0"
+  },
+  "jupyterlab": {
+    "extension": true,
+    "outputDir": "labextension",
+    "_build": {
+      "load": "static/remoteEntry.4d87890bf46c64840c78.js",
+      "extension": "./extension",
+      "style": "./style"
+    }
+  }
+}

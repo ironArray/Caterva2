@@ -1,4 +1,4 @@
-.PHONY: install assets lite-build lite-dev lite-test run
+.PHONY: install assets lite-ext lite-build lite-dev lite-test run
 
 VENV = ./venv
 # Override to use a different toolchain, e.g. a conda env already on PATH:
@@ -19,6 +19,19 @@ assets:
 	npm run build
 	git add caterva2/services/static/build/
 
+
+# Build the caterva2-save JupyterLite extension (needs Node + jlpm/JupyterLab).
+# Commit the resulting jupyterlite-exts/caterva2-save/labextension/ so the
+# caterva2 wheel ships it and downstream installs need no Node toolchain.
+# `develop --overwrite` registers it for an *editable* caterva2 install (whose
+# wheel shared-data is not staged into share/jupyter/labextensions/).
+lite-ext:
+	cd jupyterlite-exts/caterva2-save && jlpm install && jlpm build:prod
+	# Register for an *editable* caterva2 install (whose wheel shared-data is not
+	# staged into share/jupyter/labextensions/); a real wheel install does this.
+	mkdir -p ${BIN}/../share/jupyter/labextensions
+	ln -sfn $(CURDIR)/jupyterlite-exts/caterva2-save/labextension ${BIN}/../share/jupyter/labextensions/caterva2-save
+	git add jupyterlite-exts/caterva2-save/labextension
 
 lite-build:
 	rm -rf .jupyterlite.doit.db caterva2/services/static/jupyterlite

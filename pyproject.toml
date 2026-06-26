@@ -8,7 +8,7 @@
 ###############################################################################
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-jupyter-builder>=0.9.1"]
 build-backend = "hatchling.build"
 
 [project]
@@ -110,6 +110,28 @@ blosc2-plugins = [
 
 [tool.hatch.build.targets.wheel]
 only-include = ["caterva2", "root-example"]
+
+# Ship the caterva2-save JupyterLite extension inside the wheel as a federated
+# labextension, so `jupyter lite build` discovers and bundles it (replaces the
+# old jupyterlite fork's save-back patch). See jupyterlite-exts/caterva2-save/.
+[tool.hatch.build.targets.wheel.shared-data]
+"jupyterlite-exts/caterva2-save/labextension" = "share/jupyter/labextensions/caterva2-save"
+"jupyterlite-exts/caterva2-save/install.json" = "share/jupyter/labextensions/caterva2-save/install.json"
+
+# Build the labextension during sdist/wheel build. `skip-if-exists` makes this a
+# no-op when the built output is committed (the recommended flow), so downstream
+# installs need no Node toolchain; a clean build without it requires Node + the
+# JupyterLab build tools (`make lite-ext`).
+[tool.hatch.build.hooks.jupyter-builder]
+dependencies = ["hatch-jupyter-builder>=0.9.1"]
+build-function = "hatch_jupyter_builder.npm_builder"
+ensured-targets = ["jupyterlite-exts/caterva2-save/labextension/package.json"]
+skip-if-exists = ["jupyterlite-exts/caterva2-save/labextension/package.json"]
+
+[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
+build_cmd = "build:prod"
+npm = ["jlpm"]
+path = "jupyterlite-exts/caterva2-save"
 
 [project.urls]
 Home = "https://github.com/ironArray/Caterva2"
