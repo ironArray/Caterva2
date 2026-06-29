@@ -17,7 +17,7 @@ import io
 
 import nbformat
 
-PYODIDE_BOOTSTRAP_CELL_SOURCE = """# Install blosc2 and caterva2 in Pyodide environments (automatically added)
+PYODIDE_BOOTSTRAP_INSTALL_SOURCE = """# Install blosc2 and caterva2 in Pyodide environments (automatically added)
 import sys
 if sys.platform == "emscripten":
     import micropip
@@ -31,9 +31,12 @@ if sys.platform == "emscripten":
     # forces micropip to fetch a current release from PyPI instead of the stale
     # bundled one.
     await micropip.install(["blosc2>=4.6.0", "caterva2"])
-    import blosc2
-    import caterva2
-    print(f"Installed blosc2 {blosc2.__version__} and caterva2 {caterva2.__version__} successfully!")
+    print("blosc2 and caterva2 installed successfully!")
+"""
+
+PYODIDE_BOOTSTRAP_IMPORT_SOURCE = """import blosc2
+import caterva2
+print(f"blosc2 {blosc2.__version__}, caterva2 {caterva2.__version__}")
 """
 
 
@@ -44,17 +47,28 @@ def inject_pyodide_bootstrap_cell(content: bytes) -> bytes:
     except Exception:
         return content
 
-    # Drop any previously-injected bootstrap cell(s) and prepend a fresh one, so a
+    # Drop any previously-injected bootstrap cell(s) and prepend fresh ones, so a
     # served notebook always carries the *current* bootstrap source. A stale cell may
     # have been baked into the saved file (e.g. persisted by save-back, or shipped in
     # the notebook); skipping when one exists would keep serving outdated install code.
+    #
+    # Two cells are used instead of one: JupyterLite's Pyodide kernel runs
+    # loadPackagesFromImports() per cell *before* executing it, which installs the
+    # old bundled version from the lockfile if the cell contains an import of a
+    # package not yet loaded. By isolating the micropip.install() in its own cell
+    # (no imports), we let it fetch the current release from PyPI uncontested.
+    # The subsequent import cell then finds the freshly installed version.
+    # See https://github.com/pyodide/pyodide-recipes/pull/605#issuecomment-4826015651
     notebook.cells = [
         cell for cell in notebook.cells if not cell.get("metadata", {}).get("caterva2_pyodide_bootstrap")
     ]
 
-    bootstrap_cell = nbformat.v4.new_code_cell(PYODIDE_BOOTSTRAP_CELL_SOURCE)
-    bootstrap_cell["metadata"]["caterva2_pyodide_bootstrap"] = True
-    notebook.cells.insert(0, bootstrap_cell)
+    install_cell = nbformat.v4.new_code_cell(PYODIDE_BOOTSTRAP_INSTALL_SOURCE)
+    install_cell["metadata"]["caterva2_pyodide_bootstrap"] = True
+    import_cell = nbformat.v4.new_code_cell(PYODIDE_BOOTSTRAP_IMPORT_SOURCE)
+    import_cell["metadata"]["caterva2_pyodide_bootstrap"] = True
+    notebook.cells.insert(0, install_cell)
+    notebook.cells.insert(1, import_cell)
 
     file = io.StringIO()
     nbformat.write(notebook, file)
