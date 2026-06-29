@@ -48,6 +48,7 @@ from blosc2 import linalg_funcs_list as linalg_funcs
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -252,6 +253,7 @@ def custom_filesizeformat(value):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # TODO: Support user verification
 if user_login_enabled():
