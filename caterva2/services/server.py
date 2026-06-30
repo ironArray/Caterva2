@@ -127,6 +127,9 @@ def open_b2(abspath, path):
         raise ValueError(f"Unexpected root={root}")
 
     container = blosc2.open(abspath)
+    # CTable has its own storage and no table-level cparams/dparams; return early.
+    if isinstance(container, blosc2.CTable):
+        return container
     vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
     if isinstance(container, blosc2.LazyArray):
         # Open the operands properly
@@ -453,7 +456,7 @@ def get_abspath(
         return cachedir / filepath
 
     # HDF5 files cannot be compressed, as they are supported natively
-    if filepath.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
+    if filepath.suffix not in {".b2frame", ".b2nd", ".b2z", ".h5"} and not may_not_exist:
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
@@ -521,9 +524,9 @@ async def fetch_data(
     slice_ = parse_slice(slice_)
     abspath = get_abspath(path, user)
 
-    if abspath.suffix not in {".b2frame", ".b2nd"}:
+    if abspath.suffix not in {".b2frame", ".b2nd", ".b2z"}:
         srv_utils.raise_bad_request(
-            "The fetch API only supports datasets (.b2nd and .b2); "
+            "The fetch API only supports datasets (.b2nd, .b2frame, .b2z); "
             "use the download API if you only want to download the file"
         )
 
@@ -539,11 +542,16 @@ async def fetch_data(
     if field:
         container = container[field]
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField):
+    if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
+    elif isinstance(container, blosc2.CTable):
+        array = container
+        schunk = None
+        typesize = 1  # not used for CTable
+        shape = (array.nrows,)
     else:
         # SChunk
         array = None
@@ -573,7 +581,25 @@ async def fetch_data(
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
-    if isinstance(array, hdf5.HDF5Proxy):
+    if isinstance(array, blosc2.CTable):
+        # ponytail: slice_ is a single slice/int/tuple; extract row start/stop
+        if isinstance(slice_, slice):
+            row_start, row_stop = slice_.start or 0, slice_.stop or array.nrows
+        elif isinstance(slice_, int):
+            row_start, row_stop = slice_, slice_ + 1
+        elif isinstance(slice_, tuple) and len(slice_) > 0:
+            sl0 = slice_[0]
+            if isinstance(sl0, slice):
+                row_start, row_stop = sl0.start or 0, sl0.stop or array.nrows
+            elif isinstance(sl0, int):
+                row_start, row_stop = sl0, sl0 + 1
+            else:
+                row_start, row_stop = 0, array.nrows
+        else:
+            row_start, row_stop = 0, array.nrows
+        view = array.slice(row_start, row_stop)
+        data = view.to_cframe()
+    elif isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyArray):
         data = array.compute(() if slice_ is None else slice_)

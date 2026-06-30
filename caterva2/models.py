@@ -74,6 +74,21 @@ class LazyArray(pydantic.BaseModel):
     mtime: datetime.datetime | None
 
 
+class CTableMetadata(pydantic.BaseModel):
+    kind: str = "ctable"
+    nrows: int
+    ncols: int
+    chunks: tuple
+    blocks: tuple
+    schema_dict: dict
+    columns: list[str]
+    nbytes: int
+    cbytes: int
+    cratio: float
+    vlmeta: dict = {}
+    mtime: datetime.datetime | None
+
+
 class Cat2LazyArr(pydantic.BaseModel):
     name: str | None
     expression: str | None

@@ -30,6 +30,12 @@ from sqlalchemy.future import select
 from caterva2 import hdf5, models
 from caterva2.services import db, schemas, settings, users
 
+# Shared suffix constants
+BLOSC2_ARRAY_SUFFIXES = {".b2nd", ".b2frame"}
+BLOSC2_TABLE_SUFFIXES = {".b2z"}
+BLOSC2_FRAME_SUFFIXES = {".b2"}
+BLOSC2_NATIVE_SUFFIXES = BLOSC2_ARRAY_SUFFIXES | BLOSC2_TABLE_SUFFIXES | BLOSC2_FRAME_SUFFIXES
+
 
 def compress_file(path):
     with open(path, "rb") as src:
@@ -103,7 +109,7 @@ def read_metadata(obj):
             #     obj = f
             return get_model_from_obj(obj, models.File, mtime=mtime, size=size)
 
-        assert path.suffix in {".b2frame", ".b2nd", ".b2"}
+        assert path.suffix in BLOSC2_NATIVE_SUFFIXES
         try:
             obj = blosc2.open(path)
         except blosc2.exceptions.MissingOperands as exc:
@@ -149,6 +155,21 @@ def read_metadata(obj):
             operands=operands,
             mtime=mtime,
             expression=expression,
+        )
+    elif isinstance(obj, blosc2.CTable):
+        schema = obj.schema_dict()
+        return models.CTableMetadata(
+            nrows=obj.nrows,
+            ncols=obj.ncols,
+            chunks=obj.chunks,
+            blocks=obj.blocks,
+            schema_dict=schema,
+            columns=[c["name"] for c in schema.get("columns", [])],
+            nbytes=obj.nbytes,
+            cbytes=obj.cbytes,
+            cratio=obj.cratio,
+            vlmeta=dict(obj.vlmeta[:]) if obj.vlmeta[:] else {},
+            mtime=mtime,
         )
     else:
         raise TypeError(f"unexpected {type(obj)}")

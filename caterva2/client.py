@@ -125,6 +125,8 @@ class Root:
         path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
             return Dataset(self, path)
+        if path.endswith(".b2z"):
+            return Table(self, path)
         else:
             return File(self, path)
 
@@ -698,6 +700,29 @@ class Dataset(File, blosc2.Operand):
         return self.client.append(self.path, data)
 
 
+class Table(File):
+    """Represents a CTable (.b2z) dataset."""
+
+    def __repr__(self):
+        return f"<Table: {self.path}>"
+
+    @property
+    def nrows(self):
+        return self.meta["nrows"]
+
+    @property
+    def columns(self):
+        return self.meta["columns"]
+
+    def slice(self, key):
+        """Get a row slice as a blosc2.CTable."""
+        return self.client.get_slice(self.path, key, as_blosc2=True)
+
+    def __getitem__(self, key):
+        """Shortcut: slice as a blosc2.CTable."""
+        return self.slice(key)
+
+
 class BasicAuth:
     """
     Basic authentication for HTTP requests.
@@ -781,14 +806,20 @@ class Client:
         data = response.content
         # Try different deserialization methods
         try:
-            data = blosc2.ndarray_from_cframe(data)
-        except RuntimeError:
-            data = blosc2.schunk_from_cframe(data)
+            data = blosc2.ctable_from_cframe(data)
+        except ValueError:
+            try:
+                data = blosc2.ndarray_from_cframe(data)
+            except RuntimeError:
+                data = blosc2.schunk_from_cframe(data)
         if as_blosc2:
             return data
         if hasattr(data, "ndim"):  # if b2nd or b2frame
             # catch 0d case where [:] fails
             return data[()] if data.ndim == 0 else data[:]
+        elif isinstance(data, blosc2.CTable):
+            # Return rows as list of tuples if not as_blosc2
+            return [tuple(row) for row in data[:]]
         else:
             return data[:]
 
@@ -964,7 +995,7 @@ class Client:
         >>> ds[:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        if isinstance(path, (File, Dataset, Root)):
+        if isinstance(path, (File, Dataset, Table, Root)):
             return path
         # Normalize the path to a POSIX path
         path = pathlib.PurePosixPath(path).as_posix()
