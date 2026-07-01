@@ -588,15 +588,19 @@ async def fetch_data(
         if isinstance(sl0, slice):
             row_start = 0 if sl0.start is None else sl0.start
             row_stop = array.nrows if sl0.stop is None else sl0.stop
+            if row_start < 0:
+                row_start += array.nrows
+            if row_stop < 0:
+                row_stop += array.nrows
         elif isinstance(sl0, int):
-            row_start, row_stop = sl0, sl0 + 1
+            row_start = sl0
+            if row_start < 0:
+                row_start += array.nrows
+            row_stop = row_start + 1
         else:
             row_start, row_stop = 0, array.nrows
-        # Normalize negatives and clamp to [0, nrows].
-        if row_start < 0:
-            row_start += array.nrows
-        if row_stop < 0:
-            row_stop += array.nrows
+
+        # Clamp to [0, nrows].
         row_start = max(0, min(row_start, array.nrows))
         row_stop = max(row_start, min(row_stop, array.nrows))
         view = array.slice(row_start, row_stop)
