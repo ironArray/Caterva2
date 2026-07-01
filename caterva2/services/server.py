@@ -574,7 +574,7 @@ async def fetch_data(
 
     if (
         whole
-        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField))
+        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
         and (not filter)
     ):
         # Send the data in the file straight to the client,
@@ -1038,7 +1038,7 @@ async def upload_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
     else:
@@ -1057,7 +1057,7 @@ async def upload_file(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1107,7 +1107,7 @@ async def load_from_url(
         response.raise_for_status()
     data = response.content
 
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
     else:
@@ -1126,7 +1126,7 @@ async def load_from_url(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1687,7 +1687,7 @@ async def htmx_path_list(
             if rootdir is not None:
                 relpath = pathlib.Path(*segments[2:])
                 abspath = rootdir / relpath
-                if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
+                if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
                     abspath = pathlib.Path(f"{abspath}.b2")
 
                 with contextlib.suppress(FileNotFoundError):
@@ -2325,7 +2325,7 @@ async def htmx_upload(
         new_members = [
             member
             for member in members
-            if not (path / member).is_dir() and member.suffix not in {".b2", ".b2frame", ".b2nd"}
+            if not (path / member).is_dir() and member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES
         ]
         for member in new_members:
             srv_utils.compress_file(path / member)
@@ -2337,7 +2337,7 @@ async def htmx_upload(
 
     if suffix in [".h5", ".hdf5"]:
         pass
-    elif filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    elif filename.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f"{filename}.b2"

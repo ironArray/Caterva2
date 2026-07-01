@@ -7,8 +7,12 @@ from dataclasses import dataclass
 
 import blosc2
 import blosc2.ctable as ct
+import pytest
 
+import caterva2 as cat2
 from caterva2.services import srv_utils
+
+from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
 
 
 def _make_table(path, n=5):
@@ -221,3 +225,80 @@ def test_cframe_deserialization_large_slice():
     assert len(back) == 100
     assert back[0].x == 50
     assert back[99].x == 149
+
+
+# ---------------------------------------------------------------------------
+# HTTP-level / Python client tests (require the test services)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fill_ctable_public(client):
+    """Drop a small .b2z table straight into the @public root's storage."""
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    fname = "test_table.b2z"
+    _make_table(dest_dir / fname, n=3)
+    return fname, client.get(TEST_CATERVA2_ROOT)
+
+
+def test_http_info(fill_ctable_public, client):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    info = client.get_info(path)
+    assert info["kind"] == "ctable"
+    assert info["nrows"] == 3
+    assert info["columns"] == ["x", "y"]
+
+
+def test_http_download_roundtrip(fill_ctable_public, tmp_path):
+    fname, root = fill_ctable_public
+    table = root[fname]
+    local_orig = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    downloaded = table.download(tmp_path / "downloaded.b2z")
+    assert pathlib.Path(downloaded).read_bytes() == local_orig.read_bytes()
+
+    reopened = blosc2.open(downloaded)
+    assert isinstance(reopened, blosc2.CTable)
+    assert len(reopened) == 3
+
+
+def test_fetch_whole_and_slice(fill_ctable_public, client):
+    """Regression test for T1: whole-table fetch must not return the raw zip."""
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+
+    whole = client.get_slice(path, as_blosc2=True)
+    assert isinstance(whole, blosc2.CTable)
+    assert len(whole) == 3
+    assert whole[0].x == 0
+    assert whole[2].x == 2
+
+    part = client.get_slice(path, slice(1, 3), as_blosc2=True)
+    assert isinstance(part, blosc2.CTable)
+    assert len(part) == 2
+    assert tuple(part[0]) == (1, "v1")
+    assert tuple(part[1]) == (2, "v2")
+
+
+def test_client_table_class(fill_ctable_public):
+    fname, root = fill_ctable_public
+    table = root[fname]
+
+    assert isinstance(table, cat2.Table)
+    assert isinstance(table, cat2.Dataset)
+    assert not isinstance(table, cat2.Array)
+
+    assert table.nrows == 3
+    assert table.ncols == 2
+    assert table.columns == ["x", "y"]
+
+    assert table.head(2) == [(0, "v0"), (1, "v1")]
+
+    whole = table[:]
+    assert isinstance(whole, blosc2.CTable)
+    assert len(whole) == 3
+
+    part = table.slice(slice(1, 3))
+    assert isinstance(part, blosc2.CTable)
+    assert len(part) == 2
