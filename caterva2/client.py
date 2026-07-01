@@ -771,9 +771,12 @@ class Table(Dataset):
         """Shortcut: slice as a blosc2.CTable."""
         return self.slice(key)
 
-    def rows(self, start=0, stop=None):
-        """Get rows [start, stop) as a list of tuples."""
-        stop = self.nrows if stop is None else stop
+    def rows(self, start=0, stop=50):
+        """Get rows [start, stop) as a list of tuples.
+
+        The default window is bounded (first 50 rows) to avoid accidentally
+        fetching a whole large table; pass ``stop=self.nrows`` for everything.
+        """
         table = self.slice(slice(start, stop))
         return [tuple(row) for row in table]
 

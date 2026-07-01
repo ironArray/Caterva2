@@ -252,6 +252,17 @@ def cmd_info(client, args, url):
         print("  filters: None")
 
 
+def _json_default(o):
+    """Make CTable cell values JSON-serializable (numpy scalars, bytes, arrays)."""
+    if isinstance(o, bytes):
+        return o.decode(errors="replace")
+    if isinstance(o, np.generic):
+        return o.item()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    return str(o)
+
+
 def _parse_row_slice(slice_, nrows):
     if not slice_:
         return 0, nrows
@@ -274,7 +285,7 @@ def cmd_show(client, args, url):
         start, stop = _parse_row_slice(slice_, table.nrows)
         rows = table.rows(start, stop)
         if getattr(args, "json", False):
-            print(json.dumps(rows))
+            print(json.dumps(rows, default=_json_default))
         else:
             for row in rows:
                 print(row)

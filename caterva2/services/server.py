@@ -582,21 +582,23 @@ async def fetch_data(
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(array, blosc2.CTable):
-        # ponytail: slice_ is a single slice/int/tuple; extract row start/stop
-        if isinstance(slice_, slice):
-            row_start, row_stop = slice_.start or 0, slice_.stop or array.nrows
-        elif isinstance(slice_, int):
-            row_start, row_stop = slice_, slice_ + 1
-        elif isinstance(slice_, tuple) and len(slice_) > 0:
-            sl0 = slice_[0]
-            if isinstance(sl0, slice):
-                row_start, row_stop = sl0.start or 0, sl0.stop or array.nrows
-            elif isinstance(sl0, int):
-                row_start, row_stop = sl0, sl0 + 1
-            else:
-                row_start, row_stop = 0, array.nrows
+        # slice_ is a single slice/int/tuple; extract row start/stop.
+        # Use `is None` (not truthiness) so that stop == 0 stays 0.
+        sl0 = slice_[0] if isinstance(slice_, tuple) and len(slice_) > 0 else slice_
+        if isinstance(sl0, slice):
+            row_start = 0 if sl0.start is None else sl0.start
+            row_stop = array.nrows if sl0.stop is None else sl0.stop
+        elif isinstance(sl0, int):
+            row_start, row_stop = sl0, sl0 + 1
         else:
             row_start, row_stop = 0, array.nrows
+        # Normalize negatives and clamp to [0, nrows].
+        if row_start < 0:
+            row_start += array.nrows
+        if row_stop < 0:
+            row_stop += array.nrows
+        row_start = max(0, min(row_start, array.nrows))
+        row_stop = max(row_start, min(row_stop, array.nrows))
         view = array.slice(row_start, row_stop)
         data = view.to_cframe()
     elif isinstance(array, hdf5.HDF5Proxy):
@@ -1881,6 +1883,8 @@ async def htmx_path_view(
         try:
             mtime = abspath.stat().st_mtime
             arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime)
+        except AssertionError:
+            return htmx_error(request, "Filtering/sorting is not supported for this dataset type.")
         except TypeError as exc:
             return htmx_error(request, f"Error in filter: {exc}")
         except NameError as exc:
