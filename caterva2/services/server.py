@@ -367,9 +367,20 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
-    # List the datasets in root or directory
-    directory = get_writable_path(path, user)
+    # A path may descend into a container (e.g. a TreeStore .b2z); list its members.
+    container_path, inner_key = srv_utils.split_container_path(path)
+    directory = get_writable_path(container_path, user)
     if directory.is_file():
+        if directory.suffix == ".b2z":
+            tree = blosc2.open(directory)
+            if isinstance(tree, blosc2.TreeStore):
+                # Deep listing of leaves relative to the requested path, matching
+                # walk_files() semantics for directories.
+                prefix = inner_key or "/"
+                strip = prefix.rstrip("/") + "/"
+                return sorted(d[len(strip) :] for d in srv_utils.treestore_leaves(tree, prefix))
+        if inner_key is not None:
+            srv_utils.raise_not_found()
         name = pathlib.Path(directory.name)
         return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
     # Sort the list of datasets and return
@@ -398,7 +409,14 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    abspath = get_abspath(path, user)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
+    if inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z leaf).
+        leaf = blosc2.open(abspath)[inner_key]
+        if isinstance(leaf, blosc2.TreeStore):
+            srv_utils.raise_not_found()  # a group node is directory-like; use /api/list
+        return srv_utils.read_metadata(leaf, mtime=abspath.stat().st_mtime)
     if abspath.is_dir():
         srv_utils.raise_not_found()
     return srv_utils.read_metadata(abspath)
@@ -522,7 +540,8 @@ async def fetch_data(
     """
 
     slice_ = parse_slice(slice_)
-    abspath = get_abspath(path, user)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
 
     if abspath.suffix not in {".b2frame", ".b2nd", ".b2z"}:
         srv_utils.raise_bad_request(
@@ -530,7 +549,12 @@ async def fetch_data(
             "use the download API if you only want to download the file"
         )
 
-    if filter:
+    if inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z leaf).
+        container = blosc2.open(abspath)[inner_key]
+        if isinstance(container, blosc2.TreeStore):
+            srv_utils.raise_not_found()
+    elif filter:
         if field:
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         filter = filter.strip()
@@ -576,6 +600,7 @@ async def fetch_data(
         whole
         and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
         and (not filter)
+        and inner_key is None  # abspath is the container, not this leaf: never stream it whole
     ):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
@@ -1676,6 +1701,16 @@ async def htmx_path_list(
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             path = f"{root}/{relpath}"
+            # A .b2z holding a TreeStore is browsed as a folder: expand it into
+            # one row per leaf (e.g. tree.b2z/level1/ctable).
+            if relpath.suffix == ".b2z":
+                tree = blosc2.open(abspath)
+                if isinstance(tree, blosc2.TreeStore):
+                    for key in srv_utils.treestore_leaves(tree):
+                        leaf_path = f"{path}{key}"
+                        if search in leaf_path:
+                            add_dataset(leaf_path, abspath)
+                    continue
             if search in path:
                 add_dataset(path, abspath)
 
@@ -1757,9 +1792,13 @@ async def htmx_path_info(
     else:
         push_url = None
 
-    # Read metadata
-    abspath = get_abspath(path, user)
-    meta = srv_utils.read_metadata(abspath)
+    # Read metadata (a path may descend into a container, e.g. a TreeStore .b2z leaf)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
+    if inner_key is not None:
+        meta = srv_utils.read_metadata(blosc2.open(abspath)[inner_key], mtime=abspath.stat().st_mtime)
+    else:
+        meta = srv_utils.read_metadata(abspath)
 
     # Context
     current_url = push_url or hx_current_url
@@ -1881,9 +1920,18 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath = get_abspath(path, user)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
     filter = filter.strip()
-    if filter or sortby:
+    # ponytail: filter/sort on a TreeStore leaf would run against the container; the
+    # default (unfiltered) view is what renders on click, so leave that path as-is.
+    if inner_key is not None and not (filter or sortby):
+        try:
+            arr = blosc2.open(abspath)[inner_key]
+        except ValueError:
+            return htmx_error(request, "Cannot open container member.")
+        idx = None
+    elif filter or sortby:
         try:
             mtime = abspath.stat().st_mtime
             arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime)

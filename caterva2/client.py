@@ -125,10 +125,18 @@ class Root:
         path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
             return Array(self, path)
-        if path.endswith(".b2z"):
-            return Table(self, path)
-        else:
+        if path.endswith(".b2z") or ".b2z/" in path:
+            # A .b2z may be a CTable or a TreeStore (a folder whose leaves are
+            # addressed by inner path). Inner leaves carry no file suffix, so the
+            # server's metadata is what tells us the kind.
+            meta = self.client.get_info(f"{self.name}/{path}")
+            if meta.get("kind") == "ctable":
+                return Table(self, path)
+            if "shape" in meta:
+                return Array(self, path)
+            # A TreeStore container itself: browse via get_list / inner paths.
             return File(self, path)
+        return File(self, path)
 
     def __contains__(self, path):
         """
@@ -1261,7 +1269,9 @@ class Client:
         if isinstance(path, Array):
             path = path.path
         elif isinstance(path, File):
-            raise TypeError("get_chunk() only supports Array datasets (.b2nd/.b2frame), not regular files or tables")
+            raise TypeError(
+                "get_chunk() only supports Array datasets (.b2nd/.b2frame), not regular files or tables"
+            )
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
             {"nchunk": nchunk},

@@ -36,6 +36,34 @@ BLOSC2_TABLE_SUFFIXES = {".b2z"}
 BLOSC2_FRAME_SUFFIXES = {".b2"}
 BLOSC2_NATIVE_SUFFIXES = BLOSC2_ARRAY_SUFFIXES | BLOSC2_TABLE_SUFFIXES | BLOSC2_FRAME_SUFFIXES
 
+# Container suffixes whose paths may descend into internal (virtual) members.
+BLOSC2_CONTAINER_SUFFIXES = {".b2z"}
+
+
+def split_container_path(path):
+    """Split a request path at a container-file boundary.
+
+    A ``.b2z`` may hold a TreeStore, so a request path can descend *into* it,
+    e.g. ``@public/dir/tree.b2z/level1/ctable``. Return
+    ``(container_path, inner_key)`` where ``container_path`` is the ``.b2z``
+    file and ``inner_key`` is a ``/...`` TreeStore key, or ``(path, None)`` when
+    the path does not descend into a container.
+    """
+    parts = pathlib.Path(path).parts
+    for i, part in enumerate(parts):
+        if pathlib.PurePath(part).suffix in BLOSC2_CONTAINER_SUFFIXES and i < len(parts) - 1:
+            return pathlib.Path(*parts[: i + 1]), "/" + "/".join(parts[i + 1 :])
+    return pathlib.Path(path), None
+
+
+def treestore_leaves(tree, prefix="/"):
+    """Full leaf keys (e.g. ``/g/a``) under ``prefix`` of an open TreeStore.
+
+    Leaves are nodes with no children (groups are skipped), matching the
+    file-only semantics of :func:`walk_files` for directories.
+    """
+    return [d for d in tree.get_descendants(prefix) if not tree.get_children(d)]
+
 
 def compress_file(path):
     with open(path, "rb") as src:
@@ -88,7 +116,9 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj):
+def read_metadata(obj, mtime=None):
+    # `mtime` is used when `obj` is an already-opened object (e.g. a container
+    # leaf) with no file of its own; callers pass the container's mtime.
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -120,8 +150,13 @@ def read_metadata(obj):
             )
         except RuntimeError:
             return get_model_from_obj(obj, models.Corrupt, mtime=mtime, error="Unrecognized format")
-    else:
-        mtime = None
+
+        # A .b2z may hold a TreeStore (a hierarchical container); it is browsed
+        # as a directory (its leaves are addressed as inner paths), so present
+        # the container itself like a plain file (as we do for HDF5).
+        if isinstance(obj, blosc2.TreeStore):
+            return get_model_from_obj(path, models.File, mtime=mtime, size=size)
+    # else: obj is an already-opened object; keep the caller-supplied mtime
 
     # Read metadata
     if isinstance(obj, blosc2.ndarray.NDArray):
