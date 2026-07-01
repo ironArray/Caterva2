@@ -1258,9 +1258,10 @@ class Client:
         >>> info_schunk['chunksize'] / len(chunk)
         6.453000645300064
         """
-        if isinstance(path, File):
+        if isinstance(path, Array):
             path = path.path
-        _, path = _format_paths(self.urlbase, path)
+        elif isinstance(path, File):
+            raise TypeError("get_chunk() only supports Array datasets (.b2nd/.b2frame), not regular files or tables")
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
             {"nchunk": nchunk},
