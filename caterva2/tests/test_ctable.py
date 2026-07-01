@@ -287,6 +287,33 @@ def test_fetch_whole_and_slice(fill_ctable_public, client):
     assert tuple(part[1]) == (2, "v2")
 
 
+def test_fetch_negative_index(fill_ctable_public, client):
+    """Regression (PR #288 review): negative indexing must not clamp to empty.
+
+    `table[-1]` previously resolved to an empty slice because ``row_stop`` was
+    derived (``sl0 + 1`` -> 0) before negative normalization was applied.
+    """
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"  # 3 rows: (0, "v0"), (1, "v1"), (2, "v2")
+
+    # The exact failing case: -1 must return the last row, not an empty table.
+    last = client.get_slice(path, -1, as_blosc2=True)
+    assert isinstance(last, blosc2.CTable)
+    assert len(last) == 1
+    assert tuple(last[0]) == (2, "v2")
+
+    # A non-(-1) negative int also resolves to a single row.
+    second_last = client.get_slice(path, -2, as_blosc2=True)
+    assert len(second_last) == 1
+    assert tuple(second_last[0]) == (1, "v1")
+
+    # Negative slice start still works.
+    tail = client.get_slice(path, slice(-2, None), as_blosc2=True)
+    assert len(tail) == 2
+    assert tuple(tail[0]) == (1, "v1")
+    assert tuple(tail[1]) == (2, "v2")
+
+
 def test_client_table_class(fill_ctable_public):
     fname, root = fill_ctable_public
     table = root[fname]
