@@ -1781,10 +1781,11 @@ async def htmx_path_info(
                 }
             )
 
-    # Tabs: Display (b2nd)
-    if hasattr(meta, "shape"):
+    # Tabs: Display (b2nd, b2z)
+    is_ctable = getattr(meta, "kind", None) == "ctable"
+    if hasattr(meta, "shape") or is_ctable:
         context["data_url"] = make_url(request, "htmx_path_view", path=path)
-        context["shape"] = meta.shape
+        context["shape"] = meta.shape if hasattr(meta, "shape") else (meta.nrows,)
         tabs.append(
             {
                 "name": "data",
@@ -1902,6 +1903,49 @@ async def htmx_path_view(
             return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
         idx = None
 
+    if isinstance(arr, blosc2.CTable):
+        schema = arr.schema_dict()
+        cols = [c["name"] for c in schema.get("columns", [])]
+        fields = fields or cols[:5]
+        nrows = arr.nrows
+        size = sizes[0] if sizes else min(nrows, 10)
+        start = index[0] if index else 0
+        stop = min(start + size, nrows)
+        mod = nrows % size if size else 0
+        start_max = nrows - (mod or size) if size else 0
+        inputs = [
+            {
+                "start": start,
+                "start_max": max(start_max, 0),
+                "size": size,
+                "size_max": nrows,
+                "with_size": True,
+            }
+        ]
+        tags = list(range(start, stop))
+
+        def cell(value):
+            if isinstance(value, bytes):
+                return value.decode(errors="replace")
+            if isinstance(value, np.generic):
+                return value.item()
+            return value
+
+        rows = [fields] + [[cell(row[f]) for f in fields] for row in arr.slice(start, stop)]
+        context = {
+            "view_url": make_url(request, "htmx_path_view", path=path),
+            "inputs": inputs,
+            "rows": rows,
+            "cols": cols,
+            "fields": fields,
+            "filter": "",
+            "sortby": "",
+            "shape": (nrows,),
+            "tags": tags,
+            "filterable": False,
+        }
+        return templates.TemplateResponse(request, "info_view.html", context)
+
     # Local variables
     shape = arr.shape
     ndims = len(shape)
@@ -1990,6 +2034,7 @@ async def htmx_path_view(
         "sortby": sortby,
         "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
+        "filterable": True,
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 

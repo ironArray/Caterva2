@@ -46,6 +46,7 @@
                 {% endfor %}
             </div>
         </div>
+        {% if filterable %}
         <div class="input-group w-auto">
             <label class="input-group-text" for="id_sortby">Sort by</label>
             <select class="form-select" name="sortby" id="id_sortby" hx-post="{{ view_url }}">
@@ -56,12 +57,13 @@
             </select>
         </div>
         {% endif %}
+        {% endif %}
         {% with id="id_data_indicator" %}
             {% include 'includes/loading.html' %}
         {% endwith %}
     </div>
 
-    {% if cols %}
+    {% if cols and filterable %}
     <div class="input-group me-2">
         <input type="text" class="form-control" placeholder="Filter" name="filter" value="{{ filter }}"
                hx-post="{{ view_url }}">

@@ -1,15 +1,21 @@
 """Tests for CTable .b2z metadata and fetch deserialization in Caterva2."""
 # ruff: noqa: RUF009  # blosc2.field() is the standard CTable dataclass default API
 
+import io
+import json
 import pathlib
+import sys
 import tempfile
+from contextlib import redirect_stdout
 from dataclasses import dataclass
 
 import blosc2
 import blosc2.ctable as ct
+import httpx
 import pytest
 
 import caterva2 as cat2
+from caterva2.clients import cli
 from caterva2.services import srv_utils
 
 from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
@@ -302,3 +308,167 @@ def test_client_table_class(fill_ctable_public):
     part = table.slice(slice(1, 3))
     assert isinstance(part, blosc2.CTable)
     assert len(part) == 2
+
+
+# ---------------------------------------------------------------------------
+# CLI: info / show for .b2z
+# ---------------------------------------------------------------------------
+
+
+def _run_cli(argv):
+    buf = io.StringIO()
+    old_argv = sys.argv
+    sys.argv = ["cat2-client", *argv]
+    try:
+        with redirect_stdout(buf):
+            cli.main()
+    finally:
+        sys.argv = old_argv
+    return buf.getvalue()
+
+
+def test_cli_info_json(fill_ctable_public, services):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    out = _run_cli(["--url", services.get_urlbase(), "info", path, "--json"])
+    data = json.loads(out.strip().splitlines()[-1])
+    assert data["kind"] == "ctable"
+    assert data["nrows"] == 3
+
+
+def test_cli_info_text(fill_ctable_public, services):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    out = _run_cli(["--url", services.get_urlbase(), "info", path])
+    assert "nrows  : 3" in out
+    assert "columns: ['x', 'y']" in out
+
+
+def test_cli_show(fill_ctable_public, services):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    out = _run_cli(["--url", services.get_urlbase(), "show", path])
+    assert "(0, 'v0')" in out
+    assert "(2, 'v2')" in out
+
+
+def test_cli_show_slice(fill_ctable_public, services):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    out = _run_cli(["--url", services.get_urlbase(), "show", f"{path}[1:3]"])
+    lines = [line for line in out.strip().splitlines() if line.startswith("(")]
+    assert lines == ["(1, 'v1')", "(2, 'v2')"]
+
+
+# ---------------------------------------------------------------------------
+# Web preview: htmx_path_view/htmx_path_info render .b2z without error
+# ---------------------------------------------------------------------------
+
+
+def test_htmx_path_info_renders(fill_ctable_public, client):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    resp = httpx.get(f"{client.urlbase}/htmx/path-info/{path}")
+    resp.raise_for_status()
+    assert "Display" in resp.text
+    assert "Meta" in resp.text
+    assert "nrows" in resp.text
+
+
+def test_htmx_path_view_no_filter_sort(fill_ctable_public, client):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}")
+    resp.raise_for_status()
+    text = resp.text
+    # Fields selector present, Filter/Sort-by absent (filterable=False for CTable)
+    assert "Fields" in text
+    assert "Sort by" not in text
+    assert 'placeholder="Filter"' not in text
+    assert "v0" in text
+    assert "v2" in text
+
+
+# ---------------------------------------------------------------------------
+# Regression: columns whose name is not a valid Python identifier (namedtuple
+# renames them under the hood, e.g. via CTable.from_arrow with a dotted name)
+# ---------------------------------------------------------------------------
+
+
+def test_ctable_row_non_identifier_column_access():
+    """row[name] must be used instead of row._asdict()[name]: namedtuple(rename=True)
+    replaces non-identifier field names (e.g. "trip.sec") with "_N" internally."""
+    row_cls = ct._make_namedtuple_row_type(("id", "trip.sec", "name"))
+    row = row_cls(1, 100, "a")
+    assert row["trip.sec"] == 100
+    assert "trip.sec" not in row._asdict()
+    with pytest.raises(KeyError):
+        row._asdict()["trip.sec"]
+
+
+@pytest.fixture
+def fill_dotted_ctable_public(client):
+    pa = pytest.importorskip("pyarrow")
+
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    table_path = tmp / "dotted_src.b2z"
+    schema = pa.schema([("id", pa.int32()), ("trip.sec", pa.int32())])
+    batch = pa.record_batch([pa.array([1, 2]), pa.array([100, 200])], schema=schema)
+    t = blosc2.CTable.from_arrow(schema, [batch], urlpath=str(table_path), mode="w")
+    t.close()
+
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    fname = "dotted.b2z"
+    (dest_dir / fname).write_bytes(table_path.read_bytes())
+    return fname, client.get(TEST_CATERVA2_ROOT)
+
+
+def test_htmx_path_view_dotted_column(fill_dotted_ctable_public, client):
+    fname, root = fill_dotted_ctable_public
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}")
+    resp.raise_for_status()
+    assert "trip.sec" in resp.text
+    assert "100" in resp.text
+
+
+@pytest.fixture
+def fill_nested_ctable_public(client):
+    """A struct column ('trip') whose leaves schema_dict() reports as dotted
+    paths ("trip.sec") that don't exist as top-level row fields at all: the
+    row only exposes 'trip' itself (a nested dict)."""
+    pa = pytest.importorskip("pyarrow")
+
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    table_path = tmp / "nested_src.b2z"
+    trip_type = pa.struct([("sec", pa.float32()), ("km", pa.float32())])
+    schema = pa.schema([("id", pa.int32()), ("trip", trip_type)])
+    batch = pa.record_batch(
+        [
+            pa.array([1, 2]),
+            pa.array([{"sec": 10.0, "km": 1.0}, {"sec": 20.0, "km": 2.0}], type=trip_type),
+        ],
+        schema=schema,
+    )
+    t = blosc2.CTable.from_arrow(schema, [batch], urlpath=str(table_path), mode="w")
+    t.close()
+
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    fname = "nested.b2z"
+    (dest_dir / fname).write_bytes(table_path.read_bytes())
+    return fname, client.get(TEST_CATERVA2_ROOT)
+
+
+def test_htmx_path_view_nested_struct_column(fill_nested_ctable_public, client):
+    """Regression: schema_dict() flattens struct leaves as "trip.sec", but the
+    row itself only has a top-level "trip" dict field; row["trip.sec"] raises
+    KeyError and must fall back to walking row["trip"]["sec"]."""
+    fname, root = fill_nested_ctable_public
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}")
+    resp.raise_for_status()
+    assert "trip.sec" in resp.text
+    assert "10.0" in resp.text
+    assert "20.0" in resp.text
