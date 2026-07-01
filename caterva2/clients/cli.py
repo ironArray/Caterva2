@@ -496,7 +496,7 @@ def main():
 
     # Make --json a global flag so it applies to all commands that support JSON output
     parser.add_argument("--json", action="store_true", help="Output JSON when supported by the command")
-    subparsers = parser.add_subparsers(required=True)
+    subparsers = parser.add_subparsers(required=True, metavar="command", dest="command")
 
     # roots
     help = "List all the available roots."
