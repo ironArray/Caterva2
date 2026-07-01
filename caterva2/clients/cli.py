@@ -200,6 +200,12 @@ def cmd_info(client, args, url):
                 names.append(f"f{f}")
         return names
 
+    if data.get("kind") == "dir":
+        print(f"nfiles : {data.get('nfiles')}")
+        print(f"size   : {_human_bytes(data.get('size'))}")
+        print(f"mtime  : {data.get('mtime')}")
+        return
+
     if data.get("kind") == "ctable":
         nbytes = data.get("nbytes")
         cbytes = data.get("cbytes")

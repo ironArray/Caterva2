@@ -65,6 +65,17 @@ def treestore_leaves(tree, prefix="/"):
     return [d for d in tree.get_descendants(prefix) if not tree.get_children(d)]
 
 
+def treestore_size(tree, prefix="/"):
+    """On-disk size (bytes) of leaves under ``prefix``, summed cheaply from the
+    ``.b2z`` zip index without opening any leaf. Returns None if unavailable."""
+    get_offsets = getattr(tree, "_get_zip_offsets", None)
+    if get_offsets is None:
+        return None
+    rel = prefix.strip("/")
+    rel = f"{rel}/" if rel else ""
+    return sum(info.get("length", 0) for m, info in get_offsets().items() if m.startswith(rel))
+
+
 def compress_file(path):
     with open(path, "rb") as src:
         data = src.read()
@@ -152,10 +163,10 @@ def read_metadata(obj, mtime=None):
             return get_model_from_obj(obj, models.Corrupt, mtime=mtime, error="Unrecognized format")
 
         # A .b2z may hold a TreeStore (a hierarchical container); it is browsed
-        # as a directory (its leaves are addressed as inner paths), so present
-        # the container itself like a plain file (as we do for HDF5).
+        # as a group (its leaves are addressed as inner paths), so present the
+        # container itself as a directory (the root group).
         if isinstance(obj, blosc2.TreeStore):
-            return get_model_from_obj(path, models.File, mtime=mtime, size=size)
+            return models.Directory(mtime=mtime, size=size, nfiles=len(treestore_leaves(obj, "/")))
     # else: obj is an already-opened object; keep the caller-supplied mtime
 
     # Read metadata

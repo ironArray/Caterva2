@@ -9,7 +9,7 @@
 
 """Caterva2 - On demand access to remote Blosc2 data repositories"""
 
-from .client import Array, BasicAuth, Client, Dataset, File, Root, Table
+from .client import Array, BasicAuth, Client, Dataset, File, Group, Root, Table
 
 __version__ = "2025.12.4.dev0"
 """The version in use of the Caterva2 package."""
@@ -20,6 +20,7 @@ __all__ = [
     "Client",
     "Dataset",
     "File",
+    "Group",
     "Root",
     "Table",
 ]

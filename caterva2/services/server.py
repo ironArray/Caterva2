@@ -412,13 +412,22 @@ async def get_info(
     container_path, inner_key = srv_utils.split_container_path(path)
     abspath = get_abspath(container_path, user)
     if inner_key is not None:
-        # A member inside a container (e.g. a TreeStore .b2z leaf).
-        leaf = blosc2.open(abspath)[inner_key]
-        if isinstance(leaf, blosc2.TreeStore):
-            srv_utils.raise_not_found()  # a group node is directory-like; use /api/list
-        return srv_utils.read_metadata(leaf, mtime=abspath.stat().st_mtime)
+        # A member inside a container (e.g. a TreeStore .b2z leaf or group).
+        tree = blosc2.open(abspath)
+        node = tree[inner_key]
+        if isinstance(node, blosc2.TreeStore):
+            # A virtual group: report leaf count and on-disk size (summed from
+            # the .b2z zip index, no per-leaf open).
+            return models.Directory(
+                mtime=abspath.stat().st_mtime,
+                size=srv_utils.treestore_size(tree, inner_key),
+                nfiles=len(srv_utils.treestore_leaves(tree, inner_key)),
+            )
+        return srv_utils.read_metadata(node, mtime=abspath.stat().st_mtime)
     if abspath.is_dir():
-        srv_utils.raise_not_found()
+        files = list(srv_utils.walk_files(abspath))
+        size = sum(f.stat().st_size for f, _ in files)
+        return models.Directory(mtime=abspath.stat().st_mtime, size=size, nfiles=len(files))
     return srv_utils.read_metadata(abspath)
 
 

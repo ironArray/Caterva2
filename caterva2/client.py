@@ -125,18 +125,18 @@ class Root:
         path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
             return Array(self, path)
-        if path.endswith(".b2z") or ".b2z/" in path:
-            # A .b2z may be a CTable or a TreeStore (a folder whose leaves are
-            # addressed by inner path). Inner leaves carry no file suffix, so the
-            # server's metadata is what tells us the kind.
-            meta = self.client.get_info(f"{self.name}/{path}")
-            if meta.get("kind") == "ctable":
-                return Table(self, path)
-            if "shape" in meta:
-                return Array(self, path)
-            # A TreeStore container itself: browse via get_list / inner paths.
-            return File(self, path)
-        return File(self, path)
+        # Anything else (a directory, a .b2z CTable/TreeStore, a virtual group or
+        # leaf inside one, or a plain file) has no reliable suffix, so the
+        # server's metadata is what tells us the kind.
+        meta = self.client.get_info(f"{self.name}/{path}")
+        kind = meta.get("kind")
+        if kind == "dir":
+            return Group(self, path, meta)
+        if kind == "ctable":
+            return Table(self, path, meta)
+        if "shape" in meta:
+            return Array(self, path, meta)
+        return File(self, path, meta)
 
     def __contains__(self, path):
         """
@@ -281,7 +281,7 @@ class Root:
 
 
 class File:
-    def __init__(self, root, path):
+    def __init__(self, root, path, meta=None):
         """
         Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
 
@@ -317,8 +317,16 @@ class File:
         _, root = _format_paths(root.urlbase, root.name)
         self.name = name
         self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
-        self.meta = self.root.client._get(
-            f"{self.urlbase}/api/info/{self.path}", auth_cookie=self.cookie, timeout=self.root.client.timeout
+        # `meta` may be supplied by the caller (e.g. Root.__getitem__ already
+        # fetched it to pick the class) to avoid a redundant /api/info round-trip.
+        self.meta = (
+            meta
+            if meta is not None
+            else self.root.client._get(
+                f"{self.urlbase}/api/info/{self.path}",
+                auth_cookie=self.cookie,
+                timeout=self.root.client.timeout,
+            )
         )
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
@@ -590,7 +598,7 @@ class Dataset(File):
 
 
 class Array(Dataset, blosc2.Operand):
-    def __init__(self, root, path):
+    def __init__(self, root, path, meta=None):
         """
         Represents an array dataset (.b2nd, .b2frame) within a Blosc2 container.
 
@@ -619,7 +627,7 @@ class Array(Dataset, blosc2.Operand):
         >>> ds.blocks
         (10,)
         """
-        super().__init__(root, path)
+        super().__init__(root, path, meta)
 
     def __str__(self):
         return self.path.as_posix()
@@ -791,6 +799,67 @@ class Table(Dataset):
     def head(self, n=5):
         """Get the first `n` rows as a list of tuples."""
         return self.rows(0, n)
+
+
+class Group:
+    """A browsable group (HDF5 jargon): a directory, a TreeStore ``.b2z``, or a
+    virtual group inside one. Children are addressed by (inner) path.
+
+    Not instantiated directly; obtained from a :class:`Root`, e.g.
+    ``root['dir1']`` or ``root['tree.b2z/level1']``.
+    """
+
+    def __init__(self, root, path, meta=None):
+        self.root = root
+        _, name = _format_paths(root.urlbase, path)
+        _, rootname = _format_paths(root.urlbase, root.name)
+        self.name = name
+        self.path = pathlib.PurePosixPath(f"{rootname}/{self.name}")
+        self._meta = meta
+
+    @property
+    def client(self):
+        return self.root.client
+
+    @property
+    def urlbase(self):
+        return self.client.urlbase
+
+    @property
+    def cookie(self):
+        return self.client.cookie
+
+    @property
+    def meta(self):
+        if self._meta is None:
+            self._meta = self.client.get_info(str(self.path))
+        return self._meta
+
+    @property
+    def file_list(self):
+        """Deep list of leaf paths under this group (relative to it)."""
+        return self.client.get_list(str(self.path))
+
+    def __iter__(self):
+        return iter(self.file_list)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __contains__(self, item):
+        item = item.as_posix() if hasattr(item, "as_posix") else str(item)
+        return item in self.file_list
+
+    def __getitem__(self, item):
+        """Retrieve a child (dataset, file, or subgroup) by relative path."""
+        item = item.as_posix() if hasattr(item, "as_posix") else str(item)
+        return self.root[f"{self.name}/{item}"]
+
+    def __repr__(self):
+        return f"<Group: {self.path}>"
+
+    def __str__(self):
+        return self.path.as_posix()
 
 
 class BasicAuth:

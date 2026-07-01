@@ -115,6 +115,17 @@ class File(pydantic.BaseModel):
     size: int
 
 
+class Directory(pydantic.BaseModel):
+    """A group-like container: a real directory, a TreeStore .b2z, or a
+    virtual group inside one. ``size`` is None when it is not cheap to compute
+    (virtual groups)."""
+
+    kind: str = "dir"
+    mtime: datetime.datetime | None
+    size: int | None = None
+    nfiles: int
+
+
 class Root(pydantic.BaseModel):
     name: str
 
