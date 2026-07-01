@@ -456,7 +456,7 @@ def get_abspath(
         return cachedir / filepath
 
     # HDF5 files cannot be compressed, as they are supported natively
-    if filepath.suffix not in {".b2frame", ".b2nd", ".b2z", ".h5"} and not may_not_exist:
+    if filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"} and not may_not_exist:
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
