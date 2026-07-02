@@ -127,6 +127,9 @@ def open_b2(abspath, path):
         raise ValueError(f"Unexpected root={root}")
 
     container = blosc2.open(abspath)
+    # CTable has its own storage and no table-level cparams/dparams; return early.
+    if isinstance(container, blosc2.CTable):
+        return container
     vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
     if isinstance(container, blosc2.LazyArray):
         # Open the operands properly
@@ -364,9 +367,20 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
-    # List the datasets in root or directory
-    directory = get_writable_path(path, user)
+    # A path may descend into a container (e.g. a TreeStore .b2z); list its members.
+    container_path, inner_key = srv_utils.split_container_path(path)
+    directory = get_writable_path(container_path, user)
     if directory.is_file():
+        if directory.suffix == ".b2z":
+            tree = blosc2.open(directory)
+            if isinstance(tree, blosc2.TreeStore):
+                # Deep listing of leaves relative to the requested path, matching
+                # walk_files() semantics for directories.
+                prefix = inner_key or "/"
+                strip = prefix.rstrip("/") + "/"
+                return sorted(d[len(strip) :] for d in srv_utils.treestore_leaves(tree, prefix))
+        if inner_key is not None:
+            srv_utils.raise_not_found()
         name = pathlib.Path(directory.name)
         return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
     # Sort the list of datasets and return
@@ -395,9 +409,25 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    abspath = get_abspath(path, user)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
+    if inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z leaf or group).
+        tree = blosc2.open(abspath)
+        node = tree[inner_key]
+        if isinstance(node, blosc2.TreeStore):
+            # A virtual group: report leaf count and on-disk size (summed from
+            # the .b2z zip index, no per-leaf open).
+            return models.Directory(
+                mtime=abspath.stat().st_mtime,
+                size=srv_utils.treestore_size(tree, inner_key),
+                nfiles=len(srv_utils.treestore_leaves(tree, inner_key)),
+            )
+        return srv_utils.read_metadata(node, mtime=abspath.stat().st_mtime)
     if abspath.is_dir():
-        srv_utils.raise_not_found()
+        files = list(srv_utils.walk_files(abspath))
+        size = sum(f.stat().st_size for f, _ in files)
+        return models.Directory(mtime=abspath.stat().st_mtime, size=size, nfiles=len(files))
     return srv_utils.read_metadata(abspath)
 
 
@@ -453,7 +483,7 @@ def get_abspath(
         return cachedir / filepath
 
     # HDF5 files cannot be compressed, as they are supported natively
-    if filepath.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
+    if filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"} and not may_not_exist:
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
@@ -519,15 +549,21 @@ async def fetch_data(
     """
 
     slice_ = parse_slice(slice_)
-    abspath = get_abspath(path, user)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
 
-    if abspath.suffix not in {".b2frame", ".b2nd"}:
+    if abspath.suffix not in {".b2frame", ".b2nd", ".b2z"}:
         srv_utils.raise_bad_request(
-            "The fetch API only supports datasets (.b2nd and .b2); "
+            "The fetch API only supports datasets (.b2nd, .b2frame, .b2z); "
             "use the download API if you only want to download the file"
         )
 
-    if filter:
+    if inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z leaf).
+        container = blosc2.open(abspath)[inner_key]
+        if isinstance(container, blosc2.TreeStore):
+            srv_utils.raise_not_found()
+    elif filter:
         if field:
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         filter = filter.strip()
@@ -539,11 +575,16 @@ async def fetch_data(
     if field:
         container = container[field]
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField):
+    if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
+    elif isinstance(container, blosc2.CTable):
+        array = container
+        schunk = None
+        typesize = 1  # not used for CTable
+        shape = (array.nrows,)
     else:
         # SChunk
         array = None
@@ -566,14 +607,39 @@ async def fetch_data(
 
     if (
         whole
-        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField))
+        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
         and (not filter)
+        and inner_key is None  # abspath is the container, not this leaf: never stream it whole
     ):
         # Send the data in the file straight to the client,
         # avoiding slicing and re-compression.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
-    if isinstance(array, hdf5.HDF5Proxy):
+    if isinstance(array, blosc2.CTable):
+        # slice_ is a single slice/int/tuple; extract row start/stop.
+        # Use `is None` (not truthiness) so that stop == 0 stays 0.
+        sl0 = slice_[0] if isinstance(slice_, tuple) and len(slice_) > 0 else slice_
+        if isinstance(sl0, slice):
+            row_start = 0 if sl0.start is None else sl0.start
+            row_stop = array.nrows if sl0.stop is None else sl0.stop
+            if row_start < 0:
+                row_start += array.nrows
+            if row_stop < 0:
+                row_stop += array.nrows
+        elif isinstance(sl0, int):
+            row_start = sl0
+            if row_start < 0:
+                row_start += array.nrows
+            row_stop = row_start + 1
+        else:
+            row_start, row_stop = 0, array.nrows
+
+        # Clamp to [0, nrows].
+        row_start = max(0, min(row_start, array.nrows))
+        row_stop = max(row_start, min(row_stop, array.nrows))
+        view = array.slice(row_start, row_stop)
+        data = view.to_cframe()
+    elif isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyArray):
         data = array.compute(() if slice_ is None else slice_)
@@ -1012,7 +1078,7 @@ async def upload_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
     else:
@@ -1031,7 +1097,7 @@ async def upload_file(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1081,7 +1147,7 @@ async def load_from_url(
         response.raise_for_status()
     data = response.content
 
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
     else:
@@ -1100,7 +1166,7 @@ async def load_from_url(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1559,11 +1625,21 @@ async def htmx_root_list(
     request: Request,
     # Query
     roots: list[str] = fastapi.Query([]),
+    mounted: list[str] = fastapi.Query([]),
     # Depends
     user: db.User = Depends(optional_user),
 ):
+    seen = set()
+    mounted_ok = []
+    for path in mounted:
+        prefix = path.split("/", 1)[0]
+        if get_rootdir_or_none(prefix, user) is not None and path not in seen:
+            seen.add(path)
+            mounted_ok.append(path)
+
     context = {
         "checked": roots,
+        "mounted": mounted_ok,
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1628,14 +1704,15 @@ async def htmx_path_list(
     datasets = []
     query = {"roots": roots, "search": search}
 
-    def add_dataset(path, abspath):
+    def add_dataset(path, abspath, mountable=False, size=None):
         datasets.append(
             {
                 "name": "_",
                 "path": path,
-                "size": abspath.stat().st_size,
+                "size": abspath.stat().st_size if size is None else size,
                 "url": make_url(request, "html_home", path=path, query=query),
                 "label": truncate_path(path),
+                "mountable": mountable,
             }
         )
 
@@ -1644,8 +1721,47 @@ async def htmx_path_list(
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             path = f"{root}/{relpath}"
+            # A .b2z holding a TreeStore shows as a single mountable row; its
+            # leaves are browsed once it's mounted as a virtual root. A corrupt
+            # or non-container .b2z (uploads aren't validated) falls through to
+            # a plain row instead of crashing the whole listing.
+            if relpath.suffix == ".b2z":
+                try:
+                    tree = blosc2.open(abspath)
+                except Exception:
+                    tree = None
+                if isinstance(tree, blosc2.TreeStore):
+                    if search in path:
+                        add_dataset(path, abspath, mountable=True)
+                    continue
             if search in path:
                 add_dataset(path, abspath)
+
+    # Virtual roots: mounted .b2z TreeStore containers, expanded into leaves.
+    for root in roots:
+        proot = pathlib.PurePosixPath(root)
+        if proot.suffix not in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
+            continue  # classic roots handled by filter_roots above
+        rootdir = get_rootdir_or_none(proot.parts[0], user)
+        if rootdir is None:
+            continue
+        abspath = (rootdir / pathlib.Path(*proot.parts[1:])).resolve()
+        if rootdir.resolve() not in abspath.parents:
+            continue
+        # `root` is untrusted (client localStorage): a stale, non-container, or
+        # corrupt path must skip silently, not 500 the whole listing. blosc2.open
+        # raises OSError (missing/dir), zipfile.BadZipFile, or RuntimeError here.
+        try:
+            tree = blosc2.open(abspath)
+        except Exception:
+            continue
+        if not isinstance(tree, blosc2.TreeStore):
+            continue
+        size = abspath.stat().st_size  # same container file for every leaf
+        for key in srv_utils.treestore_leaves(tree):
+            leaf_path = f"{root}{key}"
+            if search in leaf_path:
+                add_dataset(leaf_path, abspath, size=size)
 
     # Add current path if not already in the list
     current_path = hx_current_url.path
@@ -1659,12 +1775,18 @@ async def htmx_path_list(
             root = segments[1]
             rootdir = get_rootdir_or_none(root, user)
             if rootdir is not None:
-                relpath = pathlib.Path(*segments[2:])
-                abspath = rootdir / relpath
-                if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
-                    abspath = pathlib.Path(f"{abspath}.b2")
+                # Path may descend into a container (e.g. an unmounted TreeStore
+                # leaf); size/stat then come from the container file itself.
+                container_path, inner_key = srv_utils.split_container_path(path)
+                if inner_key is not None:
+                    abspath = rootdir / pathlib.Path(*container_path.parts[1:])
+                else:
+                    relpath = pathlib.Path(*segments[2:])
+                    abspath = rootdir / relpath
+                    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                        abspath = pathlib.Path(f"{abspath}.b2")
 
-                with contextlib.suppress(FileNotFoundError):
+                with contextlib.suppress(FileNotFoundError, NotADirectoryError):
                     add_dataset(path, abspath)
 
     # Assign names to datasets
@@ -1725,9 +1847,17 @@ async def htmx_path_info(
     else:
         push_url = None
 
-    # Read metadata
-    abspath = get_abspath(path, user)
-    meta = srv_utils.read_metadata(abspath)
+    # Read metadata (a path may descend into a container, e.g. a TreeStore .b2z leaf)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
+    try:
+        if inner_key is not None:
+            meta = srv_utils.read_metadata(blosc2.open(abspath)[inner_key], mtime=abspath.stat().st_mtime)
+        else:
+            meta = srv_utils.read_metadata(abspath)
+    except FileNotFoundError:
+        # e.g. a bare root (@personal) or another directory with no dataset of its own
+        raise fastapi.HTTPException(status_code=404) from None  # NotFound
 
     # Context
     current_url = push_url or hx_current_url
@@ -1755,10 +1885,11 @@ async def htmx_path_info(
                 }
             )
 
-    # Tabs: Display (b2nd)
-    if hasattr(meta, "shape"):
+    # Tabs: Display (b2nd, b2z)
+    is_ctable = getattr(meta, "kind", None) == "ctable"
+    if hasattr(meta, "shape") or is_ctable:
         context["data_url"] = make_url(request, "htmx_path_view", path=path)
-        context["shape"] = meta.shape
+        context["shape"] = meta.shape if hasattr(meta, "shape") else (meta.nrows,)
         tabs.append(
             {
                 "name": "data",
@@ -1848,12 +1979,23 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath = get_abspath(path, user)
+    container_path, inner_key = srv_utils.split_container_path(path)
+    abspath = get_abspath(container_path, user)
     filter = filter.strip()
-    if filter or sortby:
+    # ponytail: filter/sort on a TreeStore leaf would run against the container; the
+    # default (unfiltered) view is what renders on click, so leave that path as-is.
+    if inner_key is not None and not (filter or sortby):
+        try:
+            arr = blosc2.open(abspath)[inner_key]
+        except ValueError:
+            return htmx_error(request, "Cannot open container member.")
+        idx = None
+    elif filter or sortby:
         try:
             mtime = abspath.stat().st_mtime
             arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime)
+        except AssertionError:
+            return htmx_error(request, "Filtering/sorting is not supported for this dataset type.")
         except TypeError as exc:
             return htmx_error(request, f"Error in filter: {exc}")
         except NameError as exc:
@@ -1875,6 +2017,49 @@ async def htmx_path_view(
         except ValueError:
             return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
         idx = None
+
+    if isinstance(arr, blosc2.CTable):
+        schema = arr.schema_dict()
+        cols = [c["name"] for c in schema.get("columns", [])]
+        fields = fields or cols[:5]
+        nrows = arr.nrows
+        size = sizes[0] if sizes else min(nrows, 10)
+        start = index[0] if index else 0
+        stop = min(start + size, nrows)
+        mod = nrows % size if size else 0
+        start_max = nrows - (mod or size) if size else 0
+        inputs = [
+            {
+                "start": start,
+                "start_max": max(start_max, 0),
+                "size": size,
+                "size_max": nrows,
+                "with_size": True,
+            }
+        ]
+        tags = list(range(start, stop))
+
+        def cell(value):
+            if isinstance(value, bytes):
+                return value.decode(errors="replace")
+            if isinstance(value, np.generic):
+                return value.item()
+            return value
+
+        rows = [fields] + [[cell(row[f]) for f in fields] for row in arr.slice(start, stop)]
+        context = {
+            "view_url": make_url(request, "htmx_path_view", path=path),
+            "inputs": inputs,
+            "rows": rows,
+            "cols": cols,
+            "fields": fields,
+            "filter": "",
+            "sortby": "",
+            "shape": (nrows,),
+            "tags": tags,
+            "filterable": False,
+        }
+        return templates.TemplateResponse(request, "info_view.html", context)
 
     # Local variables
     shape = arr.shape
@@ -1964,6 +2149,7 @@ async def htmx_path_view(
         "sortby": sortby,
         "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
+        "filterable": True,
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 
@@ -2299,7 +2485,7 @@ async def htmx_upload(
         new_members = [
             member
             for member in members
-            if not (path / member).is_dir() and member.suffix not in {".b2", ".b2frame", ".b2nd"}
+            if not (path / member).is_dir() and member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES
         ]
         for member in new_members:
             srv_utils.compress_file(path / member)
@@ -2311,7 +2497,7 @@ async def htmx_upload(
 
     if suffix in [".h5", ".hdf5"]:
         pass
-    elif filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    elif filename.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f"{filename}.b2"

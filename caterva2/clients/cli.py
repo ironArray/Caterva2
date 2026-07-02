@@ -200,6 +200,27 @@ def cmd_info(client, args, url):
                 names.append(f"f{f}")
         return names
 
+    if data.get("kind") == "group":
+        print(f"nfiles : {data.get('nfiles')}")
+        print(f"size   : {_human_bytes(data.get('size'))}")
+        print(f"mtime  : {data.get('mtime')}")
+        return
+
+    if data.get("kind") == "ctable":
+        nbytes = data.get("nbytes")
+        cbytes = data.get("cbytes")
+        mtime = data.get("mtime")
+        print(f"nrows  : {data.get('nrows')}")
+        print(f"ncols  : {data.get('ncols')}")
+        print(f"chunks : {data.get('chunks')}")
+        print(f"blocks : {data.get('blocks')}")
+        print(f"columns: {data.get('columns')}")
+        print(f"nbytes : {_human_bytes(nbytes)}")
+        print(f"cbytes : {_human_bytes(cbytes)}")
+        print(f"ratio  : {nbytes / cbytes:.2f}x" if nbytes and cbytes else "ratio  : N/A")
+        print(f"mtime  : {mtime}") if mtime is not None else print("mtime  : None")
+        return
+
     # Extract fields
     schunk = data.get("schunk") or data
     cparams = schunk.get("cparams")
@@ -237,10 +258,45 @@ def cmd_info(client, args, url):
         print("  filters: None")
 
 
+def _json_default(o):
+    """Make CTable cell values JSON-serializable (numpy scalars, bytes, arrays)."""
+    if isinstance(o, bytes):
+        return o.decode(errors="replace")
+    if isinstance(o, np.generic):
+        return o.item()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    return str(o)
+
+
+def _parse_row_slice(slice_, nrows):
+    if not slice_:
+        return 0, nrows
+    if ":" in slice_:
+        start_s, _, stop_s = slice_.partition(":")
+        start = int(start_s) if start_s.strip() else 0
+        stop = int(stop_s) if stop_s.strip() else nrows
+        return start, stop
+    start = int(slice_)
+    return start, start + 1
+
+
 @handle_errors
 def cmd_show(client, args, url):
     path, params = args.dataset
     slice_ = params.get("slice_", None)
+
+    if str(path).endswith(".b2z"):
+        table = client.get(path)
+        start, stop = _parse_row_slice(slice_, table.nrows)
+        rows = table.rows(start, stop)
+        if getattr(args, "json", False):
+            print(json.dumps(rows, default=_json_default))
+        else:
+            for row in rows:
+                print(row)
+        return
+
     data = client.fetch(path, slice_=slice_)
 
     # JSON output requested -> convert numpy arrays to lists
@@ -446,7 +502,7 @@ def main():
 
     # Make --json a global flag so it applies to all commands that support JSON output
     parser.add_argument("--json", action="store_true", help="Output JSON when supported by the command")
-    subparsers = parser.add_subparsers(required=True)
+    subparsers = parser.add_subparsers(required=True, metavar="command", dest="command")
 
     # roots
     help = "List all the available roots."

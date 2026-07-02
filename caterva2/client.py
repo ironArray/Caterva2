@@ -120,13 +120,23 @@ class Root:
         >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> root['ds-1d.b2nd']
-        <Dataset: example/ds-1d.b2nd>
+        <Array: example/ds-1d.b2nd>
         """
         path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
-            return Dataset(self, path)
-        else:
-            return File(self, path)
+            return Array(self, path)
+        # Anything else (a directory, a .b2z CTable/TreeStore, a virtual group or
+        # leaf inside one, or a plain file) has no reliable suffix, so the
+        # server's metadata is what tells us the kind.
+        meta = self.client.get_info(f"{self.name}/{path}")
+        kind = meta.get("kind")
+        if kind == "group":
+            return Group(self, path, meta)
+        if kind == "ctable":
+            return Table(self, path, meta)
+        if "shape" in meta:
+            return Array(self, path, meta)
+        return File(self, path, meta)
 
     def __contains__(self, path):
         """
@@ -229,7 +239,7 @@ class Root:
         >>> root = client.get('@personal')
         >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
         >>> 'root-example/dir2/ds-4d.b2nd' in root
         True
         """
@@ -271,7 +281,7 @@ class Root:
 
 
 class File:
-    def __init__(self, root, path):
+    def __init__(self, root, path, meta=None):
         """
         Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
 
@@ -307,8 +317,16 @@ class File:
         _, root = _format_paths(root.urlbase, root.name)
         self.name = name
         self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
-        self.meta = self.root.client._get(
-            f"{self.urlbase}/api/info/{self.path}", auth_cookie=self.cookie, timeout=self.root.client.timeout
+        # `meta` may be supplied by the caller (e.g. Root.__getitem__ already
+        # fetched it to pick the class) to avoid a redundant /api/info round-trip.
+        self.meta = (
+            meta
+            if meta is not None
+            else self.root.client._get(
+                f"{self.urlbase}/api/info/{self.path}",
+                auth_cookie=self.cookie,
+                timeout=self.root.client.timeout,
+            )
         )
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
@@ -368,7 +386,7 @@ class File:
 
     def __getitem__(self, item):
         """
-        Retrieves a slice of the dataset.
+        Retrieves a slice of the file's data (only meaningful for datasets).
 
         Parameters
         ----------
@@ -379,35 +397,8 @@ class File:
         -------
         numpy.ndarray
             The requested slice of the dataset.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds[1]
-        array(1)
-        >>> ds[:1]
-        array([0])
-        >>> ds[0:10]
-        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        if isinstance(item, str):  # used a filter or field to index so want blosc2 array as result
-            try:
-                dtype = np.dtype(self.dtype)
-            except (ValueError, TypeError):
-                dtype = np.dtype(ast.literal_eval(self.dtype))
-            fields = dtype.fields
-            if fields is None:
-                raise ValueError("The array is not structured (its dtype does not have fields)")
-            if item in fields:
-                # A shortcut to access fields
-                return self.client.get_slice(self.path, as_blosc2=True, field=item)  # arg key is None
-            else:  # used a filter (possibly lazyexpr)
-                return self.client.get_slice(self.path, item, as_blosc2=True)
-        else:
-            return self.slice(item, as_blosc2=False)
+        return self.slice(item, as_blosc2=False)
 
     def slice(
         self, key: int | slice | Sequence[slice], as_blosc2: bool = True
@@ -519,7 +510,7 @@ class File:
         >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
         >>> root = client.get('@personal')
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
         >>> file = root['root-example/dir2/ds-4d.b2nd']
         >>> file.move('@personal/root-example/dir1/ds-4d-moved.b2nd')
         PurePosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
@@ -552,7 +543,7 @@ class File:
         >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
         >>> root = client.get('@personal')
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
         >>> file = root['root-example/dir2/ds-4d.b2nd']
         >>> file.copy('@personal/root-example/dir2/ds-4d-copy.b2nd')
         PurePosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
@@ -581,7 +572,7 @@ class File:
         >>> root = client.get('@personal')
         >>> path = 'root-example/dir2/ds-4d.b2nd'
         >>> root.upload(path)
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
         >>> file = root[path]
         >>> file.remove()
         '@personal/root-example/dir2/ds-4d.b2nd'
@@ -591,10 +582,25 @@ class File:
         return self.client.remove(self.path)
 
 
-class Dataset(File, blosc2.Operand):
-    def __init__(self, root, path):
+class Dataset(File):
+    """Generic fetchable-dataset base, shared by :class:`Array` and :class:`Table`.
+
+    This class is not intended to be instantiated directly; it should be
+    accessed through a :class:`Root` instance, which returns an :class:`Array`
+    or a :class:`Table` depending on the dataset kind.
+    """
+
+    def __str__(self):
+        return self.path.as_posix()
+
+    def __repr__(self):
+        return f"<Dataset: {self.path}>"
+
+
+class Array(Dataset, blosc2.Operand):
+    def __init__(self, root, path, meta=None):
         """
-        Represents a dataset within a Blosc2 container.
+        Represents an array dataset (.b2nd, .b2frame) within a Blosc2 container.
 
         This class is not intended to be instantiated directly; it should be accessed through a
         :class:`Root` instance.
@@ -621,14 +627,14 @@ class Dataset(File, blosc2.Operand):
         >>> ds.blocks
         (10,)
         """
-        super().__init__(root, path)
+        super().__init__(root, path, meta)
 
     def __str__(self):
         return self.path.as_posix()
 
     def __repr__(self):
         # TODO: add more info about dims, types, etc.
-        return f"<Dataset: {self.path}>"
+        return f"<Array: {self.path}>"
 
     @property
     def dtype(self):
@@ -638,7 +644,7 @@ class Dataset(File, blosc2.Operand):
         try:
             return self.meta["dtype"]
         except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'dtype'.") from e
+            raise AttributeError("'Array' object has no attribute 'dtype'.") from e
 
     @property
     def shape(self):
@@ -648,7 +654,14 @@ class Dataset(File, blosc2.Operand):
         try:
             return tuple(self.meta["shape"])
         except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'shape'.") from e
+            raise AttributeError("'Array' object has no attribute 'shape'.") from e
+
+    @property
+    def ndim(self):
+        """
+        The number of dimensions of the dataset.
+        """
+        return len(self.shape)
 
     @property
     def chunks(self):
@@ -658,7 +671,7 @@ class Dataset(File, blosc2.Operand):
         try:
             return tuple(self.meta["chunks"])
         except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'chunks'.") from e
+            raise AttributeError("'Array' object has no attribute 'chunks'.") from e
 
     @property
     def blocks(self):
@@ -668,7 +681,7 @@ class Dataset(File, blosc2.Operand):
         try:
             return tuple(self.meta["blocks"])
         except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'blocks'.") from e
+            raise AttributeError("'Array' object has no attribute 'blocks'.") from e
 
     def append(self, data):
         """
@@ -681,7 +694,7 @@ class Dataset(File, blosc2.Operand):
 
         Returns
         -------
-        out: Caterva2.Dataset
+        out: Caterva2.Array
             A pointer to the (modified) dataset.
 
         Examples
@@ -696,6 +709,157 @@ class Dataset(File, blosc2.Operand):
         (1003,)
         """
         return self.client.append(self.path, data)
+
+    def __getitem__(self, item):
+        """
+        Retrieves a slice of the dataset.
+
+        Parameters
+        ----------
+        item : int, slice, tuple of ints and slices, or None
+            Specifies the slice to fetch.
+
+        Returns
+        -------
+        numpy.ndarray
+            The requested slice of the dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds[1]
+        array(1)
+        >>> ds[:1]
+        array([0])
+        >>> ds[0:10]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        if isinstance(item, str):  # used a filter or field to index so want blosc2 array as result
+            try:
+                dtype = np.dtype(self.dtype)
+            except (ValueError, TypeError):
+                dtype = np.dtype(ast.literal_eval(self.dtype))
+            fields = dtype.fields
+            if fields is None:
+                raise ValueError("The array is not structured (its dtype does not have fields)")
+            if item in fields:
+                # A shortcut to access fields
+                return self.client.get_slice(self.path, as_blosc2=True, field=item)  # arg key is None
+            else:  # used a filter (possibly lazyexpr)
+                return self.client.get_slice(self.path, item, as_blosc2=True)
+        else:
+            return self.slice(item, as_blosc2=False)
+
+
+class Table(Dataset):
+    """Represents a CTable (.b2z) dataset."""
+
+    def __str__(self):
+        return self.path.as_posix()
+
+    def __repr__(self):
+        return f"<Table: {self.path}>"
+
+    @property
+    def nrows(self):
+        return self.meta["nrows"]
+
+    @property
+    def ncols(self):
+        return len(self.meta["columns"])
+
+    @property
+    def columns(self):
+        return self.meta["columns"]
+
+    @property
+    def schema(self):
+        return self.meta["schema_dict"]
+
+    def slice(self, key):
+        """Get a row slice as a blosc2.CTable."""
+        return self.client.get_slice(self.path, key, as_blosc2=True)
+
+    def __getitem__(self, key):
+        """Shortcut: slice as a blosc2.CTable."""
+        return self.slice(key)
+
+    def rows(self, start=0, stop=50):
+        """Get rows [start, stop) as a list of tuples.
+
+        The default window is bounded (first 50 rows) to avoid accidentally
+        fetching a whole large table; pass ``stop=self.nrows`` for everything.
+        """
+        table = self.slice(slice(start, stop))
+        return [tuple(row) for row in table]
+
+    def head(self, n=5):
+        """Get the first `n` rows as a list of tuples."""
+        return self.rows(0, n)
+
+
+class Group:
+    """A browsable group (HDF5 jargon): a directory, a TreeStore ``.b2z``, or a
+    virtual group inside one. Children are addressed by (inner) path.
+
+    Not instantiated directly; obtained from a :class:`Root`, e.g.
+    ``root['dir1']`` or ``root['tree.b2z/level1']``.
+    """
+
+    def __init__(self, root, path, meta=None):
+        self.root = root
+        _, name = _format_paths(root.urlbase, path)
+        _, rootname = _format_paths(root.urlbase, root.name)
+        self.name = name
+        self.path = pathlib.PurePosixPath(f"{rootname}/{self.name}")
+        self._meta = meta
+
+    @property
+    def client(self):
+        return self.root.client
+
+    @property
+    def urlbase(self):
+        return self.client.urlbase
+
+    @property
+    def cookie(self):
+        return self.client.cookie
+
+    @property
+    def meta(self):
+        if self._meta is None:
+            self._meta = self.client.get_info(str(self.path))
+        return self._meta
+
+    @property
+    def file_list(self):
+        """Deep list of leaf paths under this group (relative to it)."""
+        return self.client.get_list(str(self.path))
+
+    def __iter__(self):
+        return iter(self.file_list)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __contains__(self, item):
+        item = item.as_posix() if hasattr(item, "as_posix") else str(item)
+        return item in self.file_list
+
+    def __getitem__(self, item):
+        """Retrieve a child (dataset, file, or subgroup) by relative path."""
+        item = item.as_posix() if hasattr(item, "as_posix") else str(item)
+        return self.root[f"{self.name}/{item}"]
+
+    def __repr__(self):
+        return f"<Group: {self.path}>"
+
+    def __str__(self):
+        return self.path.as_posix()
 
 
 class BasicAuth:
@@ -774,21 +938,26 @@ class Client:
         self.close()
         return False
 
-    def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5):
+    def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5, kind=None):
         response = self._xget(
             f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, timeout=timeout
         )
         data = response.content
-        # Try different deserialization methods
-        try:
-            data = blosc2.ndarray_from_cframe(data)
-        except RuntimeError:
-            data = blosc2.schunk_from_cframe(data)
+        if kind == "ctable":
+            data = blosc2.ctable_from_cframe(data)
+        else:
+            try:
+                data = blosc2.ndarray_from_cframe(data)
+            except RuntimeError:
+                data = blosc2.schunk_from_cframe(data)
         if as_blosc2:
             return data
         if hasattr(data, "ndim"):  # if b2nd or b2frame
             # catch 0d case where [:] fails
             return data[()] if data.ndim == 0 else data[:]
+        elif isinstance(data, blosc2.CTable):
+            # Return rows as list of tuples if not as_blosc2
+            return [tuple(row) for row in data[:]]
         else:
             return data[:]
 
@@ -964,7 +1133,7 @@ class Client:
         >>> ds[:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        if isinstance(path, (File, Dataset, Root)):
+        if isinstance(path, (File, Root)):
             return path
         # Normalize the path to a POSIX path
         path = pathlib.PurePosixPath(path).as_posix()
@@ -1026,7 +1195,7 @@ class Client:
         >>> info['shape']
         [100, 200]
         """
-        if isinstance(path, (Dataset, File)):
+        if isinstance(path, File):
             path = path.path
         _, path = _format_paths(self.urlbase, path)
         return self._get(f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout)
@@ -1092,7 +1261,14 @@ class Client:
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
-        if isinstance(path, (Dataset, File)):
+        if isinstance(path, Table):
+            kind = "ctable"
+        elif isinstance(path, File):
+            kind = None
+        else:
+            path_str = path.as_posix() if hasattr(path, "as_posix") else str(path)
+            kind = "ctable" if path_str.endswith(".b2z") else None
+        if isinstance(path, File):
             path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
         if field:  # blosc2 doesn't support indexing of multiple fields
@@ -1103,6 +1279,7 @@ class Client:
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
+                kind=kind,
             )
         if isinstance(key, str):
             # The key can still be a slice expression in string format (like for CLI utils)
@@ -1114,6 +1291,7 @@ class Client:
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
+                kind=kind,
             )
         else:  # Convert slices to strings
             slice_ = api_utils.slice_to_string(key)
@@ -1125,6 +1303,7 @@ class Client:
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
+                kind=kind,
             )
 
     def get_chunk(self, path, nchunk):
@@ -1156,9 +1335,12 @@ class Client:
         >>> info_schunk['chunksize'] / len(chunk)
         6.453000645300064
         """
-        if isinstance(path, Dataset):
+        if isinstance(path, Array):
             path = path.path
-        _, path = _format_paths(self.urlbase, path)
+        elif isinstance(path, File):
+            raise TypeError(
+                "get_chunk() only supports Array datasets (.b2nd/.b2frame), not regular files or tables"
+            )
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
             {"nchunk": nchunk},

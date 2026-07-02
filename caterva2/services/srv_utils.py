@@ -30,6 +30,51 @@ from sqlalchemy.future import select
 from caterva2 import hdf5, models
 from caterva2.services import db, schemas, settings, users
 
+# Shared suffix constants
+BLOSC2_ARRAY_SUFFIXES = {".b2nd", ".b2frame"}
+BLOSC2_TABLE_SUFFIXES = {".b2z"}
+BLOSC2_FRAME_SUFFIXES = {".b2"}
+BLOSC2_NATIVE_SUFFIXES = BLOSC2_ARRAY_SUFFIXES | BLOSC2_TABLE_SUFFIXES | BLOSC2_FRAME_SUFFIXES
+
+# Container suffixes whose paths may descend into internal (virtual) members.
+BLOSC2_CONTAINER_SUFFIXES = {".b2z"}
+
+
+def split_container_path(path):
+    """Split a request path at a container-file boundary.
+
+    A ``.b2z`` may hold a TreeStore, so a request path can descend *into* it,
+    e.g. ``@public/dir/tree.b2z/level1/ctable``. Return
+    ``(container_path, inner_key)`` where ``container_path`` is the ``.b2z``
+    file and ``inner_key`` is a ``/...`` TreeStore key, or ``(path, None)`` when
+    the path does not descend into a container.
+    """
+    parts = pathlib.Path(path).parts
+    for i, part in enumerate(parts):
+        if pathlib.PurePath(part).suffix in BLOSC2_CONTAINER_SUFFIXES and i < len(parts) - 1:
+            return pathlib.Path(*parts[: i + 1]), "/" + "/".join(parts[i + 1 :])
+    return pathlib.Path(path), None
+
+
+def treestore_leaves(tree, prefix="/"):
+    """Full leaf keys (e.g. ``/g/a``) under ``prefix`` of an open TreeStore.
+
+    Leaves are nodes with no children (groups are skipped), matching the
+    file-only semantics of :func:`walk_files` for directories.
+    """
+    return [d for d in tree.get_descendants(prefix) if not tree.get_children(d)]
+
+
+def treestore_size(tree, prefix="/"):
+    """On-disk size (bytes) of leaves under ``prefix``, summed cheaply from the
+    ``.b2z`` zip index without opening any leaf. Returns None if unavailable."""
+    get_offsets = getattr(tree, "_get_zip_offsets", None)
+    if get_offsets is None:
+        return None
+    rel = prefix.strip("/")
+    rel = f"{rel}/" if rel else ""
+    return sum(info.get("length", 0) for m, info in get_offsets().items() if m.startswith(rel))
+
 
 def compress_file(path):
     with open(path, "rb") as src:
@@ -82,7 +127,9 @@ def get_model_from_obj(obj, model_class, **kwargs):
     return model_class(**data)
 
 
-def read_metadata(obj):
+def read_metadata(obj, mtime=None):
+    # `mtime` is used when `obj` is an already-opened object (e.g. a container
+    # leaf) with no file of its own; callers pass the container's mtime.
     # Open dataset
     if isinstance(obj, pathlib.Path):
         path = obj
@@ -103,7 +150,7 @@ def read_metadata(obj):
             #     obj = f
             return get_model_from_obj(obj, models.File, mtime=mtime, size=size)
 
-        assert path.suffix in {".b2frame", ".b2nd", ".b2"}
+        assert path.suffix in BLOSC2_NATIVE_SUFFIXES
         try:
             obj = blosc2.open(path)
         except blosc2.exceptions.MissingOperands as exc:
@@ -114,8 +161,13 @@ def read_metadata(obj):
             )
         except RuntimeError:
             return get_model_from_obj(obj, models.Corrupt, mtime=mtime, error="Unrecognized format")
-    else:
-        mtime = None
+
+        # A .b2z may hold a TreeStore (a hierarchical container); it is browsed
+        # as a group (its leaves are addressed as inner paths), so present the
+        # container itself as a directory (the root group).
+        if isinstance(obj, blosc2.TreeStore):
+            return models.Directory(mtime=mtime, size=size, nfiles=len(treestore_leaves(obj, "/")))
+    # else: obj is an already-opened object; keep the caller-supplied mtime
 
     # Read metadata
     if isinstance(obj, blosc2.ndarray.NDArray):
@@ -149,6 +201,21 @@ def read_metadata(obj):
             operands=operands,
             mtime=mtime,
             expression=expression,
+        )
+    elif isinstance(obj, blosc2.CTable):
+        schema = obj.schema_dict()
+        return models.CTableMetadata(
+            nrows=obj.nrows,
+            ncols=obj.ncols,
+            chunks=obj.chunks,
+            blocks=obj.blocks,
+            schema_dict=schema,
+            columns=[c["name"] for c in schema.get("columns", [])],
+            nbytes=obj.nbytes,
+            cbytes=obj.cbytes,
+            cratio=obj.cratio,
+            vlmeta=dict(obj.vlmeta[:]) if obj.vlmeta[:] else {},
+            mtime=mtime,
         )
     else:
         raise TypeError(f"unexpected {type(obj)}")

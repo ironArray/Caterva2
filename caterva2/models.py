@@ -74,6 +74,21 @@ class LazyArray(pydantic.BaseModel):
     mtime: datetime.datetime | None
 
 
+class CTableMetadata(pydantic.BaseModel):
+    kind: str = "ctable"
+    nrows: int
+    ncols: int
+    chunks: tuple
+    blocks: tuple
+    schema_dict: dict
+    columns: list[str]
+    nbytes: int
+    cbytes: int
+    cratio: float
+    vlmeta: dict = {}
+    mtime: datetime.datetime | None
+
+
 class Cat2LazyArr(pydantic.BaseModel):
     name: str | None
     expression: str | None
@@ -98,6 +113,17 @@ class AddUserPayload(pydantic.BaseModel):
 class File(pydantic.BaseModel):
     mtime: datetime.datetime | None
     size: int
+
+
+class Directory(pydantic.BaseModel):
+    """A group-like container: a real directory, a TreeStore .b2z, or a
+    virtual group inside one. ``size`` is None when it is not cheap to compute
+    (virtual groups)."""
+
+    kind: str = "group"
+    mtime: datetime.datetime | None
+    size: int | None = None
+    nfiles: int
 
 
 class Root(pydantic.BaseModel):

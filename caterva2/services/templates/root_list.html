@@ -29,6 +29,21 @@
         {% include 'includes/root.html' %}
     {% endwith %}
 
+    {% for name in mounted %}
+    <div class="d-flex gap-1 justify-content-between">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="roots"
+                   value="{{ name }}" {{ "checked" if name in checked }}
+                   onchange="return onMountedRootToggle(event, this.value)"
+                   id="id_root_mounted_{{ loop.index }}">
+            <label class="form-check-label" for="id_root_mounted_{{ loop.index }}"
+                   title="{{ name }}">{{ name.split('/')[-1] }}</label>
+        </div>
+        <i class="fa-solid fa-xmark" role="button" title="Unmount"
+           data-name="{{ name }}" onclick="unmountRoot(this.dataset.name)"></i>
+    </div>
+    {% endfor %}
+
 </form>
 
 <script>
