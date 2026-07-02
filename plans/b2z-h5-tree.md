@@ -32,10 +32,16 @@ API (`server.py`): `get_list` descends; `get_info`/`fetch_data` open
 `tree[inner_key]` (leaf → metadata/slice; group → `Directory`); `fetch` guards
 the whole-file `FileResponse` fast path so it never streams the whole container.
 
-Web (`server.py`): `htmx_path_list` expands a container into one row per leaf;
-`htmx_path_info`/`htmx_path_view` split + open the leaf.
+Web (`server.py`): a TreeStore `.b2z` shows as a **single mountable row**;
+the user "mounts" it (client-side, `localStorage` key `caterva2:mounted`,
+bridged to the server via an `htmx:configRequest` listener) to get a **virtual
+root** listed next to `@personal`/`@shared`/`@public`. Checking that virtual
+root expands the container into one row per leaf. `htmx_path_info`/
+`htmx_path_view` split + open the leaf. See `plans/b2z-virtual-roots.md` for the
+full design (implemented + reviewed on `new-table`). This replaced the earlier
+"auto-expand every container into leaf rows" behavior, which flooded the list.
 
-Groups unified via `models.Directory{kind:"dir", mtime, size, nfiles}`:
+Groups unified via `models.Directory{kind:"group", mtime, size, nfiles}`:
 `get_info` returns it for a real directory, a TreeStore container (root group),
 and a virtual group inside one. Size is cheap (zip index for `.b2z` groups;
 aggregate file stat for real dirs).
@@ -50,10 +56,13 @@ non-`.b2nd`/`.b2frame` path; `File`/`Array` accept `meta=` to avoid a double
 
 1. **Route `.h5` through the same seam** (chosen direction; plan below). Would
    let us eventually retire the `unfold` proxy-file path.
-2. **Web cosmetics** (minor, marked with `ponytail:` comments):
-   - Each expanded leaf row in the web tree shows the *container's* size
-     (`add_dataset` stats the container file). Would need per-leaf size.
-   - Filter/sort on a TreeStore leaf falls back to unfiltered (default view is
+2. **Web cosmetics** (minor):
+   - Each expanded leaf row of a mounted virtual root shows the *container's*
+     size (`add_dataset` stats the container once and reuses it for all leaves).
+     Per-leaf size is available cheaply for `.b2z` (`treestore_size(tree, key)`)
+     and `.h5` (`dset.id.get_storage_size()`); wire it through the container
+     adapter if the cosmetic matters.
+   - Filter/sort on a container leaf falls back to unfiltered (default view is
      fine).
 3. **Client perf tradeoff** (accepted, not a bug): `Root.__getitem__` now does
    one `/api/info` call for any non-`.b2nd`/`.b2frame` path (dirs, `.b2z`, plain
@@ -80,15 +89,32 @@ yields an in-memory b2arr carrying cparams.
    prefix)` via `visititems`; `hdf5_size(path, prefix)` via
    `dset.id.get_storage_size()`. Analogs of `treestore_leaves`/`treestore_size`.
 3. **`read_metadata`** (~8 lines) — plain `.h5` (no inner key) → `Directory`
-   (currently `File`) with nfiles/size; add an `HDF5Proxy` branch for a leaf
-   object.
+   (currently `File`) with nfiles/size; add a *dedicated* `HDF5Proxy` branch
+   for a leaf object (the existing proxy handling keys on `vlmeta["_ftype"]`,
+   which a file-less proxy lacks) that also sets cbytes/cratio from the proxy.
 4. **Server descent** (~25 lines) — `get_list`/`get_info`/`fetch_data` currently
    hardcode `.b2z` + `blosc2.open` + TreeStore. Add `.h5` siblings; cleanest is a
    tiny "container adapter" (`open → is-group? Directory : leaf-proxy`) so both
-   formats share the flow.
+   formats share the flow. This adapter is now load-bearing for the web too
+   (step 6), so it is the pivot of the whole change. `fetch_data` admits
+   `.h5`/`.hdf5` only when the path has an inner key — a plain `.h5` fetch must
+   keep erroring, not fall into `open_b2` → `blosc2.open` → 500.
 5. **`split_container_path`** — add `.h5`, `.hdf5` to
    `BLOSC2_CONTAINER_SUFFIXES` (1 line; `get_abspath` already permits `.h5`).
-6. **Web** (~8 lines) — generalize the path-list leaf-row expansion to `.h5`.
+6. **Web / virtual roots** (~20 lines) — since the shipped `.b2z` web feature
+   is mount-as-virtual-root (not auto-expand), routing `.h5` through it means:
+   (a) `htmx_path_list`'s "is this a mountable container?" check in the walk
+   loop and its virtual-root leaf-expansion loop both drop their hardcoded
+   `relpath.suffix == ".b2z"` / `isinstance(tree, blosc2.TreeStore)` tests and
+   call the container adapter instead (keyed off `BLOSC2_CONTAINER_SUFFIXES`,
+   which now includes `.h5`); the walk-loop probe uses `h5py.is_hdf5` for
+   `.h5` (no file open per keystroke); (b) `htmx_root_list` already accepts
+   arbitrary container paths as `mounted` — no change; (c) `htmx_path_info`
+   and `htmx_path_view` open leaves with a hardcoded
+   `blosc2.open(abspath)[inner_key]` — both must switch to the adapter, or
+   clicking a mounted `.h5` leaf errors. Result: an `.h5` file gets the plug
+   icon, mounts as a virtual root, and lists its datasets as leaf rows, exactly
+   like a `.b2z`.
 7. **Client** — zero change; already dispatches on server `kind`.
 
 ### Decisions / risks
@@ -99,8 +125,13 @@ yields an in-memory b2arr carrying cparams.
 - **Compat**: `read_metadata` on a plain `.h5` flips `File`→`Directory`; a couple
   of `test_hdf5_proxy` assertions may expect `File` — check/adjust.
 - **Incompatible leaves** (compound/vlen/scalar h5 datasets):
-  `h5dset_is_compatible` exists; skip or surface them in enumeration rather than
-  crash.
+  `h5dset_is_compatible` exists; skip them in enumeration, and have the
+  adapter's `get()` return None (→ 404) for one reached by a hand-typed URL
+  rather than crash. Same None→404 treatment for bogus inner keys (`KeyError`),
+  for both `.h5` and TreeStore paths.
+- **Handle lifetime**: the adapter owns the `h5py.File` (the file-less proxy
+  borrows it); close only after response bytes are materialized. Details in
+  `plans/b2z-h5-tree-implementation.md`.
 
 ### Suggested increments
 - Spike: file-less proxy (#1) + enumeration (#2) alone, verified with a test.

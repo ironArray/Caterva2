@@ -367,18 +367,20 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
-    # A path may descend into a container (e.g. a TreeStore .b2z); list its members.
-    container_path, inner_key = srv_utils.split_container_path(path)
-    directory = get_writable_path(container_path, user)
+    # A path may descend into a container (e.g. a TreeStore .b2z or .h5); list
+    # its members.
+    directory, inner_key = split_and_resolve(path, user, resolver=get_writable_path)
     if directory.is_file():
-        if directory.suffix == ".b2z":
-            tree = blosc2.open(directory)
-            if isinstance(tree, blosc2.TreeStore):
+        container = srv_utils.open_container(directory)
+        if container is not None:
+            try:
                 # Deep listing of leaves relative to the requested path, matching
                 # walk_files() semantics for directories.
                 prefix = inner_key or "/"
                 strip = prefix.rstrip("/") + "/"
-                return sorted(d[len(strip) :] for d in srv_utils.treestore_leaves(tree, prefix))
+                return sorted(d[len(strip) :] for d in container.leaves(prefix))
+            finally:
+                container.close()
         if inner_key is not None:
             srv_utils.raise_not_found()
         name = pathlib.Path(directory.name)
@@ -409,21 +411,13 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    container_path, inner_key = srv_utils.split_container_path(path)
-    abspath = get_abspath(container_path, user)
+    abspath, inner_key = split_and_resolve(path, user)
     if inner_key is not None:
-        # A member inside a container (e.g. a TreeStore .b2z leaf or group).
-        tree = blosc2.open(abspath)
-        node = tree[inner_key]
-        if isinstance(node, blosc2.TreeStore):
-            # A virtual group: report leaf count and on-disk size (summed from
-            # the .b2z zip index, no per-leaf open).
-            return models.Directory(
-                mtime=abspath.stat().st_mtime,
-                size=srv_utils.treestore_size(tree, inner_key),
-                nfiles=len(srv_utils.treestore_leaves(tree, inner_key)),
-            )
-        return srv_utils.read_metadata(node, mtime=abspath.stat().st_mtime)
+        # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf/group).
+        meta = srv_utils.container_member_info(abspath, inner_key)
+        if meta is None:
+            srv_utils.raise_not_found()
+        return meta
     if abspath.is_dir():
         files = list(srv_utils.walk_files(abspath))
         size = sum(f.stat().st_size for f, _ in files)
@@ -483,7 +477,10 @@ def get_abspath(
         return cachedir / filepath
 
     # HDF5 files cannot be compressed, as they are supported natively
-    if filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"} and not may_not_exist:
+    if (
+        filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | srv_utils.HDF5_SUFFIXES
+        and not may_not_exist
+    ):
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
@@ -498,6 +495,25 @@ def get_abspath(
         srv_utils.raise_not_found()
 
     return abspath
+
+
+def split_and_resolve(path, user, resolver=None):
+    """Split a container-descent path and resolve the container on disk.
+
+    Like ``srv_utils.split_container_path`` + resolving, but skips split
+    points that are real *directories* merely named like a container (e.g.
+    ``results.h5/``, creatable through the upload API), so files beneath them
+    stay reachable instead of 404ing. Returns ``(abspath, inner_key)``.
+    """
+    resolver = resolver or get_abspath
+    parts = pathlib.Path(path).parts
+    for i, part in enumerate(parts[:-1]):
+        if pathlib.PurePath(part).suffix in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
+            abspath = resolver(pathlib.Path(*parts[: i + 1]), user)
+            if abspath.is_dir():
+                continue  # a directory that merely looks like a container
+            return abspath, "/" + "/".join(parts[i + 1 :])
+    return resolver(pathlib.Path(path), user), None
 
 
 def parse_slice(string):
@@ -549,19 +565,30 @@ async def fetch_data(
     """
 
     slice_ = parse_slice(slice_)
-    container_path, inner_key = srv_utils.split_container_path(path)
-    abspath = get_abspath(container_path, user)
+    abspath, inner_key = split_and_resolve(path, user)
 
-    if abspath.suffix not in {".b2frame", ".b2nd", ".b2z"}:
+    # Container leaves are fetchable too; a plain .h5/.hdf5 (no inner_key) is
+    # a group, not a dataset, so it keeps the usual 400.
+    fetchable = abspath.suffix in {".b2frame", ".b2nd", ".b2z"} or (
+        abspath.suffix in srv_utils.HDF5_SUFFIXES and inner_key is not None
+    )
+    if not fetchable:
         srv_utils.raise_bad_request(
             "The fetch API only supports datasets (.b2nd, .b2frame, .b2z); "
             "use the download API if you only want to download the file"
         )
 
     if inner_key is not None:
-        # A member inside a container (e.g. a TreeStore .b2z leaf).
-        container = blosc2.open(abspath)[inner_key]
-        if isinstance(container, blosc2.TreeStore):
+        # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf). Not
+        # explicitly closed: an HDF5 leaf needs its underlying h5py.File open
+        # for the reads below; CPython drops it once `container` goes out of
+        # scope at function return (verified: a leaf survives an *implicit*
+        # refcount-driven close, only an *explicit* .close() invalidates it).
+        container_adapter = srv_utils.open_container(abspath)
+        if container_adapter is None:
+            srv_utils.raise_not_found()
+        container = container_adapter.get(inner_key)
+        if container is None or container_adapter.is_group(container):
             srv_utils.raise_not_found()
     elif filter:
         if field:
@@ -1342,15 +1369,16 @@ async def remove(
     if abspath.is_dir():
         shutil.rmtree(abspath)
     else:
-        # Try to unlink the file
+        # Try to unlink the file. NotADirectoryError: a path descending into a
+        # container file (e.g. foo.h5/g) names no real file of its own.
         try:
             abspath.unlink()
-        except FileNotFoundError:
+        except (FileNotFoundError, NotADirectoryError):
             # Try adding a .b2 extension
             abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
                 abspath.unlink()
-            except FileNotFoundError as exc:
+            except (FileNotFoundError, NotADirectoryError) as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
                     detail="The specified path does not exist",
@@ -1721,23 +1749,21 @@ async def htmx_path_list(
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             path = f"{root}/{relpath}"
-            # A .b2z holding a TreeStore shows as a single mountable row; its
-            # leaves are browsed once it's mounted as a virtual root. A corrupt
-            # or non-container .b2z (uploads aren't validated) falls through to
-            # a plain row instead of crashing the whole listing.
-            if relpath.suffix == ".b2z":
-                try:
-                    tree = blosc2.open(abspath)
-                except Exception:
-                    tree = None
-                if isinstance(tree, blosc2.TreeStore):
-                    if search in path:
-                        add_dataset(path, abspath, mountable=True)
-                    continue
+            # A .b2z/.h5 holding a browsable container shows as a single
+            # mountable row; its leaves are browsed once it's mounted as a
+            # virtual root. A corrupt or non-container file (uploads aren't
+            # validated) falls through to a plain row instead of crashing the
+            # whole listing.
+            if relpath.suffix in srv_utils.BLOSC2_CONTAINER_SUFFIXES and srv_utils.is_container_file(
+                abspath
+            ):
+                if search in path:
+                    add_dataset(path, abspath, mountable=True)
+                continue
             if search in path:
                 add_dataset(path, abspath)
 
-    # Virtual roots: mounted .b2z TreeStore containers, expanded into leaves.
+    # Virtual roots: mounted .b2z/.h5 containers, expanded into leaves.
     for root in roots:
         proot = pathlib.PurePosixPath(root)
         if proot.suffix not in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
@@ -1749,19 +1775,19 @@ async def htmx_path_list(
         if rootdir.resolve() not in abspath.parents:
             continue
         # `root` is untrusted (client localStorage): a stale, non-container, or
-        # corrupt path must skip silently, not 500 the whole listing. blosc2.open
-        # raises OSError (missing/dir), zipfile.BadZipFile, or RuntimeError here.
+        # corrupt path must skip silently, not 500 the whole listing.
+        # open_container() swallows the underlying open errors itself.
+        container = srv_utils.open_container(abspath)
+        if container is None:
+            continue
         try:
-            tree = blosc2.open(abspath)
-        except Exception:
-            continue
-        if not isinstance(tree, blosc2.TreeStore):
-            continue
-        size = abspath.stat().st_size  # same container file for every leaf
-        for key in srv_utils.treestore_leaves(tree):
-            leaf_path = f"{root}{key}"
-            if search in leaf_path:
-                add_dataset(leaf_path, abspath, size=size)
+            size = abspath.stat().st_size  # same container file for every leaf
+            for key in container.leaves():
+                leaf_path = f"{root}{key}"
+                if search in leaf_path:
+                    add_dataset(leaf_path, abspath, size=size)
+        finally:
+            container.close()
 
     # Add current path if not already in the list
     current_path = hx_current_url.path
@@ -1847,12 +1873,14 @@ async def htmx_path_info(
     else:
         push_url = None
 
-    # Read metadata (a path may descend into a container, e.g. a TreeStore .b2z leaf)
-    container_path, inner_key = srv_utils.split_container_path(path)
-    abspath = get_abspath(container_path, user)
+    # Read metadata (a path may descend into a container, e.g. a TreeStore
+    # .b2z or .h5 leaf)
+    abspath, inner_key = split_and_resolve(path, user)
     try:
         if inner_key is not None:
-            meta = srv_utils.read_metadata(blosc2.open(abspath)[inner_key], mtime=abspath.stat().st_mtime)
+            meta = srv_utils.container_member_info(abspath, inner_key)
+            if meta is None:
+                srv_utils.raise_not_found()
         else:
             meta = srv_utils.read_metadata(abspath)
     except FileNotFoundError:
@@ -1979,15 +2007,22 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    container_path, inner_key = srv_utils.split_container_path(path)
-    abspath = get_abspath(container_path, user)
+    abspath, inner_key = split_and_resolve(path, user)
     filter = filter.strip()
-    # ponytail: filter/sort on a TreeStore leaf would run against the container; the
-    # default (unfiltered) view is what renders on click, so leave that path as-is.
-    if inner_key is not None and not (filter or sortby):
-        try:
-            arr = blosc2.open(abspath)[inner_key]
-        except ValueError:
+    if inner_key is not None and (filter or sortby):
+        # get_filtered_array() would blosc2.open() the whole container file
+        # (uncaught RuntimeError → 500, for .h5 and TreeStore .b2z alike);
+        # container members render unfiltered only.
+        return htmx_error(request, "Filtering/sorting is not supported for container members.")
+    if inner_key is not None:
+        # Not explicitly closed: an HDF5 leaf needs its h5py.File open for the
+        # reads below (through the rest of this function); CPython drops it
+        # once `arr` goes out of scope at function return.
+        container = srv_utils.open_container(abspath)
+        if container is None:
+            return htmx_error(request, "Cannot open container member.")
+        arr = container.get(inner_key)
+        if arr is None or container.is_group(arr):
             return htmx_error(request, "Cannot open container member.")
         idx = None
     elif filter or sortby:

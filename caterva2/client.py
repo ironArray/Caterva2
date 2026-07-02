@@ -280,7 +280,170 @@ class Root:
         return self.client.load_from_url(urlpath, remotepath)
 
 
-class File:
+# Mirrors ``srv_utils.BLOSC2_CONTAINER_SUFFIXES`` (not importable here: the
+# services package needs server-only dependencies).
+_CONTAINER_SUFFIXES = {".b2z", ".h5", ".hdf5"}
+
+
+class _FileOpsMixin:
+    """File-level operations shared by :class:`File` and :class:`Group`.
+
+    They act on the underlying *file* on the server, so they refuse paths
+    addressing a member inside a container (e.g. ``@personal/foo.h5/g``),
+    which has no file of its own.
+    """
+
+    def _toplevel_path(self):
+        parts = pathlib.PurePosixPath(self.path).parts
+        if any(pathlib.PurePosixPath(p).suffix in _CONTAINER_SUFFIXES for p in parts[:-1]):
+            raise ValueError(f"Not supported for a member inside a container file: {self.path}")
+        return self.path
+
+    def download(self, localpath=None):
+        """
+        Downloads the file to storage.
+
+        Parameters
+        ----------
+        localpath : Path, optional
+            The destination path for the downloaded file.  If not specified, the file will
+            be downloaded to the current working directory.
+
+        Returns
+        -------
+        Path
+            The path to the downloaded file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.download()
+        PosixPath('example/ds-1d.b2nd')
+        >>> file.download('mydir/myarray.b2nd')
+        PosixPath('mydir/myarray.b2nd')
+        """
+        return self.client.download(
+            self._toplevel_path(),
+            localpath=localpath,
+        )
+
+    def unfold(self):
+        """
+        Unfolds the file in a remote directory.
+
+        Returns
+        -------
+        Path
+            The path to the unfolded directory.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> file = root['ds-1d.h5']
+        >>> file.unfold()
+        PurePosixPath('example/ds-1d.h5')
+        """
+        return self.client.unfold(self._toplevel_path())
+
+    def move(self, dst):
+        """
+        Moves the file to a new location.
+
+        Parameters
+        ----------
+        dst : Path
+            The destination path for the file.
+
+        Returns
+        -------
+        Path
+            The new path of the file after the move.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> # For moving a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd')
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
+        >>> file = root['root-example/dir2/ds-4d.b2nd']
+        >>> file.move('@personal/root-example/dir1/ds-4d-moved.b2nd')
+        PurePosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
+        >>> 'root-example/dir2/ds-4d.b2nd' in root
+        False
+        >>> 'root-example/dir1/ds-4d-moved.b2nd' in root
+        True
+        """
+        return self.client.move(self._toplevel_path(), dst)
+
+    def copy(self, dst):
+        """
+        Copies the file to a new location.
+
+        Parameters
+        ----------
+        dst : Path
+            The destination path for the file.
+
+        Returns
+        -------
+        Path
+            The new path of the copied file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # For copying a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd')
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
+        >>> file = root['root-example/dir2/ds-4d.b2nd']
+        >>> file.copy('@personal/root-example/dir2/ds-4d-copy.b2nd')
+        PurePosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
+        >>> 'root-example/dir2/ds-4d.b2nd' in root
+        True
+        >>> 'root-example/dir2/ds-4d-copy.b2nd' in root
+        True
+        """
+        return self.client.copy(self._toplevel_path(), dst)
+
+    def remove(self):
+        """
+        Removes the file from the remote repository.
+
+        Returns
+        -------
+        str
+            The path of the removed file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # To remove a file you need to be a registered user
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> path = 'root-example/dir2/ds-4d.b2nd'
+        >>> root.upload(path)
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
+        >>> file = root[path]
+        >>> file.remove()
+        '@personal/root-example/dir2/ds-4d.b2nd'
+        >>> path in root
+        False
+        """
+        return self.client.remove(self._toplevel_path())
+
+
+class File(_FileOpsMixin):
     def __init__(self, root, path, meta=None):
         """
         Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
@@ -437,149 +600,6 @@ class File:
         """
         # Fetch and return the data as a Blosc2 object / NumPy array
         return self.client.get_slice(self.path, key, as_blosc2)
-
-    def download(self, localpath=None):
-        """
-        Downloads the file to storage.
-
-        Parameters
-        ----------
-        localpath : Path, optional
-            The destination path for the downloaded file.  If not specified, the file will
-            be downloaded to the current working directory.
-
-        Returns
-        -------
-        Path
-            The path to the downloaded file.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> file = root['ds-1d.b2nd']
-        >>> file.download()
-        PosixPath('example/ds-1d.b2nd')
-        >>> file.download('mydir/myarray.b2nd')
-        PosixPath('mydir/myarray.b2nd')
-        """
-        return self.client.download(
-            self.path,
-            localpath=localpath,
-        )
-
-    def unfold(self):
-        """
-        Unfolds the file in a remote directory.
-
-        Returns
-        -------
-        Path
-            The path to the unfolded directory.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> file = root['ds-1d.h5']
-        >>> file.unfold()
-        PurePosixPath('example/ds-1d.h5')
-        """
-        return self.client.unfold(self.path)
-
-    def move(self, dst):
-        """
-        Moves the file to a new location.
-
-        Parameters
-        ----------
-        dst : Path
-            The destination path for the file.
-
-        Returns
-        -------
-        Path
-            The new path of the file after the move.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> # For moving a file you need to be a registered user
-        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
-        >>> root = client.get('@personal')
-        >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Array: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> file = root['root-example/dir2/ds-4d.b2nd']
-        >>> file.move('@personal/root-example/dir1/ds-4d-moved.b2nd')
-        PurePosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
-        >>> 'root-example/dir2/ds-4d.b2nd' in root
-        False
-        >>> 'root-example/dir1/ds-4d-moved.b2nd' in root
-        True
-        """
-        return self.client.move(self.path, dst)
-
-    def copy(self, dst):
-        """
-        Copies the file to a new location.
-
-        Parameters
-        ----------
-        dst : Path
-            The destination path for the file.
-
-        Returns
-        -------
-        Path
-            The new path of the copied file.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> # For copying a file you need to be a registered user
-        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
-        >>> root = client.get('@personal')
-        >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Array: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> file = root['root-example/dir2/ds-4d.b2nd']
-        >>> file.copy('@personal/root-example/dir2/ds-4d-copy.b2nd')
-        PurePosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
-        >>> 'root-example/dir2/ds-4d.b2nd' in root
-        True
-        >>> 'root-example/dir2/ds-4d-copy.b2nd' in root
-        True
-        """
-        return self.client.copy(self.path, dst)
-
-    def remove(self):
-        """
-        Removes the file from the remote repository.
-
-        Returns
-        -------
-        str
-            The path of the removed file.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> # To remove a file you need to be a registered user
-        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
-        >>> root = client.get('@personal')
-        >>> path = 'root-example/dir2/ds-4d.b2nd'
-        >>> root.upload(path)
-        <Array: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> file = root[path]
-        >>> file.remove()
-        '@personal/root-example/dir2/ds-4d.b2nd'
-        >>> path in root
-        False
-        """
-        return self.client.remove(self.path)
 
 
 class Dataset(File):
@@ -801,7 +821,7 @@ class Table(Dataset):
         return self.rows(0, n)
 
 
-class Group:
+class Group(_FileOpsMixin):
     """A browsable group (HDF5 jargon): a directory, a TreeStore ``.b2z``, or a
     virtual group inside one. Children are addressed by (inner) path.
 

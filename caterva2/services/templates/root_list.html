@@ -8,7 +8,7 @@
       hx-include="#query-search"
       hx-indicator="#path-list-wrapper .htmx-indicator"
       hx-on:htmx:before-request="clearContent('#path-list');"
-      style="width: max-content"
+      style="width: max-content; max-width: 100%; min-width: 0;"
 >
 
     Roots:
@@ -30,8 +30,10 @@
     {% endwith %}
 
     {% for name in mounted %}
-    <div class="d-flex gap-1 justify-content-between">
-        <div class="form-check">
+    <div class="position-relative" style="min-width: 0;">
+        <i class="fa-solid fa-xmark position-absolute" style="left: -1.1rem; top: 0.2rem;" role="button"
+           title="Unmount" data-name="{{ name }}" onclick="unmountRoot(this.dataset.name)"></i>
+        <div class="form-check text-truncate" style="min-width: 0;">
             <input class="form-check-input" type="checkbox" name="roots"
                    value="{{ name }}" {{ "checked" if name in checked }}
                    onchange="return onMountedRootToggle(event, this.value)"
@@ -39,8 +41,6 @@
             <label class="form-check-label" for="id_root_mounted_{{ loop.index }}"
                    title="{{ name }}">{{ name.split('/')[-1] }}</label>
         </div>
-        <i class="fa-solid fa-xmark" role="button" title="Unmount"
-           data-name="{{ name }}" onclick="unmountRoot(this.dataset.name)"></i>
     </div>
     {% endfor %}
 

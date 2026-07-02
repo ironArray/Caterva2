@@ -22,6 +22,7 @@ import typing
 # Requirements
 import blosc2
 import fastapi
+import h5py
 import safer
 from fastapi_users.exceptions import UserNotExists
 from sqlalchemy.future import select
@@ -36,8 +37,10 @@ BLOSC2_TABLE_SUFFIXES = {".b2z"}
 BLOSC2_FRAME_SUFFIXES = {".b2"}
 BLOSC2_NATIVE_SUFFIXES = BLOSC2_ARRAY_SUFFIXES | BLOSC2_TABLE_SUFFIXES | BLOSC2_FRAME_SUFFIXES
 
+HDF5_SUFFIXES = {".h5", ".hdf5"}
+
 # Container suffixes whose paths may descend into internal (virtual) members.
-BLOSC2_CONTAINER_SUFFIXES = {".b2z"}
+BLOSC2_CONTAINER_SUFFIXES = {".b2z"} | HDF5_SUFFIXES
 
 
 def split_container_path(path):
@@ -74,6 +77,130 @@ def treestore_size(tree, prefix="/"):
     rel = prefix.strip("/")
     rel = f"{rel}/" if rel else ""
     return sum(info.get("length", 0) for m, info in get_offsets().items() if m.startswith(rel))
+
+
+class _TreeStoreAdapter:
+    """Adapter for a ``.b2z`` holding a TreeStore. Leaves survive `close()`
+    (they're independent objects once fetched), so callers may close eagerly."""
+
+    def __init__(self, tree):
+        self.tree = tree
+
+    def leaves(self, prefix="/"):
+        try:
+            return treestore_leaves(self.tree, prefix)
+        except (KeyError, ValueError):
+            return []
+
+    def size(self, prefix="/"):
+        return treestore_size(self.tree, prefix)
+
+    def get(self, key):
+        try:
+            return self.tree[key]
+        except (KeyError, ValueError):
+            # ValueError: TreeStore rejects malformed keys (NUL bytes, empty
+            # segments), and keys come straight from the URL — 404, not 500.
+            return None
+
+    def is_group(self, node):
+        return isinstance(node, blosc2.TreeStore)
+
+    def close(self):
+        self.tree.close()
+
+
+class _HDF5Adapter:
+    """Adapter for a ``.h5``/``.hdf5`` file. Unlike TreeStore leaves, a leaf
+    ``HDF5Proxy`` needs the underlying ``h5py.File`` to stay open for reads
+    that happen after `get()` returns, so callers reading leaf data should
+    let this adapter be garbage-collected rather than closing it eagerly
+    (CPython drops the file's refcount to zero once the proxy itself goes out
+    of scope). Only call `close()` when done with `leaves()`/`size()` alone."""
+
+    def __init__(self, h5file):
+        self.h5file = h5file
+
+    def leaves(self, prefix="/"):
+        return hdf5.hdf5_leaves(self.h5file, prefix)
+
+    def size(self, prefix="/"):
+        return hdf5.hdf5_size(self.h5file, prefix)
+
+    def get(self, key):
+        key = key.strip("/")
+        try:
+            node = self.h5file[key] if key else self.h5file
+        except KeyError:
+            return None
+        if isinstance(node, (h5py.Group, h5py.File)):
+            return node
+        if not hdf5.h5dset_is_compatible(node):
+            return None
+        return hdf5.HDF5Proxy.open_leaf(self.h5file, key)
+
+    def is_group(self, node):
+        return isinstance(node, (h5py.Group, h5py.File))
+
+    def close(self):
+        self.h5file.close()
+
+
+def open_container(abspath):
+    """Adapter for a *browsable hierarchical* file, or ``None`` if `abspath`
+    is not one (single-array .b2z, corrupt/non-container file, wrong suffix)."""
+    suffix = abspath.suffix
+    if suffix == ".b2z":
+        try:
+            tree = blosc2.open(abspath)
+        except Exception:
+            return None
+        return _TreeStoreAdapter(tree) if isinstance(tree, blosc2.TreeStore) else None
+    if suffix in HDF5_SUFFIXES:
+        try:
+            return _HDF5Adapter(h5py.File(abspath, "r"))
+        except Exception:
+            return None
+    return None
+
+
+def is_container_file(abspath):
+    """Cheap "is this mountable?" probe for the web path-list hot path (runs
+    per file per search keystroke), avoiding a full open where possible."""
+    suffix = abspath.suffix
+    if suffix in HDF5_SUFFIXES:
+        return h5py.is_hdf5(abspath)
+    if suffix == ".b2z":
+        container = open_container(abspath)
+        if container is None:
+            return False
+        container.close()
+        return True
+    return False
+
+
+def container_member_info(abspath, inner_key):
+    """Metadata model for a member inside a container file: a
+    ``models.Directory`` for a virtual group, dataset metadata for a leaf, or
+    ``None`` if the container or the member does not exist."""
+    container = open_container(abspath)
+    if container is None:
+        return None
+    try:
+        node = container.get(inner_key)
+        if node is None:
+            return None
+        if container.is_group(node):
+            # A virtual group: report leaf count and on-disk size (cheap,
+            # no per-leaf open).
+            return models.Directory(
+                mtime=abspath.stat().st_mtime,
+                size=container.size(inner_key),
+                nfiles=len(container.leaves(inner_key)),
+            )
+        return read_metadata(node, mtime=abspath.stat().st_mtime)
+    finally:
+        container.close()
 
 
 def compress_file(path):
@@ -139,16 +266,17 @@ def read_metadata(obj, mtime=None):
         mtime = stat.st_mtime
         size = stat.st_size
 
-        if path.suffix in {".h5", ".hdf5"}:
-            # HDF5 file
-            # TODO: extract metadata from HDF5 file
-            # try:
-            #     import h5py
-            # except ImportError:
-            #     raise ImportError("h5py is required to read HDF5 files")
-            # with h5py.File(path, "r") as f:
-            #     obj = f
-            return get_model_from_obj(obj, models.File, mtime=mtime, size=size)
+        if path.suffix in HDF5_SUFFIXES:
+            # A browsable .h5/.hdf5 is presented as a directory (its root
+            # group), mirroring the .b2z/TreeStore case below; a corrupt or
+            # unopenable file falls back to a plain File.
+            container = open_container(path)
+            if container is None:
+                return get_model_from_obj(obj, models.File, mtime=mtime, size=size)
+            try:
+                return models.Directory(mtime=mtime, size=size, nfiles=len(container.leaves("/")))
+            finally:
+                container.close()
 
         assert path.suffix in BLOSC2_NATIVE_SUFFIXES
         try:
@@ -170,7 +298,18 @@ def read_metadata(obj, mtime=None):
     # else: obj is an already-opened object; keep the caller-supplied mtime
 
     # Read metadata
-    if isinstance(obj, blosc2.ndarray.NDArray):
+    if isinstance(obj, hdf5.HDF5Proxy):
+        # A file-less HDF5 leaf proxy (from a container adapter): not an
+        # NDArray, so it needs its own branch (unlike the on-disk-proxy
+        # NDArray case below, which is keyed on vlmeta["_ftype"]).
+        proxy = obj
+        cparams = get_model_from_obj(proxy.b2arr.schunk.cparams, models.CParams)
+        cparams = reformat_cparams(cparams)
+        schunk = get_model_from_obj(proxy.b2arr.schunk, models.SChunk, cparams=cparams)
+        schunk.cratio = proxy.cratio
+        schunk.cbytes = proxy.cbytes
+        return get_model_from_obj(proxy, models.Metadata, schunk=schunk, mtime=mtime)
+    elif isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)

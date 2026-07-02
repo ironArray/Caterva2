@@ -297,12 +297,81 @@ def b2chunkers_from_chunked(
     return b2getchunk_chunked, b2iterchunks_chunked
 
 
+def _h5group(h5file, prefix):
+    """The group at ``prefix``, or None if it is missing or not a group.
+
+    URL-supplied prefixes may name a leaf dataset or nothing at all; both must
+    degrade gracefully (matching TreeStore's tolerant prefix matching), not
+    crash the caller.
+    """
+    rel = prefix.strip("/")
+    try:
+        node = h5file[rel] if rel else h5file
+    except (KeyError, ValueError):
+        return None
+    return node if isinstance(node, (h5py.Group, h5py.File)) else None
+
+
+def hdf5_leaves(h5file, prefix="/"):
+    """Full leaf keys (e.g. ``/g/a``) under ``prefix`` of an open HDF5 file.
+
+    Mirrors ``srv_utils.treestore_leaves``. Incompatible datasets (compound,
+    vlen, too many dims) are skipped rather than surfaced as broken leaves;
+    a missing or non-group ``prefix`` yields ``[]``.
+    """
+    grp = _h5group(h5file, prefix)
+    if grp is None:
+        return []
+    base = prefix.rstrip("/")
+    out = []
+
+    def visit(name, obj):
+        if isinstance(obj, h5py.Dataset) and h5dset_is_compatible(obj):
+            out.append(f"{base}/{name}")
+
+    grp.visititems(visit)
+    return out
+
+
+def hdf5_size(h5file, prefix="/"):
+    """On-disk size (bytes) of compatible leaves under ``prefix``, in a single
+    ``visititems`` walk (no per-leaf re-lookup)."""
+    grp = _h5group(h5file, prefix)
+    if grp is None:
+        return 0
+    total = 0
+
+    def visit(name, obj):
+        nonlocal total
+        if isinstance(obj, h5py.Dataset) and h5dset_is_compatible(obj):
+            total += obj.id.get_storage_size()
+
+    grp.visititems(visit)
+    return total
+
+
 class HDF5Proxy(blosc2.Operand):
     """
     Simple proxy for an HDF5 array (or similar) that can be used with the Blosc2 compute engine.
 
     This only supports the __getitem__ method. No caching is performed.
     """
+
+    @classmethod
+    def open_leaf(cls, h5file, dsetname):
+        """Build a file-less proxy for a dataset in an already-open HDF5 file.
+
+        Unlike the on-disk mode below, this creates no ``.b2nd`` proxy file:
+        ``b2arr`` is an in-memory, urlpath-less Blosc2 array used only to hold
+        creation-compatible metadata (cparams/dparams/chunks/dtype).
+        """
+        self = cls.__new__(cls)
+        self.fname = h5file.filename
+        self.dsetname = dsetname
+        self.dset = h5file[dsetname] if dsetname else h5file
+        b2args = b2args_from_h5dset(self.dset)
+        self.b2arr = blosc2.empty(self.dset.shape or (), dtype=self.dset.dtype, **b2args)
+        return self
 
     def __init__(self, b2arr, h5file=None, dsetname=None):
         if b2arr is not None:

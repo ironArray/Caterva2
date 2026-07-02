@@ -24,6 +24,14 @@ body {
     min-width: 0;
 }
 
+#root-list-wrapper {
+    /* Grid items default to min-width: auto, so a long mounted-root name
+       (e.g. a .h5 file) would overflow the fixed-width column instead of
+       shrinking/truncating, spilling into (and eating clicks meant for)
+       #path-list-wrapper next door. */
+    min-width: 0;
+}
+
 @media (min-width: 800px) and (max-width: 1300px) {
     #page {
         grid-template-columns: 10rem auto;
