@@ -103,6 +103,16 @@ class _TreeStoreAdapter:
             # segments), and keys come straight from the URL — 404, not 500.
             return None
 
+    def leaf_size(self, key):
+        """Cheap on-disk (compressed) size of a single leaf, or None if
+        `key` doesn't resolve to a leaf. Unlike `size()`, this doesn't sum
+        anything: `treestore_size`'s prefix-matching is for group subtrees
+        and doesn't match an exact leaf key."""
+        node = self.get(key)
+        if node is None or self.is_group(node):
+            return None
+        return node.cbytes
+
     def is_group(self, node):
         return isinstance(node, blosc2.TreeStore)
 
@@ -138,6 +148,20 @@ class _HDF5Adapter:
         if not hdf5.h5dset_is_compatible(node):
             return None
         return hdf5.HDF5Proxy.open_leaf(self.h5file, key)
+
+    def leaf_size(self, key):
+        """Cheap on-disk (storage) size of a single dataset, or None if
+        `key` doesn't resolve to a dataset. Reads straight off the h5py
+        Dataset instead of `get()`, to avoid building a full HDF5Proxy
+        (which reads Blosc2 super-chunk metadata) just for a listing."""
+        key = key.strip("/")
+        try:
+            node = self.h5file[key] if key else self.h5file
+        except KeyError:
+            return None
+        if isinstance(node, (h5py.Group, h5py.File)):
+            return None
+        return node.id.get_storage_size()
 
     def is_group(self, node):
         return isinstance(node, (h5py.Group, h5py.File))

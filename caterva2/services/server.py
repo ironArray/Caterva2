@@ -1781,11 +1781,10 @@ async def htmx_path_list(
         if container is None:
             continue
         try:
-            size = abspath.stat().st_size  # same container file for every leaf
             for key in container.leaves():
                 leaf_path = f"{root}{key}"
                 if search in leaf_path:
-                    add_dataset(leaf_path, abspath, size=size)
+                    add_dataset(leaf_path, abspath, size=container.leaf_size(key))
         finally:
             container.close()
 
@@ -1802,10 +1801,16 @@ async def htmx_path_list(
             rootdir = get_rootdir_or_none(root, user)
             if rootdir is not None:
                 # Path may descend into a container (e.g. an unmounted TreeStore
-                # leaf); size/stat then come from the container file itself.
+                # leaf); stat comes from the container file, but size is the
+                # leaf's own (not the whole container's).
                 container_path, inner_key = srv_utils.split_container_path(path)
+                leaf_size = None
                 if inner_key is not None:
                     abspath = rootdir / pathlib.Path(*container_path.parts[1:])
+                    container = srv_utils.open_container(abspath)
+                    if container is not None:
+                        leaf_size = container.leaf_size(inner_key)
+                        container.close()
                 else:
                     relpath = pathlib.Path(*segments[2:])
                     abspath = rootdir / relpath
@@ -1813,7 +1818,7 @@ async def htmx_path_list(
                         abspath = pathlib.Path(f"{abspath}.b2")
 
                 with contextlib.suppress(FileNotFoundError, NotADirectoryError):
-                    add_dataset(path, abspath)
+                    add_dataset(path, abspath, size=leaf_size)
 
     # Assign names to datasets
     datasets = sorted(datasets, key=lambda x: x["path"])
