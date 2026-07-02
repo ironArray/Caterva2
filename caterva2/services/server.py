@@ -1625,11 +1625,21 @@ async def htmx_root_list(
     request: Request,
     # Query
     roots: list[str] = fastapi.Query([]),
+    mounted: list[str] = fastapi.Query([]),
     # Depends
     user: db.User = Depends(optional_user),
 ):
+    seen = set()
+    mounted_ok = []
+    for path in mounted:
+        prefix = path.split("/", 1)[0]
+        if get_rootdir_or_none(prefix, user) is not None and path not in seen:
+            seen.add(path)
+            mounted_ok.append(path)
+
     context = {
         "checked": roots,
+        "mounted": mounted_ok,
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1694,14 +1704,15 @@ async def htmx_path_list(
     datasets = []
     query = {"roots": roots, "search": search}
 
-    def add_dataset(path, abspath):
+    def add_dataset(path, abspath, mountable=False, size=None):
         datasets.append(
             {
                 "name": "_",
                 "path": path,
-                "size": abspath.stat().st_size,
+                "size": abspath.stat().st_size if size is None else size,
                 "url": make_url(request, "html_home", path=path, query=query),
                 "label": truncate_path(path),
+                "mountable": mountable,
             }
         )
 
@@ -1710,18 +1721,47 @@ async def htmx_path_list(
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             path = f"{root}/{relpath}"
-            # A .b2z holding a TreeStore is browsed as a folder: expand it into
-            # one row per leaf (e.g. tree.b2z/level1/ctable).
+            # A .b2z holding a TreeStore shows as a single mountable row; its
+            # leaves are browsed once it's mounted as a virtual root. A corrupt
+            # or non-container .b2z (uploads aren't validated) falls through to
+            # a plain row instead of crashing the whole listing.
             if relpath.suffix == ".b2z":
-                tree = blosc2.open(abspath)
+                try:
+                    tree = blosc2.open(abspath)
+                except Exception:
+                    tree = None
                 if isinstance(tree, blosc2.TreeStore):
-                    for key in srv_utils.treestore_leaves(tree):
-                        leaf_path = f"{path}{key}"
-                        if search in leaf_path:
-                            add_dataset(leaf_path, abspath)
+                    if search in path:
+                        add_dataset(path, abspath, mountable=True)
                     continue
             if search in path:
                 add_dataset(path, abspath)
+
+    # Virtual roots: mounted .b2z TreeStore containers, expanded into leaves.
+    for root in roots:
+        proot = pathlib.PurePosixPath(root)
+        if proot.suffix not in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
+            continue  # classic roots handled by filter_roots above
+        rootdir = get_rootdir_or_none(proot.parts[0], user)
+        if rootdir is None:
+            continue
+        abspath = (rootdir / pathlib.Path(*proot.parts[1:])).resolve()
+        if rootdir.resolve() not in abspath.parents:
+            continue
+        # `root` is untrusted (client localStorage): a stale, non-container, or
+        # corrupt path must skip silently, not 500 the whole listing. blosc2.open
+        # raises OSError (missing/dir), zipfile.BadZipFile, or RuntimeError here.
+        try:
+            tree = blosc2.open(abspath)
+        except Exception:
+            continue
+        if not isinstance(tree, blosc2.TreeStore):
+            continue
+        size = abspath.stat().st_size  # same container file for every leaf
+        for key in srv_utils.treestore_leaves(tree):
+            leaf_path = f"{root}{key}"
+            if search in leaf_path:
+                add_dataset(leaf_path, abspath, size=size)
 
     # Add current path if not already in the list
     current_path = hx_current_url.path
@@ -1735,12 +1775,18 @@ async def htmx_path_list(
             root = segments[1]
             rootdir = get_rootdir_or_none(root, user)
             if rootdir is not None:
-                relpath = pathlib.Path(*segments[2:])
-                abspath = rootdir / relpath
-                if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
-                    abspath = pathlib.Path(f"{abspath}.b2")
+                # Path may descend into a container (e.g. an unmounted TreeStore
+                # leaf); size/stat then come from the container file itself.
+                container_path, inner_key = srv_utils.split_container_path(path)
+                if inner_key is not None:
+                    abspath = rootdir / pathlib.Path(*container_path.parts[1:])
+                else:
+                    relpath = pathlib.Path(*segments[2:])
+                    abspath = rootdir / relpath
+                    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                        abspath = pathlib.Path(f"{abspath}.b2")
 
-                with contextlib.suppress(FileNotFoundError):
+                with contextlib.suppress(FileNotFoundError, NotADirectoryError):
                     add_dataset(path, abspath)
 
     # Assign names to datasets
@@ -1804,10 +1850,14 @@ async def htmx_path_info(
     # Read metadata (a path may descend into a container, e.g. a TreeStore .b2z leaf)
     container_path, inner_key = srv_utils.split_container_path(path)
     abspath = get_abspath(container_path, user)
-    if inner_key is not None:
-        meta = srv_utils.read_metadata(blosc2.open(abspath)[inner_key], mtime=abspath.stat().st_mtime)
-    else:
-        meta = srv_utils.read_metadata(abspath)
+    try:
+        if inner_key is not None:
+            meta = srv_utils.read_metadata(blosc2.open(abspath)[inner_key], mtime=abspath.stat().st_mtime)
+        else:
+            meta = srv_utils.read_metadata(abspath)
+    except FileNotFoundError:
+        # e.g. a bare root (@personal) or another directory with no dataset of its own
+        raise fastapi.HTTPException(status_code=404) from None  # NotFound
 
     # Context
     current_url = push_url or hx_current_url

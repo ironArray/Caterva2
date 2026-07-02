@@ -130,7 +130,7 @@ class Root:
         # server's metadata is what tells us the kind.
         meta = self.client.get_info(f"{self.name}/{path}")
         kind = meta.get("kind")
-        if kind == "dir":
+        if kind == "group":
             return Group(self, path, meta)
         if kind == "ctable":
             return Table(self, path, meta)

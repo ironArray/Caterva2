@@ -200,7 +200,7 @@ def cmd_info(client, args, url):
                 names.append(f"f{f}")
         return names
 
-    if data.get("kind") == "dir":
+    if data.get("kind") == "group":
         print(f"nfiles : {data.get('nfiles')}")
         print(f"size   : {_human_bytes(data.get('size'))}")
         print(f"mtime  : {data.get('mtime')}")

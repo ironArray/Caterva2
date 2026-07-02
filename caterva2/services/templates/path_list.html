@@ -22,7 +22,7 @@
         {% endif %}
         <a href="{{dataset.url}}"
            class="input-group-text text-decoration-none"
-           style="width: 70%"
+           style="width: 62%"
            title="{{dataset.path}}"
 
            data-url="{{ url('htmx/path-info/') }}"
@@ -33,6 +33,10 @@
         </a>
         <span class="input-group-text" style="width: 20%">
             {{ dataset.size|filesizeformat }}
+        </span>
+        <span class="input-group-text" style="width: 8%"
+              {% if dataset.mountable %}role="button" title="Mount as root" data-path="{{ dataset.path }}" onclick="mountRoot(this.dataset.path)"{% endif %}>
+            {% if dataset.mountable %}<i class="fa-solid fa-plug"></i>{% endif %}
         </span>
     </div>
     {% endfor %}

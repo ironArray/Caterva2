@@ -120,7 +120,7 @@ class Directory(pydantic.BaseModel):
     virtual group inside one. ``size`` is None when it is not cheap to compute
     (virtual groups)."""
 
-    kind: str = "dir"
+    kind: str = "group"
     mtime: datetime.datetime | None
     size: int | None = None
     nfiles: int
