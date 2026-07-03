@@ -302,6 +302,101 @@ document.addEventListener('pointerdown', (ev) => {
     bar.addEventListener('pointercancel', onUp);
 });
 
+// Row selection + arrow-key navigation for the Datasets panel and the Display data table.
+// Arrows just move the highlight (dataset list) except at the Display table's window
+// edge, where they page in the adjacent window (dataset list never auto-loads).
+let lastRowPanel = null; // 'datasets' | 'display'
+let pendingRowEdge = null; // 'first' | 'last' | null, set right before paging past a window edge
+
+document.addEventListener('click', (ev) => {
+    const datasetRow = ev.target.closest('#dataset-list .input-group');
+    if (datasetRow) {
+        document.querySelectorAll('#dataset-list .input-group.border-primary')
+            .forEach(r => r.classList.remove('border', 'border-primary'));
+        datasetRow.classList.add('border', 'border-primary');
+        lastRowPanel = 'datasets';
+        return;
+    }
+    const dataRow = ev.target.closest('#info-view table tr.data-row');
+    if (dataRow) {
+        dataRow.closest('table').querySelectorAll('tr.table-active')
+            .forEach(r => r.classList.remove('table-active'));
+        dataRow.classList.add('table-active');
+        lastRowPanel = 'display';
+    }
+});
+
+document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    if (document.activeElement.matches('input, textarea')) return;  // native inputs keep their own arrow behavior
+
+    // Before any click/arrow-move sets a cursor row, start from whichever dataset
+    // is already loaded (the .active teal link) instead of defaulting to first/last.
+    const panel = lastRowPanel
+        || (document.querySelector('#dataset-list a.active') ? 'datasets' : null);
+
+    if (panel === 'datasets') {
+        const rows = [...document.querySelectorAll('#dataset-list .input-group')];
+        if (rows.length === 0) return;
+        const current = document.querySelector('#dataset-list .input-group.border-primary')
+            || document.querySelector('#dataset-list a.active')?.closest('.input-group');
+        const idx = current ? rows.indexOf(current) : -1;
+        ev.preventDefault();
+        const next = idx === -1
+            ? (ev.key === 'ArrowDown' ? rows[0] : rows[rows.length - 1])
+            : rows[ev.key === 'ArrowDown' ? Math.min(idx + 1, rows.length - 1) : Math.max(idx - 1, 0)];
+        rows.forEach(r => r.classList.remove('border', 'border-primary'));
+        next.classList.add('border', 'border-primary');
+        next.scrollIntoView({block: 'nearest'});
+        next.querySelector('a')?.focus({preventScroll: true});  // so Enter loads it (native link activation)
+    } else if (panel === 'display') {
+        const table = document.querySelector('#info-view table');
+        if (!table) return;
+        const rows = [...table.querySelectorAll('tr.data-row')];
+        if (rows.length === 0) return;
+        const current = table.querySelector('tr.data-row.table-active');
+        const idx = current ? rows.indexOf(current) : -1;
+        ev.preventDefault();
+
+        if (idx === -1) {
+            const row = ev.key === 'ArrowDown' ? rows[0] : rows[rows.length - 1];
+            row.classList.add('table-active');
+            row.scrollIntoView({block: 'nearest'});
+        } else if (ev.key === 'ArrowDown' && idx < rows.length - 1) {
+            rows[idx].classList.remove('table-active');
+            rows[idx + 1].classList.add('table-active');
+            rows[idx + 1].scrollIntoView({block: 'nearest'});
+        } else if (ev.key === 'ArrowUp' && idx > 0) {
+            rows[idx].classList.remove('table-active');
+            rows[idx - 1].classList.add('table-active');
+            rows[idx - 1].scrollIntoView({block: 'nearest'});
+        } else {
+            // already at the loaded window's edge: page to the adjacent window
+            const input = document.querySelector('#info-view-form input[name="index"]:not([readonly])');
+            if (!input) return;
+            const before = input.value;
+            ev.key === 'ArrowDown' ? input.stepUp() : input.stepDown();
+            if (input.value !== before) {
+                pendingRowEdge = ev.key === 'ArrowDown' ? 'first' : 'last';
+                htmx.trigger(input, 'change');
+            }
+        }
+    }
+});
+
+// After paging a row selection past the loaded window's edge, land the highlight
+// on the near edge of the freshly-swapped-in window (continuous scroll-through-data).
+document.body.addEventListener('htmx:afterSwap', (ev) => {
+    if (ev.target.id !== 'info-view' || !pendingRowEdge) return;
+    const rows = [...ev.target.querySelectorAll('tr.data-row')];
+    const row = pendingRowEdge === 'first' ? rows[0] : rows[rows.length - 1];
+    if (row) {
+        row.classList.add('table-active');
+        row.scrollIntoView({block: 'nearest'});
+    }
+    pendingRowEdge = null;
+});
+
 window.activate = activate;
 window.clearContent = clearContent;
 window.openTab = openTab;

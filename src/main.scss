@@ -151,6 +151,15 @@ body {
     overflow-y: auto;
 }
 
+#dataset-list a:focus {
+    // the row's own border-primary highlight already shows what's focused
+    outline: none;
+}
+
+tr.data-row {
+    cursor: pointer;
+}
+
 .info-view-scrollbar {
     position: relative;
     width: 6px;
