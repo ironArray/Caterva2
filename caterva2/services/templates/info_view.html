@@ -46,7 +46,7 @@
                 {% endfor %}
             </div>
         </div>
-        {% if filterable %}
+        {% if sortable %}
         <div class="input-group w-auto">
             <label class="input-group-text" for="id_sortby">Sort by</label>
             <select class="form-select" name="sortby" id="id_sortby" hx-post="{{ view_url }}">

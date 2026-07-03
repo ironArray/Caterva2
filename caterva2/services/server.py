@@ -1967,10 +1967,18 @@ async def htmx_path_info(
 @functools.lru_cache(maxsize=16)
 def get_filtered_array(abspath, path, filter, sortby, mtime):
     arr = open_b2(abspath, path)
+    sortby = sortby.strip() if sortby else None
+
+    if isinstance(arr, blosc2.CTable):
+        # CTable has no .fields/.argsort; filtering isn't supported, only sort_by().
+        assert not filter
+        if sortby:
+            arr = arr.sort_by(sortby, view=True)
+        return arr, None
+
     has_ndfields = hasattr(arr, "fields") and arr.fields != {}
     assert has_ndfields
     idx = None
-    sortby = sortby.strip() if sortby else None
 
     # Filter rows only for NDArray with fields
     if filter:
@@ -2040,6 +2048,8 @@ async def htmx_path_view(
             return htmx_error(request, f"Error in filter: {exc}")
         except NameError as exc:
             return htmx_error(request, f"Unknown field: {exc}")
+        except KeyError as exc:
+            return htmx_error(request, f"Unknown field: {exc}")
         except ValueError as exc:
             return htmx_error(request, f"ValueError: {exc}")
         except SyntaxError as exc:
@@ -2094,10 +2104,11 @@ async def htmx_path_view(
             "cols": cols,
             "fields": fields,
             "filter": "",
-            "sortby": "",
+            "sortby": sortby,
             "shape": (nrows,),
             "tags": tags,
             "filterable": False,
+            "sortable": True,
         }
         return templates.TemplateResponse(request, "info_view.html", context)
 
@@ -2190,6 +2201,7 @@ async def htmx_path_view(
         "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
         "filterable": True,
+        "sortable": True,
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 

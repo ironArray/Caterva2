@@ -402,18 +402,51 @@ def test_htmx_path_info_renders(fill_ctable_public, client):
     assert "nrows" in resp.text
 
 
-def test_htmx_path_view_no_filter_sort(fill_ctable_public, client):
+def test_htmx_path_view_no_filter(fill_ctable_public, client):
     fname, root = fill_ctable_public
     path = f"{root.name}/{fname}"
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}")
     resp.raise_for_status()
     text = resp.text
-    # Fields selector present, Filter/Sort-by absent (filterable=False for CTable)
+    # Fields and Sort-by selectors present; Filter absent (filterable=False for CTable)
     assert "Fields" in text
-    assert "Sort by" not in text
+    assert "Sort by" in text
     assert 'placeholder="Filter"' not in text
     assert "v0" in text
     assert "v2" in text
+
+
+def test_htmx_path_view_sort_by(client):
+    """Rows are inserted in descending x order; sort_by('x') must reverse them."""
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    fname = "unsorted_table.b2z"
+
+    @dataclass
+    class Row:
+        x: int = blosc2.field(blosc2.int32())
+        y: str = blosc2.field(blosc2.string(max_length=20))
+
+    t = blosc2.CTable(Row, urlpath=str(dest_dir / fname), mode="w", compact=True)
+    for i in reversed(range(5)):
+        t.append((i, f"v{i}"))
+    t.close()
+
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x"})
+    resp.raise_for_status()
+    text = resp.text
+    x_positions = [text.index(f">{i}<") for i in range(5)]
+    assert x_positions == sorted(x_positions)
+
+
+def test_htmx_path_view_sort_by_unknown_field(fill_ctable_public, client):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "nope"})
+    resp.raise_for_status()
+    assert "Unknown field" in resp.text
 
 
 # ---------------------------------------------------------------------------
