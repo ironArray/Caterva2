@@ -578,24 +578,22 @@ async def fetch_data(
             "use the download API if you only want to download the file"
         )
 
-    if inner_key is not None:
-        # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf). Not
-        # explicitly closed: an HDF5 leaf needs its underlying h5py.File open
-        # for the reads below; CPython drops it once `container` goes out of
-        # scope at function return (verified: a leaf survives an *implicit*
-        # refcount-driven close, only an *explicit* .close() invalidates it).
-        container_adapter = srv_utils.open_container(abspath)
-        if container_adapter is None:
-            srv_utils.raise_not_found()
-        container = container_adapter.get(inner_key)
-        if container is None or container_adapter.is_group(container):
-            srv_utils.raise_not_found()
-    elif filter:
+    filter = filter.strip() if filter else filter
+    if filter:
         if field:
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
-        filter = filter.strip()
         mtime = abspath.stat().st_mtime
-        container, _ = get_filtered_array(abspath, path, filter, sortby=None, mtime=mtime)
+        try:
+            container, _ = get_filtered_array(
+                abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+            )
+        except ValueError as exc:
+            srv_utils.raise_bad_request(str(exc))
+    elif inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf).
+        container = srv_utils.open_container_member(abspath, inner_key)
+        if container is None:
+            srv_utils.raise_not_found()
     else:
         container = open_b2(abspath, path)
 
@@ -1969,35 +1967,33 @@ def get_filtered_array(abspath, path, filter, sortby, mtime, inner_key=None):
     # Always sorts ascending (so "col asc" and "col desc" share one cache entry);
     # descending is rendered by reading a tail window of this order in reverse.
     if inner_key is not None:
-        container = srv_utils.open_container(abspath)
-        arr = container.get(inner_key)
-        if arr is None or container.is_group(arr):
+        arr = srv_utils.open_container_member(abspath, inner_key)
+        if arr is None:
             raise ValueError("Cannot open container member")
+        if filter and isinstance(arr, blosc2.NDArray):
+            # blosc2's where fastpath re-opens the operand's urlpath, which for
+            # a TreeStore leaf is the whole .b2z ("Key must be a string" error);
+            # detach with an in-memory copy (cache-bounded, like .compute() below).
+            arr = arr.copy()
     else:
         arr = open_b2(abspath, path)
     sortby = sortby.strip() if sortby else None
 
-    if isinstance(arr, hdf5.HDF5Proxy):
-        # ponytail: HDF5Proxy has .indices()/.sort() (materialized, cache-safe)
-        # but no string-indexed LazyExpr → filter unsupported for now
-        has_ndfields = hasattr(arr, "fields") and arr.fields != {}
-        assert has_ndfields
-        assert not filter
-        idx = None
-        if sortby:
-            idx = arr.indices(sortby)
-            arr = arr.sort(sortby)
-        return arr, idx
+    if filter and isinstance(arr, hdf5.HDF5Proxy):
+        # HDF5Proxy supports slicing only; no string-indexed LazyExpr yet.
+        raise ValueError("Filtering is not supported for HDF5-backed datasets")
 
     if isinstance(arr, blosc2.CTable):
         # CTable has no .fields/.argsort; filtering isn't supported, only sort_by().
-        assert not filter
+        if filter:
+            raise ValueError("Filtering is not supported for this dataset type")
         if sortby:
             arr = arr.sort_by(sortby, view=True)
         return arr, None
 
     has_ndfields = hasattr(arr, "fields") and arr.fields != {}
-    assert has_ndfields
+    if not has_ndfields:
+        raise ValueError("Filtering/sorting is not supported for this dataset type")
     idx = None
 
     # Filter rows only for NDArray with fields
@@ -2077,22 +2073,14 @@ async def htmx_path_view(
     if hdf5_member and filter:
         return htmx_error(request, "Filtering is not supported for HDF5 container members.")
     if inner_key is not None and not (filter or sortby):
-        # Not explicitly closed: an HDF5 leaf needs its h5py.File open for the
-        # reads below (through the rest of this function); CPython drops it
-        # once `arr` goes out of scope at function return.
-        container = srv_utils.open_container(abspath)
-        if container is None:
-            return htmx_error(request, "Cannot open container member.")
-        arr = container.get(inner_key)
-        if arr is None or container.is_group(arr):
+        arr = srv_utils.open_container_member(abspath, inner_key)
+        if arr is None:
             return htmx_error(request, "Cannot open container member.")
         idx = None
     elif filter or sortby:
         try:
             mtime = abspath.stat().st_mtime
             arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
-        except AssertionError:
-            return htmx_error(request, "Filtering/sorting is not supported for this dataset type.")
         except TypeError as exc:
             return htmx_error(request, f"Error in filter: {exc}")
         except NameError as exc:
@@ -2105,6 +2093,10 @@ async def htmx_path_view(
             return htmx_error(request, f"SyntaxError: {exc}")
         except IndexError as exc:
             return htmx_error(request, f"IndexError: {exc}")
+        except (RuntimeError, OSError) as exc:
+            # e.g. a corrupt member frame in a .b2z (blosc2 RuntimeError) or a
+            # truncated HDF5 dataset (h5py OSError).
+            return htmx_error(request, f"Error reading dataset: {exc}")
         except AttributeError as exc:
             return htmx_error(
                 request,
@@ -2252,7 +2244,8 @@ async def htmx_path_view(
             rows = [tags[-1]] + list(arr)
         else:
             val = arr[()]
-            # ponytail: arr[()] may return 0-d ndarray (unhashable) not scalar
+            # blosc2.NDArray[()] returns a 0-d ndarray, not a scalar
+            # (HDF5Proxy[()] already returns a scalar)
             if isinstance(val, np.ndarray):
                 val = val.item()
             arr = [[val]]

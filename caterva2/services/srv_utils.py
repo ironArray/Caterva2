@@ -188,6 +188,23 @@ def open_container(abspath):
     return None
 
 
+def open_container_member(abspath, inner_key):
+    """The leaf at `inner_key` inside a container file, or ``None`` if the
+    container cannot be opened, the key does not exist, or it is a group.
+
+    The returned leaf stays readable after the adapter goes out of scope:
+    TreeStore leaves are independent objects, and an HDF5 leaf keeps its
+    h5py.File alive via the dataset reference (only an explicit ``.close()``
+    on the file invalidates it)."""
+    container = open_container(abspath)
+    if container is None:
+        return None
+    node = container.get(inner_key)
+    if node is None or container.is_group(node):
+        return None
+    return node
+
+
 def is_container_file(abspath):
     """Cheap "is this mountable?" probe for the web path-list hot path (runs
     per file per search keystroke), avoiding a full open where possible."""

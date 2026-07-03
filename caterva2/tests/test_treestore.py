@@ -246,6 +246,51 @@ def test_htmx_path_view_member_sort_desc(fill_tree_public, client):
     assert "&#9660;" in resp.text  # desc indicator
 
 
+def test_htmx_path_view_member_filter_only(fill_tree_public, client):
+    """Filter without sort on a structured TreeStore leaf (regression: blosc2's
+    where fastpath re-opened the leaf's urlpath — the whole .b2z — and crashed)."""
+    fname, root = fill_tree_public
+    base = client.urlbase
+    resp = httpx.post(f"{base}/htmx/path-view/{root.name}/{fname}/s/people", data={"filter": "x > 1"})
+    assert resp.status_code == 200
+    assert "<td>2</td>" in resp.text
+    assert "<td>3</td>" in resp.text
+    assert "<td>1</td>" not in resp.text  # the x == 1 row is filtered out
+
+
+def test_htmx_path_view_member_filter_and_sort(fill_tree_public, client):
+    """Filter combined with sort on a structured TreeStore leaf."""
+    fname, root = fill_tree_public
+    base = client.urlbase
+    resp = httpx.post(
+        f"{base}/htmx/path-view/{root.name}/{fname}/s/people",
+        data={"filter": "x > 1", "sortby": "y", "sortdir": "desc"},
+    )
+    assert resp.status_code == 200
+    # Rows with x > 1 sorted by y descending: (3, y=2.0) before (2, y=1.0).
+    assert resp.text.index("<td>3</td>") < resp.text.index("<td>2</td>")
+
+
+def test_fetch_member_filter(fill_tree_public, client):
+    """/api/fetch must honor the filter parameter on container members
+    (regression: it was silently ignored and the whole member returned)."""
+    fname, root = fill_tree_public
+    arr = client.get_slice(f"{root.name}/{fname}/s/people", "x > 1")
+    assert arr[:]["x"].tolist() == [2, 3]
+
+
+def test_htmx_path_view_bogus_member_sort_friendly_error(client):
+    """Sorting a member path inside a non-TreeStore .b2z gives a clear 400
+    (regression: AttributeError surfaced as a bogus 'Invalid filter' message)."""
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    (dest_dir / "bogus2.b2z").write_text("not a blosc2 container")
+    root = client.get(TEST_CATERVA2_ROOT)
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{root.name}/bogus2.b2z/x", data={"sortby": "x"})
+    assert resp.status_code == 400
+    assert "Cannot open container member" in resp.text
+
+
 def test_htmx_path_view_member_i4_no_fields(fill_tree_public, client):
     """Sort/filter on a plain (no fields) TreeStore leaf gives friendly 400, not 500."""
     fname, root = fill_tree_public

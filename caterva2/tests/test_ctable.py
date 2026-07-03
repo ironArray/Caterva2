@@ -447,8 +447,8 @@ def test_htmx_path_view_sort_by_ascending(client):
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x"})
     resp.raise_for_status()
     text = resp.text
-    x_positions = [text.index(f">{i}<") for i in range(5)]
-    assert x_positions == sorted(x_positions)
+    # x is the only integer <td> column (y renders as vN, row labels are <th>).
+    assert [int(v) for v in re.findall(r"<td>(\d+)</td>", text)] == [0, 1, 2, 3, 4]
     assert "&#9650;" in text  # ascending indicator on the active header
 
 
@@ -460,8 +460,8 @@ def test_htmx_path_view_sort_by_descending(client):
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x", "sortdir": "desc"})
     resp.raise_for_status()
     text = resp.text
-    x_positions = [text.index(f">{i}<") for i in range(5)]
-    assert x_positions == sorted(x_positions, reverse=True)
+    # x is the only integer <td> column (y renders as vN, row labels are <th>).
+    assert [int(v) for v in re.findall(r"<td>(\d+)</td>", text)] == [4, 3, 2, 1, 0]
     assert "&#9660;" in text  # descending indicator on the active header
 
 
@@ -497,7 +497,7 @@ def test_htmx_path_view_sort_by_unknown_field(fill_ctable_public, client):
     fname, root = fill_ctable_public
     path = f"{root.name}/{fname}"
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "nope"})
-    resp.raise_for_status()
+    assert resp.status_code == 400  # htmx error alert
     assert "Unknown field" in resp.text
 
 
@@ -526,8 +526,8 @@ def test_htmx_path_view_ndarray_sort_by_ascending(client):
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x"})
     resp.raise_for_status()
     text = resp.text
-    x_positions = [text.index(f"<td>{i}</td>") for i in range(6)]
-    assert x_positions == sorted(x_positions)
+    # <td> ints interleave x,y per row; [::2] picks the x column.
+    assert [int(v) for v in re.findall(r"<td>(\d+)</td>", text)[::2]] == list(range(6))
     assert "&#9650;" in text
 
 
@@ -538,8 +538,8 @@ def test_htmx_path_view_ndarray_sort_by_descending(client):
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x", "sortdir": "desc"})
     resp.raise_for_status()
     text = resp.text
-    x_positions = [text.index(f"<td>{i}</td>") for i in range(6)]
-    assert x_positions == sorted(x_positions, reverse=True)
+    # <td> ints interleave x,y per row; [::2] picks the x column.
+    assert [int(v) for v in re.findall(r"<td>(\d+)</td>", text)[::2]] == list(range(5, -1, -1))
     assert "&#9660;" in text
 
 

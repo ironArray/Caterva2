@@ -255,6 +255,15 @@ def test_web_leaf_view_filter_unsupported(fill_h5_public, client):
     assert "not supported" in r.text
 
 
+def test_fetch_h5_member_filter_unsupported(fill_h5_public, client):
+    """/api/fetch with a filter on an HDF5 member gives a 400, not a 500 or
+    silently unfiltered data."""
+    fname, root = fill_h5_public
+    r = httpx.get(f"{client.urlbase}/api/fetch/{root.name}/{fname}/s/people", params={"filter": "x > 1"})
+    assert r.status_code == 400
+    assert "not supported" in r.text
+
+
 def test_web_leaf_view_sort_i4_no_fields(fill_h5_public, client):
     """Sort on a plain (no fields) HDF5 leaf = friendly 400, not 500."""
     fname, root = fill_h5_public

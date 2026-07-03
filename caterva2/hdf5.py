@@ -7,11 +7,12 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 import json
+import math
 import os
 from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
-import b2h5py.auto  # noqa: F401A
+import b2h5py.auto  # noqa: F401
 import blosc2
 import h5py
 
@@ -553,25 +554,38 @@ class HDF5Proxy(blosc2.Operand):
             result = blosc2.empty((), dtype=self.dtype)
         return blosc2.asarray(result, cparams=self.b2arr.cparams)
 
-    def indices(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
+    def _as_blosc2(self) -> blosc2.NDArray:
+        """Materialize the whole dataset as an in-memory NDArray (memoized per proxy)."""
+        nda = getattr(self, "_nda", None)
+        if nda is None:
+            # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
+            chunks = self.dset.chunks
+            if chunks is not None and math.prod(chunks) * self.dset.dtype.itemsize < 2**20:
+                # Tiny HDF5 chunks (e.g. row-chunked tables) would be inherited by
+                # asarray and cripple blosc2 sorts; let blosc2 pick its own chunking.
+                chunks, _ = blosc2.compute_chunks_blocks(self.dset.shape, None, None, self.dset.dtype)
+            nda = self._nda = blosc2.asarray(self.dset, cparams=self.b2arr.cparams, chunks=chunks)
+        return nda
+
+    def argsort(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
         """
-        Get the indices of the HDF5 dataset.
+        Get the indices that would sort the HDF5 dataset.
 
         Parameters
         ----------
         order: str | list[str] | None
             The order of the indices. If None, use the default order.
         kwargs: Any
-            Additional arguments to pass to the Blosc2 array.
+            Additional arguments to pass to NDArray.argsort.
 
         Returns
         -------
         out: NDArray
             An array with the indices.
         """
-        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        nda = blosc2.asarray(self.dset, cparams=self.b2arr.cparams, **kwargs)
-        return nda.argsort(order=order, **kwargs)
+        return self._as_blosc2().argsort(order=order, **kwargs)
+
+    indices = argsort  # backwards-compatible name
 
     def sort(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
         """
@@ -582,16 +596,14 @@ class HDF5Proxy(blosc2.Operand):
         order: str | list[str] | None
             The order of the indices. If None, use the default order.
         kwargs: Any
-            Additional arguments to pass to the Blosc2 array.
+            Additional arguments to pass to NDArray.sort.
 
         Returns
         -------
         out: NDArray
             An array with the sorted data.
         """
-        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        nda = blosc2.asarray(self.dset, cparams=self.b2arr.cparams, **kwargs)
-        return nda.sort(order=order, **kwargs)
+        return self._as_blosc2().sort(order=order, **kwargs)
 
     def to_cframe(self, item=()) -> bytes:
         # Convert the HDF5 dataset to a Blosc2 CFrame
