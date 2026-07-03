@@ -570,7 +570,7 @@ class HDF5Proxy(blosc2.Operand):
             An array with the indices.
         """
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        nda = blosc2.asarray(self.dset[:], cparams=self.b2arr.cparams, **kwargs)
+        nda = blosc2.asarray(self.dset, cparams=self.b2arr.cparams, **kwargs)
         return nda.argsort(order=order, **kwargs)
 
     def sort(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
@@ -590,7 +590,7 @@ class HDF5Proxy(blosc2.Operand):
             An array with the sorted data.
         """
         # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        nda = blosc2.asarray(self.dset[:], cparams=self.b2arr.cparams, **kwargs)
+        nda = blosc2.asarray(self.dset, cparams=self.b2arr.cparams, **kwargs)
         return nda.sort(order=order, **kwargs)
 
     def to_cframe(self, item=()) -> bytes:

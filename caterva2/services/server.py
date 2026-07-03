@@ -1977,6 +1977,18 @@ def get_filtered_array(abspath, path, filter, sortby, mtime, inner_key=None):
         arr = open_b2(abspath, path)
     sortby = sortby.strip() if sortby else None
 
+    if isinstance(arr, hdf5.HDF5Proxy):
+        # ponytail: HDF5Proxy has .indices()/.sort() (materialized, cache-safe)
+        # but no string-indexed LazyExpr → filter unsupported for now
+        has_ndfields = hasattr(arr, "fields") and arr.fields != {}
+        assert has_ndfields
+        assert not filter
+        idx = None
+        if sortby:
+            idx = arr.indices(sortby)
+            arr = arr.sort(sortby)
+        return arr, idx
+
     if isinstance(arr, blosc2.CTable):
         # CTable has no .fields/.argsort; filtering isn't supported, only sort_by().
         assert not filter
@@ -2060,9 +2072,10 @@ async def htmx_path_view(
         # header to click, the sort would be stuck. Clear it instead.
         sortby = sortdir = ""
     sort_desc = bool(sortby) and sortdir == "desc"
-    # ponytail: HDF5 member filter/sort deferred to Phase 2
-    if inner_key is not None and abspath.suffix in srv_utils.HDF5_SUFFIXES and (filter or sortby):
-        return htmx_error(request, "Filtering/sorting is not supported for HDF5 container members.")
+    hdf5_member = inner_key is not None and abspath.suffix in srv_utils.HDF5_SUFFIXES
+    # ponytail: HDF5 filter needs LazyExpr plumbing on HDF5Proxy; sort works via .indices()/.sort()
+    if hdf5_member and filter:
+        return htmx_error(request, "Filtering is not supported for HDF5 container members.")
     if inner_key is not None and not (filter or sortby):
         # Not explicitly closed: an HDF5 leaf needs its h5py.File open for the
         # reads below (through the rest of this function); CPython drops it
@@ -2257,7 +2270,7 @@ async def htmx_path_view(
         "sortdir": sortdir,
         "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
-        "filterable": True,
+        "filterable": not hdf5_member,
         "header_sort": _header_sort_links(fields, sortby, sortdir) if cols else {},
     }
     return templates.TemplateResponse(request, "info_view.html", context)
