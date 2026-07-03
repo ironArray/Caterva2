@@ -252,6 +252,56 @@ function stopSpinner() {
 }
 
 
+// Wheel over the data table pages the dim-0 window via its htmx-wired input
+let wheelBusy = false;
+document.addEventListener('wheel', (ev) => {
+    const table = ev.target.closest('#info-view table');
+    if (!table) return;
+    const input = document.querySelector('#info-view-form input[name="index"]:not([readonly])');
+    if (!input) return;              // whole dim fits: nothing to page
+    ev.preventDefault();             // don't also scroll the page
+    if (wheelBusy) return;           // one page per gesture / in-flight request
+    wheelBusy = true;
+    setTimeout(() => { wheelBusy = false; }, 300);
+    const before = input.value;
+    ev.deltaY > 0 ? input.stepUp() : input.stepDown();  // step == window size, clamped to min/max
+    if (input.value !== before) htmx.trigger(input, 'change');
+}, { passive: false });
+
+// Drag the lateral position bar in the Display tab to seek within the dataset.
+// Pointer events (not mouse events) so this also works with touch/pen.
+document.addEventListener('pointerdown', (ev) => {
+    const bar = ev.target.closest('.info-view-scrollbar');
+    if (!bar) return;
+    const input = document.querySelector('#info-view-form input[name="index"]:not([readonly])');
+    if (!input) return;
+    ev.preventDefault();  // no text-selection drag artifacts
+    bar.setPointerCapture(ev.pointerId);  // keep tracking even if pointer leaves the bar
+    bar.classList.add('dragging');
+    const max = Number(input.max), step = Number(input.step);
+    const sizeMax = max + step;
+    const seek = (clientY) => {
+        const rect = bar.getBoundingClientRect();
+        const frac = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+        const start = Math.min(max, Math.round(frac * sizeMax / step) * step);
+        if (String(start) !== input.value) {
+            input.value = start;
+            htmx.trigger(input, 'change');
+        }
+    };
+    seek(ev.clientY);
+    const onMove = (e) => seek(e.clientY);
+    const onUp = () => {
+        bar.classList.remove('dragging');
+        bar.removeEventListener('pointermove', onMove);
+        bar.removeEventListener('pointerup', onUp);
+        bar.removeEventListener('pointercancel', onUp);
+    };
+    bar.addEventListener('pointermove', onMove);
+    bar.addEventListener('pointerup', onUp);
+    bar.addEventListener('pointercancel', onUp);
+});
+
 window.activate = activate;
 window.clearContent = clearContent;
 window.openTab = openTab;

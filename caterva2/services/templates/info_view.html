@@ -66,6 +66,18 @@
     {% endif %}
 </form>
 
+{% set ns = namespace(dim=none) %}
+{% for input in inputs %}
+{% if ns.dim is none and input.size < input.size_max %}
+{% set ns.dim = loop.index0 %}
+{% set ns.start = input.start %}
+{% set ns.size = input.size %}
+{% set ns.size_max = input.size_max %}
+{% endif %}
+{% endfor %}
+
+<div class="d-flex gap-2">
+<div class="table-responsive flex-grow-1">
 <table class="table table-sm">
     <tbody>
     <tr>
@@ -113,6 +125,15 @@
     {% endif %}
     </tbody>
 </table>
+</div>
+{% if ns.dim is not none %}
+<div class="info-view-scrollbar" title="dim {{ ns.dim }} position: {{ ns.start }}-{{ ns.start + ns.size }} of {{ ns.size_max }}">
+    <div class="info-view-scrollbar-thumb"
+         style="top: {{ (ns.start / ns.size_max * 100) }}%; height: {{ [(ns.size / ns.size_max * 100), 4] | max }}%;">
+    </div>
+</div>
+{% endif %}
+</div>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasFilterHelp" aria-labelledby="offcanvasFilterHelpLabel" style="width: 600px">
   <div class="offcanvas-header">
