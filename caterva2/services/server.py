@@ -1965,10 +1965,16 @@ async def htmx_path_info(
 
 # Added mtime to implicitly check when underlying files are changed, and so can't use cache (see issue #207)
 @functools.lru_cache(maxsize=16)
-def get_filtered_array(abspath, path, filter, sortby, mtime):
+def get_filtered_array(abspath, path, filter, sortby, mtime, inner_key=None):
     # Always sorts ascending (so "col asc" and "col desc" share one cache entry);
     # descending is rendered by reading a tail window of this order in reverse.
-    arr = open_b2(abspath, path)
+    if inner_key is not None:
+        container = srv_utils.open_container(abspath)
+        arr = container.get(inner_key)
+        if arr is None or container.is_group(arr):
+            raise ValueError("Cannot open container member")
+    else:
+        arr = open_b2(abspath, path)
     sortby = sortby.strip() if sortby else None
 
     if isinstance(arr, blosc2.CTable):
@@ -2054,12 +2060,10 @@ async def htmx_path_view(
         # header to click, the sort would be stuck. Clear it instead.
         sortby = sortdir = ""
     sort_desc = bool(sortby) and sortdir == "desc"
-    if inner_key is not None and (filter or sortby):
-        # get_filtered_array() would blosc2.open() the whole container file
-        # (uncaught RuntimeError → 500, for .h5 and TreeStore .b2z alike);
-        # container members render unfiltered only.
-        return htmx_error(request, "Filtering/sorting is not supported for container members.")
-    if inner_key is not None:
+    # ponytail: HDF5 member filter/sort deferred to Phase 2
+    if inner_key is not None and abspath.suffix in srv_utils.HDF5_SUFFIXES and (filter or sortby):
+        return htmx_error(request, "Filtering/sorting is not supported for HDF5 container members.")
+    if inner_key is not None and not (filter or sortby):
         # Not explicitly closed: an HDF5 leaf needs its h5py.File open for the
         # reads below (through the rest of this function); CPython drops it
         # once `arr` goes out of scope at function return.
@@ -2073,7 +2077,7 @@ async def htmx_path_view(
     elif filter or sortby:
         try:
             mtime = abspath.stat().st_mtime
-            arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime)
+            arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
         except AssertionError:
             return htmx_error(request, "Filtering/sorting is not supported for this dataset type.")
         except TypeError as exc:
@@ -2234,7 +2238,11 @@ async def htmx_path_view(
             arr = [arr[i : i + isize]]
             rows = [tags[-1]] + list(arr)
         else:
-            arr = [[arr[()]]]
+            val = arr[()]
+            # ponytail: arr[()] may return 0-d ndarray (unhashable) not scalar
+            if isinstance(val, np.ndarray):
+                val = val.item()
+            arr = [[val]]
             rows = list(arr)
 
     # Render
