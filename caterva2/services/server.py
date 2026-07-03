@@ -1966,6 +1966,8 @@ async def htmx_path_info(
 # Added mtime to implicitly check when underlying files are changed, and so can't use cache (see issue #207)
 @functools.lru_cache(maxsize=16)
 def get_filtered_array(abspath, path, filter, sortby, mtime):
+    # Always sorts ascending (so "col asc" and "col desc" share one cache entry);
+    # descending is rendered by reading a tail window of this order in reverse.
     arr = open_b2(abspath, path)
     sortby = sortby.strip() if sortby else None
 
@@ -2006,6 +2008,29 @@ def get_filtered_array(abspath, path, filter, sortby, mtime):
     return arr, idx
 
 
+def _desc_window(total, start, size):
+    """Map window [start, start+size) of a descending view onto the ascending order."""
+    return max(total - start - size, 0), total - start
+
+
+def _header_sort_links(displayed_fields, sortby, sortdir):
+    """Per-column htmx `hx-vals` payload cycling the sort: ascending -> descending -> unsorted.
+
+    Headers post with hx-include of the live form; these values override the
+    form's hidden sortby/sortdir inputs (htmx hx-vals take precedence).
+    """
+    links = {}
+    for col in displayed_fields:
+        if sortby != col:
+            nxt = {"sortby": col, "sortdir": "asc"}
+        elif sortdir != "desc":
+            nxt = {"sortby": col, "sortdir": "desc"}
+        else:
+            nxt = {"sortby": "", "sortdir": ""}
+        links[col] = json.dumps(nxt)
+    return links
+
+
 @app.post("/htmx/path-view/{path:path}", response_class=HTMLResponse)
 async def htmx_path_view(
     request: Request,
@@ -2017,11 +2042,18 @@ async def htmx_path_view(
     fields: typing.Annotated[list[str] | None, Form()] = None,
     filter: typing.Annotated[str, Form()] = "",
     sortby: typing.Annotated[str, Form()] = "",
+    sortdir: typing.Annotated[str, Form()] = "",
     # Depends
     user: db.User = Depends(optional_user),
 ):
     abspath, inner_key = split_and_resolve(path, user)
     filter = filter.strip()
+    sortby = sortby.strip()
+    if sortby and fields and sortby not in fields:
+        # The sorted column was removed from the displayed fields; without a
+        # header to click, the sort would be stuck. Clear it instead.
+        sortby = sortdir = ""
+    sort_desc = bool(sortby) and sortdir == "desc"
     if inner_key is not None and (filter or sortby):
         # get_filtered_array() would blosc2.open() the whole container file
         # (uncaught RuntimeError → 500, for .h5 and TreeStore .b2z alike);
@@ -2096,7 +2128,13 @@ async def htmx_path_view(
                 return value.item()
             return value
 
-        rows = [fields] + [[cell(row[f]) for f in fields] for row in arr.slice(start, stop)]
+        if sort_desc:
+            # arr is ascending-sorted; read its tail and reverse for descending order.
+            lo, hi = _desc_window(nrows, start, size)
+            window = list(arr.slice(lo, hi))[::-1]
+        else:
+            window = arr.slice(start, stop)
+        rows = [fields] + [[cell(row[f]) for f in fields] for row in window]
         context = {
             "view_url": make_url(request, "htmx_path_view", path=path),
             "inputs": inputs,
@@ -2105,10 +2143,11 @@ async def htmx_path_view(
             "fields": fields,
             "filter": "",
             "sortby": sortby,
+            "sortdir": sortdir,
             "shape": (nrows,),
             "tags": tags,
             "filterable": False,
-            "sortable": True,
+            "header_sort": _header_sort_links(fields, sortby, sortdir),
         }
         return templates.TemplateResponse(request, "info_view.html", context)
 
@@ -2150,6 +2189,10 @@ async def htmx_path_view(
             stop = min(start + size, size_max)
             if idx is None:
                 tags.append(list(range(start, stop)))
+            elif sort_desc:
+                # idx is ascending-sorted; read its tail and reverse for descending order.
+                lo, hi = _desc_window(size_max, start, size)
+                tags.append(list(reversed(idx[lo:hi])))
             else:
                 tags.append(list(idx[start:stop]))
 
@@ -2167,8 +2210,13 @@ async def htmx_path_view(
             arr = arr.tolist()
         elif ndims == 1:
             i, isize = index[0], sizes[0]
-            arr = arr[i : i + isize]
-            arr = arr.tolist()
+            if idx is not None and sort_desc:
+                # arr is ascending-sorted; read its tail and reverse for descending order.
+                lo, hi = _desc_window(shape[0], i, isize)
+                arr = list(reversed(arr[lo:hi].tolist()))
+            else:
+                arr = arr[i : i + isize]
+                arr = arr.tolist()
         else:
             arr = [arr[()].tolist()]
         rows += [[row[i] for i in idxs] for row in arr]
@@ -2198,10 +2246,11 @@ async def htmx_path_view(
         "fields": fields,
         "filter": filter,
         "sortby": sortby,
+        "sortdir": sortdir,
         "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
         "filterable": True,
-        "sortable": True,
+        "header_sort": _header_sort_links(fields, sortby, sortdir) if cols else {},
     }
     return templates.TemplateResponse(request, "info_view.html", context)
 

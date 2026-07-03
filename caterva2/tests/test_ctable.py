@@ -4,6 +4,7 @@
 import io
 import json
 import pathlib
+import re
 import sys
 import tempfile
 from contextlib import redirect_stdout
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 import blosc2
 import blosc2.ctable as ct
 import httpx
+import numpy as np
 import pytest
 
 import caterva2 as cat2
@@ -408,19 +410,22 @@ def test_htmx_path_view_no_filter(fill_ctable_public, client):
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}")
     resp.raise_for_status()
     text = resp.text
-    # Fields and Sort-by selectors present; Filter absent (filterable=False for CTable)
+    # Fields selector and clickable sortable headers present; Filter absent
+    # (filterable=False for CTable)
     assert "Fields" in text
-    assert "Sort by" in text
+    assert 'name="sortby"' in text  # hidden input preserving sort state
+    assert "hx-vals=" in text  # header click targets
+    assert 'hx-target="#info-view"' in text  # headers must not swap into themselves
+    assert 'hx-include="#info-view-form"' in text  # headers carry the live form state
     assert 'placeholder="Filter"' not in text
     assert "v0" in text
     assert "v2" in text
 
 
-def test_htmx_path_view_sort_by(client):
-    """Rows are inserted in descending x order; sort_by('x') must reverse them."""
-    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+def _make_unsorted_public_table(state_dir, fname="unsorted_table.b2z", n=5):
+    """Drop a CTable with rows inserted in descending x order (x: n-1..0)."""
+    dest_dir = pathlib.Path(state_dir) / "server/public"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    fname = "unsorted_table.b2z"
 
     @dataclass
     class Row:
@@ -428,10 +433,15 @@ def test_htmx_path_view_sort_by(client):
         y: str = blosc2.field(blosc2.string(max_length=20))
 
     t = blosc2.CTable(Row, urlpath=str(dest_dir / fname), mode="w", compact=True)
-    for i in reversed(range(5)):
+    for i in reversed(range(n)):
         t.append((i, f"v{i}"))
     t.close()
+    return fname
 
+
+def test_htmx_path_view_sort_by_ascending(client):
+    """Rows are inserted in descending x order; sort_by('x') must reverse them."""
+    fname = _make_unsorted_public_table(TEST_STATE_DIR)
     root = client.get(TEST_CATERVA2_ROOT)
     path = f"{root.name}/{fname}"
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x"})
@@ -439,6 +449,48 @@ def test_htmx_path_view_sort_by(client):
     text = resp.text
     x_positions = [text.index(f">{i}<") for i in range(5)]
     assert x_positions == sorted(x_positions)
+    assert "&#9650;" in text  # ascending indicator on the active header
+
+
+def test_htmx_path_view_sort_by_descending(client):
+    """sortdir=desc must sort by x in descending order (row insertion order)."""
+    fname = _make_unsorted_public_table(TEST_STATE_DIR, fname="unsorted_table2.b2z")
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x", "sortdir": "desc"})
+    resp.raise_for_status()
+    text = resp.text
+    x_positions = [text.index(f">{i}<") for i in range(5)]
+    assert x_positions == sorted(x_positions, reverse=True)
+    assert "&#9660;" in text  # descending indicator on the active header
+
+
+def test_htmx_path_view_sort_by_descending_paginated(client):
+    """CTable descending is emulated via a reversed tail window; check page 2."""
+    fname = _make_unsorted_public_table(TEST_STATE_DIR, fname="unsorted_table12.b2z", n=12)
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(
+        f"{client.urlbase}/htmx/path-view/{path}",
+        data={"sortby": "x", "sortdir": "desc", "sizes": "4", "index": "4"},
+    )
+    resp.raise_for_status()
+    # Second page (offset 4, size 4) of a descending 0..11 order is 7,6,5,4.
+    assert re.findall(r">v(\d+)<", resp.text) == ["7", "6", "5", "4"]
+
+
+def test_htmx_path_view_sort_cleared_when_column_hidden(client):
+    """Hiding the sorted column via the Fields selector must clear the sort."""
+    fname = _make_unsorted_public_table(TEST_STATE_DIR, fname="unsorted_table3.b2z")
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x", "fields": "y"})
+    resp.raise_for_status()
+    text = resp.text
+    # Insertion order (v4..v0) preserved: the sort on the hidden 'x' was dropped.
+    y_positions = [text.index(f">v{i}<") for i in range(5)]
+    assert y_positions == sorted(y_positions, reverse=True)
+    assert 'name="sortby" value=""' in text  # hidden input no longer re-posts the sort
 
 
 def test_htmx_path_view_sort_by_unknown_field(fill_ctable_public, client):
@@ -447,6 +499,64 @@ def test_htmx_path_view_sort_by_unknown_field(fill_ctable_public, client):
     resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "nope"})
     resp.raise_for_status()
     assert "Unknown field" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Sorting for structured NDArray (.b2nd with fields), asc/desc via headers.
+# blosc2's NDArray.argsort/sort are ascending-only; descending is done by
+# reading the ascending order's tail window and reversing it.
+# ---------------------------------------------------------------------------
+
+
+def _make_unsorted_ndarray_public(fname="nd_fields.b2nd", n=6):
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dtype = np.dtype([("x", "i4"), ("y", "i4")])
+    data = np.zeros(n, dtype=dtype)
+    data["x"] = np.arange(n)[::-1]
+    data["y"] = np.arange(n)
+    blosc2.asarray(data, urlpath=str(dest_dir / fname), mode="w")
+    return fname
+
+
+def test_htmx_path_view_ndarray_sort_by_ascending(client):
+    fname = _make_unsorted_ndarray_public()
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x"})
+    resp.raise_for_status()
+    text = resp.text
+    x_positions = [text.index(f"<td>{i}</td>") for i in range(6)]
+    assert x_positions == sorted(x_positions)
+    assert "&#9650;" in text
+
+
+def test_htmx_path_view_ndarray_sort_by_descending(client):
+    fname = _make_unsorted_ndarray_public(fname="nd_fields2.b2nd")
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(f"{client.urlbase}/htmx/path-view/{path}", data={"sortby": "x", "sortdir": "desc"})
+    resp.raise_for_status()
+    text = resp.text
+    x_positions = [text.index(f"<td>{i}</td>") for i in range(6)]
+    assert x_positions == sorted(x_positions, reverse=True)
+    assert "&#9660;" in text
+
+
+def test_htmx_path_view_ndarray_sort_by_descending_paginated(client):
+    """Descending order must remain correct across a paged window, not just page 1."""
+    fname = _make_unsorted_ndarray_public(fname="nd_fields3.b2nd", n=12)
+    root = client.get(TEST_CATERVA2_ROOT)
+    path = f"{root.name}/{fname}"
+    resp = httpx.post(
+        f"{client.urlbase}/htmx/path-view/{path}",
+        data={"sortby": "x", "sortdir": "desc", "sizes": "4", "index": "4"},
+    )
+    resp.raise_for_status()
+    text = resp.text
+    # Second page (offset 4, size 4) of a descending 0..11 order is 7,6,5,4.
+    xs = [int(v) for v in re.findall(r"<td>(\d+)</td>", text)[::2]]
+    assert xs == [7, 6, 5, 4]
 
 
 # ---------------------------------------------------------------------------

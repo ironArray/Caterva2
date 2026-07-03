@@ -1,4 +1,4 @@
-<form class="mb-2" hx-target="#info-view" hx-indicator="#id_data_indicator">
+<form id="info-view-form" class="mb-2" hx-target="#info-view" hx-indicator="#id_data_indicator">
 
     shape = {{ shape }}
 
@@ -25,6 +25,8 @@
             {% endif %}
         </div>
         {% endfor %}
+        <input type="hidden" name="sortby" value="{{ sortby }}">
+        <input type="hidden" name="sortdir" value="{{ sortdir }}">
         {% if cols %}
         <div class="dropdown" id="id_fields">
             <button type="button" class="btn btn-light dropdown-toggle"
@@ -46,17 +48,6 @@
                 {% endfor %}
             </div>
         </div>
-        {% if sortable %}
-        <div class="input-group w-auto">
-            <label class="input-group-text" for="id_sortby">Sort by</label>
-            <select class="form-select" name="sortby" id="id_sortby" hx-post="{{ view_url }}">
-                <option value=""></option>
-                {% for col in cols %}
-                <option value="{{ col }}" {% if col == sortby %}selected{% endif %}>{{ col }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        {% endif %}
         {% endif %}
         {% with id="id_data_indicator" %}
             {% include 'includes/loading.html' %}
@@ -93,7 +84,19 @@
         {% endfor %}
     {% else %}
         {% for value in rows[0] %}
+        {% if value in header_sort %}
+        {# hx-include carries the live form state; hx-vals overrides its hidden sortby/sortdir #}
+        <th role="button" tabindex="0" style="cursor: pointer;"
+            hx-post="{{ view_url }}" hx-target="#info-view" hx-indicator="#id_data_indicator"
+            hx-include="#info-view-form" hx-vals='{{ header_sort[value] }}'>
+            {{ value }}
+            {% if sortby == value %}
+            <span class="text-muted">{% if sortdir == 'desc' %}&#9660;{% else %}&#9650;{% endif %}</span>
+            {% endif %}
+        </th>
+        {% else %}
         <th>{{ value }}</th>
+        {% endif %}
         {% endfor %}
         </tr>
 
