@@ -64,6 +64,9 @@ def two_servers(tmp_path_factory):
     pub.mkdir()
     data = np.random.default_rng(0).random((4, 100_000))
     blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    # a nested dataset, to exercise path-relative listing
+    (pub / "dir1").mkdir()
+    blosc2.asarray(np.arange(10), urlpath=str(pub / "dir1" / "small.b2nd"))
     b = _start(bdir, B_PORT)
     peer_toml = f'[[server.peer]]\nname = "labb"\nurlbase = "http://localhost:{B_PORT}"\n'
     a = _start(adir, A_PORT, peer_toml)
@@ -85,6 +88,31 @@ def test_list_and_info(two_servers):
     assert "mc.b2nd" in listing
     info = httpx.get(f"{urlbase}/api/info/@labb/mc.b2nd", timeout=5).json()
     assert tuple(info["shape"]) == (4, 100_000)
+
+
+def test_list_is_path_relative(two_servers):
+    urlbase, _data, _adir = two_servers
+    listing = httpx.get(f"{urlbase}/api/list/@labb/dir1", timeout=5).json()
+    assert listing == ["small.b2nd"]  # not ["dir1/small.b2nd"]
+
+
+def test_info_404_relayed_and_peer_stays_online(two_servers):
+    urlbase, data, _adir = two_servers
+    # A bad path must relay the peer's 404 (not 503 "offline")...
+    r = httpx.get(f"{urlbase}/api/info/@labb/nope.b2nd", timeout=5)
+    assert r.status_code == 404
+    # ...and must NOT knock the whole peer offline: a fetch right after works.
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "1:2"}, timeout=5)
+    r.raise_for_status()
+    arr = blosc2.ndarray_from_cframe(r.content)
+    np.testing.assert_array_equal(arr[:], data[1:2])
+
+
+def test_fetch_rejects_filter_field_and_steps(two_servers):
+    urlbase, _data, _adir = two_servers
+    for params in ({"field": "x"}, {"filter": "a > 0"}, {"slice_": "0:4:2"}):
+        r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params=params, timeout=5)
+        assert r.status_code == 400, params
 
 
 def test_fetch_slice_correct(two_servers):
