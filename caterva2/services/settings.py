@@ -37,6 +37,10 @@ demo = conf.get(".demo", False)
 quota = parse_size(conf.get(".quota"))
 maxusers = conf.get(".maxusers")
 
+# Caterva3 remote peer mounts (see plans/caterva3-remote-peer-mounts.md)
+peers = conf.get(".peer") or []  # list of [[server.peer]] config dicts
+peer_cache_quota = parse_size(conf.get(".peer_cache_quota", "1G"))
+
 
 # Not strictly necessary but useful for documentation
 statedir = None
@@ -44,3 +48,4 @@ database = None  # <Database> instance
 personal = None
 shared = None
 public = None
+peer_id = None  # set at startup from <statedir>/peer_id

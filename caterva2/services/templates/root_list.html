@@ -29,6 +29,12 @@
         {% include 'includes/root.html' %}
     {% endwith %}
 
+    {% for name in peer_roots %}
+        {% with upload=False %}
+            {% include 'includes/root.html' %}
+        {% endwith %}
+    {% endfor %}
+
     {% for name in mounted %}
     <div class="position-relative" style="min-width: 0;">
         <i class="fa-solid fa-xmark position-absolute" style="left: -1.1rem; top: 0.2rem;" role="button"

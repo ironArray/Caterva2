@@ -26,6 +26,7 @@ import tarfile
 import traceback
 import types
 import typing
+import uuid
 import zipfile
 
 # Requirements
@@ -237,6 +238,25 @@ async def lifespan(app: FastAPI):
     if user_login_enabled():
         await db.create_db_and_tables(settings.statedir)
 
+    # Peer identity (Caterva3): a stable UUID for this server instance.
+    idfile = settings.statedir / "peer_id"
+    if not idfile.exists():
+        idfile.write_text(uuid.uuid4().hex)
+    settings.peer_id = idfile.read_text().strip()
+
+    # Peer registry (Caterva3)
+    from caterva2.services import peers as peers_mod
+
+    peers_mod.registry = peers_mod.PeerRegistry(settings.peer_id)
+    peers_mod.registry.load(settings.peers)
+    await asyncio.to_thread(peers_mod.registry.handshake_all)
+
+    from caterva2.services import peercache
+
+    peercache.pool_dir = settings.statedir / "peercache"
+    peercache.pool_dir.mkdir(parents=True, exist_ok=True)
+    peercache.budget = settings.peer_cache_quota
+
     yield
 
     # Clean up the database engine on shutdown
@@ -327,6 +347,22 @@ with (BASE_DIR / BUILD_DIR / "manifest.json").open() as file:
     templates.env.globals["main_js"] = url(BUILD_DIR + entry["file"])
 
 
+API_VERSION = 1  # bump on any breaking change to the peer-facing API
+
+
+@app.get("/api/peer")
+async def get_peer_manifest() -> dict:
+    """Identity manifest used by the Caterva3 peer handshake."""
+    return {
+        "peer_id": settings.peer_id,
+        "name": settings.urlbase,
+        "api_version": API_VERSION,
+        "roots": ["@public"],  # only locally-owned public data: never mounts
+        "capabilities": {"chunk_api": "plain"},  # api/chunk works for plain
+        # datasets only (see design doc)
+    }
+
+
 @app.get("/api/roots")
 async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     """
@@ -345,6 +381,12 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
         for name in ["@personal", "@shared"]:
             root = models.Root(name=name)
             roots[root.name] = root
+
+    from caterva2.services import peers as peers_mod
+
+    if peers_mod.registry is not None:
+        for peer in peers_mod.registry.peers.values():
+            roots[peer.root] = models.Root(name=peer.root)
 
     return roots
 
@@ -367,6 +409,12 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
+    root = path.parts[0]
+    adapter = get_peer_adapter_or_none(root)
+    if adapter is not None:
+        rel = "/".join(path.parts[1:])
+        return await asyncio.to_thread(lambda: sorted(adapter.leaves(rel)))
+
     # A path may descend into a container (e.g. a TreeStore .b2z or .h5); list
     # its members.
     directory, inner_key = split_and_resolve(path, user, resolver=get_writable_path)
@@ -411,6 +459,15 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
+    root = path.parts[0]
+    adapter = get_peer_adapter_or_none(root)
+    if adapter is not None:
+        rel = "/".join(path.parts[1:])
+        try:
+            return await asyncio.to_thread(adapter._info, rel)
+        except Exception as exc:
+            raise fastapi.HTTPException(status_code=503, detail=f"peer {root} is offline") from exc
+
     abspath, inner_key = split_and_resolve(path, user)
     if inner_key is not None:
         # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf/group).
@@ -565,6 +622,36 @@ async def fetch_data(
     """
 
     slice_ = parse_slice(slice_)
+
+    root = path.parts[0]
+    adapter = get_peer_adapter_or_none(root)
+    if adapter is not None:
+        from caterva2.services import peercache, remote
+
+        rel = "/".join(path.parts[1:])
+        real_slice = () if slice_ is None else slice_
+        try:
+            proxy = await asyncio.to_thread(adapter.get, rel)
+            lock = locks.setdefault(str(path), asyncio.Lock())
+            async with lock:  # same discipline as partial_download
+                await proxy.afetch(real_slice)
+            await asyncio.to_thread(peercache.touch, proxy, real_slice)
+            await peercache.ensure_budget()
+            data = proxy[real_slice]
+        except Exception as exc:
+            # Peer unreachable (mark_offline already called by adapter._info,
+            # or by the retry logic below): serve from the local cache if the
+            # touched chunks are already there, otherwise there is nothing
+            # correct we can return.
+            adapter.registry.mark_offline(adapter.peer)
+            cached = await asyncio.to_thread(adapter.get_cached_only, rel)
+            if cached is None or not remote.slice_fully_cached(cached, real_slice):
+                raise fastapi.HTTPException(status_code=503, detail=f"peer {root} is offline") from exc
+            data = cached[real_slice]
+        cframe = blosc2.asarray(np.ascontiguousarray(data)).to_cframe()
+        downloader = srv_utils.iterchunk(cframe)
+        return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+
     abspath, inner_key = split_and_resolve(path, user)
 
     # Container leaves are fetchable too; a plain .h5/.hdf5 (no inner_key) is
@@ -699,6 +786,11 @@ async def download_data(
     user: db.User = Depends(optional_user),
     accept_encoding: str | None = fastapi.Header(None),
 ):
+    if get_peer_adapter_or_none(path.parts[0]) is not None:
+        # ponytail: whole-file download of peer datasets is out of MVP scope;
+        # use api/fetch. Upgrade path: stream via adapter.get(...).afetch(()).
+        raise fastapi.HTTPException(status_code=404, detail="peer roots are non-transitive")
+
     decompress = accept_encoding != "blosc2"
 
     async def downloader():
@@ -752,6 +844,10 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(optional_user),
 ):
+    if get_peer_adapter_or_none(path.parts[0]) is not None:
+        # Non-transitivity guard: peer roots are never re-exposed chunk-wise.
+        raise fastapi.HTTPException(status_code=404, detail="peer roots are non-transitive")
+
     abspath = get_abspath(path, user)
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
@@ -1663,12 +1759,61 @@ async def htmx_root_list(
             seen.add(path)
             mounted_ok.append(path)
 
+    from caterva2.services import peers as peers_mod
+
+    peer_roots = [p.root for p in peers_mod.registry.peers.values()] if peers_mod.registry else []
+
     context = {
         "checked": roots,
         "mounted": mounted_ok,
+        "peer_roots": peer_roots,
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
+
+
+@app.get("/htmx/peers/", response_class=HTMLResponse)
+async def htmx_peers(request: Request):
+    """Read-only peers status fragment: name, urlbase, online badge, and
+    on-disk cache size per peer. No timer-based auto-refresh (MVP scope)."""
+    from caterva2.services import peers as peers_mod
+
+    entries = []
+    if peers_mod.registry is not None:
+        for peer in peers_mod.registry.peers.values():
+            # No background timer (out of MVP scope): re-probe on each page
+            # load/refresh instead, so the badge reflects reality without
+            # waiting for a fetch to stumble on the peer being down.
+            await asyncio.to_thread(peers_mod.registry._handshake, peer)
+            cachedir = settings.statedir / "peercache" / peer.name
+            cached_bytes = (
+                sum(f.stat().st_size for f in cachedir.rglob("*") if f.is_file()) if cachedir.is_dir() else 0
+            )
+            entries.append(
+                {
+                    "name": peer.name,
+                    "urlbase": peer.urlbase,
+                    "online": peer.online,
+                    "cached": custom_filesizeformat(cached_bytes),
+                }
+            )
+
+    return templates.TemplateResponse(request, "peers_panel.html", {"peers": entries})
+
+
+def get_peer_adapter_or_none(root):
+    """Return a RemotePeerAdapter if `root` names a legitimately mounted peer
+    (possibly transiently offline; endpoints fall back to cached data in
+    that case), else None."""
+    from caterva2.services import peers as peers_mod
+    from caterva2.services import remote
+
+    if peers_mod.registry is None:
+        return None
+    peer = peers_mod.registry.get_known(root)
+    if peer is None:
+        return None
+    return remote.RemotePeerAdapter(peer, peers_mod.registry, settings.statedir / "peercache")
 
 
 def get_rootdir_or_error(root, user):
@@ -1785,6 +1930,27 @@ async def htmx_path_list(
                     add_dataset(leaf_path, abspath, size=container.leaf_size(key))
         finally:
             container.close()
+
+    # Peer roots (Caterva3): @<peer> browsed via the peer's cached catalog.
+    for root in roots:
+        adapter = get_peer_adapter_or_none(root)
+        if adapter is None:
+            continue
+        for key in adapter.leaves():
+            path = f"{root}/{key}"
+            if search in path:
+                # ponytail: no per-leaf size (would mean one HTTP round trip
+                # per row); upgrade path is to carry sizes in the catalog.
+                datasets.append(
+                    {
+                        "name": "_",
+                        "path": path,
+                        "size": 0,
+                        "url": make_url(request, "html_home", path=path, query=query),
+                        "label": truncate_path(path),
+                        "mountable": False,
+                    }
+                )
 
     # Add current path if not already in the list
     current_path = hx_current_url.path
@@ -2100,7 +2266,7 @@ async def htmx_path_view(
         except AttributeError as exc:
             return htmx_error(
                 request,
-                f"Invalid filter: {exc}." f" Only expressions can be used as filters, not field names.",
+                f"Invalid filter: {exc}. Only expressions can be used as filters, not field names.",
             )
     else:
         try:

@@ -75,6 +75,7 @@
 {% else %}
     <div id="page">
         <div id="root-list-wrapper" hx-get="{{ roots_url }}" hx-trigger="load"></div>
+        <div id="peers-panel-wrapper" hx-get="{{ url('htmx/peers/') }}" hx-trigger="load"></div>
         <div id="prompt-wrapper">
             {% include "includes/prompt.html" %}
         </div>
