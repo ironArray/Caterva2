@@ -1,0 +1,4 @@
+[server]
+listen = "0.0.0.0:8000"
+urlbase = "http://0.0.0.0:8000"
+login = false
