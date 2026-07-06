@@ -656,15 +656,14 @@ async def fetch_data(
                 status_code=400, detail="stepped slices are not supported on peer datasets"
             )
         try:
-            proxy = await asyncio.to_thread(adapter.get, rel)
-            lock = locks.setdefault(path, asyncio.Lock())
-            async with lock:  # same discipline (and same key type) as partial_download
+            # Everything that touches the cache frame under peercache.io_lock
+            # (open, fetch, read): concurrent handles/eviction corrupt reads.
+            # Data is read out before ensure_budget (evict-after-read).
+            async with peercache.io_lock:
+                proxy = await asyncio.to_thread(adapter.get, rel)
                 await proxy.afetch(real_slice)
-                # Read out BEFORE the evictor may run: with a small budget the
-                # evictor could evict the just-fetched chunks, and a proxy
-                # read of an evicted chunk refetches it synchronously.
                 data = await asyncio.to_thread(lambda: proxy[real_slice])
-            await asyncio.to_thread(peercache.touch, proxy, real_slice)
+                await asyncio.to_thread(peercache.touch, proxy, real_slice)
             await peercache.ensure_budget()
         except remote.NotAFetchableDataset as exc:
             raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
@@ -678,15 +677,15 @@ async def fetch_data(
             # propagates as a normal server error instead of masquerading
             # as "peer offline".
             adapter.registry.mark_offline(adapter.peer)
-            cached = await asyncio.to_thread(adapter.get_cached_only, rel)
-            if cached is None:
-                raise fastapi.HTTPException(status_code=503, detail=f"peer {root} is offline") from exc
-            data = await asyncio.to_thread(lambda: cached[real_slice])
-            # Check AFTER the read: chunks only disappear while offline
-            # (the evictor may run concurrently), so a positive check now
-            # means every touched chunk was present during the read.
-            if not remote.slice_fully_cached(cached, real_slice):
-                raise fastapi.HTTPException(status_code=503, detail=f"peer {root} is offline") from exc
+            async with peercache.io_lock:  # offline reads touch the frame too
+                cached = await asyncio.to_thread(adapter.get_cached_only, rel)
+                if cached is None:
+                    raise fastapi.HTTPException(status_code=503, detail=f"peer {root} is offline") from exc
+                data = await asyncio.to_thread(lambda: cached[real_slice])
+                # Check AFTER the read: a positive check now means every
+                # touched chunk was present during the read.
+                if not remote.slice_fully_cached(cached, real_slice):
+                    raise fastapi.HTTPException(status_code=503, detail=f"peer {root} is offline") from exc
         cframe = await asyncio.to_thread(lambda: blosc2.asarray(np.ascontiguousarray(data)).to_cframe())
         downloader = srv_utils.iterchunk(cframe)
         return responses.StreamingResponse(downloader, media_type="application/octet-stream")
@@ -1749,7 +1748,14 @@ async def html_home(
     user: db.User = Depends(optional_user),
 ):
     if not user:
-        roots = ["@public"]
+        # Anonymous users see @public plus peer roots (peers are public-only),
+        # not @personal/@shared.
+        peer_roots = (
+            {p.root for p in peers_mod.registry.peers.values() if p.peer_id is not None}
+            if peers_mod.registry
+            else set()
+        )
+        roots = [r for r in roots if r == "@public" or r in peer_roots] or ["@public"]
 
     # Disk usage
     size = get_disk_usage()
@@ -1810,6 +1816,7 @@ async def htmx_root_list(
         "checked": roots,
         "mounted": mounted_ok,
         "peer_roots": peer_roots,
+        "peers_configured": bool(peers_mod.registry and peers_mod.registry.peers),
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1982,18 +1989,28 @@ async def htmx_path_list(
         adapter = get_peer_adapter_or_none(root)
         if adapter is None:
             continue
-        # leaves() may refresh the catalog over HTTP: keep it off the loop.
-        keys = await asyncio.to_thread(lambda a=adapter: list(a.leaves()))
-        for key in keys:
+
+        # leaves()/leaf_size() may hit the peer over HTTP: keep them off the
+        # loop. Sizes are memoized per catalog refresh; a failed size lookup
+        # (peer just went down) must not kill the whole listing.
+        def peer_rows(a=adapter):
+            rows = []
+            for key in a.leaves():
+                try:
+                    size = a.leaf_size(key)
+                except Exception:
+                    size = 0
+                rows.append((key, size))
+            return rows
+
+        for key, size in await asyncio.to_thread(peer_rows):
             path = f"{root}/{key}"
             if search in path:
-                # ponytail: no per-leaf size (would mean one HTTP round trip
-                # per row); upgrade path is to carry sizes in the catalog.
                 datasets.append(
                     {
                         "name": "_",
                         "path": path,
-                        "size": 0,
+                        "size": size,
                         "url": make_url(request, "html_home", path=path, query=query),
                         "label": truncate_path(path),
                         "mountable": False,
@@ -2092,17 +2109,37 @@ async def htmx_path_info(
 
     # Read metadata (a path may descend into a container, e.g. a TreeStore
     # .b2z or .h5 leaf)
-    abspath, inner_key = split_and_resolve(path, user)
-    try:
-        if inner_key is not None:
-            meta = srv_utils.container_member_info(abspath, inner_key)
-            if meta is None:
-                srv_utils.raise_not_found()
+    adapter = get_peer_adapter_or_none(path.parts[0])
+    if adapter is not None:
+        try:
+            info = await asyncio.to_thread(adapter._info, "/".join(path.parts[1:]))
+        except httpx.HTTPStatusError as exc:
+            raise fastapi.HTTPException(status_code=exc.response.status_code) from exc
+        except remote.OFFLINE_ERRORS as exc:
+            raise fastapi.HTTPException(status_code=503, detail=f"peer {path.parts[0]} is offline") from exc
+        # B serves the JSON of the same pydantic models we build locally;
+        # round-trip it into the right one so the attribute access in the
+        # templates below works unchanged.
+        if "shape" in info:
+            meta = srv_utils.get_model_from_obj(info, models.Metadata)
+        elif "cparams" in info:
+            meta = srv_utils.get_model_from_obj(info, models.SChunk)
+        elif "nfiles" in info:
+            meta = srv_utils.get_model_from_obj(info, models.Directory)
         else:
-            meta = srv_utils.read_metadata(abspath)
-    except FileNotFoundError:
-        # e.g. a bare root (@personal) or another directory with no dataset of its own
-        raise fastapi.HTTPException(status_code=404) from None  # NotFound
+            meta = srv_utils.get_model_from_obj(info, models.File)
+    else:
+        abspath, inner_key = split_and_resolve(path, user)
+        try:
+            if inner_key is not None:
+                meta = srv_utils.container_member_info(abspath, inner_key)
+                if meta is None:
+                    srv_utils.raise_not_found()
+            else:
+                meta = srv_utils.read_metadata(abspath)
+        except FileNotFoundError:
+            # e.g. a bare root (@personal) or another directory with no dataset of its own
+            raise fastapi.HTTPException(status_code=404) from None  # NotFound
 
     # Context
     current_url = push_url or hx_current_url
@@ -2274,7 +2311,6 @@ async def htmx_path_view(
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath, inner_key = split_and_resolve(path, user)
     filter = filter.strip()
     sortby = sortby.strip()
     if sortby and fields and sortby not in fields:
@@ -2282,11 +2318,42 @@ async def htmx_path_view(
         # header to click, the sort would be stuck. Clear it instead.
         sortby = sortdir = ""
     sort_desc = bool(sortby) and sortdir == "desc"
-    hdf5_member = inner_key is not None and abspath.suffix in srv_utils.HDF5_SUFFIXES
-    # ponytail: HDF5 filter needs LazyExpr plumbing on HDF5Proxy; sort works via .indices()/.sort()
-    if hdf5_member and filter:
-        return htmx_error(request, "Filtering is not supported for HDF5 container members.")
-    if inner_key is not None and not (filter or sortby):
+
+    adapter = get_peer_adapter_or_none(path.parts[0])
+    if adapter is not None:
+        hdf5_member = False
+        idx = None
+        if filter or sortby:
+            # ponytail: same gap as api/fetch — no filter/sort plumbing for
+            # peer proxies yet.
+            return htmx_error(request, "Filtering/sorting is not supported on peer datasets yet.")
+        # peercache.io_lock is held from here until the window is read out
+        # below (released on every early return): concurrent handles on the
+        # same sparse frame, or the evictor, corrupt reads. The code in
+        # between is pure sync computation, so holding it is cheap.
+        await peercache.io_lock.acquire()
+        try:
+            arr = await asyncio.to_thread(adapter.get, "/".join(path.parts[1:]))
+        except remote.NotAFetchableDataset as exc:
+            peercache.io_lock.release()
+            return htmx_error(request, str(exc))
+        except httpx.HTTPStatusError as exc:
+            peercache.io_lock.release()
+            return htmx_error(request, f"Peer error: HTTP {exc.response.status_code}.")
+        except remote.OFFLINE_ERRORS:
+            peercache.io_lock.release()
+            adapter.registry.mark_offline(adapter.peer)
+            return htmx_error(request, f"Peer {path.parts[0]} is offline.")
+    else:
+        abspath, inner_key = split_and_resolve(path, user)
+        hdf5_member = inner_key is not None and abspath.suffix in srv_utils.HDF5_SUFFIXES
+        # ponytail: HDF5 filter needs LazyExpr plumbing on HDF5Proxy; sort works via .indices()/.sort()
+        if hdf5_member and filter:
+            return htmx_error(request, "Filtering is not supported for HDF5 container members.")
+
+    if adapter is not None:
+        pass  # arr/idx already set by the peer branch above
+    elif inner_key is not None and not (filter or sortby):
         arr = srv_utils.open_container_member(abspath, inner_key)
         if arr is None:
             return htmx_error(request, "Cannot open container member.")
@@ -2419,51 +2486,81 @@ async def htmx_path_view(
             else:
                 tags.append(list(idx[start:stop]))
 
-    if has_ndfields:
-        cols = list(arr.fields.keys())
-        fields = fields or cols[:5]
-        idxs = [cols.index(f) for f in fields]
-        rows = [fields]
+    if adapter is not None:
+        # Prefetch exactly the window into the peer cache so the sync reads
+        # below are local cache hits, not blocking HTTP on the event loop.
+        window = tuple(
+            slice(st, min(st + sz, dim)) if i in view_dims else st
+            for i, (st, sz, dim) in enumerate(zip(index, sizes, shape, strict=False))
+        )
+        try:
+            await arr.afetch(window)  # io_lock held (acquired at adapter.get)
+        except remote.OFFLINE_ERRORS:
+            peercache.io_lock.release()
+            adapter.registry.mark_offline(adapter.peer)
+            return htmx_error(request, f"Peer {path.parts[0]} is offline.")
+        peer_proxy = arr
 
-        # Get array view
-        if ndims >= 2:
-            arr = arr[index[:-1]]
-            i, isize = index[-1], sizes[-1]
-            arr = arr[i : i + isize]
-            arr = arr.tolist()
-        elif ndims == 1:
-            i, isize = index[0], sizes[0]
-            if idx is not None and sort_desc:
-                # arr is ascending-sorted; read its tail and reverse for descending order.
-                lo, hi = _desc_window(shape[0], i, isize)
-                arr = list(reversed(arr[lo:hi].tolist()))
-            else:
-                arr = arr[i : i + isize]
+    try:
+        if has_ndfields:
+            cols = list(arr.fields.keys())
+            fields = fields or cols[:5]
+            idxs = [cols.index(f) for f in fields]
+            rows = [fields]
+
+            # Get array view
+            if ndims >= 2:
+                # One combined slice: on a peer-backed Proxy, arr[index[:-1]]
+                # alone would fetch that whole sub-array, not just the window.
+                i, isize = index[-1], sizes[-1]
+                arr = arr[(*index[:-1], slice(i, i + isize))]
                 arr = arr.tolist()
+            elif ndims == 1:
+                i, isize = index[0], sizes[0]
+                if idx is not None and sort_desc:
+                    # arr is ascending-sorted; read its tail and reverse for descending order.
+                    lo, hi = _desc_window(shape[0], i, isize)
+                    arr = list(reversed(arr[lo:hi].tolist()))
+                else:
+                    arr = arr[i : i + isize]
+                    arr = arr.tolist()
+            else:
+                arr = [arr[()].tolist()]
+            rows += [[row[i] for i in idxs] for row in arr]
         else:
-            arr = [arr[()].tolist()]
-        rows += [[row[i] for i in idxs] for row in arr]
-    else:
-        # Get array view
-        cols = None
-        if ndims >= 2:
-            arr = arr[index[:-2]]
-            i, isize = index[-2], sizes[-2]
-            j, jsize = index[-1], sizes[-1]
-            arr = arr[i : i + isize, j : j + jsize]
-            rows = [tags[-1]] + list(arr)
-        elif ndims == 1:
-            i, isize = index[0], sizes[0]
-            arr = [arr[i : i + isize]]
-            rows = [tags[-1]] + list(arr)
-        else:
-            val = arr[()]
-            # blosc2.NDArray[()] returns a 0-d ndarray, not a scalar
-            # (HDF5Proxy[()] already returns a scalar)
-            if isinstance(val, np.ndarray):
-                val = val.item()
-            arr = [[val]]
-            rows = list(arr)
+            # Get array view
+            cols = None
+            if ndims >= 2:
+                # One combined slice (see the fields case above).
+                i, isize = index[-2], sizes[-2]
+                j, jsize = index[-1], sizes[-1]
+                arr = arr[(*index[:-2], slice(i, i + isize), slice(j, j + jsize))]
+                rows = [tags[-1]] + list(arr)
+            elif ndims == 1:
+                i, isize = index[0], sizes[0]
+                arr = [arr[i : i + isize]]
+                rows = [tags[-1]] + list(arr)
+            else:
+                val = arr[()]
+                # blosc2.NDArray[()] returns a 0-d ndarray, not a scalar
+                # (HDF5Proxy[()] already returns a scalar)
+                if isinstance(val, np.ndarray):
+                    val = val.item()
+                arr = [[val]]
+                rows = list(arr)
+    except BaseException:
+        # Never leak io_lock on an unexpected read error: a leaked lock
+        # would wedge all peer IO for good.
+        if adapter is not None:
+            peercache.io_lock.release()
+        raise
+
+    if adapter is not None:
+        # rows are fully materialized; account, release, then evict
+        # (ensure_budget takes io_lock itself, so release first).
+        await asyncio.to_thread(peercache.touch, peer_proxy, window)
+        peercache.io_lock.release()
+        await peercache.ensure_budget()
 
     # Render
     context = {
@@ -2477,7 +2574,7 @@ async def htmx_path_view(
         "sortdir": sortdir,
         "shape": shape,
         "tags": tags if len(tags) == 0 else tags[0],
-        "filterable": not hdf5_member,
+        "filterable": not hdf5_member and adapter is None,
         "header_sort": _header_sort_links(fields, sortby, sortdir) if cols else {},
     }
     return templates.TemplateResponse(request, "info_view.html", context)

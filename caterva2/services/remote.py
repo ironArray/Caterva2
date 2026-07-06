@@ -120,12 +120,18 @@ def open_cached_proxy(source, cpath, remote_mtime):
     cpath = pathlib.Path(cpath)
     cache = None
     if cpath.exists():
-        cache = blosc2.open(str(cpath), mode="a")
-        meta = json.loads(cache.schunk.vlmeta.get("_peer_src", "{}"))
-        if meta.get("mtime") != remote_mtime:
-            del cache  # invalidation on remote change
+        try:
+            cache = blosc2.open(str(cpath), mode="a")
+            meta = json.loads(cache.schunk.vlmeta.get("_peer_src", "{}"))
+            valid = meta.get("mtime") == remote_mtime
+        except Exception:
+            # A cache that won't open (e.g. left half-written by a crashed
+            # writer) is just an invalid cache: rebuild it, don't crash.
+            valid = False
+        if not valid:
+            cache = None  # drop the open handle before removing the dir
             shutil.rmtree(cpath)
-            cache = None
+            pathlib.Path(str(cpath) + ".atime.npy").unlink(missing_ok=True)
     if cache is None:
         cpath.parent.mkdir(parents=True, exist_ok=True)
         cache = blosc2.empty(
@@ -182,8 +188,14 @@ class RemotePeerAdapter:
         return None
 
     def leaf_size(self, key):
-        info = self._info(key)
-        return info.get("schunk", {}).get("cbytes")
+        # Memoized on the Peer (cleared with each catalog refresh): the
+        # listing calls this once per row, and one api/info round trip per
+        # row on every render would add up.
+        sizes = self.peer.sizes
+        if key not in sizes:
+            info = self._info(key)
+            sizes[key] = info.get("schunk", {}).get("cbytes") or info.get("size") or 0
+        return sizes[key]
 
     def is_group(self, node):
         return False  # remote catalog entries are always leaves

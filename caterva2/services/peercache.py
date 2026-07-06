@@ -19,7 +19,15 @@ logger = logging.getLogger("peercache")
 HIGH = 1.0  # start evicting above budget
 LOW = 0.8  # evict down to this fraction of budget
 
-_lock = asyncio.Lock()  # ponytail: one global evictor lock; fine for MVP
+# One lock serializing ALL peer-cache IO: open/create, chunk fetch, reads and
+# eviction. Sparse-frame handles are not coherent under concurrent mutation —
+# a second writer (or the evictor thread) leaves every other open handle with
+# a stale frame index, and the next read dies with "Error while getting the
+# lazychunk". Endpoints must hold this across open+fetch+read; ensure_budget
+# takes it itself (so never call it while holding).
+# ponytail: one global lock serializes all peer traffic; per-cache locks if
+# throughput matters.
+io_lock = asyncio.Lock()
 pool_dir: pathlib.Path | None = None  # set at startup
 budget: int | None = None  # bytes, set at startup
 
@@ -73,7 +81,7 @@ async def ensure_budget():
     below LOW * budget. Called after each remote fetch."""
     if pool_dir is None or budget is None:
         return
-    async with _lock:
+    async with io_lock:
         await asyncio.to_thread(_evict_sync)
 
 

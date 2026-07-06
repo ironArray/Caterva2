@@ -41,6 +41,8 @@ class Peer:
     # catalog cache: list of dataset paths relative to B's @public
     catalog: list[str] | None = None
     catalog_ts: float = 0.0
+    # per-leaf sizes (api/info cbytes), memoized until the catalog refreshes
+    sizes: dict = dataclasses.field(default_factory=dict)
 
     @property
     def root(self):
@@ -170,6 +172,7 @@ class PeerRegistry:
                 listing = listing[:MAX_CATALOG]
             peer.catalog = [str(p) for p in listing]
             peer.catalog_ts = now
+            peer.sizes.clear()  # sizes may be stale along with the listing
         return peer.catalog
 
 

@@ -52,6 +52,19 @@
 
 </form>
 
+{% if peers_configured %}
+<div class="dropdown mt-3">
+    <button class="btn btn-sm btn-outline-secondary" type="button" title="Peer servers"
+            data-bs-toggle="dropdown" aria-expanded="false"
+            hx-get="{{ url('htmx/peers/') }}" hx-target="#peers-dropdown" hx-trigger="click">
+        <i class="fa-solid fa-server"></i> Peers
+    </button>
+    <div class="dropdown-menu p-2" id="peers-dropdown">
+        <span class="text-muted small">Loading…</span>
+    </div>
+</div>
+{% endif %}
+
 <script>
 function dropHandler(ev) {
     ev.preventDefault();
