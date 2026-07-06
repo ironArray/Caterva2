@@ -18,7 +18,7 @@
   "license": "AGPL",
   "devDependencies": {
     "sass": "1.77.6",
-    "vite": "^7.1"
+    "vite": "^7.3.6"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
