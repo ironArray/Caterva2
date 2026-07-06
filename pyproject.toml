@@ -72,6 +72,7 @@ server = [
     "pygments",
     "python-dotenv",
     "python-multipart",
+    "requests",
 ]
 # Build-time only: tools to (re)build the static JupyterLite site with
 # `jupyter lite build` (see `make lite-build`). NOT a server runtime dependency —
@@ -118,16 +119,18 @@ blosc2-plugins = [
 ]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["caterva2", "root-example"]
+only-include = ["caterva2", "c2cache", "root-example"]
 
 # Ship the caterva2-save JupyterLite extension inside the wheel as a federated
 # labextension, so `jupyter lite build` discovers and bundles it (replaces the
 # old jupyterlite fork's save-back patch). The prebuilt `labextension/` output is
 # committed (see jupyterlite-exts/caterva2-save/), so no Node/JS build runs during
 # `pip install` — this is a pure data-files copy. Rebuild it with `make lite-ext`.
+# The labextension build already copies install.json into labextension/, so
+# only the directory mapping is needed (a second explicit mapping of the root
+# install.json to the same destination collides with it).
 [tool.hatch.build.targets.wheel.shared-data]
 "jupyterlite-exts/caterva2-save/labextension" = "share/jupyter/labextensions/caterva2-save"
-"jupyterlite-exts/caterva2-save/install.json" = "share/jupyter/labextensions/caterva2-save/install.json"
 
 [project.urls]
 Home = "https://github.com/ironArray/Caterva2"
@@ -138,6 +141,9 @@ cat2-server = "caterva2.services.server:main"
 cat2-agent = "caterva2.clients.agent:main"
 cat2-client = "caterva2.clients.cli:main"
 cat2-admin = "caterva2.tools.admin:main"
+
+[project.entry-points."caterva2.providers"]
+c2cache = "c2cache:provider_factory"
 
 
 [tool.ruff]

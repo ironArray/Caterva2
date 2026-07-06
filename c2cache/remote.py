@@ -18,7 +18,7 @@ import numpy as np
 import requests
 
 import caterva2
-from caterva2.services.srv_utils import split_container_path
+from caterva2.services.providers import split_container_path
 
 # Errors that mean "the peer is unreachable" (connection/timeout), as opposed
 # to an HTTP status the peer deliberately returned or a local bug. Both stacks

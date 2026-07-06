@@ -29,7 +29,7 @@
         {% include 'includes/root.html' %}
     {% endwith %}
 
-    {% for name in peer_roots %}
+    {% for name in provider_roots %}
         {% with upload=False %}
             {% include 'includes/root.html' %}
         {% endwith %}
@@ -52,18 +52,19 @@
 
 </form>
 
-{% if peers_configured %}
+{% for w in provider_widgets %}
 <div class="dropdown mt-3">
-    <button class="btn btn-sm btn-outline-secondary" type="button" title="Peer servers"
+    <button class="btn btn-sm btn-outline-secondary" type="button" title="{{ w.label }}"
             data-bs-toggle="dropdown" aria-expanded="false"
-            hx-get="{{ url('htmx/peers/') }}" hx-target="#peers-dropdown" hx-trigger="click">
-        <i class="fa-solid fa-server"></i> Peers
+            hx-get="{{ url(w.panel_url) }}" hx-target="#provider-dropdown-{{ loop.index }}"
+            hx-trigger="click">
+        <i class="{{ w.icon }}"></i> {{ w.label }}
     </button>
-    <div class="dropdown-menu p-2" id="peers-dropdown">
+    <div class="dropdown-menu p-2" id="provider-dropdown-{{ loop.index }}">
         <span class="text-muted small">Loading…</span>
     </div>
 </div>
-{% endif %}
+{% endfor %}
 
 <script>
 function dropHandler(ev) {

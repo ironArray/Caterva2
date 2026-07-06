@@ -14,7 +14,6 @@ import httpx
 
 logger = logging.getLogger("peers")
 
-API_VERSION = 1  # must match server.API_VERSION on the remote side
 HTTP_TIMEOUT = 5  # seconds, every peer request
 CATALOG_TTL = 60  # seconds before a cached remote listing is stale
 OFFLINE_RETRY = 15  # seconds before re-probing an offline peer
@@ -59,7 +58,7 @@ class PeerRegistry:
     def load(self, peer_confs):
         """Ingest [[server.peer]] config entries. Invalid ones are logged
         and skipped — never raise (startup must be tolerant)."""
-        from caterva2.services.settings import parse_size  # avoid cycle
+        from caterva2.services.providers import parse_size  # avoid cycle
 
         for conf in peer_confs:
             name = conf.get("name")
@@ -100,12 +99,14 @@ class PeerRegistry:
             logger.warning("peer %s is myself; disabling (self-mount guard)", peer.name)
             peer.online = False
             return
-        if m.get("api_version") != API_VERSION:
+        from caterva2.services.providers import PEER_API_VERSION
+
+        if m.get("api_version") != PEER_API_VERSION:
             logger.warning(
                 "peer %s api_version %s != %s; disabling",
                 peer.name,
                 m.get("api_version"),
-                API_VERSION,
+                PEER_API_VERSION,
             )
             peer.online = False
             return
@@ -174,6 +175,3 @@ class PeerRegistry:
             peer.catalog_ts = now
             peer.sizes.clear()  # sizes may be stale along with the listing
         return peer.catalog
-
-
-registry: PeerRegistry | None = None  # singleton, created in server lifespan
