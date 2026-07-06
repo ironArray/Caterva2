@@ -6,6 +6,7 @@ pytest harness in services.py, since peer mounts need two servers talking
 to each other.
 """
 
+import asyncio
 import os
 import signal
 import subprocess
@@ -176,3 +177,63 @@ def test_peer_offline_tolerated(tmp_path_factory):
     finally:
         a.send_signal(signal.SIGTERM)
         a.wait(timeout=10)
+
+
+@pytest.fixture(scope="module")
+def tiny_quota_peers(tmp_path_factory):
+    # A tiny peer_cache_quota forces peercache to evict under load, which is
+    # exactly the concurrency scenario that corrupted sparse-frame handles
+    # before io_lock serialized all peer-cache IO (see todo-peers.md).
+    bdir = tmp_path_factory.mktemp("peerB3")
+    adir = tmp_path_factory.mktemp("peerA3")
+    pub = bdir / "public"
+    pub.mkdir()
+    data = np.random.default_rng(2).random((8, 100_000))
+    blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    b_port, a_port = 8035, 8036
+    b = _start(bdir, b_port)
+    peer_toml = (
+        'peer_cache_quota = "100K"\n'
+        f'[[server.peer]]\nname = "labb3"\nurlbase = "http://localhost:{b_port}"\n'
+    )
+    a = _start(adir, a_port, peer_toml)
+    yield f"http://localhost:{a_port}", data
+    for p in (a, b):
+        p.send_signal(signal.SIGTERM)
+        p.wait(timeout=10)
+
+
+async def _fetch(client, urlbase, i):
+    return await client.get(
+        f"{urlbase}/api/fetch/@labb3/mc.b2nd", params={"slice_": f"{i % 8}:{i % 8 + 1}"}, timeout=10
+    )
+
+
+async def _path_view(client, urlbase, i):
+    return await client.post(
+        f"{urlbase}/htmx/path-view/@labb3/mc.b2nd",
+        data={"index": [i % 8, 0], "sizes": [1, 10]},
+        timeout=10,
+    )
+
+
+async def _run_concurrent_requests(urlbase):
+    async with httpx.AsyncClient() as client:
+        calls = [
+            _fetch(client, urlbase, i) if i % 2 == 0 else _path_view(client, urlbase, i) for i in range(12)
+        ]
+        return await asyncio.gather(*calls, return_exceptions=True)
+
+
+def test_concurrent_requests_under_tiny_quota_dont_crash(tiny_quota_peers):
+    urlbase, _data = tiny_quota_peers
+    results = asyncio.run(_run_concurrent_requests(urlbase))
+    for r in results:
+        assert not isinstance(r, Exception), r
+        # 200 (served), 503 (evicted before use, offline), 400 (bad request
+        # edge case) are all fine; a 500 means a crash/corruption regression.
+        assert r.status_code != 500, r.text
+
+    # the peer must still be responsive after the storm, not knocked over
+    roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
+    assert "@labb3" in roots
