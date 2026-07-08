@@ -5,7 +5,8 @@
 by per-cache locks (`peercache.cache_lock(cpath)`); see
 `plans/peercache-locking.md` for the current mechanism and rationale. This
 document is otherwise left as-is as the historical record of the seam
-refactor.
+refactor — except §8, which has been amended with the current Phase-2
+sequencing (§8.1, 2026-07-08 review).
 
 Status: ready to implement. This document is a self-contained handover: it contains every
 decision, code sketch, line reference, and guardrail needed to execute the refactor without
@@ -797,6 +798,58 @@ Run: `python -m pytest caterva2/tests/ -q` and `ruff check . && ruff format --ch
   to_thread shim, auth/non-public roots, dynamic mounts) without needing new core hooks.
 - The `providers.py` surface + `PEER_API_VERSION` then constitute a compatibility contract;
   document it in the caterva2 docs and version-gate c2cache releases on it.
+
+### 8.1 Phase-2 sequencing amendments (2026-07-08 review)
+
+Status check against the trigger above: the seam has survived the decoupling itself
+(`e4d9ac2`) **and** the per-cache locking rework (`2f8eacb`) with zero new core hooks — good
+evidence. But async `aget_chunk` adoption has not happened, auth/dynamic mounts haven't either,
+and the branch (`c2cache-monorepo`) signals intent to split now. Amended plan: Phase 2 stays
+valid and mechanical as written, with the following ordering and detail changes.
+
+**Do BEFORE the split (in this order):**
+
+1. **Adopt real async in c2cache.** Upstream python-blosc2 now ships `C2Array.aget_chunk` +
+   gathered, bounded `Proxy.afetch` (python-blosc2 `35a162ab`), yet `c2cache/remote.py:70-73`
+   still carries the serial `to_thread` shim whose own ponytail says it exists "until that
+   lands upstream". Replace the shim with the upstream async path for plain-dataset leaves;
+   the chunk-aligned `api/fetch` fallback for container members needs a small async variant of
+   its own. Rationale for doing it pre-split: this is the last planned seam-exercising churn
+   and the one most likely to touch the seam (`ViewHandle.prefetch`, the `to_thread`
+   choreography in `fetch`/`open_view`) — do it while a seam change is a same-repo edit, not a
+   cross-package version dance.
+2. **Ride the release train.** c-blosc2 3.2.0 tag → python-blosc2 4.8.0 (its
+   `BLOSC2_BUNDLED_VERSION` is already at c-blosc2 `3cd3bfe5`) → bump caterva2's `blosc2>=`
+   floor (currently 4.6.0, but the code passes `locking=True`, which only exists in unreleased
+   4.8.0.dev — a PyPI install of current HEAD would crash). Phase 2 produces a *published*
+   c2cache package whose dependency floors must name real releases; splitting first creates a
+   package that cannot ship. The release decision itself is the maintainer's call; only the
+   ordering is prescribed here. Tracking: c-blosc2 `plans/todo-locking-swmr.md` item 3,
+   caterva2 `plans/peercache-locking.md` "Changes" §5.
+
+**Amendments to the §8 split itself:**
+
+- The c2cache dist's dependencies must carry `blosc2>=4.8.0` (the planned release that ships
+  `locking`) explicitly — not just the `caterva2[base-services]>=` floor.
+- `caterva2/tests/test_providers.py` **stays** in the caterva2 package (it tests the seam, not
+  the plugin); only `test_peers.py` moves to `packages/c2cache/tests/`.
+- Housekeeping: a stale `packages/c2cache/tests/__pycache__/` from an earlier aborted start is
+  lying around untracked; remove it when doing the real move.
+
+**Do AFTER the split:**
+
+- Auth/non-public roots and dynamic mounts, as originally listed (provider-internal; safe to do
+  cross-package).
+- **New roadmap item: multi-worker Caterva2 sharing one peercache pool.** Previously only an
+  out-of-scope note in `plans/peercache-locking.md`; promoted to a deliberate item because it
+  is where the blosc2 MWMR work converges with Caterva2 (multiple server processes fetching
+  into the same cache frames *is* the multi-writer use case, and the frames are already safe
+  for it via `locking=True`). What's missing is Caterva2-side: the fetch→read→touch critical
+  section is an asyncio lock (process-local) and would need to become cross-process —
+  blosc2's `holding_lock()` bracket is the natural primitive — plus shared atime/budget
+  accounting. Prerequisites and the blosc2-side steps: python-blosc2
+  `todo/locking-mwmr.md`. If super-server deployments are expected to run more than one
+  worker, this outranks any remaining polish.
 
 ## 9. Risks
 

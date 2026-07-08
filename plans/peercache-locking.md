@@ -128,11 +128,12 @@ actual throughput win.
 - `pyproject.toml:42`: bump `blosc2>=` to the first release with `locking`
   support (during development, the local editable python-blosc2 serves).
   **Not done yet (2026-07-08): blocked.** No released python-blosc2 has
-  `locking` yet (it landed after 4.7.0, in the still-unreleased 4.7.1).
-  Caterva2's CI does `pip install -e '.[tests,hdf5]'` — a real PyPI
-  resolution, not the local editable checkout — so bumping this floor to an
-  unpublished version would break CI immediately. Bump it once python-blosc2
-  4.7.1 (or whichever version ships `locking`) is actually released.
+  `locking` yet (it landed after 4.7.0; the planned next release is 4.8.0 —
+  minor bump for the significant API additions). Caterva2's CI does
+  `pip install -e '.[tests,hdf5]'` — a real PyPI resolution, not the local
+  editable checkout — so bumping this floor to an unpublished version would
+  break CI immediately. Bump it to `blosc2>=4.8.0` once python-blosc2 4.8.0
+  is actually released.
 - Mention in `plans/c2cache-decoupling.md` that the io_lock section it
   documents is superseded (or leave a pointer to this plan).
 
