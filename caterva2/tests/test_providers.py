@@ -82,7 +82,7 @@ def test_server_source_has_no_c2cache_coupling():
 
 def test_open_view_releases_lock_on_exception():
     """A ProviderError or unexpected exception raised while the open_view
-    context is held must not leak peercache.io_lock."""
+    context is held must not leak that cache's peercache lock."""
     os.environ.setdefault("CATERVA2_SECRET", "t")  # server.py import-time check
     from c2cache import peercache
     from c2cache.provider import C2CacheProvider
@@ -102,6 +102,9 @@ def test_open_view_releases_lock_on_exception():
     peercache.pool_dir = "/tmp/nonexistent-peercache-pool"
 
     class _BoomAdapter:
+        def cache_path(self, key):
+            return "/tmp/nonexistent-peercache-pool/boom-cache-path"
+
         def get(self, key):
             raise RuntimeError("boom")
 
@@ -113,4 +116,4 @@ def test_open_view_releases_lock_on_exception():
                 pass  # pragma: no cover - open_view raises before yielding
 
     asyncio.run(run())
-    assert not peercache.io_lock.locked()
+    assert not peercache.cache_lock("/tmp/nonexistent-peercache-pool/boom-cache-path").locked()

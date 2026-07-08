@@ -21,7 +21,7 @@ class _Handle:
 
     async def prefetch(self, window):
         try:
-            await self.array.afetch(window)  # io_lock held by open_view
+            await self.array.afetch(window)  # this cache's lock held by open_view
         except remote.OFFLINE_ERRORS as exc:
             self._adapter.registry.mark_offline(self._adapter.peer)
             raise providers.ProviderUnavailable(f"Peer {self._root} is offline.") from exc
@@ -130,11 +130,13 @@ class C2CacheProvider(providers.RootProvider):
         parts = real_slice if isinstance(real_slice, tuple) else (real_slice,)
         if any(isinstance(p, slice) and p.step not in (None, 1) for p in parts):
             raise providers.ProviderBadRequest("stepped slices are not supported on peer datasets")
+        cpath = adapter.cache_path(key)
         try:
-            # Everything that touches the cache frame under peercache.io_lock
-            # (open, fetch, read): concurrent handles/eviction corrupt reads.
+            # Everything that touches this cache's frame, under its own lock
+            # (not the whole pool's): concurrent fetch/eviction of this same
+            # cache corrupt reads. Fetches of *other* caches are unaffected.
             # Data is read out before ensure_budget (evict-after-read).
-            async with peercache.io_lock:
+            async with peercache.cache_lock(cpath):
                 proxy = await asyncio.to_thread(adapter.get, key)
                 await proxy.afetch(real_slice)
                 data = await asyncio.to_thread(lambda: proxy[real_slice])
@@ -146,7 +148,7 @@ class C2CacheProvider(providers.RootProvider):
             raise providers.ProviderRelayedStatus(exc.response.status_code) from exc
         except remote.OFFLINE_ERRORS as exc:
             adapter.registry.mark_offline(adapter.peer)
-            async with peercache.io_lock:  # offline reads touch the frame too
+            async with peercache.cache_lock(cpath):  # offline reads touch the frame too
                 cached = await asyncio.to_thread(adapter.get_cached_only, key)
                 if cached is None:
                     raise providers.ProviderUnavailable(f"peer {root} is offline") from exc
@@ -160,7 +162,8 @@ class C2CacheProvider(providers.RootProvider):
     @contextlib.asynccontextmanager
     async def open_view(self, root, key):
         adapter = self._adapter(root)
-        async with peercache.io_lock:  # released on EVERY exit path
+        cpath = adapter.cache_path(key)
+        async with peercache.cache_lock(cpath):  # released on EVERY exit path
             try:
                 arr = await asyncio.to_thread(adapter.get, key)
             except remote.NotAFetchableDataset as exc:

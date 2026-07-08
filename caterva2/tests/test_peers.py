@@ -8,6 +8,7 @@ to each other.
 
 import asyncio
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -139,6 +140,25 @@ def test_chunk_endpoint_is_404_on_peer_root(two_servers):
     assert r.status_code == 404
 
 
+def test_cache_sidecar_appears_and_is_removed_with_cache(two_servers):
+    """Every peer-cache handle opens with locking=True (plans/peercache-locking.md
+    §1): the cache's `.b2lock` sidecar must appear, and since the cache is
+    directory-backed (sframe), it lives inside that directory, so it
+    disappears together with the cache on removal -- no separate cleanup
+    needed."""
+    urlbase, _data, adir = two_servers
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
+    r.raise_for_status()
+
+    caches = list((adir / "peercache" / "labb").glob("*.b2nd"))
+    assert len(caches) == 1, caches
+    cache_dir = caches[0]
+    assert (cache_dir / ".b2lock").exists()
+
+    shutil.rmtree(cache_dir)
+    assert not cache_dir.exists()
+
+
 def test_peer_offline_tolerated(tmp_path_factory):
     # Independent pair (own ports) so killing B here doesn't affect the
     # module-scoped `two_servers` fixture used by the other tests.
@@ -183,7 +203,8 @@ def test_peer_offline_tolerated(tmp_path_factory):
 def tiny_quota_peers(tmp_path_factory):
     # A tiny peer_cache_quota forces peercache to evict under load, which is
     # exactly the concurrency scenario that corrupted sparse-frame handles
-    # before io_lock serialized all peer-cache IO (see todo-peers.md).
+    # before per-cache locking + blosc2's frame-level locking closed the gap
+    # (see plans/peercache-locking.md).
     bdir = tmp_path_factory.mktemp("peerB3")
     adir = tmp_path_factory.mktemp("peerA3")
     pub = bdir / "public"
@@ -226,14 +247,99 @@ async def _run_concurrent_requests(urlbase):
 
 
 def test_concurrent_requests_under_tiny_quota_dont_crash(tiny_quota_peers):
-    urlbase, _data = tiny_quota_peers
+    urlbase, data = tiny_quota_peers
     results = asyncio.run(_run_concurrent_requests(urlbase))
-    for r in results:
+    for i, r in enumerate(results):
         assert not isinstance(r, Exception), r
         # 200 (served), 503 (evicted before use, offline), 400 (bad request
         # edge case) are all fine; a 500 means a crash/corruption regression.
         assert r.status_code != 500, r.text
+        # A 200 from a fetch (the even i's) must never be silent UNINIT
+        # zeros: fetch->read->touch under this cache's lock must be atomic
+        # against a concurrent eviction of the same cache.
+        if i % 2 == 0 and r.status_code == 200:
+            arr = blosc2.ndarray_from_cframe(r.content)
+            np.testing.assert_array_equal(arr[:], data[i % 8 : i % 8 + 1])
 
     # the peer must still be responsive after the storm, not knocked over
     roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
     assert "@labb3" in roots
+
+
+def test_cache_lock_is_per_path():
+    """Two different cache paths get independent locks (the whole point of
+    per-cache locking, plans/peercache-locking.md §2): locking one must not
+    block acquiring the other, and the same path always maps to the same
+    lock object."""
+    from c2cache import peercache
+
+    async def run():
+        lock_a = peercache.cache_lock("/tmp/does-not-exist-a")
+        lock_b = peercache.cache_lock("/tmp/does-not-exist-b")
+        assert lock_a is not lock_b
+        assert peercache.cache_lock("/tmp/does-not-exist-a") is lock_a
+
+        async with lock_a, asyncio.timeout(1), lock_b:
+            pass  # must not block/timeout: lock_b is independent of lock_a
+
+    asyncio.run(run())
+
+
+@pytest.fixture(scope="module")
+def two_dataset_peers(tmp_path_factory):
+    # Two distinct datasets sharing one tiny-quota pool: fetches/evictions of
+    # one must not serialize behind the other now that locking is per-cache
+    # rather than pool-wide (plans/peercache-locking.md §3/§4).
+    bdir = tmp_path_factory.mktemp("peerB4")
+    adir = tmp_path_factory.mktemp("peerA4")
+    pub = bdir / "public"
+    pub.mkdir()
+    data1 = np.random.default_rng(3).random((8, 100_000))
+    data2 = np.random.default_rng(4).random((8, 100_000))
+    blosc2.asarray(data1, chunks=(1, 100_000), urlpath=str(pub / "mc1.b2nd"))
+    blosc2.asarray(data2, chunks=(1, 100_000), urlpath=str(pub / "mc2.b2nd"))
+    b_port, a_port = 8037, 8038
+    b = _start(bdir, b_port)
+    peer_toml = (
+        'peer_cache_quota = "100K"\n'
+        f'[[server.peer]]\nname = "labb4"\nurlbase = "http://localhost:{b_port}"\n'
+    )
+    a = _start(adir, a_port, peer_toml)
+    yield f"http://localhost:{a_port}", data1, data2
+    for p in (a, b):
+        p.send_signal(signal.SIGTERM)
+        p.wait(timeout=10)
+
+
+async def _fetch_dataset(client, urlbase, name, i):
+    return await client.get(
+        f"{urlbase}/api/fetch/@labb4/{name}.b2nd", params={"slice_": f"{i % 8}:{i % 8 + 1}"}, timeout=10
+    )
+
+
+def test_concurrent_fetches_of_different_datasets_dont_serialize(two_dataset_peers):
+    """Interleaved concurrent fetches of two different datasets under a tiny
+    shared quota: correctness under load is the regression net (per
+    plans/peercache-locking.md §Tests point 3 -- the locking mechanics/timing
+    itself is blosc2's own suite's job)."""
+    urlbase, data1, data2 = two_dataset_peers
+
+    async def run():
+        async with httpx.AsyncClient() as client:
+            calls = []
+            for i in range(12):
+                name = "mc1" if i % 2 == 0 else "mc2"
+                calls.append(_fetch_dataset(client, urlbase, name, i))
+            return await asyncio.gather(*calls, return_exceptions=True)
+
+    results = asyncio.run(run())
+    for i, r in enumerate(results):
+        assert not isinstance(r, Exception), r
+        assert r.status_code != 500, r.text
+        if r.status_code == 200:
+            data = data1 if i % 2 == 0 else data2
+            arr = blosc2.ndarray_from_cframe(r.content)
+            np.testing.assert_array_equal(arr[:], data[i % 8 : i % 8 + 1])
+
+    roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
+    assert "@labb4" in roots

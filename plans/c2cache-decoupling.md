@@ -1,5 +1,12 @@
 # C2Cache decoupling — Phase 1: in-repo provider seam
 
+**Superseded (2026-07-08):** every reference below to the module-global
+`peercache.io_lock` describes the pre-locking design. It has been replaced
+by per-cache locks (`peercache.cache_lock(cpath)`); see
+`plans/peercache-locking.md` for the current mechanism and rationale. This
+document is otherwise left as-is as the historical record of the seam
+refactor.
+
 Status: ready to implement. This document is a self-contained handover: it contains every
 decision, code sketch, line reference, and guardrail needed to execute the refactor without
 re-deriving the design. Line numbers are against the `caterva3-remote-peer` branch as of

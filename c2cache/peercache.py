@@ -19,17 +19,29 @@ logger = logging.getLogger("peercache")
 HIGH = 1.0  # start evicting above budget
 LOW = 0.8  # evict down to this fraction of budget
 
-# One lock serializing ALL peer-cache IO: open/create, chunk fetch, reads and
-# eviction. Sparse-frame handles are not coherent under concurrent mutation —
-# a second writer (or the evictor thread) leaves every other open handle with
-# a stale frame index, and the next read dies with "Error while getting the
-# lazychunk". Endpoints must hold this across open+fetch+read; ensure_budget
-# takes it itself (so never call it while holding).
-# ponytail: one global lock serializes all peer traffic; per-cache locks if
-# throughput matters.
-io_lock = asyncio.Lock()
+# Per-cache locks serializing fetch->read->touch vs eviction, one per cache
+# frame (keyed by cache path). Frame integrity itself (no torn reads, no
+# clobbered index rewrites under concurrent mutation) is delegated to
+# blosc2's own opt-in locking (locking=True on every peer-cache handle,
+# below) instead of being serialized here. The asyncio locks below exist for
+# a different reason: the eviction policy sorts untouched chunks as oldest
+# (touch() only runs after the read), so fetch->read->touch needs to be one
+# atomic unit against a concurrent eviction of the same cache, or the evictor
+# can reclaim a chunk between its fetch and its touch and the read silently
+# returns UNINIT zeros. Per-cache (rather than one global lock) means
+# fetches of different datasets no longer serialize against each other.
+_locks: dict[str, asyncio.Lock] = {}
 pool_dir: pathlib.Path | None = None  # set at startup
 budget: int | None = None  # bytes, set at startup
+
+
+def cache_lock(cpath) -> asyncio.Lock:
+    """Serialize fetch->read->touch vs eviction, per cache frame.
+
+    Bounded by the number of caches in the pool; never pruned (ponytail:
+    fine, a pool has at most a few hundred entries).
+    """
+    return _locks.setdefault(str(cpath), asyncio.Lock())
 
 
 def _atime_file(cache_urlpath):
@@ -78,23 +90,40 @@ def _uninit_chunk(schunk, nchunk):
 
 async def ensure_budget():
     """Evict least-recently-used chunks across the whole pool until usage is
-    below LOW * budget. Called after each remote fetch."""
+    below LOW * budget. Called after each remote fetch.
+
+    Candidate gathering is lock-free (read-only; blosc2's own handle locking
+    keeps it safe against concurrent mutation). Eviction itself is grouped by
+    cache and run under that cache's lock, one cache at a time -- so it never
+    blocks a fetch/eviction of a *different* cache, only the same one."""
     if pool_dir is None or budget is None:
         return
-    async with io_lock:
-        await asyncio.to_thread(_evict_sync)
-
-
-def _evict_sync():
-    usage = _usage()
+    usage, candidates = await asyncio.to_thread(_gather_candidates)
     if usage <= HIGH * budget:
         return
-    # gather (atime, cache_path, nchunk) for all filled chunks in the pool
+    target = LOW * budget
+    by_cache: dict[str, list[tuple[float, int]]] = {}
+    for at, cpath, nchunk in candidates:
+        by_cache.setdefault(cpath, []).append((at, nchunk))
+    for cpath, chunks in by_cache.items():
+        if usage <= target:
+            break
+        async with cache_lock(cpath):
+            usage = await asyncio.to_thread(_evict_from_cache, cpath, chunks, target, usage)
+
+
+def _gather_candidates():
+    """Read-only scan across the whole pool: total usage, plus (atime,
+    cache_path, nchunk) for every filled chunk, to be sorted and grouped by
+    the caller. No lock held -- blosc2's own locking (every peer-cache handle
+    opens with locking=True) makes concurrent reads safe against mutation
+    elsewhere in the pool."""
+    usage = _usage()
     candidates = []
     for cdir in pool_dir.glob("*/*.b2nd"):
         atimes = _load_atimes(_atime_file(cdir))
         try:
-            arr = blosc2.open(str(cdir), mode="a")
+            arr = blosc2.open(str(cdir), mode="a", locking=True)
         except Exception:
             continue  # corrupt cache: skip (never crash the fetch path)
         sc = getattr(arr, "schunk", arr)
@@ -103,15 +132,34 @@ def _evict_sync():
                 at = atimes[info.nchunk] if atimes is not None and info.nchunk < len(atimes) else 0.0
                 candidates.append((at, str(cdir), info.nchunk))
     candidates.sort()  # oldest first
-    target = LOW * budget
-    open_caches = {}
-    for _, cpath, nchunk in candidates:
+    return usage, candidates
+
+
+def _evict_from_cache(cpath, chunks, target, usage):
+    """Evict `chunks` (a cache's candidates, as (atime, nchunk) pairs, oldest
+    first) until pool usage drops to `target` or the candidates run out.
+    Called with `cpath`'s cache_lock held.
+
+    A candidate may be stale by the time we get here: already evicted by a
+    concurrent eviction pass, or re-touched (fresh access) since it was
+    gathered. Both are re-checked against the live frame/atimes and skipped
+    -- harmless, and avoids evicting a chunk that was just fetched again
+    while we waited for the lock."""
+    if usage <= target:
+        return usage
+    arr = blosc2.open(cpath, mode="a", locking=True)
+    sc = getattr(arr, "schunk", arr)
+    specials = {info.nchunk: info.special for info in sc.iterchunks_info()}
+    live_atimes = _load_atimes(_atime_file(cpath))
+    for at, nchunk in chunks:
         if usage <= target:
             break
-        if cpath not in open_caches:
-            open_caches[cpath] = blosc2.open(cpath, mode="a")
-        sc = getattr(open_caches[cpath], "schunk", open_caches[cpath])
+        if specials.get(nchunk) != blosc2.SpecialValue.NOT_SPECIAL:
+            continue  # already evicted since we gathered candidates
+        if live_atimes is not None and nchunk < len(live_atimes) and live_atimes[nchunk] != at:
+            continue  # re-touched (refetched) since we gathered candidates
         before = _usage()  # ponytail: O(pool) stat per eviction; batch later
         sc.update_chunk(nchunk, _uninit_chunk(sc, nchunk))
         usage = _usage()
         logger.info("evicted chunk %d of %s (freed %d bytes)", nchunk, cpath, before - usage)
+    return usage

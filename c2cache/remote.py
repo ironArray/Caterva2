@@ -121,7 +121,7 @@ def open_cached_proxy(source, cpath, remote_mtime):
     cache = None
     if cpath.exists():
         try:
-            cache = blosc2.open(str(cpath), mode="a")
+            cache = blosc2.open(str(cpath), mode="a", locking=True)
             meta = json.loads(cache.schunk.vlmeta.get("_peer_src", "{}"))
             valid = meta.get("mtime") == remote_mtime
         except Exception:
@@ -143,6 +143,7 @@ def open_cached_proxy(source, cpath, remote_mtime):
             urlpath=str(cpath),
             contiguous=False,
             mode="w",
+            locking=True,
         )
         cache.schunk.vlmeta["_peer_src"] = json.dumps({"path": source.path, "mtime": remote_mtime})
     return blosc2.Proxy(source, _cache=cache)
@@ -218,6 +219,11 @@ class RemotePeerAdapter:
             self.registry.mark_offline(self.peer)
             raise
 
+    def cache_path(self, key):
+        """Local cache path for `key`, computable up front (pure hashing, no
+        I/O) so callers can take that cache's lock before opening anything."""
+        return cache_path(self.pool_dir / self.peer.name, self.peer.peer_id, key)
+
     def get(self, key):
         """Return a blosc2.Proxy for the remote dataset behind `key`."""
         info = self._info(key)
@@ -230,15 +236,14 @@ class RemotePeerAdapter:
         # fallback. Reuse the canonical container-boundary rule.
         plain = split_container_path(key)[1] is None
         src = RemoteSource(self._remote_path(key), self.peer.urlbase, use_chunk_api=plain)
-        cpath = cache_path(self.pool_dir / self.peer.name, self.peer.peer_id, key)
-        return open_cached_proxy(src, cpath, mtime)
+        return open_cached_proxy(src, self.cache_path(key), mtime)
 
     def get_cached_only(self, key):
         """The on-disk cache for `key` without any peer HTTP call, or None
         if nothing has been cached yet. Used when the peer is unreachable;
         callers must still check `slice_fully_cached` before trusting data,
         since not-yet-fetched chunks read back as silent zeros."""
-        cpath = cache_path(self.pool_dir / self.peer.name, self.peer.peer_id, key)
+        cpath = self.cache_path(key)
         if not cpath.exists():
             return None
-        return blosc2.open(str(cpath), mode="a")
+        return blosc2.open(str(cpath), mode="a", locking=True)
