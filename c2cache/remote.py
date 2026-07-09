@@ -4,7 +4,6 @@ Verified mechanics: see "Verified by experiment" in
 plans/caterva3-remote-peer-mounts.md and repo-root e2e_peer_test.py.
 """
 
-import asyncio
 import hashlib
 import json
 import math
@@ -15,20 +14,19 @@ import threading
 import blosc2
 import httpx
 import numpy as np
-import requests
 
 import caterva2
+from caterva2 import api_utils
 from caterva2.services.providers import split_container_path
 
 # Errors that mean "the peer is unreachable" (connection/timeout), as opposed
-# to an HTTP status the peer deliberately returned or a local bug. Both stacks
-# appear on the peer data path: caterva2.Client/handshake use httpx, while
-# blosc2.C2Array.get_chunk uses requests. Client._post also wraps ReadTimeout
-# in a bare TimeoutError.
+# to an HTTP status the peer deliberately returned or a local bug. Every peer
+# data-path call (caterva2.Client, blosc2.C2Array.get_chunk/aget_chunk, and
+# our own fallback fetch below) is httpx-based, so httpx.TransportError alone
+# covers connection/timeout failures. Client._post also wraps ReadTimeout in a
+# bare TimeoutError.
 OFFLINE_ERRORS = (
     httpx.TransportError,
-    requests.exceptions.ConnectionError,
-    requests.exceptions.Timeout,
     TimeoutError,
 )
 
@@ -58,24 +56,34 @@ def client_for(urlbase):
 class RemoteSource(blosc2.C2Array):
     """C2Array with an async chunk getter and a per-leaf fetch strategy.
 
-    use_chunk_api=True  -> per-chunk GET api/chunk (plain .b2nd datasets).
+    use_chunk_api=True  -> per-chunk GET api/chunk (plain .b2nd datasets),
+                           via blosc2's own real async aget_chunk (httpx
+                           AsyncClient, gathered/bounded by Proxy.afetch).
     use_chunk_api=False -> chunk-aligned GET api/fetch fallback (container
-                           members: api/chunk 404s on those, verified).
+                           members: api/chunk 404s on those, verified), via
+                           our own lazy async client below.
     """
 
     def __init__(self, path, urlbase, use_chunk_api=True):
         super().__init__(path, urlbase=urlbase)
         self.use_chunk_api = use_chunk_api
+        self._fetch_aclient = None  # lazy async client for the api/fetch fallback path
 
     async def aget_chunk(self, nchunk):
-        # ponytail: serial to_thread shim; replaced by real async aget_chunk
-        # + gathered afetch when that lands upstream in blosc2.
-        return await asyncio.to_thread(self._get_chunk_sync, nchunk)
-
-    def _get_chunk_sync(self, nchunk):
         if self.use_chunk_api:
-            return self.get_chunk(nchunk)
-        return self._chunk_via_fetch(nchunk)
+            return await super().aget_chunk(nchunk)  # blosc2.C2Array: real async api/chunk GET
+        return await self._chunk_via_fetch(nchunk)
+
+    async def aclose(self):
+        """Close both lazy async HTTP clients this source may have opened:
+        the api/chunk one from the base class, and our own api/fetch one
+        for the container-member fallback. Callers must call this once
+        they're done with a RemoteSource -- it is not closed automatically
+        (matches blosc2.C2Array.aget_chunk's own contract)."""
+        await super().aclose()
+        if self._fetch_aclient is not None:
+            await self._fetch_aclient.aclose()
+            self._fetch_aclient = None
 
     def _chunk_slice(self, nchunk):
         """C-order chunk grid coordinates -> tuple of slices for `nchunk`."""
@@ -86,13 +94,20 @@ class RemoteSource(blosc2.C2Array):
             for i, c, s in zip(coords, self.chunks, self.shape, strict=True)
         )
 
-    def _chunk_via_fetch(self, nchunk):
+    async def _chunk_via_fetch(self, nchunk):
         """Fetch this chunk's exact slice via api/fetch and recompress it
         into a cache-shaped chunk (padded to full chunkshape)."""
         slice_ = self._chunk_slice(nchunk)
-        # caterva2.Client.get_slice hits api/fetch and returns the slice
-        # (sync httpx; we are already inside to_thread here).
-        data = client_for(self.urlbase).get_slice(self.path, slice_, as_blosc2=True)
+        params = {"slice_": api_utils.slice_to_string(slice_)}
+        if self._fetch_aclient is None:
+            self._fetch_aclient = httpx.AsyncClient(timeout=5)
+        # self.urlbase is slash-terminated (blosc2.C2Array.__init__ enforces it).
+        response = await self._fetch_aclient.get(f"{self.urlbase}api/fetch/{self.path}", params=params)
+        response.raise_for_status()
+        try:
+            data = blosc2.ndarray_from_cframe(response.content)
+        except RuntimeError:
+            data = blosc2.schunk_from_cframe(response.content)
         full = np.zeros(self.chunks, dtype=self.dtype)
         region = tuple(slice(0, s.stop - s.start) for s in slice_)
         full[region] = data[...]

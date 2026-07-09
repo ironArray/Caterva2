@@ -818,14 +818,17 @@ valid and mechanical as written, with the following ordering and detail changes.
    and the one most likely to touch the seam (`ViewHandle.prefetch`, the `to_thread`
    choreography in `fetch`/`open_view`) — do it while a seam change is a same-repo edit, not a
    cross-package version dance.
-2. **Ride the release train.** c-blosc2 3.2.0 tag → python-blosc2 4.8.0 (its
-   `BLOSC2_BUNDLED_VERSION` is already at c-blosc2 `3cd3bfe5`) → bump caterva2's `blosc2>=`
-   floor (currently 4.6.0, but the code passes `locking=True`, which only exists in unreleased
-   4.8.0.dev — a PyPI install of current HEAD would crash). Phase 2 produces a *published*
+2. **Ride the release train.** c-blosc2 3.2.0 tag → python-blosc2 4.8.0 → bump caterva2's
+   `blosc2>=` floor. The floor bump is **done (2026-07-09)**: `pyproject.toml` now reads
+   `blosc2>=4.8.0`, ahead of the actual tags per explicit user instruction — the code already
+   passes `locking=True`, which only exists in unreleased 4.8.0.dev, so a PyPI install of
+   current HEAD (`pip install -e '.[tests,hdf5]'` in CI) will fail to resolve until c-blosc2
+   3.2.0 / python-blosc2 4.8.0 are actually tagged and published. Phase 2 produces a *published*
    c2cache package whose dependency floors must name real releases; splitting first creates a
-   package that cannot ship. The release decision itself is the maintainer's call; only the
-   ordering is prescribed here. Tracking: c-blosc2 `plans/todo-locking-swmr.md` item 3,
-   caterva2 `plans/peercache-locking.md` "Changes" §5.
+   package that cannot ship — so the split itself still waits on the actual tags, only the floor
+   number is pre-bumped. The release-cutting decision itself is the maintainer's call; only the
+   ordering is prescribed here. Tracking: python-blosc2 `todo/locking-mwmr.md` "Release
+   coupling", caterva2 `plans/peercache-locking.md` "Changes" §5.
 
 **Amendments to the §8 split itself:**
 

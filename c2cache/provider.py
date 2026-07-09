@@ -131,6 +131,7 @@ class C2CacheProvider(providers.RootProvider):
         if any(isinstance(p, slice) and p.step not in (None, 1) for p in parts):
             raise providers.ProviderBadRequest("stepped slices are not supported on peer datasets")
         cpath = adapter.cache_path(key)
+        proxy = None
         try:
             # Everything that touches this cache's frame, under its own lock
             # (not the whole pool's): concurrent fetch/eviction of this same
@@ -157,6 +158,12 @@ class C2CacheProvider(providers.RootProvider):
                 # touched chunk was present during the read.
                 if not remote.slice_fully_cached(cached, real_slice):
                     raise providers.ProviderUnavailable(f"peer {root} is offline") from exc
+        finally:
+            # RemoteSource.aget_chunk lazily opens async HTTP client(s) that
+            # aren't closed automatically; this Proxy/source is fresh per
+            # call (adapter.get), so close them here regardless of outcome.
+            if proxy is not None:
+                await proxy.src.aclose()
         return data
 
     @contextlib.asynccontextmanager
@@ -175,10 +182,15 @@ class C2CacheProvider(providers.RootProvider):
             except remote.OFFLINE_ERRORS as exc:
                 adapter.registry.mark_offline(adapter.peer)
                 raise providers.ProviderUnavailable(f"Peer {root} is offline.") from exc
-            handle = _Handle(adapter, arr, root)
-            yield handle
-            # Clean exit only (an exception skips this, matching the old
-            # BaseException path that released without touching):
-            if handle.window is not None:
-                await asyncio.to_thread(peercache.touch, arr, handle.window)
+            try:
+                handle = _Handle(adapter, arr, root)
+                yield handle
+                # Clean exit only (an exception skips this, matching the old
+                # BaseException path that released without touching):
+                if handle.window is not None:
+                    await asyncio.to_thread(peercache.touch, arr, handle.window)
+            finally:
+                # Same lazy-async-client cleanup as fetch() -- arr.src is a
+                # fresh RemoteSource per call.
+                await arr.src.aclose()
         await peercache.ensure_budget()  # AFTER lock release (it locks itself)
