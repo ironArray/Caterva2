@@ -1,11 +1,12 @@
 # Peer cache: replace the global io_lock with per-cache locks + blosc2 frame locking
 
-**Status (2026-07-08): implemented.** `locking=True` on every peer-cache
-handle, the `cache_lock()` per-cache registry, the call-site updates, and the
-tests below have all landed. The one item still open is bumping
-`pyproject.toml`'s `blosc2>=` floor to the first release with `locking`
-support — blocked on that python-blosc2 release actually shipping (see the
-note at the end of "Changes" §5).
+**Status (2026-07-09): implemented, including the floor bump.** `locking=True`
+on every peer-cache handle, the `cache_lock()` per-cache registry, the
+call-site updates, and the tests below have all landed. `pyproject.toml`'s
+`blosc2>=` floor is now `4.8.0` (see "Changes" §5) — bumped ahead of the
+actual PyPI release, on the understanding that c-blosc2 3.2.0 / python-blosc2
+4.8.0 are about to be tagged; a `pip install -e '.[tests,hdf5]'` CI run will
+fail to resolve until that release actually ships.
 
 ## Context
 
@@ -126,14 +127,14 @@ actual throughput win.
     read semantics are unchanged;
   - atomic atime replace (`touch()`, `peercache.py:58-62`).
 - `pyproject.toml:42`: bump `blosc2>=` to the first release with `locking`
-  support (during development, the local editable python-blosc2 serves).
-  **Not done yet (2026-07-08): blocked.** No released python-blosc2 has
-  `locking` yet (it landed after 4.7.0; the planned next release is 4.8.0 —
-  minor bump for the significant API additions). Caterva2's CI does
+  support. **Done (2026-07-09):** bumped to `blosc2>=4.8.0` ahead of the
+  actual PyPI release, per explicit user instruction, since c-blosc2 3.2.0 /
+  python-blosc2 4.8.0 are queued to be tagged next (see
+  `python-blosc2/todo/locking-mwmr.md` "Release coupling"). Caterva2's CI does
   `pip install -e '.[tests,hdf5]'` — a real PyPI resolution, not the local
-  editable checkout — so bumping this floor to an unpublished version would
-  break CI immediately. Bump it to `blosc2>=4.8.0` once python-blosc2 4.8.0
-  is actually released.
+  editable checkout — so CI will fail to resolve this floor until 4.8.0 is
+  actually published; do not merge/release Caterva2 with this floor before
+  that lands.
 - Mention in `plans/c2cache-decoupling.md` that the io_lock section it
   documents is superseded (or leave a pointer to this plan).
 
