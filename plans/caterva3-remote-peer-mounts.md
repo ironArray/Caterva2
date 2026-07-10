@@ -1,11 +1,20 @@
 # Caterva3: remote peer mounts (multi-host)
 
-Status: design verified / ready to implement — the step-by-step build plan is
-`plans/caterva3-remote-peer-mounts-impl.md`. Consolidates the architecture
-discussion for forking Caterva3 from the `new-table` branch. Scope below is deliberately split
-into an MVP that ships and a set of clearly-deferred extensions. File/line
-references are against `new-table` as read during design and should be
-re-checked before coding.
+Status (2026-07-10): **implemented** — the whole MVP plus both blosc2
+fast-follows ship on the `c2cache-monorepo` branch. The peer-mount capability
+lives in the `c2cache/` provider plugin (`e4d9ac2`); the cache-locking
+refinement is `plans/peercache-locking.md` (`2f8eacb`, blosc2>=4.8.0); the
+`to_thread` shim was replaced by blosc2's real async `aget_chunk` (`2a31271`).
+Per-section "Implemented:" notes below record where each piece landed. The
+one remaining data-type gap — CTable leaves are browsable but not fetchable —
+is planned in `plans/ctable-remote-peer-mounts.md`.
+
+Original status: design verified / ready to implement — the step-by-step
+build plan was `plans/caterva3-remote-peer-mounts-impl.md`. Consolidates the
+architecture discussion for forking Caterva3 from the `new-table` branch.
+Scope below is deliberately split into an MVP that ships and a set of
+clearly-deferred extensions. File/line references are against `new-table` as
+read during design.
 
 ## Goal
 
@@ -174,6 +183,12 @@ eviction), `e2e_peer_test.py` (live HTTP end-to-end).
 
 ### 1. Adapter-first path resolution
 
+> **Implemented** — as the provider plugin seam instead of a resolution
+> refactor: `caterva2/services/providers.py` defines `RootProvider` +
+> `provider_for()`, and the peer capability is the `c2cache` entry-point
+> plugin (`e4d9ac2`). Server endpoints branch on `provider_for(root)` before
+> filesystem resolution.
+
 Current resolution is filesystem-centric: `get_abspath`/`split_and_resolve` map a
 path to a local abspath (with `.resolve()` traversal guards), and `open_b2`
 (`server.py:119`) hardcodes `root in {@personal,@shared,@public}` and raises
@@ -185,6 +200,14 @@ virtual-root loop) already needs only "something with `afetch`/`leaves()`", so
 once resolution yields the right adapter, the pipeline is largely agnostic.
 
 ### 2. `RemotePeerAdapter`
+
+> **Implemented** — `c2cache/remote.py`: `RemotePeerAdapter` with sparse
+> `Proxy` caches (`open_cached_proxy`, hashed `cache_path`), and the per-leaf
+> fetch strategy exactly as designed: plain `.b2nd` uses `api/chunk`
+> (`use_chunk_api=True`); container members use the chunk-aligned `api/fetch`
+> fallback (`RemoteSource._chunk_via_fetch`). TreeStore `.b2z` NDArray leaves
+> therefore cache chunk-granularly today. CTable leaves still fail the
+> shape/schunk fetchability gate — see `plans/ctable-remote-peer-mounts.md`.
 
 Implements the adapter protocol against B's REST API:
 
@@ -220,6 +243,11 @@ through Proxy's **sync** `fetch` (blocking HTTP on the caller's thread) — see
 open item 6.
 
 ### 3. Async chunk fetch: local shim in MVP, upstream as fast-follow
+
+> **Implemented, including the fast-follow** — the MVP shipped with the
+> `to_thread` shim, and blosc2 4.8.0 landed the real async
+> `C2Array.aget_chunk`; the shim was then dropped (`2a31271`,
+> `pyproject.toml` floor bumped to `blosc2>=4.8.0` in `81849e0`).
 
 `Proxy.afetch` only checks `callable(getattr(src, "aget_chunk"))`
 (proxy.py:399). So the MVP doesn't *gate* on a blosc2 release: a
@@ -265,6 +293,16 @@ the event-loop benefit, not the latency win.
 
 ### 4. Remote-cache manager
 
+> **Implemented** — `c2cache/peercache.py`: sparse per-dataset caches,
+> chunk-granular LRU via UNINIT `update_chunk`, per-chunk `.atime.npy`
+> sidecars, global byte budget with high/low watermarks
+> (`peer_cache_quota`, default 1G), mtime invalidation via
+> `vlmeta["_peer_src"]`. Refined by `plans/peercache-locking.md`
+> (`2f8eacb`): the global io_lock became per-cache asyncio locks, and every
+> cache frame handle opens with blosc2 `locking=True` (`.b2lock` sidecar) —
+> the "latest locking features" pass. Per-peer `cache_quota` is parsed but
+> not enforced (still deferred).
+
 Separate from the durable-upload quota — two pools, two policies:
 
 - **Durable storage** (`@personal`/`@shared` uploads): keep today's admission
@@ -302,6 +340,11 @@ uploads or wedge against a ceiling with no eviction to relieve it.
 
 ### 5. Server identity manifest
 
+> **Implemented** — `GET /api/peer` (`server.py:343-353`): persistent
+> `peer_id`, `api_version` (`PEER_API_VERSION = 1`), `roots: ["@public"]`,
+> `capabilities: {"chunk_api": "plain"}`. Self-mount guard and id-based
+> dedupe live in `c2cache/peers.py` (`PeerRegistry`).
+
 New endpoint `GET /api/peer` (or `/.well-known/caterva3`) returning
 `{peer_id, name, api_version, capabilities, public_root}`. `peer_id` is a UUID B
 generates once and persists in its state dir. Used for:
@@ -320,6 +363,10 @@ generates once and persists in its state dir. Used for:
   container-chunk support.
 
 ### 6. Static discovery + startup handshake
+
+> **Implemented** — `c2cache/peers.py`: `[[peer]]` TOML entries, tolerant
+> startup handshake (version check, self-mount guard, dedupe, offline
+> peers logged and skipped, catalog snapshot capped at `MAX_CATALOG`).
 
 MVP discovery is static configuration, not network discovery. A `[[peer]]` seed
 list in `caterva2-server.toml`:
@@ -348,6 +395,10 @@ re-probed lazily on next access (§8).
 
 ### 7. `get_roots` + WebUI
 
+> **Implemented** — peer roots appear in `get_roots` via the provider seam;
+> read-only peers panel in `c2cache/panel.py`; peer roots fully browsable
+> from the web UI (`19742ec`, follow-up fixes 2026-07-06).
+
 - `get_roots` appends configured peer roots. Public-only ⇒ visible to everyone,
   unconditionally, mirroring how `@public` is added.
 - WebUI: an HTMX fragment (`GET htmx/peers/`) listing configured peers with a
@@ -356,6 +407,11 @@ re-probed lazily on next access (§8).
   virtual-root leaves.
 
 ### 8. Liveness & catalog refresh
+
+> **Implemented** — lazy liveness (`mark_offline` on request failure, lazy
+> re-probe), offline serving of fully-cached slices (`get_cached_only` +
+> `slice_fully_cached` guard against silent UNINIT zeros). Timer/push
+> refresh remains deferred.
 
 MVP liveness is **lazy**: mark a peer offline when a request to it fails,
 re-probe on the next access — no background timer task. When B is offline, keep
@@ -371,26 +427,31 @@ subscribes per mounted root, replacing polling entirely.
 
 ## MVP scope
 
-In:
+In (all shipped ✅):
 
-- Static `[[peer]]` seed list; startup handshake (`api/peer` probe, version check,
+- ✅ Static `[[peer]]` seed list; startup handshake (`api/peer` probe, version check,
   self-mount guard, dedupe).
-- Public-only; **no credentials**, **no database**, no user auth required to run a
+- ✅ Public-only; **no credentials**, **no database**, no user auth required to run a
   mounting server.
-- In-memory registry; lazy liveness (no background tasks).
-- `RemotePeerAdapter` + adapter-first resolution refactor.
-- Remote-cache pool: sparse per-dataset caches, chunk-granular LRU eviction
+- ✅ In-memory registry; lazy liveness (no background tasks).
+- ✅ `RemotePeerAdapter` + adapter-first resolution refactor (landed as the
+  provider plugin seam, see §1).
+- ✅ Remote-cache pool: sparse per-dataset caches, chunk-granular LRU eviction
   with sidecar atime store (separate from upload quota) + mtime/etag
-  invalidation.
-- Local `aget_chunk` shim (`asyncio.to_thread` over sync `get_chunk`) so the
-  MVP doesn't gate on a blosc2 release; small blosc2 conveniences
-  (`contiguous` passthrough, `update_special`) land in parallel (see §3).
-- Read-only peers panel in the WebUI.
+  invalidation. Locking refined per `plans/peercache-locking.md`.
+- ✅ Local `aget_chunk` shim (`asyncio.to_thread` over sync `get_chunk`) so the
+  MVP doesn't gate on a blosc2 release — since retired by the real async
+  `aget_chunk` (see §3).
+- ✅ Read-only peers panel in the WebUI.
+
+**Next up (planned): CTable leaves for peer mounts** — browsable today but
+not fetchable; design and steps in `plans/ctable-remote-peer-mounts.md`.
 
 Deferred (all additive; none require unwinding the MVP):
 
-- Blosc2 fast-follow: real async `C2Array.aget_chunk` + gathered, bounded
-  `afetch` (the latency win; see §3); replaces the shim when it lands.
+- ~~Blosc2 fast-follow: real async `C2Array.aget_chunk` + gathered, bounded
+  `afetch` (the latency win; see §3); replaces the shim when it lands.~~
+  **Landed** (`2a31271`, blosc2>=4.8.0).
 - Timer/push-based liveness & catalog refresh (see §8).
 - mDNS/Zeroconf auto-discovery; manual add-by-URL UI; broker-style rendezvous
   directory; gossip/peer-exchange.
@@ -481,9 +542,10 @@ ping-pong.
    compressed chunk via `schunk.get_chunk(nchunk)` (server.py:761-767), so it
    is cache-aligned and suitable for `update_chunk`. (`api/fetch` remains a
    repacked slice — not for the caching path.)
-3. **Blosc2 upstream landing** (fast-follow, not MVP): `C2Array.aget_chunk` and
+3. ~~**Blosc2 upstream landing** (fast-follow, not MVP): `C2Array.aget_chunk` and
    the gathered, semaphore-bounded, opt-in `afetch`, plus the non-JSPI fallback
-   decision driven by the JupyterLite browser matrix.
+   decision driven by the JupyterLite browser matrix.~~ **Resolved**:
+   `aget_chunk` landed in blosc2 4.8.0 and c2cache adopted it (`2a31271`).
 4. **Sync reads on the event loop.** Verified: `Proxy.__getitem__` (and thus
    LazyExpr operand reads) fills missing chunks via the **sync** `fetch` path —
    for a remote-backed leaf that means blocking HTTP GETs on whatever thread
