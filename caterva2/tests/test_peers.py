@@ -700,6 +700,32 @@ def test_ctable_source_aget_chunk(tmp_path):
     assert arr[:]["y"][:6].tolist() == [f"s{i}" for i in range(64, 70)]
 
 
+def test_afetch_retry_once():
+    """A single transport timeout inside afetch is retried once (sporadic
+    503 flake on concurrent first-touch fetches); a second failure still
+    propagates for the caller's mark_offline handling."""
+    from c2cache import remote
+
+    class FlakyProxy:
+        def __init__(self, failures):
+            self.failures = failures
+            self.calls = []
+
+        async def afetch(self, slice_, **kwargs):
+            self.calls.append((slice_, kwargs))
+            if len(self.calls) <= self.failures:
+                raise httpx.ReadTimeout("slow chunk")
+
+    proxy = FlakyProxy(failures=1)
+    asyncio.run(remote.afetch_retry_once(proxy, slice(0, 8), max_concurrency=4))
+    assert proxy.calls == [(slice(0, 8), {"max_concurrency": 4})] * 2
+
+    proxy = FlakyProxy(failures=2)
+    with pytest.raises(httpx.ReadTimeout):
+        asyncio.run(remote.afetch_retry_once(proxy, slice(0, 8)))
+    assert len(proxy.calls) == 2
+
+
 def test_concurrent_fetches_of_different_datasets_dont_serialize(two_dataset_peers):
     """Interleaved concurrent fetches of two different datasets under a tiny
     shared quota: correctness under load is the regression net (per

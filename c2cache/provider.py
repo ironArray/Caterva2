@@ -23,7 +23,8 @@ class _Handle:
 
     async def prefetch(self, window):
         try:
-            await self.array.afetch(window)  # this cache's lock held by open_view
+            # this cache's lock held by open_view
+            await remote.afetch_retry_once(self.array, window)
         except remote.OFFLINE_ERRORS as exc:
             self._adapter.registry.mark_offline(self._adapter.peer)
             raise providers.ProviderUnavailable(f"Peer {self._root} is offline.") from exc
@@ -209,7 +210,7 @@ class C2CacheProvider(providers.RootProvider):
             # Data is read out before ensure_budget (evict-after-read).
             async with peercache.cache_lock(cpath):
                 proxy = await asyncio.to_thread(adapter.get, key, info)
-                await proxy.afetch(real_slice)
+                await remote.afetch_retry_once(proxy, real_slice)
                 data = await asyncio.to_thread(lambda: proxy[real_slice])
                 await asyncio.to_thread(peercache.touch, proxy, real_slice)
             await peercache.ensure_budget()

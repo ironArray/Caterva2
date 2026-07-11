@@ -32,6 +32,19 @@ OFFLINE_ERRORS = (
 )
 
 
+async def afetch_retry_once(proxy, slice_, **kwargs):
+    """Proxy.afetch with one retry on a transport/timeout error: a single
+    slow chunk read during a concurrent first-touch fetch must not fail the
+    whole request (and mark the peer offline). Already-fetched chunks stay
+    in the sparse cache, so the retry only refetches what's missing.
+    A second failure propagates for the caller's usual offline handling."""
+    # ponytail: one retry, no backoff; add backoff/jitter if flaky WANs show up
+    try:
+        await proxy.afetch(slice_, **kwargs)
+    except OFFLINE_ERRORS:
+        await proxy.afetch(slice_, **kwargs)
+
+
 class NotAFetchableDataset(Exception):
     """The remote catalog entry is not a fetchable dataset (e.g. a bare
     container file / group, whose info carries no shape/schunk)."""
@@ -341,7 +354,7 @@ async def fetch_ctable_slice(adapter, key, info, start, stop):
     src = CTableSource(remote_path, adapter.peer.urlbase, info, dtype)
     try:
         proxy = await asyncio.to_thread(open_cached_proxy, src, adapter.cache_path(key), info.get("mtime"))
-        await proxy.afetch(slice(start, stop), max_concurrency=CTABLE_FETCH_CONCURRENCY)
+        await afetch_retry_once(proxy, slice(start, stop), max_concurrency=CTABLE_FETCH_CONCURRENCY)
         rows = await asyncio.to_thread(lambda: proxy[start:stop])
         await asyncio.to_thread(peercache.touch, proxy, (slice(start, stop),))
     finally:

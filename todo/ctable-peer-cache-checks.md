@@ -20,13 +20,14 @@ closed.
 
 ## Known non-blocking flake
 
-- [ ] **One request timeout marks the whole peer offline** → sporadic 503
+- [x] **One request timeout marks the whole peer offline** → sporadic 503
   on concurrent first-touch fetches (seen ~once per 50 suite runs, e.g.
-  `test_ctable_nested_in_tree_fetch`). Mechanism predates the CTable work
-  and is shared with the NDArray path (`OFFLINE_ERRORS` + `mark_offline` on
-  any 5s `httpx` timeout). Candidate fixes if it ever annoys: retry-once
-  before marking offline, or only mark offline on connect errors (not read
-  timeouts).
+  `test_ctable_nested_in_tree_fetch`). Fixed (2026-07-11) with the
+  retry-once option: `remote.afetch_retry_once` wraps every data-path
+  `Proxy.afetch` (NDArray fetch, view prefetch, CTable slice); already
+  fetched chunks stay in the sparse cache, so the retry only refetches
+  what's missing, and a second failure still marks the peer offline.
+  Covered by `test_afetch_retry_once`.
 
 ## Deferred by choice (plan "Out of scope")
 
