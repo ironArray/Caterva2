@@ -967,6 +967,9 @@ class Client:
             f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, timeout=timeout
         )
         data = response.content
+        # Zero-copy deserialization is safe even when the object escapes
+        # this frame: blosc2 >= 4.8.1 (the required floor) pins the source
+        # buffer on the returned object.
         if kind == "ctable":
             data = blosc2.ctable_from_cframe(data)
         else:

@@ -205,7 +205,7 @@ def _ctable_fixed_dtypes(schema_dict):
     dictionary/ndarray column, or column names numpy rejects as structured
     field names."""
     # Internal blosc2 APIs (schema_compiler, CTable._is_* predicates),
-    # pinned to the blosc2>=4.8.0 floor in pyproject.
+    # pinned to the blosc2>=4.8.1 floor in pyproject.
     from blosc2.schema_compiler import schema_from_dict
 
     try:
@@ -227,7 +227,7 @@ def _synth_ctable_cframe(schema_dict, cols, n):
     """A valid CTable cframe from per-column numpy arrays: an EmbedStore with
     /_meta, an all-True /_valid_rows and /_cols/<relpath> per column,
     mirroring CTable.to_cframe (ctable.py) for the fixed-width scalar case."""
-    from blosc2.ctable_storage import _column_name_to_relpath  # blosc2>=4.8.0 internal
+    from blosc2.ctable_storage import _column_name_to_relpath  # blosc2>=4.8.1 internal
 
     estore = blosc2.EmbedStore(urlpath=None, mode="w")
     meta = blosc2.SChunk()
@@ -368,6 +368,8 @@ class PeerCTableView:
         """Fetch rows [start, stop) into a local CTable window. Caller holds
         cache_lock(adapter.cache_path(key)) (fetch_ctable_slice's contract)."""
         data = await fetch_ctable_slice(self._adapter, self._key, self._info, start, stop)
+        # Zero-copy is safe although the window table outlives `data`:
+        # blosc2 >= 4.8.1 (the required floor) pins the buffer on it.
         self._window = (start, stop, blosc2.ctable_from_cframe(data))
 
     def slice(self, start, stop):

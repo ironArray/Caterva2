@@ -125,7 +125,10 @@ async def aget_chunk(self, nchunk):
     # NOT keep its parent alive, so the one-liner
     # `blosc2.asarray(...).schunk.get_chunk(0)` is a use-after-free that
     # nondeterministically returns b"" or raises RuntimeError (verified on
-    # 4.8.0 and 4.8.1.dev0, 2026-07-11; upstream fix pending).
+    # 4.8.0 and 4.8.1.dev0, 2026-07-11). This is the DOCUMENTED contract
+    # upstream: a keep-alive back-ref was tried and reverted there (the
+    # NDArray<->SChunk cycle deferred fd release / broke indexing's
+    # dropped-on-gc caches), so the held reference here is permanent.
     packed = blosc2.asarray(rows, chunks=self.chunks)
     return packed.schunk.get_chunk(0)
 ```
@@ -308,8 +311,10 @@ round-trip preserves null sentinels; non-cacheable detection (varlen,
 
 1. REPL-check before coding: ~~structured sparse frame + update_chunk +
    reopen + field reads~~ **done 2026-07-10** (blosc2 4.8.1.dev0, see
-   Part 1). **Re-verified 2026-07-11 on a clean `blosc2==4.8.0` install**
-   (no version bump needed): all of the above, plus the full
+   Part 1). **Re-verified 2026-07-11 on a clean `blosc2==4.8.0` install** (floor
+   later bumped to `>=4.8.1` anyway, for its zero-copy `from_cframe`
+   buffer pinning — client/web-view code keeps deserialized tables past
+   the source bytes' lifetime): all of the above, plus the full
    `open_cached_proxy` idiom (`blosc2.empty` + vlmeta + `Proxy(duck_source,
    _cache=...)` + `afetch(max_concurrency=)`), duck-typed source accepted,
    reopen + `get_slice_nchunks` + `iterchunks_info` specials on the
