@@ -35,6 +35,7 @@ LOW = 0.8  # evict down to this fraction of budget
 _locks: dict[str, asyncio.Lock] = {}
 pool_dir: pathlib.Path | None = None  # set at startup
 budget: int | None = None  # bytes, set at startup
+peer_quotas: dict[str, int] = {}  # peer name -> bytes for pool_dir/<name>, set at startup
 
 
 def cache_lock(cpath) -> asyncio.Lock:
@@ -81,12 +82,13 @@ def touch(proxy, slice_):
     os.replace(tmp, af)
 
 
-def _usage():
-    """Total pool bytes. The scan is lock-free, and files can vanish between
-    listing and stat (touch()'s atomic-replace tmp files) -- tolerate that
-    instead of 500ing the fetch that triggered ensure_budget."""
+def _usage(scope=None):
+    """Total bytes under `scope` (default: the whole pool). The scan is
+    lock-free, and files can vanish between listing and stat (touch()'s
+    atomic-replace tmp files) -- tolerate that instead of 500ing the fetch
+    that triggered ensure_budget."""
     total = 0
-    for f in pool_dir.rglob("*"):
+    for f in (scope or pool_dir).rglob("*"):
         with contextlib.suppress(OSError):
             if f.is_file():
                 total += f.stat().st_size
@@ -104,36 +106,48 @@ def _uninit_chunk(schunk, nchunk):
 
 
 async def ensure_budget():
-    """Evict least-recently-used chunks across the whole pool until usage is
-    below LOW * budget. Called after each remote fetch.
+    """Evict least-recently-used chunks until usage fits the quotas: first
+    each configured per-peer quota over its own pool_dir/<name> subtree,
+    then the pool-wide budget over everything. Called after each remote
+    fetch.
 
     Candidate gathering is lock-free (read-only; blosc2's own handle locking
     keeps it safe against concurrent mutation). Eviction itself is grouped by
     cache and run under that cache's lock, one cache at a time -- so it never
     blocks a fetch/eviction of a *different* cache, only the same one."""
-    if pool_dir is None or budget is None:
+    if pool_dir is None or (budget is None and not peer_quotas):
         return
-    usage, candidates = await asyncio.to_thread(_gather_candidates)
-    if usage <= HIGH * budget:
+    candidates = await asyncio.to_thread(_gather_candidates)
+    for name, quota in peer_quotas.items():
+        await _evict_to_quota(candidates, pool_dir / name, quota)
+    await _evict_to_quota(candidates, pool_dir, budget)
+
+
+async def _evict_to_quota(candidates, scope, quota):
+    """One LRU eviction pass over the caches under `scope` (a directory),
+    down to LOW * quota when usage exceeds HIGH * quota."""
+    if quota is None:
         return
-    target = LOW * budget
+    usage = await asyncio.to_thread(_usage, scope)
+    if usage <= HIGH * quota:
+        return
+    target = LOW * quota
     by_cache: dict[str, list[tuple[float, int]]] = {}
     for at, cpath, nchunk in candidates:
-        by_cache.setdefault(cpath, []).append((at, nchunk))
+        if pathlib.Path(cpath).is_relative_to(scope):
+            by_cache.setdefault(cpath, []).append((at, nchunk))
     for cpath, chunks in by_cache.items():
         if usage <= target:
             break
         async with cache_lock(cpath):
-            usage = await asyncio.to_thread(_evict_from_cache, cpath, chunks, target, usage)
+            usage = await asyncio.to_thread(_evict_from_cache, cpath, chunks, target, usage, scope)
 
 
 def _gather_candidates():
-    """Read-only scan across the whole pool: total usage, plus (atime,
-    cache_path, nchunk) for every filled chunk, to be sorted and grouped by
-    the caller. No lock held -- blosc2's own locking (every peer-cache handle
-    opens with locking=True) makes concurrent reads safe against mutation
-    elsewhere in the pool."""
-    usage = _usage()
+    """Read-only scan across the whole pool: (atime, cache_path, nchunk) for
+    every filled chunk, to be sorted and grouped by the caller. No lock held
+    -- blosc2's own locking (every peer-cache handle opens with locking=True)
+    makes concurrent reads safe against mutation elsewhere in the pool."""
     candidates = []
     for cdir in pool_dir.glob("*/*.b2nd"):
         atimes = _load_atimes(_atime_file(cdir))
@@ -147,12 +161,12 @@ def _gather_candidates():
                 at = atimes[info.nchunk] if atimes is not None and info.nchunk < len(atimes) else 0.0
                 candidates.append((at, str(cdir), info.nchunk))
     candidates.sort()  # oldest first
-    return usage, candidates
+    return candidates
 
 
-def _evict_from_cache(cpath, chunks, target, usage):
+def _evict_from_cache(cpath, chunks, target, usage, scope):
     """Evict `chunks` (a cache's candidates, as (atime, nchunk) pairs, oldest
-    first) until pool usage drops to `target` or the candidates run out.
+    first) until `scope` usage drops to `target` or the candidates run out.
     Called with `cpath`'s cache_lock held.
 
     A candidate may be stale by the time we get here: already evicted by a
@@ -173,8 +187,8 @@ def _evict_from_cache(cpath, chunks, target, usage):
             continue  # already evicted since we gathered candidates
         if live_atimes is not None and nchunk < len(live_atimes) and live_atimes[nchunk] != at:
             continue  # re-touched (refetched) since we gathered candidates
-        before = _usage()  # ponytail: O(pool) stat per eviction; batch later
+        before = _usage(scope)  # ponytail: O(scope) stat per eviction; batch later
         sc.update_chunk(nchunk, _uninit_chunk(sc, nchunk))
-        usage = _usage()
+        usage = _usage(scope)
         logger.info("evicted chunk %d of %s (freed %d bytes)", nchunk, cpath, before - usage)
     return usage

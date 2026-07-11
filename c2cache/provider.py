@@ -80,6 +80,9 @@ class C2CacheProvider(providers.RootProvider):
         peercache.pool_dir = self.settings.statedir / "peercache"
         peercache.pool_dir.mkdir(parents=True, exist_ok=True)
         peercache.budget = providers.parse_size(self.settings.conf.get(".peer_cache_quota", "1G"))
+        peercache.peer_quotas = {
+            p.name: p.cache_quota for p in self.registry.peers.values() if p.cache_quota
+        }
 
     # -- control plane --------------------------------------------------------
     def roots(self):

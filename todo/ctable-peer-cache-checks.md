@@ -33,7 +33,9 @@ closed.
 
 - Whole-file `api/download` for peer paths (stays 404).
 - DictStore recognition server-side (flat `.b2z` stores stay opaque leaves).
-- Per-peer `cache_quota` enforcement (parsed, unused).
+- ~~Per-peer `cache_quota` enforcement~~ done (2026-07-11): `ensure_budget`
+  runs a scoped LRU pass per configured peer over `pool_dir/<name>` before
+  the pool-wide one (`test_per_peer_quota_evicts_only_that_peer`).
 - Auth, dynamic mounts, batch `api/chunks`.
 
 ## Long-term direction (recorded in the plan)

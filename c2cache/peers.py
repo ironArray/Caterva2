@@ -27,9 +27,8 @@ _RESERVED = {"personal", "shared", "public"}
 class Peer:
     name: str  # local alias; root is "@" + name
     urlbase: str  # e.g. http://serverB:8000
-    # ponytail: parsed but not enforced; peercache only knows one global
-    # budget (settings.peer_cache_quota). Upgrade: give peercache a
-    # per-pool_dir/<peer.name> budget instead of one pool-wide number.
+    # eviction budget for this peer's pool_dir/<name> subtree, enforced by
+    # peercache.ensure_budget alongside the pool-wide peer_cache_quota
     cache_quota: int | None = None
     # filled by handshake:
     peer_id: str | None = None

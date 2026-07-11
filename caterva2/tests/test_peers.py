@@ -497,6 +497,45 @@ def test_concurrent_requests_under_tiny_quota_dont_crash(tiny_quota_peers):
     assert "@labb3" in roots
 
 
+def test_per_peer_quota_evicts_only_that_peer(tmp_path):
+    """A per-peer cache_quota only evicts under that peer's pool subtree;
+    other peers' caches and the (disabled) pool-wide budget are untouched."""
+    from c2cache import peercache
+
+    def make_cache(peer):
+        d = tmp_path / peer
+        d.mkdir()
+        arr = blosc2.empty(
+            (8000,),
+            np.float64,
+            chunks=(1000,),
+            urlpath=str(d / "x.b2nd"),
+            contiguous=False,
+            mode="w",
+            locking=True,
+        )
+        arr[:] = np.random.default_rng(7).random(8000)  # incompressible: ~8K/chunk
+        return d / "x.b2nd"
+
+    def filled_chunks(cpath):
+        # keep the NDArray referenced: a detached .schunk is a use-after-free
+        arr = blosc2.open(str(cpath), mode="a", locking=True)
+        return sum(i.special == blosc2.SpecialValue.NOT_SPECIAL for i in arr.schunk.iterchunks_info())
+
+    ca, cb = make_cache("peer-a"), make_cache("peer-b")
+    saved = peercache.pool_dir, peercache.budget, peercache.peer_quotas
+    try:
+        peercache.pool_dir = tmp_path
+        peercache.budget = None  # pool-wide budget off: isolate the per-peer pass
+        peercache.peer_quotas = {"peer-a": 20_000}
+        asyncio.run(peercache.ensure_budget())
+    finally:
+        peercache.pool_dir, peercache.budget, peercache.peer_quotas = saved
+
+    assert filled_chunks(ca) < 8  # peer-a evicted down toward LOW * quota
+    assert filled_chunks(cb) == 8  # peer-b untouched
+
+
 def test_cache_lock_is_per_path():
     """Two different cache paths get independent locks (the whole point of
     per-cache locking, plans/peercache-locking.md §2): locking one must not
