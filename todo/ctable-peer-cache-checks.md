@@ -36,7 +36,10 @@ closed.
   no local caching) via an optional `RootProvider.download` seam; fixing it
   surfaced (and fixed) local downloads 404ing mid-stream after the 200
   headers (`test_download_relays_peer_file`).
-- DictStore recognition server-side (flat `.b2z` stores stay opaque leaves).
+- ~~DictStore recognition server-side~~ already covered (verified
+  2026-07-11): `blosc2.open` promotes a DictStore `.b2z` to a TreeStore, so
+  the existing container adapter deep-lists/fetches/mounts it with no new
+  code; pinned by `test_dictstore_b2z_browses_as_container`.
 - ~~Per-peer `cache_quota` enforcement~~ done (2026-07-11): `ensure_budget`
   runs a scoped LRU pass per configured peer over `pool_dir/<name>` before
   the pool-wide one (`test_per_peer_quota_evicts_only_that_peer`).

@@ -70,6 +70,13 @@ def _seed_ctables(pub):
     tree["/dir/tbl"] = nested
     tree.close()
 
+    # a .b2z written via the flat DictStore API (blosc2.open promotes it to
+    # a TreeStore, so it browses like any container)
+    ds = blosc2.DictStore(str(pub / "dict.b2z"), mode="w")
+    ds["/flat"] = blosc2.asarray(np.arange(7))
+    ds["/grp/nested"] = blosc2.asarray(np.arange(30))
+    ds.close()
+
 
 def _start(statedir, port, extra_toml=""):
     statedir = str(statedir)
@@ -355,6 +362,22 @@ def test_peer_container_deep_list(two_servers):
     assert sorted(listing) == ["dir/arr", "dir/tbl"]
     listing = httpx.get(f"{urlbase}/api/list/@labb/tree.b2z/dir", timeout=15).json()
     assert sorted(listing) == ["arr", "tbl"]
+
+
+def test_dictstore_b2z_browses_as_container(two_servers):
+    """A flat DictStore .b2z needs no server-side recognition of its own:
+    blosc2.open promotes it to a TreeStore, so it deep-lists, fetches, and
+    mounts like any peer container."""
+    urlbase, _data, _adir = two_servers
+    listing = httpx.get(f"{urlbase}/api/list/@labb/dict.b2z", timeout=15).json()
+    assert sorted(listing) == ["flat", "grp/nested"]
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/dict.b2z/grp/nested", params={"slice_": "0:5"}, timeout=15)
+    r.raise_for_status()
+    arr = blosc2.ndarray_from_cframe(r.content)
+    np.testing.assert_array_equal(arr[:], np.arange(5))
+    # mountable in the UI, same as a TreeStore-written .b2z
+    html = httpx.get(f"{urlbase}/htmx/path-list/", params=[("roots", "@labb")], timeout=30).text
+    assert 'title="Mount as root" data-path="@labb/dict.b2z"' in html
 
 
 def test_peer_container_mount_ui(two_servers):
