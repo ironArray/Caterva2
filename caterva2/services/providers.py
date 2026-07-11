@@ -128,6 +128,11 @@ class RootProvider(abc.ABC):
         fully orchestrated (lock, prefetch, read, accounting, eviction,
         offline fallback)."""
 
+    async def download(self, root: str, key: str, accept_encoding: str | None = None):
+        """(async byte iterator, media_type, headers) streaming the whole
+        file behind `key`, for api/download. Optional: the default refuses."""
+        raise ProviderRelayedStatus(404, "download is not supported on this root")
+
     @abc.abstractmethod
     def open_view(self, root: str, key: str) -> AsyncIterator[ViewHandle]:
         """Async context manager yielding a ViewHandle whose .array can be

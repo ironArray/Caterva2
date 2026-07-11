@@ -190,6 +190,22 @@ def test_chunk_endpoint_is_404_on_peer_root(two_servers):
     assert r.status_code == 404
 
 
+def test_download_relays_peer_file(two_servers):
+    """api/download on a peer path streams the peer's own download verbatim
+    (used to be a flat 404); a bad path relays the peer's status."""
+    urlbase, _data, _adir = two_servers
+    for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
+        direct = httpx.get(
+            f"http://localhost:{B_PORT}/api/download/@public/dir1/small.b2nd", headers=hdrs, timeout=10
+        )
+        relayed = httpx.get(f"{urlbase}/api/download/@labb/dir1/small.b2nd", headers=hdrs, timeout=10)
+        assert relayed.status_code == direct.status_code == 200
+        assert relayed.content == direct.content
+        assert "small.b2nd" in relayed.headers.get("content-disposition", "")
+    r = httpx.get(f"{urlbase}/api/download/@labb/nope.b2nd", timeout=10)
+    assert r.status_code == 404
+
+
 def test_cache_sidecar_appears_and_is_removed_with_cache(two_servers):
     """Every peer-cache handle opens with locking=True (plans/peercache-locking.md
     §1): the cache's `.b2lock` sidecar must appear, and since the cache is

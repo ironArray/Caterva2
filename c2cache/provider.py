@@ -249,6 +249,39 @@ class C2CacheProvider(providers.RootProvider):
                 await proxy.src.aclose()
         return data
 
+    async def download(self, root, key, accept_encoding=None):
+        # Pure byte relay of the peer's own api/download: aiter_raw + verbatim
+        # headers, so a blosc2-encoded body passes through untouched. No local
+        # caching (a whole-file stream doesn't fit the sparse chunk cache).
+        adapter = self._adapter(root)
+        url = f"{adapter.peer.urlbase}/api/download/{adapter._remote_path(key)}"
+        # "identity" otherwise: never let httpx advertise gzip on our behalf,
+        # the relayed Content-Length/Content-Encoding must match the body.
+        headers = {"Accept-Encoding": accept_encoding or "identity"}
+        client = httpx.AsyncClient(timeout=5)
+        try:
+            resp = await client.send(client.build_request("GET", url, headers=headers), stream=True)
+        except remote.OFFLINE_ERRORS as exc:
+            await client.aclose()
+            adapter.registry.mark_offline(adapter.peer)
+            raise providers.ProviderUnavailable(f"peer {root} is offline") from exc
+        if resp.status_code != 200:
+            await resp.aclose()
+            await client.aclose()
+            raise providers.ProviderRelayedStatus(resp.status_code)
+
+        async def body():
+            try:
+                async for chunk in resp.aiter_raw():
+                    yield chunk
+            finally:
+                await resp.aclose()
+                await client.aclose()
+
+        relay = ("content-disposition", "content-encoding", "content-length")
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() in relay}
+        return body(), resp.headers.get("content-type", "application/octet-stream"), out_headers
+
     @contextlib.asynccontextmanager
     async def open_view(self, root, key):
         adapter = self._adapter(root)

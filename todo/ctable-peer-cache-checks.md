@@ -31,7 +31,11 @@ closed.
 
 ## Deferred by choice (plan "Out of scope")
 
-- Whole-file `api/download` for peer paths (stays 404).
+- ~~Whole-file `api/download` for peer paths~~ done (2026-07-11): pure
+  streaming byte relay of the peer's own `api/download` (headers verbatim,
+  no local caching) via an optional `RootProvider.download` seam; fixing it
+  surfaced (and fixed) local downloads 404ing mid-stream after the 200
+  headers (`test_download_relays_peer_file`).
 - DictStore recognition server-side (flat `.b2z` stores stay opaque leaves).
 - ~~Per-peer `cache_quota` enforcement~~ done (2026-07-11): `ensure_budget`
   runs a scoped LRU pass per configured peer over `pool_dir/<name>` before

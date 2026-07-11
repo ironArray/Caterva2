@@ -752,15 +752,24 @@ async def download_data(
     user: db.User = Depends(optional_user),
     accept_encoding: str | None = fastapi.Header(None),
 ):
-    if providers.provider_for(path.parts[0]) is not None:
-        # ponytail: whole-file download of peer datasets is out of MVP scope;
-        # use api/fetch. Upgrade path: stream via adapter.get(...).afetch(()).
-        raise fastapi.HTTPException(status_code=404, detail="external roots are non-transitive")
+    provider = providers.provider_for(path.parts[0])
+    if provider is not None:
+        try:
+            body, media_type, headers = await provider.download(
+                path.parts[0], "/".join(path.parts[1:]), accept_encoding
+            )
+        except providers.ProviderError as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
+        return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 
     decompress = accept_encoding != "blosc2"
+    # Read before creating the response: a bad path must 404 up front, not
+    # abort the stream after the 200 headers already went out.
+    content = await get_file_content(path, user, decompress=decompress)
 
     async def downloader():
-        yield await get_file_content(path, user, decompress=decompress)
+        yield content
 
     mimetype = guess_type(path)
     headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
