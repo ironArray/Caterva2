@@ -628,6 +628,12 @@ async def fetch_data(
             data = await provider.fetch(root, rel, slice_)
         except providers.ProviderError as exc:
             raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        if isinstance(data, bytes):
+            # Already a serialized cframe (e.g. a peer CTable row range):
+            # stream it as-is, no numpy wrap.
+            return responses.StreamingResponse(
+                srv_utils.iterchunk(data), media_type="application/octet-stream"
+            )
         cframe = await asyncio.to_thread(lambda: blosc2.asarray(np.ascontiguousarray(data)).to_cframe())
         downloader = srv_utils.iterchunk(cframe)
         return responses.StreamingResponse(downloader, media_type="application/octet-stream")
@@ -708,27 +714,7 @@ async def fetch_data(
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(array, blosc2.CTable):
-        # slice_ is a single slice/int/tuple; extract row start/stop.
-        # Use `is None` (not truthiness) so that stop == 0 stays 0.
-        sl0 = slice_[0] if isinstance(slice_, tuple) and len(slice_) > 0 else slice_
-        if isinstance(sl0, slice):
-            row_start = 0 if sl0.start is None else sl0.start
-            row_stop = array.nrows if sl0.stop is None else sl0.stop
-            if row_start < 0:
-                row_start += array.nrows
-            if row_stop < 0:
-                row_stop += array.nrows
-        elif isinstance(sl0, int):
-            row_start = sl0
-            if row_start < 0:
-                row_start += array.nrows
-            row_stop = row_start + 1
-        else:
-            row_start, row_stop = 0, array.nrows
-
-        # Clamp to [0, nrows].
-        row_start = max(0, min(row_start, array.nrows))
-        row_stop = max(row_start, min(row_stop, array.nrows))
+        row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
         view = array.slice(row_start, row_stop)
         data = view.to_cframe()
     elif isinstance(array, hdf5.HDF5Proxy):
@@ -1738,7 +1724,11 @@ async def htmx_root_list(
     mounted_ok = []
     for path in mounted:
         prefix = path.split("/", 1)[0]
-        if get_rootdir_or_none(prefix, user) is not None and path not in seen:
+        # A mounted container may live under a classic root or a provider
+        # root (peer mount). Stale/bad entries aren't validated here; the
+        # path-list expansion skips them silently, same as local ones.
+        known = get_rootdir_or_none(prefix, user) is not None or providers.provider_for(prefix) is not None
+        if known and path not in seen:
             seen.add(path)
             mounted_ok.append(path)
 
@@ -1847,6 +1837,20 @@ async def htmx_path_list(
         proot = pathlib.PurePosixPath(root)
         if proot.suffix not in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
             continue  # classic roots handled by filter_roots above
+        provider = providers.provider_for(proot.parts[0])
+        if provider is not None:
+            # A mounted peer container: expand via the peer's own deep
+            # listing. Stale/offline mounts skip silently, same rule as the
+            # local-container comment below.
+            try:
+                member_rows = await provider.rows(proot.parts[0], "/".join(proot.parts[1:]))
+            except providers.ProviderError:
+                continue
+            for name, size, _kind in member_rows:
+                leaf_path = f"{root}/{name}"
+                if search in leaf_path:
+                    add_dataset(leaf_path, None, size=size or 0)
+            continue
         rootdir = get_rootdir_or_none(proot.parts[0], user)
         if rootdir is None:
             continue
@@ -1874,7 +1878,7 @@ async def htmx_path_list(
         if provider is None:
             continue
 
-        for key, size in await provider.rows(root):
+        for key, size, kind in await provider.rows(root):
             path = f"{root}/{key}"
             if search in path:
                 datasets.append(
@@ -1884,7 +1888,9 @@ async def htmx_path_list(
                         "size": size,
                         "url": make_url(request, "html_home", path=path, query=query),
                         "label": truncate_path(path),
-                        "mountable": False,
+                        # Bare TreeStore .b2z rows are mountable, mirroring
+                        # the local rule; CTable .b2z rows open directly.
+                        "mountable": key.endswith(".b2z") and kind == "container",
                     }
                 )
 
@@ -1898,7 +1904,22 @@ async def htmx_path_list(
                 break
         else:
             root = segments[1]
-            rootdir = get_rootdir_or_none(root, user)
+            provider = providers.provider_for(root)
+            if provider is not None:
+                # Peer leaf: size from its (memoized) api/info; failures skip
+                # silently like the local suppress below.
+                with contextlib.suppress(Exception):
+                    info = await provider.info(root, "/".join(segments[2:]))
+                    size = (
+                        (info.get("schunk") or {}).get("cbytes")
+                        or info.get("cbytes")
+                        or info.get("size")
+                        or 0
+                    )
+                    add_dataset(path, None, size=size)
+                rootdir = None
+            else:
+                rootdir = get_rootdir_or_none(root, user)
             if rootdir is not None:
                 # Path may descend into a container (e.g. an unmounted TreeStore
                 # leaf); stat comes from the container file, but size is the
@@ -2151,6 +2172,14 @@ def _desc_window(total, start, size):
     return max(total - start - size, 0), total - start
 
 
+def _is_ctable_like(arr):
+    """True for real CTables and provider-backed views that render through
+    the CTable grid (ViewHandle.array is duck-typed by design)."""
+    return isinstance(arr, blosc2.CTable) or (
+        hasattr(arr, "nrows") and hasattr(arr, "schema_dict") and hasattr(arr, "slice")
+    )
+
+
 def _header_sort_links(displayed_fields, sortby, sortdir):
     """Per-column htmx `hx-vals` payload cycling the sort: ascending -> descending -> unsorted.
 
@@ -2254,7 +2283,7 @@ async def htmx_path_view(
                 return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
             idx = None
 
-        if isinstance(arr, blosc2.CTable):
+        if _is_ctable_like(arr):
             schema = arr.schema_dict()
             cols = [c["name"] for c in schema.get("columns", [])]
             fields = fields or cols[:5]
@@ -2281,6 +2310,16 @@ async def htmx_path_view(
                 if isinstance(value, np.generic):
                     return value.item()
                 return value
+
+            if provider is not None:
+                # Materialize exactly this row window locally before the sync
+                # slice below (the NDArray branch's prefetch, CTable-shaped).
+                # sort_desc can't be true here: filter/sortby already errored
+                # for providers above.
+                try:
+                    await handle.prefetch((slice(start, stop),))
+                except providers.ProviderError as exc:
+                    return htmx_error(request, exc.detail or "provider error")
 
             if sort_desc:
                 # arr is ascending-sorted; read its tail and reverse for descending order.

@@ -105,7 +105,10 @@ def test_open_view_releases_lock_on_exception():
         def cache_path(self, key):
             return "/tmp/nonexistent-peercache-pool/boom-cache-path"
 
-        def get(self, key):
+        def _info(self, key):
+            return {"shape": [1], "schunk": {}}  # a plain dataset: not the CTable branch
+
+        def get(self, key, info=None):
             raise RuntimeError("boom")
 
     provider._adapter = lambda root: _BoomAdapter()

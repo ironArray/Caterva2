@@ -6,9 +6,11 @@ file space immediately and the Proxy refetches on next access.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
 import pathlib
+import tempfile
 import time
 
 import blosc2
@@ -67,15 +69,28 @@ def touch(proxy, slice_):
         atimes = np.zeros(nchunks)
     touched = range(nchunks) if slice_ in (None, ()) else blosc2.get_slice_nchunks(cache, slice_)
     atimes[list(touched)] = time.time()
-    # Atomic replace so concurrent readers never see a partially-written file.
-    tmp = af.with_name(af.name + ".tmp")
-    with open(tmp, "wb") as f:
+    # Atomic replace so concurrent readers never see a partially-written
+    # file. The tmp name must be unique per call: touch runs via
+    # asyncio.to_thread, and a cancelled await (client disconnect) leaves
+    # the thread running after the cache lock is released — a fixed tmp
+    # name then collides with the next request's touch (os.replace ->
+    # FileNotFoundError, seen under load).
+    fd, tmp = tempfile.mkstemp(dir=af.parent, prefix=af.name, suffix=".tmp")
+    with os.fdopen(fd, "wb") as f:
         np.save(f, atimes)
     os.replace(tmp, af)
 
 
 def _usage():
-    return sum(f.stat().st_size for f in pool_dir.rglob("*") if f.is_file())
+    """Total pool bytes. The scan is lock-free, and files can vanish between
+    listing and stat (touch()'s atomic-replace tmp files) -- tolerate that
+    instead of 500ing the fetch that triggered ensure_budget."""
+    total = 0
+    for f in pool_dir.rglob("*"):
+        with contextlib.suppress(OSError):
+            if f.is_file():
+                total += f.stat().st_size
+    return total
 
 
 def _uninit_chunk(schunk, nchunk):

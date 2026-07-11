@@ -59,6 +59,35 @@ def split_container_path(path):
     return pathlib.Path(path), None
 
 
+def ctable_row_range(slice_, nrows):
+    """Normalize an ``api/fetch`` ``slice_`` into a CTable row range
+    ``(start, stop)``: take the first (row) component, apply None defaults,
+    negative wrap, and clamp to ``[0, nrows]``. Used by the local fetch
+    branch and by peer providers, so both clamp identically."""
+    # slice_ is a single slice/int/tuple; extract row start/stop.
+    # Use `is None` (not truthiness) so that stop == 0 stays 0.
+    sl0 = slice_[0] if isinstance(slice_, tuple) and len(slice_) > 0 else slice_
+    if isinstance(sl0, slice):
+        row_start = 0 if sl0.start is None else sl0.start
+        row_stop = nrows if sl0.stop is None else sl0.stop
+        if row_start < 0:
+            row_start += nrows
+        if row_stop < 0:
+            row_stop += nrows
+    elif isinstance(sl0, int):
+        row_start = sl0
+        if row_start < 0:
+            row_start += nrows
+        row_stop = row_start + 1
+    else:
+        row_start, row_stop = 0, nrows
+
+    # Clamp to [0, nrows].
+    row_start = max(0, min(row_start, nrows))
+    row_stop = max(row_start, min(row_stop, nrows))
+    return row_start, row_stop
+
+
 def treestore_leaves(tree, prefix="/"):
     """Full leaf keys (e.g. ``/g/a``) under ``prefix`` of an open TreeStore.
 

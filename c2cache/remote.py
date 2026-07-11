@@ -4,6 +4,7 @@ Verified mechanics: see "Verified by experiment" in
 plans/caterva3-remote-peer-mounts.md and repo-root e2e_peer_test.py.
 """
 
+import asyncio
 import hashlib
 import json
 import math
@@ -160,7 +161,11 @@ def open_cached_proxy(source, cpath, remote_mtime):
             mode="w",
             locking=True,
         )
-        cache.schunk.vlmeta["_peer_src"] = json.dumps({"path": source.path, "mtime": remote_mtime})
+        # src_meta lets a source stash extra keys (e.g. CTableSource's
+        # kind/schema) so the offline path can rebuild responses from the
+        # cache alone, without a fresh api/info.
+        extra = getattr(source, "src_meta", None) or {}
+        cache.schunk.vlmeta["_peer_src"] = json.dumps({"path": source.path, "mtime": remote_mtime, **extra})
     return blosc2.Proxy(source, _cache=cache)
 
 
@@ -176,6 +181,231 @@ def slice_fully_cached(cache, slice_):
     return all(
         specials.get(int(n), blosc2.SpecialValue.UNINIT) == blosc2.SpecialValue.NOT_SPECIAL for n in touched
     )
+
+
+# --- CTable peer cache: one structured-dtype sparse .b2nd per table ------
+# Design: plans/caterva3-remote-peer-simplified.md Part 1. The cache is a
+# plain sparse NDArray whose compound dtype packs all columns of a row, so
+# the whole NDArray peer-cache path (open_cached_proxy, slice_fully_cached,
+# peercache locking/eviction/touch) applies verbatim.
+
+# Compound chunk bytes = rows_per_chunk x sum(itemsizes); a wide table can
+# inflate this. Cap comfortably under blosc2's 2 GiB chunk limit; beyond it
+# the table is just non-cacheable (pass-through).
+CTABLE_MAX_CHUNK_BYTES = 512 * 2**20
+
+# CTableSource is not a C2Array, so Proxy.afetch defaults to 1 in-flight
+# aget_chunk (proxy.py); pass this explicitly instead.
+CTABLE_FETCH_CONCURRENCY = 4
+
+
+def _ctable_fixed_dtypes(schema_dict):
+    """Compound numpy dtype covering every column of `schema_dict` in schema
+    order, or None when the table is non-cacheable: any list/varlen-scalar/
+    dictionary/ndarray column, or column names numpy rejects as structured
+    field names."""
+    # Internal blosc2 APIs (schema_compiler, CTable._is_* predicates),
+    # pinned to the blosc2>=4.8.0 floor in pyproject.
+    from blosc2.schema_compiler import schema_from_dict
+
+    try:
+        compiled = schema_from_dict(schema_dict)
+        for col in compiled.columns:
+            if (
+                blosc2.CTable._is_list_column(col)
+                or blosc2.CTable._is_varlen_scalar_column(col)
+                or blosc2.CTable._is_dictionary_column(col)
+                or blosc2.CTable._is_ndarray_column(col)
+            ):
+                return None
+        return np.dtype([(col.name, col.dtype) for col in compiled.columns])
+    except Exception:
+        return None
+
+
+def _synth_ctable_cframe(schema_dict, cols, n):
+    """A valid CTable cframe from per-column numpy arrays: an EmbedStore with
+    /_meta, an all-True /_valid_rows and /_cols/<relpath> per column,
+    mirroring CTable.to_cframe (ctable.py) for the fixed-width scalar case."""
+    from blosc2.ctable_storage import _column_name_to_relpath  # blosc2>=4.8.0 internal
+
+    estore = blosc2.EmbedStore(urlpath=None, mode="w")
+    meta = blosc2.SChunk()
+    meta.vlmeta["kind"] = "ctable"
+    meta.vlmeta["version"] = 1
+    meta.vlmeta["schema"] = json.dumps(schema_dict)
+    estore["/_meta"] = meta
+    estore["/_valid_rows"] = blosc2.asarray(np.ones(n, dtype=np.bool_))
+    for name, arr in cols.items():
+        estore[f"/_cols/{_column_name_to_relpath(name)}"] = blosc2.asarray(arr)
+    return estore.to_cframe()
+
+
+class CTableSource:
+    """Duck-typed blosc2.Proxy source for one remote CTable: 1-D structured
+    rows, one api/fetch round trip per row-chunk (all columns at once, which
+    is the peer's fetch unit anyway)."""
+
+    def __init__(self, remote_path, urlbase, info, dtype):
+        self.path = remote_path
+        self.urlbase = urlbase.rstrip("/") + "/"
+        self.shape = (info["nrows"],)
+        self.chunks = tuple(info["chunks"])
+        self.blocks = None  # let blosc2 pick; per-column blocks don't map to compound rows
+        self.dtype = dtype
+        self.cparams = blosc2.CParams()
+        # Travels into the cache's _peer_src vlmeta (open_cached_proxy) so
+        # the offline path can synthesize cframes without a live api/info.
+        self.src_meta = {"kind": "ctable", "schema": info["schema_dict"]}
+        self._aclient = None
+        self._client = None
+
+    def _pack_rows(self, table, start, stop):
+        rows = np.zeros(self.chunks[0], dtype=self.dtype)  # zero-pad trailing chunk
+        for name in self.dtype.names:
+            rows[name][: stop - start] = table[name][:]
+        # Keep `packed` referenced while reading the chunk: NDArray.schunk
+        # does NOT keep its parent alive, so a one-liner here is a
+        # use-after-free (verified; see plan).
+        packed = blosc2.asarray(rows, chunks=self.chunks)
+        return packed.schunk.get_chunk(0)
+
+    def _chunk_range(self, nchunk):
+        start = nchunk * self.chunks[0]
+        return start, min(start + self.chunks[0], self.shape[0])
+
+    async def aget_chunk(self, nchunk):
+        start, stop = self._chunk_range(nchunk)
+        if self._aclient is None:
+            self._aclient = httpx.AsyncClient(timeout=5)
+        resp = await self._aclient.get(
+            f"{self.urlbase}api/fetch/{self.path}", params={"slice_": f"{start}:{stop}"}
+        )
+        resp.raise_for_status()
+        table = blosc2.ctable_from_cframe(resp.content)
+        return self._pack_rows(table, start, stop)
+
+    def get_chunk(self, nchunk):
+        # Sync twin of aget_chunk: Proxy.__getitem__ falls back to it for any
+        # chunk afetch didn't fill (shouldn't happen in our flow, but Proxy's
+        # contract expects it).
+        start, stop = self._chunk_range(nchunk)
+        if self._client is None:
+            self._client = httpx.Client(timeout=5)
+        resp = self._client.get(f"{self.urlbase}api/fetch/{self.path}", params={"slice_": f"{start}:{stop}"})
+        resp.raise_for_status()
+        table = blosc2.ctable_from_cframe(resp.content)
+        return self._pack_rows(table, start, stop)
+
+    async def aclose(self):
+        if self._aclient is not None:
+            await self._aclient.aclose()
+            self._aclient = None
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+
+async def _passthrough_ctable_cframe(urlbase, remote_path, start, stop):
+    """Milestone-0 arm: relay the peer's own api/fetch cframe for the row
+    range, no caching. Permanent fallback for non-cacheable tables."""
+    async with httpx.AsyncClient(timeout=5) as client:
+        resp = await client.get(
+            f"{urlbase.rstrip('/')}/api/fetch/{remote_path}", params={"slice_": f"{start}:{stop}"}
+        )
+        resp.raise_for_status()
+        return resp.content
+
+
+def ctable_cacheable(info):
+    """The compound dtype for a cacheable peer CTable, or None (pass-through):
+    non-fixed columns, no shared chunk grid, or oversized compound chunks."""
+    dtype = _ctable_fixed_dtypes(info.get("schema_dict") or {})
+    chunks = info.get("chunks")
+    if dtype is None or not chunks or chunks[0] * dtype.itemsize > CTABLE_MAX_CHUNK_BYTES:
+        return None
+    return dtype
+
+
+async def fetch_ctable_slice(adapter, key, info, start, stop):
+    """Cframe bytes for rows [start, stop) of the peer CTable behind `key`.
+    Caller holds cache_lock(adapter.cache_path(key)). Cacheable tables go
+    through the structured sparse cache (offline-capable); the rest pass
+    through to the peer's api/fetch."""
+    from c2cache import peercache  # late: keeps remote.py importable standalone in tests
+
+    remote_path = adapter._remote_path(key)
+    dtype = ctable_cacheable(info)
+    if dtype is None:
+        return await _passthrough_ctable_cframe(adapter.peer.urlbase, remote_path, start, stop)
+    src = CTableSource(remote_path, adapter.peer.urlbase, info, dtype)
+    try:
+        proxy = await asyncio.to_thread(open_cached_proxy, src, adapter.cache_path(key), info.get("mtime"))
+        await proxy.afetch(slice(start, stop), max_concurrency=CTABLE_FETCH_CONCURRENCY)
+        rows = await asyncio.to_thread(lambda: proxy[start:stop])
+        await asyncio.to_thread(peercache.touch, proxy, (slice(start, stop),))
+    finally:
+        await src.aclose()
+    cols = {name: rows[name] for name in dtype.names}
+    return await asyncio.to_thread(_synth_ctable_cframe, info["schema_dict"], cols, stop - start)
+
+
+class PeerCTableView:
+    """Duck CTable for the htmx data-grid (nrows/schema_dict/slice), built
+    straight from api/info — no cache open just to render. `aload` (driven
+    by the view handle's prefetch) materializes one row window through
+    fetch_ctable_slice; `slice` then serves from that window."""
+
+    def __init__(self, adapter, key, info):
+        self._adapter, self._key, self._info = adapter, key, info
+        self.nrows = info["nrows"]
+        self._window = None  # (start, stop, local CTable), set by aload
+
+    def schema_dict(self):
+        return self._info["schema_dict"]
+
+    async def aload(self, start, stop):
+        """Fetch rows [start, stop) into a local CTable window. Caller holds
+        cache_lock(adapter.cache_path(key)) (fetch_ctable_slice's contract)."""
+        data = await fetch_ctable_slice(self._adapter, self._key, self._info, start, stop)
+        self._window = (start, stop, blosc2.ctable_from_cframe(data))
+
+    def slice(self, start, stop):
+        wstart, wstop, table = self._window  # aload'ed via handle.prefetch
+        if (start, stop) == (wstart, wstop):
+            return table
+        if wstart <= start and stop <= wstop:  # sub-window: cheap local re-slice
+            return table.slice(start - wstart, stop - wstart)
+        raise RuntimeError(f"rows [{start}, {stop}) not prefetched (have [{wstart}, {wstop}))")
+
+
+def slice_ctable_cached(cache, start, stop):
+    """Offline read: synthesized cframe for rows [start, stop) from a
+    ctable-kind structured cache, or None when the range isn't fully cached
+    (or the cache carries no schema). Caller holds the cache's lock."""
+    meta = json.loads(cache.schunk.vlmeta.get("_peer_src", "{}"))
+    schema = meta.get("schema")
+    if schema is None:
+        return None
+    rows = cache[start:stop]
+    # Check AFTER the read, same discipline as the NDArray offline path: a
+    # positive check now means every touched chunk was present during it.
+    if not slice_fully_cached(cache, (slice(start, stop),)):
+        return None
+    cols = {name: rows[name] for name in rows.dtype.names}
+    return _synth_ctable_cframe(schema, cols, stop - start)
+
+
+def _leaf_kind(info):
+    """Classify a catalog leaf from its api/info dict: a bare TreeStore .b2z
+    reports as a Directory ("container", mountable), a CTable .b2z as
+    CTableMetadata ("ctable", direct view), anything else is a plain
+    "dataset" row."""
+    if info.get("kind") == "ctable":
+        return "ctable"
+    if "nfiles" in info:  # models.Directory: mtime/size/nfiles
+        return "container"
+    return "dataset"
 
 
 class RemotePeerAdapter:
@@ -210,7 +440,10 @@ class RemotePeerAdapter:
         sizes = self.peer.sizes
         if key not in sizes:
             info = self._info(key)
-            sizes[key] = info.get("schunk", {}).get("cbytes") or info.get("size") or 0
+            sizes[key] = info.get("schunk", {}).get("cbytes") or info.get("cbytes") or info.get("size") or 0
+            # Same response also tells the leaf's kind; memoize it alongside
+            # (zero extra HTTP for the listing's mountable/plain decision).
+            self.peer.kinds[key] = _leaf_kind(info)
         return sizes[key]
 
     def is_group(self, node):
@@ -239,9 +472,11 @@ class RemotePeerAdapter:
         I/O) so callers can take that cache's lock before opening anything."""
         return cache_path(self.pool_dir / self.peer.name, self.peer.peer_id, key)
 
-    def get(self, key):
-        """Return a blosc2.Proxy for the remote dataset behind `key`."""
-        info = self._info(key)
+    def get(self, key, info=None):
+        """Return a blosc2.Proxy for the remote dataset behind `key`.
+        `info` may be passed pre-fetched to skip a duplicate api/info GET."""
+        if info is None:
+            info = self._info(key)
         if "shape" not in info or "schunk" not in info:
             # e.g. a bare .h5/.b2z in the catalog: its info is a Directory
             # (group), not a dataset; there is nothing chunk-fetchable.

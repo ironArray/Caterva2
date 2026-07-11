@@ -14,6 +14,7 @@ import fastapi
 from caterva2.services.settings import parse_size  # noqa: F401
 from caterva2.services.srv_utils import (  # noqa: F401
     BLOSC2_CONTAINER_SUFFIXES,
+    ctable_row_range,
     split_container_path,
 )
 
@@ -109,9 +110,12 @@ class RootProvider(abc.ABC):
         """api/list contract: names relative to the requested path, sorted."""
 
     @abc.abstractmethod
-    async def rows(self, root: str) -> list[tuple[str, int]]:
-        """(key, size) pairs for the whole root (htmx path-list). Per-row
-        size failures are swallowed to size 0 — never kill the listing."""
+    async def rows(self, root: str, prefix: str = "") -> list[tuple[str, int, str | None]]:
+        """(key, size, kind) triples for the htmx path-list: the whole root
+        when `prefix` is empty, else the members of the container at
+        `prefix` (keys relative to it). kind is "container" (mountable),
+        "ctable", "dataset", or None (unknown). Per-row size/kind failures
+        are swallowed (size 0 / kind None) — never kill the listing."""
 
     @abc.abstractmethod
     async def info(self, root: str, key: str) -> dict:
@@ -119,7 +123,8 @@ class RootProvider(abc.ABC):
 
     @abc.abstractmethod
     async def fetch(self, root: str, key: str, slice_) -> Any:
-        """Return an in-memory ndarray-like for `slice_` (None = whole),
+        """Return an in-memory ndarray-like for `slice_` (None = whole), OR
+        raw cframe `bytes` to be streamed as-is (e.g. a CTable row range);
         fully orchestrated (lock, prefetch, read, accounting, eviction,
         offline fallback)."""
 

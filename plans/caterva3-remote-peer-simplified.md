@@ -1,6 +1,14 @@
 # Remote peer `.b2z` support, simplified: structured-dtype CTable cache + container navigation/mount UX
 
-**Status (2026-07-10): proposal, under discussion.** Candidate replacement for
+**Status (2026-07-11): IMPLEMENTED.** All of Part 1 + Part 2 landed on
+`c2cache-monorepo`, tests in `caterva2/tests/test_peers.py` (25 pass, full
+suite green). Three side-fixes shipped with it: `peercache._usage()` made
+tolerant of files vanishing mid-scan (lock-free rglob raced `touch()`'s
+atomic replace → 500 under load), `peercache.touch()` switched to unique
+mkstemp tmp names (a cancelled `to_thread(touch)` orphan could collide on
+the fixed name), and `client.Table.slice()` now passes the Table object to
+`get_slice` (nested tables, e.g. `tree.b2z/dir/tbl`, were misread as
+NDArray/SChunk — a pre-existing bug, local paths included). Replaces
 `plans/ctable-remote-peer-mounts.md` (the per-column-cache revision of the
 same day). Two changes relative to that plan:
 
@@ -113,6 +121,11 @@ async def aget_chunk(self, nchunk):
     rows = np.zeros(self.chunks[0], dtype=self.dtype)  # zero-pad trailing chunk
     for name in self.dtype.names:
         rows[name][: stop - start] = table[name][:]
+    # keep `packed` referenced while reading the chunk: NDArray.schunk does
+    # NOT keep its parent alive, so the one-liner
+    # `blosc2.asarray(...).schunk.get_chunk(0)` is a use-after-free that
+    # nondeterministically returns b"" or raises RuntimeError (verified on
+    # 4.8.0 and 4.8.1.dev0, 2026-07-11; upstream fix pending).
     packed = blosc2.asarray(rows, chunks=self.chunks)
     return packed.schunk.get_chunk(0)
 ```
@@ -295,8 +308,14 @@ round-trip preserves null sentinels; non-cacheable detection (varlen,
 
 1. REPL-check before coding: ~~structured sparse frame + update_chunk +
    reopen + field reads~~ **done 2026-07-10** (blosc2 4.8.1.dev0, see
-   Part 1). Remaining: null sentinels through the structured round-trip;
-   `Proxy(CTableSource)` accepts the duck-typed source; synth cframe reopens
+   Part 1). **Re-verified 2026-07-11 on a clean `blosc2==4.8.0` install**
+   (no version bump needed): all of the above, plus the full
+   `open_cached_proxy` idiom (`blosc2.empty` + vlmeta + `Proxy(duck_source,
+   _cache=...)` + `afetch(max_concurrency=)`), duck-typed source accepted,
+   reopen + `get_slice_nchunks` + `iterchunks_info` specials on the
+   structured frame, `schema_from_dict(t.schema_dict())`,
+   `to_cframe`/`ctable_from_cframe` round-trip, `EmbedStore`. Remaining:
+   null sentinels through the structured round-trip; synth cframe reopens
    via `ctable_from_cframe` with correct nrows/dtypes.
 2. `pytest caterva2/tests/test_peers.py -v` repeatedly, then the full suite.
 3. Manual two-peer run: fetch CTable slices through A; kill B; refetch the
@@ -315,6 +334,28 @@ round-trip preserves null sentinels; non-cacheable detection (varlen,
 5. Old-plan §5 web-UI CTable view (`PeerCTableView` etc.)
 6. Part 2 items 3–5 (plug icon, mounted-roots acceptance, expansion loop)
 7. Tests alongside each step
+
+## Long-term direction (recorded 2026-07-11, not in scope here)
+
+The eventual goal — full CTable functionality (`sort_by`, `group_by`,
+indexing, filters) over a remote table, à la `Proxy`/`C2Array` — does **not**
+run through this cache, so the structured-dtype layout doesn't constrain it.
+The cache is a disposable relay artifact on A with no external contract
+(wire format is the synthesized cframe; eviction already rebuilds it).
+
+The long-term design lives in blosc2, at the existing `TableStorage` seam:
+a `RemoteTableStorage` whose `open_column(name)` returns
+`Proxy(C2Array(column_path))` — CTable's expensive ops are already columnar
+and lazy (`sort_by(view=True)` materializes only the key columns), so
+`CTable` works unchanged on top, with per-column chunk-level fetch + local
+Proxy caching. A thin `C2CTable` wrapper for ergonomics at most. What it
+needs server-side is per-column addressability (`api/info`/`api/fetch` on
+column virtual paths, or a `field=` param — CTables are opaque object roots
+today), and optionally index-anchor exposure. Per-column paths routed
+through A would hit the existing NDArray member-fallback cache path
+(`remote.py:242-254`), independent of this plan's CTable cache. Worst case
+is bounded double-caching on A (row-structured + per-column), covered by the
+existing quota; the structured cache is the disposable one.
 
 ## Out of scope (unchanged from the old plan)
 

@@ -42,6 +42,9 @@ class Peer:
     catalog_ts: float = 0.0
     # per-leaf sizes (api/info cbytes), memoized until the catalog refreshes
     sizes: dict = dataclasses.field(default_factory=dict)
+    # per-leaf kinds ("container"/"ctable"/"dataset"), memoized like sizes
+    # from the same api/info response
+    kinds: dict = dataclasses.field(default_factory=dict)
 
     @property
     def root(self):
@@ -174,4 +177,5 @@ class PeerRegistry:
             peer.catalog = [str(p) for p in listing]
             peer.catalog_ts = now
             peer.sizes.clear()  # sizes may be stale along with the listing
+            peer.kinds.clear()
         return peer.catalog

@@ -801,7 +801,11 @@ class Table(Dataset):
 
     def slice(self, key):
         """Get a row slice as a blosc2.CTable."""
-        return self.client.get_slice(self.path, key, as_blosc2=True)
+        # Pass self (not self.path): get_slice's Table isinstance check is
+        # what marks the response as a ctable cframe. The path-string
+        # fallback only recognizes bare `.b2z` paths, so a nested table
+        # (e.g. tree.b2z/dir/tbl) would be misread as an NDArray/SChunk.
+        return self.client.get_slice(self, key, as_blosc2=True)
 
     def __getitem__(self, key):
         """Shortcut: slice as a blosc2.CTable."""
