@@ -319,9 +319,11 @@ round-trip preserves null sentinels; non-cacheable detection (varlen,
    _cache=...)` + `afetch(max_concurrency=)`), duck-typed source accepted,
    reopen + `get_slice_nchunks` + `iterchunks_info` specials on the
    structured frame, `schema_from_dict(t.schema_dict())`,
-   `to_cframe`/`ctable_from_cframe` round-trip, `EmbedStore`. Remaining:
+   `to_cframe`/`ctable_from_cframe` round-trip, `EmbedStore`. ~~Remaining:
    null sentinels through the structured round-trip; synth cframe reopens
-   via `ctable_from_cframe` with correct nrows/dtypes.
+   via `ctable_from_cframe` with correct nrows/dtypes~~ — both codified in
+   `test_peers.py` (`test_synth_ctable_cframe_roundtrip`,
+   `test_synth_ctable_cframe_preserves_null_sentinels`).
 2. `pytest caterva2/tests/test_peers.py -v` repeatedly, then the full suite.
 3. Manual two-peer run: fetch CTable slices through A; kill B; refetch the
    cached range offline; inspect `pool_dir` (one `.b2nd` per table).

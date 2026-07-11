@@ -585,6 +585,54 @@ def test_synth_ctable_cframe_roundtrip(tmp_path):
     np.testing.assert_allclose(t2["f"][:], [i / 2 for i in range(5, 15)])
 
 
+def test_synth_ctable_cframe_preserves_null_sentinels(tmp_path):
+    """Null sentinels (iinfo.min / NaN / the null string marker) and the
+    schema's null metadata must survive the full structured-cache loop:
+    numpy columns -> packed structured frame -> field reads -> synthesized
+    cframe -> reconstructed CTable."""
+    from c2cache import remote
+
+    int_null = np.iinfo(np.int32).min
+
+    @dataclass
+    class NRow:
+        x: int = blosc2.field(blosc2.int32(nullable=True), chunks=(16,), blocks=(8,))
+        y: str = blosc2.field(blosc2.string(max_length=16, nullable=True), chunks=(16,), blocks=(8,))
+        f: float = blosc2.field(blosc2.float64(nullable=True), chunks=(16,), blocks=(8,))
+
+    t = blosc2.CTable(NRow, urlpath=str(tmp_path / "n.b2z"), mode="w", compact=True, expected_size=40)
+    str_null = t["y"].null_value
+    for i in range(40):
+        t.append(
+            (
+                int_null if i % 7 == 3 else i,
+                str_null if i % 5 == 2 else f"s{i}",
+                float("nan") if i % 3 == 1 else i / 2,
+            )
+        )
+    sd = t.schema_dict()
+    dtype = remote.ctable_cacheable({"nrows": 40, "chunks": (16,), "schema_dict": sd})
+    assert dtype is not None  # nullable fixed-width columns are cacheable
+
+    # pack -> sparse structured frame -> read back (the cache's data path)
+    rows = np.zeros(40, dtype=dtype)
+    for name in dtype.names:
+        rows[name] = t[name][0:40]
+    frame = blosc2.asarray(rows, chunks=(16,))
+    back = frame[0:40]
+
+    cols = {name: back[name] for name in dtype.names}
+    t2 = blosc2.ctable_from_cframe(remote._synth_ctable_cframe(sd, cols, 40))
+
+    for name in ("x", "y", "f"):
+        np.testing.assert_array_equal(t2[name][:], t[name][:])  # NaN-safe
+        assert t2[name].null_count() == t[name].null_count()
+    assert t2["x"].null_count() == sum(1 for i in range(40) if i % 7 == 3)
+    assert t2["x"].null_value == int_null
+    assert t2["y"].null_value == str_null
+    assert np.isnan(t2["f"].null_value)
+
+
 def test_ctable_cacheable_detection(tmp_path):
     from c2cache import remote
 
