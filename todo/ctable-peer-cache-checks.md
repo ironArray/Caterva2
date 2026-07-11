@@ -43,7 +43,9 @@ closed.
 - ~~Per-peer `cache_quota` enforcement~~ done (2026-07-11): `ensure_budget`
   runs a scoped LRU pass per configured peer over `pool_dir/<name>` before
   the pool-wide one (`test_per_peer_quota_evicts_only_that_peer`).
-- Auth, dynamic mounts, batch `api/chunks`.
+- Auth, dynamic mounts, batch `api/chunks`. (Dynamic mounts + registry-URL
+  discovery now designed in `plans/peer-dynamic-mounts-registry.md`,
+  including which auth questions they do/don't reopen.)
 
 ## Long-term direction (recorded in the plan)
 
