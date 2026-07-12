@@ -1,8 +1,14 @@
 # Whole-file caching for peer paths (plain files)
 
-**Status (2026-07-12): PLANNED** (design only). The roadmap item from
-`todo/cache-server-pitch.md` (advantage 1) and the "Related future work"
-section of `plans/peer-dynamic-mounts-registry.md`. Estimated 2–3 days.
+**Status (2026-07-12): DEFERRED** (design complete, implementation on
+hold — YAGNI). The relay path works correctly today; this only adds
+bandwidth savings and offline coverage for plain files, and no customer
+has hit that need yet. Revisit when one does: repeated downloads of the
+same files through a peer mount, or offline access to plain files coming
+up in a pitch. The roadmap item from `todo/cache-server-pitch.md`
+(advantage 1) and the "Related future work" section of
+`plans/peer-dynamic-mounts-registry.md`. Estimated 2–3 days when picked
+up.
 
 ## Today
 
@@ -11,10 +17,12 @@ of B's `api/download`: verbatim headers, no local copy. N readers at site A
 hit B N times for the same report. Everything else about the peer data
 plane (datasets) already caches; whole files are the one uncached path.
 
-On B, non-native files (PDF, CSV, …) are auto-compressed to `.b2` SChunk
-frames on ingestion (`compress_file` in `get_abspath`) and `api/download`
-returns either decompressed bytes or, under `Accept-Encoding: blosc2`, the
-raw compressed frame.
+On B, non-native files (PDF, CSV, TXT, …) are auto-compressed to `.b2`
+SChunk frames on ingestion (`compress_file` in `get_abspath`) and
+`api/download` returns either decompressed bytes or, under
+`Accept-Encoding: blosc2`, the compressed frame. The one exception:
+`.h5`/`.hdf5` are treated as blosc2-native (`HDF5_SUFFIXES` is excluded
+from the compression step) and stored/served unencoded.
 
 ## Design decision: whole-file entries, not sparse frames
 
@@ -35,8 +43,10 @@ chunk-filled frames, because:
   chunks; an SChunk's trailing chunk is unpadded). No specials needed at
   all: absence of the file IS the uncached state.
 
-So the entry is: the response body **verbatim as B sent it** (negotiated
-blosc2-first, below) plus a small JSON sidecar of the relay metadata.
+So the entry is: a genuine `.b2` blosc2 frame — the same artifact B keeps
+on disk for the file — plus a small JSON sidecar of the relay metadata.
+Keeping B's own `.b2` format/extension (rather than an opaque download
+blob) means the cache is a faithful stand-in for B's storage if B is gone.
 
 ## Mechanics
 
@@ -46,14 +56,18 @@ Same pool, same hashing, new suffix (so the eviction scan can tell entries
 apart without opening them):
 
 ```
-pool_dir/<peer>/<sha256(peer_id:key)[:32]>.dl        # body, verbatim
-pool_dir/<peer>/<...>.dl.json                        # sidecar
+pool_dir/<peer>/<sha256(peer_id:key)[:32]>.b2        # blosc2 frame, as B stores it
+pool_dir/<peer>/<...>.b2.json                        # sidecar
 ```
 
-Sidecar: `{"mtime": ..., "content_type": ..., "content_encoding": ...,
-"content_disposition": ...}` — everything needed to replay the response
-and to validate freshness, written atomically (tmp + `os.replace`, the
-`touch()` pattern).
+(No clash with dataset entries: those are `<hash>.b2nd`, and `*.b2` globs
+don't match them.)
+
+Sidecar: `{"mtime": ..., "content_type": ..., "content_disposition": ...}`
+— everything needed to replay the response and to validate freshness,
+written atomically (tmp + `os.replace`, the `touch()` pattern). No
+`content_encoding` field: every file in scope is stored by B as a `.b2`
+frame (see scope guard), so every entry is one too.
 
 ### Fill (miss path), in `C2CacheProvider.download`
 
@@ -70,17 +84,13 @@ and to validate freshness, written atomically (tmp + `os.replace`, the
    for the full download. `ponytail:` known ceiling — a streaming tee
    (serve while filling) is the upgrade path if giant files make this
    annoying; reports/CSVs won't.
-4. Honor B's actual response: if it did NOT mark `Content-Encoding:
-   blosc2` (e.g. an `.h5`, which B never compresses), the body is raw —
-   record that in the sidecar and skip any decompression at serve time.
 
 ### Serve (hit path)
 
-- Client sent `Accept-Encoding: blosc2` and the entry is a blosc2 frame ⇒
-  stream the file verbatim with `Content-Encoding: blosc2`.
-- Otherwise, if the entry is a blosc2 frame ⇒ decompress
-  (`blosc2.schunk_from_cframe(...)[:]` — same as B's own
-  `get_file_content`) and stream; if raw ⇒ stream verbatim.
+- Client sent `Accept-Encoding: blosc2` ⇒ stream the `.b2` file verbatim
+  with `Content-Encoding: blosc2`.
+- Otherwise ⇒ decompress (`blosc2.schunk_from_cframe(...)[:]` — same as
+  B's own `get_file_content`) and stream.
 - Relay `Content-Disposition`/`Content-Type` from the sidecar.
 
 ### Offline
@@ -94,7 +104,7 @@ the pitch's offline story to cover plain files.
 
 - `peercache._usage` already counts the new files (it stats everything in
   the pool) — quota pressure is correct on day one.
-- `_gather_candidates` learns a second entry kind: for each `*.dl` file,
+- `_gather_candidates` learns a second entry kind: for each `*.b2` file,
   one candidate `(atime, path, WHOLE_FILE)` where atime comes from a
   1-element `.atime.npy` sidecar stamped on every serve (same
   `touch`-style atomic write). Eviction of such a candidate = unlink body
@@ -104,12 +114,27 @@ the pitch's offline story to cover plain files.
 
 ### Scope guard: which paths use this
 
-Only the whole-file `download` endpoint for **non-dataset** responses.
-Datasets (`.b2nd`, `.b2z` members, HDF5 leaves) keep the chunk cache and
-their `api/fetch` path untouched; `api/download` of a *dataset* keeps the
-plain relay (downloading whole datasets through A is rare; revisit only if
-customers do it). Deciding is one `_info` look: dataset infos carry
-`shape`/`schunk`, plain files don't.
+Only the whole-file `download` endpoint for **non-native plain files** —
+the ones B stores as `.b2` (PDF, CSV, TXT, …). Everything else keeps
+today's behavior:
+
+- Datasets (`.b2nd`, `.b2z` members, HDF5 leaves) keep the chunk cache
+  and their `api/fetch` path untouched; `api/download` of a *dataset*
+  keeps the plain relay (downloading whole datasets through A is rare;
+  revisit only if customers do it).
+- Whole-`.h5`/`.hdf5` container downloads also keep the plain relay,
+  **excluded** from the whole-file cache: B stores them unencoded, so a
+  cached copy would have to be either a raw `.h5` (a second entry format)
+  or an A-side `.b2` recompression (breaking the mirror-of-B principle),
+  and pinning multi-GB containers in the pool is the wrong trade anyway.
+  Their *leaves* already get chunk-granular sparse caching via
+  `api/fetch`, which is the access pattern that matters for big HDF5; if
+  customers hammer whole-`.h5` downloads, the honest upgrade is range
+  requests, not whole-file caching.
+
+Deciding is one `_info` look plus the key's suffix: dataset infos carry
+`shape`/`schunk` (skip), bare `.h5`/`.hdf5` keys are containers (skip),
+everything else is a cacheable plain file.
 
 ## Out of scope
 
@@ -117,6 +142,7 @@ customers do it). Deciding is one `_info` look: dataset infos carry
 - HTTP range requests on cached files.
 - Chunk-granular partial caching of `.b2` frames — would need B-side
   `api/chunk` on `.b2` paths and buys nothing for whole-file access.
+- Whole-`.h5` download caching (kept as plain relay; see scope guard).
 - `api/preview` for peer paths.
 - Any change on B.
 
@@ -127,9 +153,9 @@ customers do it). Deciding is one `_info` look: dataset infos carry
   (kill B, download again, bytes identical; both encodings).
 - Freshness: touch/replace the file on B (mtime bump) ⇒ next download
   refetches.
-- Raw-entry path: a `.h5` (or any file B serves unencoded) round-trips
-  verbatim under both client encodings.
+- Scope guard: a whole-`.h5` download still relays (no `.b2` entry
+  appears in the pool) and a dataset download still relays.
 - Concurrent first downloads: single upstream fetch (single-flight lock),
   all clients get correct bytes.
-- Eviction: tiny quota ⇒ `.dl` entries evicted whole (body + sidecars
+- Eviction: tiny quota ⇒ `.b2` entries evicted whole (body + sidecars
   gone), datasets and files compete in one LRU order.
