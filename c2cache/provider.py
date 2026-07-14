@@ -6,12 +6,34 @@ the provenance of each method."""
 import asyncio
 import contextlib
 import json
+import os
 import pathlib
+import tempfile
 
+import blosc2
 import httpx
 
 from c2cache import peercache, peers, remote
 from caterva2.services import providers
+
+
+def _read_sidecar(entry):
+    """The JSON sidecar of a whole-file cache entry, or None if missing or
+    unreadable (a torn write is just a cache miss, never a 500)."""
+    try:
+        with open(str(entry) + ".json") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _read_entry(entry):
+    """Sidecar + body bytes of a whole-file entry; caller holds its
+    cache_lock. Stamps the entry's atime (the eviction LRU signal)."""
+    sidecar = _read_sidecar(entry) or {}
+    data = entry.read_bytes()
+    peercache.touch_file(entry)
+    return sidecar, data
 
 
 class _Handle:
@@ -250,10 +272,132 @@ class C2CacheProvider(providers.RootProvider):
         return data
 
     async def download(self, root, key, accept_encoding=None):
+        # Whole-file cache for plain files (the ones B stores as .b2 frames);
+        # datasets and containers keep the pure relay below. Design:
+        # plans/plain-files-caching.md.
+        adapter = self._adapter(root)
+        suffix = pathlib.PurePosixPath(key.strip("/")).suffix
+        relay_only = (
+            suffix in providers.BLOSC2_NATIVE_SUFFIXES | providers.BLOSC2_CONTAINER_SUFFIXES
+            or providers.split_container_path(key)[1] is not None
+        )
+        if not relay_only:
+            return await self._download_plain_file(adapter, root, key, accept_encoding)
+        return await self._relay_download(adapter, root, key, accept_encoding)
+
+    async def _download_plain_file(self, adapter, root, key, accept_encoding):
+        entry = adapter.cache_path(key).with_suffix(".b2")
+        try:
+            info = await asyncio.to_thread(adapter._info, key)  # freshness token (mtime)
+        except httpx.HTTPStatusError as exc:
+            raise providers.ProviderRelayedStatus(exc.response.status_code) from exc
+        except remote.OFFLINE_ERRORS as exc:
+            # _info already marked the peer offline; serve-stale posture, same
+            # as the dataset cache: a cached entry beats a 503.
+            if entry.exists():
+                return await self._serve_file_entry(entry, accept_encoding)
+            raise providers.ProviderUnavailable(f"peer {root} is offline") from exc
+        if "shape" in info or "nfiles" in info or info.get("kind") == "ctable":
+            # a dataset or container after all: keep the plain relay
+            return await self._relay_download(adapter, root, key, accept_encoding)
+        # Same asyncio lock as the chunk caches gives single-flight: concurrent
+        # first downloads make one upstream request; waiters find the entry.
+        async with peercache.cache_lock(entry):
+            sidecar = await asyncio.to_thread(_read_sidecar, entry)
+            if sidecar is None or sidecar.get("mtime") != info.get("mtime"):
+                try:
+                    passthrough = await self._fill_file_entry(adapter, key, entry, info.get("mtime"))
+                except remote.OFFLINE_ERRORS as exc:
+                    adapter.registry.mark_offline(adapter.peer)
+                    if not entry.exists():
+                        raise providers.ProviderUnavailable(f"peer {root} is offline") from exc
+                    passthrough = None  # stale entry, peer just went down: serve it
+                if passthrough is not None:
+                    return passthrough
+            sidecar, data = await asyncio.to_thread(_read_entry, entry)
+        await peercache.ensure_budget()
+        return await self._entry_response(sidecar, data, accept_encoding)
+
+    async def _fill_file_entry(self, adapter, key, entry, remote_mtime):
+        """Fetch B's own .b2 artifact for `key` into the whole-file entry
+        (tmp + rename + JSON sidecar + atime stamp); caller holds
+        cache_lock(entry). Fill-then-serve: the first byte waits for the full
+        download (ponytail: a streaming tee is the upgrade path if giant
+        files make this annoying; reports/CSVs won't). Returns None on
+        success, or — when B's response is not a blosc2 frame (not a
+        compressed plain file after all) — a ready (body, media_type,
+        headers) passthrough triple, caching nothing."""
+        url = f"{adapter.peer.urlbase}/api/download/{adapter._remote_path(key)}"
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(url, headers={"Accept-Encoding": "blosc2"})
+        if resp.status_code != 200:
+            raise providers.ProviderRelayedStatus(resp.status_code)
+        if resp.headers.get("content-encoding") != "blosc2":
+            content = resp.content
+
+            async def body():
+                yield content
+
+            relay = ("content-disposition", "content-length")
+            headers = {k: v for k, v in resp.headers.items() if k.lower() in relay}
+            return body(), resp.headers.get("content-type", "application/octet-stream"), headers
+
+        def write():
+            entry.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=entry.parent, prefix=entry.name, suffix=".tmp")
+            with os.fdopen(fd, "wb") as f:
+                f.write(resp.content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, entry)
+            sidecar = {
+                "mtime": remote_mtime,
+                "content_type": resp.headers.get("content-type", "application/octet-stream"),
+                "content_disposition": resp.headers.get("content-disposition"),
+            }
+            fd, tmp = tempfile.mkstemp(dir=entry.parent, prefix=entry.name, suffix=".tmp")
+            with os.fdopen(fd, "w") as f:
+                json.dump(sidecar, f)
+            os.replace(tmp, str(entry) + ".json")
+            # atime now, not just on serve: a freshly filled entry must not
+            # look like the oldest candidate to ensure_budget.
+            peercache.touch_file(entry)
+
+        await asyncio.to_thread(write)
+        return None
+
+    async def _serve_file_entry(self, entry, accept_encoding):
+        """Offline serve: replay the cached entry, 503 if it vanished
+        (evicted between the exists() check and taking the lock)."""
+        async with peercache.cache_lock(entry):
+            try:
+                sidecar, data = await asyncio.to_thread(_read_entry, entry)
+            except FileNotFoundError as exc:
+                raise providers.ProviderUnavailable("peer is offline") from exc
+        return await self._entry_response(sidecar, data, accept_encoding)
+
+    async def _entry_response(self, sidecar, data, accept_encoding):
+        """(body, media_type, headers) from a whole-file entry's bytes: the
+        .b2 frame verbatim for blosc2 clients, decompressed otherwise (same
+        as B's own get_file_content)."""
+        if accept_encoding == "blosc2":
+            headers = {"Content-Encoding": "blosc2"}
+        else:
+            data = await asyncio.to_thread(lambda: blosc2.schunk_from_cframe(data)[:])
+            headers = {}
+        headers["Content-Length"] = str(len(data))
+        if sidecar.get("content_disposition"):
+            headers["Content-Disposition"] = sidecar["content_disposition"]
+
+        async def body():
+            yield data
+
+        return body(), sidecar.get("content_type", "application/octet-stream"), headers
+
+    async def _relay_download(self, adapter, root, key, accept_encoding):
         # Pure byte relay of the peer's own api/download: aiter_raw + verbatim
         # headers, so a blosc2-encoded body passes through untouched. No local
         # caching (a whole-file stream doesn't fit the sparse chunk cache).
-        adapter = self._adapter(root)
         url = f"{adapter.peer.urlbase}/api/download/{adapter._remote_path(key)}"
         # "identity" otherwise: never let httpx advertise gzip on our behalf,
         # the relayed Content-Length/Content-Encoding must match the body.

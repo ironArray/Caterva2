@@ -125,6 +125,9 @@ def two_servers(tmp_path_factory):
     # a nested dataset, to exercise path-relative listing
     (pub / "dir1").mkdir()
     blosc2.asarray(np.arange(10), urlpath=str(pub / "dir1" / "small.b2nd"))
+    # a plain (non-blosc2) file: B auto-compresses it to a .b2 frame, and A
+    # gives it a whole-file cache entry (plans/plain-files-caching.md)
+    (pub / "readme.txt").write_text("peer plain-file caching\n" * 200)
     _seed_ctables(pub)
     b = _start(bdir, B_PORT)
     peer_toml = f'[[server.peer]]\nname = "labb"\nurlbase = "http://localhost:{B_PORT}"\n'
@@ -199,8 +202,10 @@ def test_chunk_endpoint_is_404_on_peer_root(two_servers):
 
 def test_download_relays_peer_file(two_servers):
     """api/download on a peer path streams the peer's own download verbatim
-    (used to be a flat 404); a bad path relays the peer's status."""
-    urlbase, _data, _adir = two_servers
+    (used to be a flat 404); a bad path relays the peer's status. Scope
+    guard: a dataset download must NOT grow the whole-file (.b2) cache."""
+    urlbase, _data, adir = two_servers
+    entries_before = set((adir / "peercache" / "labb").glob("*.b2"))
     for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
         direct = httpx.get(
             f"http://localhost:{B_PORT}/api/download/@public/dir1/small.b2nd", headers=hdrs, timeout=10
@@ -209,8 +214,30 @@ def test_download_relays_peer_file(two_servers):
         assert relayed.status_code == direct.status_code == 200
         assert relayed.content == direct.content
         assert "small.b2nd" in relayed.headers.get("content-disposition", "")
+    assert set((adir / "peercache" / "labb").glob("*.b2")) == entries_before
     r = httpx.get(f"{urlbase}/api/download/@labb/nope.b2nd", timeout=10)
     assert r.status_code == 404
+
+
+def test_plain_file_download_fills_cache(two_servers):
+    """A plain-file download through A fills a whole-file .b2 entry (+ JSON
+    sidecar) and serves identical bytes to B's own download, both encodings
+    (plans/plain-files-caching.md)."""
+    urlbase, _data, adir = two_servers
+    for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
+        direct = httpx.get(
+            f"http://localhost:{B_PORT}/api/download/@public/readme.txt", headers=hdrs, timeout=10
+        )
+        relayed = httpx.get(f"{urlbase}/api/download/@labb/readme.txt", headers=hdrs, timeout=10)
+        assert relayed.status_code == direct.status_code == 200
+        assert relayed.content == direct.content
+        assert relayed.headers.get("content-encoding") == direct.headers.get("content-encoding")
+        assert "readme.txt" in relayed.headers.get("content-disposition", "")
+    entries = list((adir / "peercache" / "labb").glob("*.b2"))
+    assert len(entries) == 1, entries
+    entry = entries[0]
+    assert (entry.parent / (entry.name + ".json")).exists()
+    assert (entry.parent / (entry.name + ".atime.npy")).exists()
 
 
 def test_cache_sidecar_appears_and_is_removed_with_cache(two_servers):
@@ -241,6 +268,8 @@ def test_peer_offline_tolerated(tmp_path_factory):
     pub.mkdir()
     data = np.random.default_rng(1).random((4, 100_000))
     blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    (pub / "hello.txt").write_text("v1 " * 100)
+    (pub / "never.txt").write_text("never downloaded while B was up")
     b_port, a_port = 8033, 8034
     b = _start(bdir, b_port)
     peer_toml = f'[[server.peer]]\nname = "labb2"\nurlbase = "http://localhost:{b_port}"\n'
@@ -250,6 +279,19 @@ def test_peer_offline_tolerated(tmp_path_factory):
         # warm the cache for one slice before killing B
         r = httpx.get(f"{urlbase}/api/fetch/@labb2/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
         r.raise_for_status()
+
+        # fill the whole-file cache for hello.txt...
+        r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
+        r.raise_for_status()
+        assert r.content == b"v1 " * 100
+
+        # ...then change it on B (mtime bump): the next download refetches.
+        # Hit B directly first so it recompresses the rewritten file.
+        (pub / "hello.txt").write_text("v2 " * 100)
+        httpx.get(f"http://localhost:{b_port}/api/download/@public/hello.txt", timeout=10).raise_for_status()
+        r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
+        r.raise_for_status()
+        assert r.content == b"v2 " * 100
 
         b.send_signal(signal.SIGTERM)
         b.wait(timeout=10)
@@ -266,6 +308,20 @@ def test_peer_offline_tolerated(tmp_path_factory):
 
         # uncached slice cannot be served while the peer is down
         r = httpx.get(f"{urlbase}/api/fetch/@labb2/mc.b2nd", params={"slice_": "2:4"}, timeout=5)
+        assert r.status_code == 503
+
+        # the cached plain file still downloads offline, both encodings...
+        r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
+        assert r.status_code == 200
+        assert r.content == b"v2 " * 100
+        r = httpx.get(
+            f"{urlbase}/api/download/@labb2/hello.txt", headers={"Accept-Encoding": "blosc2"}, timeout=10
+        )
+        assert r.status_code == 200
+        assert bytes(blosc2.schunk_from_cframe(r.content)[:]) == b"v2 " * 100
+
+        # ...but a never-downloaded plain file is a 503
+        r = httpx.get(f"{urlbase}/api/download/@labb2/never.txt", timeout=10)
         assert r.status_code == 503
     finally:
         a.send_signal(signal.SIGTERM)
@@ -573,6 +629,42 @@ def test_per_peer_quota_evicts_only_that_peer(tmp_path):
 
     assert filled_chunks(ca) < 8  # peer-a evicted down toward LOW * quota
     assert filled_chunks(cb) == 8  # peer-b untouched
+
+
+def test_whole_file_entry_evicted_whole(tmp_path):
+    """Under quota pressure a whole-file (.b2) entry is evicted whole (body +
+    JSON/atime sidecars unlinked), and a fresher entry survives an older one:
+    files compete in the same LRU order as dataset chunks."""
+    import time
+
+    from c2cache import peercache
+
+    d = tmp_path / "peer-a"
+    d.mkdir()
+
+    def make_entry(name, at):
+        entry = d / name
+        entry.write_bytes(os.urandom(40_000))  # incompressible-ish, just bytes on disk
+        (d / (name + ".json")).write_text("{}")
+        peercache._stamp_atimes(peercache._atime_file(entry), np.array([at]))
+        return entry
+
+    old = make_entry("old.b2", time.time() - 100)
+    new = make_entry("new.b2", time.time())
+
+    saved = peercache.pool_dir, peercache.budget, peercache.peer_quotas
+    try:
+        peercache.pool_dir = tmp_path
+        peercache.budget = 60_000  # 80K on disk -> evict down to LOW * 60K
+        peercache.peer_quotas = {}
+        asyncio.run(peercache.ensure_budget())
+    finally:
+        peercache.pool_dir, peercache.budget, peercache.peer_quotas = saved
+
+    assert not old.exists()
+    assert not (d / "old.b2.json").exists()
+    assert not (d / "old.b2.atime.npy").exists()
+    assert new.exists()  # freshest entry survives
 
 
 def test_cache_lock_is_per_path():

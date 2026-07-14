@@ -1,14 +1,12 @@
 # Whole-file caching for peer paths (plain files)
 
-**Status (2026-07-12): DEFERRED** (design complete, implementation on
-hold — YAGNI). The relay path works correctly today; this only adds
-bandwidth savings and offline coverage for plain files, and no customer
-has hit that need yet. Revisit when one does: repeated downloads of the
-same files through a peer mount, or offline access to plain files coming
-up in a pitch. The roadmap item from `todo/cache-server-pitch.md`
-(advantage 1) and the "Related future work" section of
-`plans/peer-dynamic-mounts-registry.md`. Estimated 2–3 days when picked
-up.
+**Status (2026-07-14): IMPLEMENTED** as designed below (c2cache/provider.py
+`_download_plain_file` + whole-file candidates in peercache eviction; tests
+in caterva2/tests/test_peers.py). Not implemented from the test list:
+counting B's hits via an access log/proxy (cache use is proven by the
+offline-serve test instead) and an observable single-flight assertion (the
+shared `cache_lock` gives it by construction). Streaming tee, range
+requests, and whole-`.h5` caching remain out of scope as recorded.
 
 ## Today
 

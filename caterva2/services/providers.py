@@ -14,6 +14,7 @@ import fastapi
 from caterva2.services.settings import parse_size  # noqa: F401
 from caterva2.services.srv_utils import (  # noqa: F401
     BLOSC2_CONTAINER_SUFFIXES,
+    BLOSC2_NATIVE_SUFFIXES,
     ctable_row_range,
     split_container_path,
 )

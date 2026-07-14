@@ -21,6 +21,11 @@ logger = logging.getLogger("peercache")
 HIGH = 1.0  # start evicting above budget
 LOW = 0.8  # evict down to this fraction of budget
 
+# nchunk sentinel for whole-file (.b2) entries in the candidate list: plain
+# peer files are cached as one .b2 frame and evicted whole (the refetch unit
+# is the whole download), unlike the per-chunk dataset caches.
+WHOLE_FILE = -1
+
 # Per-cache locks serializing fetch->read->touch vs eviction, one per cache
 # frame (keyed by cache path). Frame integrity itself (no torn reads, no
 # clobbered index rewrites under concurrent mutation) is delegated to
@@ -70,6 +75,16 @@ def touch(proxy, slice_):
         atimes = np.zeros(nchunks)
     touched = range(nchunks) if slice_ in (None, ()) else blosc2.get_slice_nchunks(cache, slice_)
     atimes[list(touched)] = time.time()
+    _stamp_atimes(af, atimes)
+
+
+def touch_file(entry):
+    """Stamp the access time of a whole-file (.b2) entry: a 1-element atime
+    array in the same sidecar format the chunk caches use."""
+    _stamp_atimes(_atime_file(entry), np.array([time.time()]))
+
+
+def _stamp_atimes(af, atimes):
     # Atomic replace so concurrent readers never see a partially-written
     # file. The tmp name must be unique per call: touch runs via
     # asyncio.to_thread, and a cancelled await (client disconnect) leaves
@@ -140,7 +155,10 @@ async def _evict_to_quota(candidates, scope, quota):
         if usage <= target:
             break
         async with cache_lock(cpath):
-            usage = await asyncio.to_thread(_evict_from_cache, cpath, chunks, target, usage, scope)
+            if chunks[0][1] == WHOLE_FILE:
+                usage = await asyncio.to_thread(_evict_whole_file, cpath, chunks[0][0], usage, scope)
+            else:
+                usage = await asyncio.to_thread(_evict_from_cache, cpath, chunks, target, usage, scope)
 
 
 def _gather_candidates():
@@ -160,8 +178,32 @@ def _gather_candidates():
             if info.special == blosc2.SpecialValue.NOT_SPECIAL:
                 at = atimes[info.nchunk] if atimes is not None and info.nchunk < len(atimes) else 0.0
                 candidates.append((at, str(cdir), info.nchunk))
+    # Whole-file (.b2) entries: one candidate per file, competing in the same
+    # LRU order as dataset chunks. (*.b2 never matches the *.b2nd caches, nor
+    # the .b2.json/.b2.atime.npy sidecars.)
+    for f in pool_dir.glob("*/*.b2"):
+        atimes = _load_atimes(_atime_file(f))
+        at = float(atimes[0]) if atimes is not None and len(atimes) else 0.0
+        candidates.append((at, str(f), WHOLE_FILE))
     candidates.sort()  # oldest first
     return candidates
+
+
+def _evict_whole_file(cpath, at, usage, scope):
+    """Evict a whole-file (.b2) entry: unlink body + sidecars. Called with
+    the entry's cache_lock held. A candidate re-served (fresh atime) or
+    already removed since gathering is skipped, mirroring _evict_from_cache's
+    staleness checks."""
+    p = pathlib.Path(cpath)
+    live = _load_atimes(_atime_file(p))
+    live_at = float(live[0]) if live is not None and len(live) else 0.0
+    if not p.exists() or live_at != at:
+        return usage
+    for f in (p, pathlib.Path(str(p) + ".json"), _atime_file(p)):
+        f.unlink(missing_ok=True)
+    new = _usage(scope)
+    logger.info("evicted file entry %s (freed %d bytes)", cpath, usage - new)
+    return new
 
 
 def _evict_from_cache(cpath, chunks, target, usage, scope):
