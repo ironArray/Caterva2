@@ -585,6 +585,7 @@ async def fetch_data(
     user: db.User = Depends(optional_user),
     filter: str | None = None,
     field: str | None = None,
+    range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
     """
     Fetch a dataset.
@@ -610,6 +611,12 @@ async def fetch_data(
         to be downloaded (instead of some slice which does not cover it fully),
         its stored image is served containing all data and metadata (including
         variable length fields).
+
+    The `FileResponse` case, and only that one, serves byte ranges: a client
+    can read the header, the chunk offsets and single blocks of a stored frame
+    instead of transferring it whole (blosc2's Proxy over a C2Array does).
+    Everything else is built as it is sent and answers a `Range` header with a
+    416, rather than quietly returning the whole body with a 200.
     """
 
     slice_ = parse_slice(slice_)
@@ -631,12 +638,20 @@ async def fetch_data(
         if isinstance(data, bytes):
             # Already a serialized cframe (e.g. a peer CTable row range):
             # stream it as-is, no numpy wrap.
+            srv_utils.refuse_range(range_header, path)
             return responses.StreamingResponse(
-                srv_utils.iterchunk(data), media_type="application/octet-stream"
+                srv_utils.iterchunk(data),
+                media_type="application/octet-stream",
+                headers=srv_utils.NO_RANGES,
             )
+        # A peer dataset is fetched from its owner and re-serialized here, so
+        # there is no file to seek into
+        srv_utils.refuse_range(range_header, path)
         cframe = await asyncio.to_thread(lambda: blosc2.asarray(np.ascontiguousarray(data)).to_cframe())
         downloader = srv_utils.iterchunk(cframe)
-        return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+        return responses.StreamingResponse(
+            downloader, media_type="application/octet-stream", headers=srv_utils.NO_RANGES
+        )
 
     abspath, inner_key = split_and_resolve(path, user)
 
@@ -710,8 +725,14 @@ async def fetch_data(
         and inner_key is None  # abspath is the container, not this leaf: never stream it whole
     ):
         # Send the data in the file straight to the client,
-        # avoiding slicing and re-compression.
+        # avoiding slicing and re-compression.  This is also the one branch that
+        # serves byte ranges: FileResponse seeks into the file and sends only
+        # what was asked for, which is what block-granular clients read.
         return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+
+    # Everything below builds its answer, so a range cannot be honoured: say so
+    # here, before computing a body that is not going to be sent
+    srv_utils.refuse_range(range_header, path)
 
     if isinstance(array, blosc2.CTable):
         row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
@@ -743,7 +764,9 @@ async def fetch_data(
         data = schunk.to_cframe()
 
     downloader = srv_utils.iterchunk(data)
-    return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+    return responses.StreamingResponse(
+        downloader, media_type="application/octet-stream", headers=srv_utils.NO_RANGES
+    )
 
 
 @app.get("/api/download/{path:path}")
@@ -751,7 +774,12 @@ async def download_data(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
     accept_encoding: str | None = fastapi.Header(None),
+    range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
+    # This one always streams, decompressing on the way out more often than not,
+    # so it never serves ranges; api/fetch on a stored dataset is what does.  The
+    # refusal comes after the path is resolved, so a path that does not exist is
+    # still a 404 rather than a 416 about a file nobody has.
     provider = providers.provider_for(path.parts[0])
     if provider is not None:
         try:
@@ -760,19 +788,22 @@ async def download_data(
             )
         except providers.ProviderError as exc:
             raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        srv_utils.refuse_range(range_header, path)
         headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
+        headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 
     decompress = accept_encoding != "blosc2"
     # Read before creating the response: a bad path must 404 up front, not
     # abort the stream after the 200 headers already went out.
     content = await get_file_content(path, user, decompress=decompress)
+    srv_utils.refuse_range(range_header, path)
 
     async def downloader():
         yield content
 
     mimetype = guess_type(path)
-    headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
+    headers = {"Content-Disposition": f'attachment; filename="{path.name}"', **srv_utils.NO_RANGES}
     if accept_encoding == "blosc2":
         abspath = get_abspath(path, user)
         suffix = abspath.suffix

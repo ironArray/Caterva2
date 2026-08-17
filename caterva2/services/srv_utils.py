@@ -524,6 +524,31 @@ def raise_not_found(detail="Not Found"):
     raise fastapi.HTTPException(status_code=404, detail=detail)
 
 
+NO_RANGES = {"Accept-Ranges": "none"}
+"""Header for a response that is built as it is sent, and so cannot be seeked.
+
+A dataset served straight from a file gets byte ranges for free -- Starlette's
+`FileResponse` implements RFC 7233 by itself -- and a client can then read the
+blocks of a slice instead of whole chunks.  A `StreamingResponse` has no such
+thing and ignores the `Range` header entirely, so a client that asks for 32
+bytes gets the whole body with a 200 and no way to notice.  This says which is
+which, and `refuse_range` makes the mistake cheap instead of silent.
+"""
+
+
+def refuse_range(range_header, path):
+    """416 a ranged request for something that is computed rather than stored."""
+    if range_header:
+        raise fastapi.HTTPException(
+            status_code=416,
+            detail=(
+                f"{path} is not served from a file (it is computed, filtered or held "
+                "inside a container), so byte ranges are not available for it"
+            ),
+            headers=NO_RANGES,
+        )
+
+
 #
 # Blosc2 related helpers
 #
