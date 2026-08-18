@@ -308,3 +308,67 @@ def test_htmx_path_view_member_0d_scalar(fill_tree_public, client):
     resp = httpx.post(f"{base}/htmx/path-view/{root.name}/{fname}/s/scalar")
     assert resp.status_code == 200
     assert "42" in resp.text
+
+
+# --- api/chunk on a container leaf -----------------------------------------
+
+
+def _chunk_url(client, path, nchunk):
+    return f"{client.urlbase}/api/chunk/{TEST_CATERVA2_ROOT}/{path}?nchunk={nchunk}"
+
+
+def test_chunk_of_a_leaf_is_the_stored_one(fill_tree_public, client):
+    """A TreeStore keeps its leaves as ordinary Blosc2 arrays, so a chunk of one
+    is served as it lies in the .b2z -- nothing is sliced or recompressed."""
+    fname, _root = fill_tree_public
+    response = httpx.get(_chunk_url(client, f"{fname}/g/a", 0))
+    assert response.status_code == 200
+
+    stored = blosc2.open(pathlib.Path(TEST_STATE_DIR) / "server/public" / fname)["/g/a"]
+    assert response.content == stored.schunk.get_chunk(0)
+
+
+def test_proxy_over_a_leaf_reads_it(fill_tree_public, client):
+    """What the chunk endpoint is for: a Proxy caching a remote array chunk by
+    chunk. Before api/chunk resolved container paths, this 404ed."""
+    fname, _root = fill_tree_public
+    remote = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/{fname}/g/a", urlbase=client.urlbase)
+    proxy = blosc2.Proxy(remote, mode="w")
+    assert np.array_equal(proxy[:], np.arange(6, dtype="i4").reshape(2, 3))
+
+
+def test_chunk_of_a_missing_leaf(fill_tree_public, client):
+    fname, _root = fill_tree_public
+    assert httpx.get(_chunk_url(client, f"{fname}/g/nope", 0)).status_code == 404
+    # A group is not a dataset either
+    assert httpx.get(_chunk_url(client, f"{fname}/g", 0)).status_code == 404
+
+
+def test_chunk_of_a_ctable_is_refused(client):
+    """A CTable is a set of columns rather than one chunked array: it has no
+    schunk to take a chunk out of, and used to fail as a 500."""
+    from .test_ctable import _make_table
+
+    fname = "test_chunk_ctable.b2z"
+    dest = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _make_table(dest)
+
+    response = httpx.get(_chunk_url(client, fname, 0))
+    assert response.status_code == 400
+    assert "slice_" in response.json()["detail"]
+
+
+def test_the_opened_leaf_is_kept_between_requests(fill_tree_public):
+    """Reading a leaf chunk by chunk must not reopen the container per chunk;
+    a container rewritten underneath must not be served from the cache either."""
+    from caterva2.services.server import open_member
+
+    fname, _root = fill_tree_public
+    abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    mtime = abspath.stat().st_mtime
+
+    leaf = open_member(abspath, "/g/a", mtime)
+    assert open_member(abspath, "/g/a", mtime) is leaf
+    assert open_member(abspath, "/g/b", mtime) is not leaf
+    assert open_member(abspath, "/g/a", mtime + 1) is not leaf  # rewritten since

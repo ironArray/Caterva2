@@ -497,6 +497,23 @@ async def partial_download(abspath, path, slice_=None):
         await proxy.afetch(slice_)
 
 
+# mtime is in the key and unused in the body, so that a container rewritten
+# underneath is reopened instead of served from here (as get_filtered_array does)
+@functools.lru_cache(maxsize=16)
+def open_member(abspath, inner_key, mtime):
+    """The leaf at *inner_key* inside a container file, kept between requests.
+
+    Reading a leaf chunk by chunk, which is what a proxy over one does, would
+    otherwise reopen the container for every chunk.  Holding on to the leaf is
+    safe: a TreeStore leaf is an independent object once fetched, and outlives
+    the adapter that produced it.
+    """
+    leaf = srv_utils.open_container_member(abspath, inner_key)
+    if leaf is None:  # no such key, or it names a group rather than a dataset
+        srv_utils.raise_not_found()
+    return leaf
+
+
 def get_abspath(
     path: pathlib.Path, user: (db.User | None), may_not_exist=False
 ) -> tuple[
@@ -850,17 +867,45 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(optional_user),
 ):
+    """One compressed chunk of a dataset, as it is stored.
+
+    This is how a client caches a remote array a chunk at a time, so it serves
+    what is *stored* in Blosc2 chunks and nothing else.  A container leaf counts:
+    a TreeStore keeps its leaves as ordinary Blosc2 arrays, and the chunk is
+    handed over as it lies in the ``.b2z``.  An HDF5 dataset and a CTable do not,
+    and say so rather than being taken apart and recompressed once per request --
+    ``api/fetch`` with a ``slice_`` computes exactly the region wanted for those,
+    which is both less work here and fewer bytes over the wire.
+    """
     if providers.provider_for(path.parts[0]) is not None:
         # Non-transitivity guard: peer roots are never re-exposed chunk-wise.
         raise fastapi.HTTPException(status_code=404, detail="external roots are non-transitive")
 
-    abspath = get_abspath(path, user)
-    lock = locks.setdefault(path, asyncio.Lock())
+    # Resolve the way api/fetch does, so a leaf inside a container is reachable:
+    # get_abspath alone drops the inner key and 404s on the container's own path
+    abspath, inner_key = split_and_resolve(path, user)
+    if abspath.suffix in srv_utils.HDF5_SUFFIXES:
+        srv_utils.raise_bad_request(
+            f"{path} is HDF5, whose chunks are HDF5-compressed rather than Blosc2 chunks; "
+            "fetch it with the slice_ parameter instead"
+        )
+    # One lock per container, so the leaves of a .b2z serialize with each other
+    # over the file they share; a plain dataset is its own container, as before
+    container_path = pathlib.Path(str(path)[: -len(inner_key)]) if inner_key else path
+    lock = locks.setdefault(container_path, asyncio.Lock())
     async with lock:
         root = path.parts[0]
         get_rootdir_or_error(root, user)
 
-        container = open_b2(abspath, path)
+        if inner_key is None:
+            container = open_b2(abspath, path)
+        else:
+            container = open_member(abspath, inner_key, abspath.stat().st_mtime)
+        if isinstance(container, blosc2.CTable):
+            srv_utils.raise_bad_request(
+                f"{path} is a CTable, which is a set of columns rather than one chunked array; "
+                "fetch it with the slice_ parameter instead"
+            )
         if isinstance(container, blosc2.LazyArray):
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
