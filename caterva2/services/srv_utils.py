@@ -15,6 +15,7 @@ import inspect
 import json
 import pathlib
 import random
+import secrets
 import string
 import types
 import typing
@@ -524,6 +525,9 @@ def raise_not_found(detail="Not Found"):
     raise fastapi.HTTPException(status_code=404, detail=detail)
 
 
+RANGES_OK = {"Accept-Ranges": "bytes"}
+"""Header for a response whose bytes can be seeked to, and so served in ranges."""
+
 NO_RANGES = {"Accept-Ranges": "none"}
 """Header for a response that is built as it is sent, and so cannot be seeked.
 
@@ -534,6 +538,133 @@ thing and ignores the `Range` header entirely, so a client that asks for 32
 bytes gets the whole body with a 200 and no way to notice.  This says which is
 which, and `refuse_range` makes the mistake cheap instead of silent.
 """
+
+
+def parse_ranges(range_header, size):
+    """The spans a ``Range: bytes=`` header names over *size* bytes.
+
+    Sorted, and the ones that touch merged, which is what Starlette does to the
+    ranges of a file response: a client sees one shape of answer whichever path
+    served it, and none of them can count on getting a part per span it asked
+    for.  An empty list means nothing it named is satisfiable (a 416); None
+    means it is not a byte range at all, which RFC 7233 says to ignore rather
+    than refuse.  Anything malformed raises ValueError.
+    """
+    units, _, spec = range_header.partition("=")
+    if units.strip().lower() != "bytes":
+        return None
+    spans = []
+    for part in spec.split(","):
+        first, sep, last = part.strip().partition("-")
+        if not sep:
+            raise ValueError(f"not a range: {part.strip()!r}")
+        if not first:  # bytes=-N: the last N bytes, which is how a suffix is asked for
+            wanted = int(last)
+            start, end = max(size - wanted, 0), size - 1
+            if wanted <= 0:
+                continue
+        else:
+            start = int(first)
+            end = min(int(last), size - 1) if last else size - 1
+        if start > end or start >= size:
+            continue  # unsatisfiable on its own: dropped, as RFC 7233 says
+        spans.append((start, end))
+    if not spans:
+        return spans
+    spans.sort()
+    merged = [spans[0]]
+    for start, end in spans[1:]:
+        if start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def ranged_window_response(abspath, window, range_header, media_type="application/octet-stream"):
+    """Answer *range_header* out of the ``(offset, size)`` *window* of *abspath*.
+
+    The window is a leaf's frame inside a container, so the coordinates are the
+    leaf's own: its byte 0 is the frame's first byte, and a range reaching past
+    its end is clamped to it.  Nothing outside the window a client named is ever
+    served through here, whatever it asks for.
+
+    None when the header is not a byte range at all, which leaves the caller to
+    answer as if it had not been sent.
+    """
+    offset, size = window
+    try:
+        spans = parse_ranges(range_header, size)
+    except ValueError:
+        raise_bad_request(f"malformed Range header: {range_header!r}")
+    if spans is None:
+        return None
+    if not spans:
+        raise fastapi.HTTPException(
+            status_code=416,
+            detail=f"none of {range_header!r} lies within the {size} bytes there are",
+            headers={**RANGES_OK, "Content-Range": f"bytes */{size}"},
+        )
+    with open(abspath, "rb") as frame:
+        if len(spans) == 1:
+            start, end = spans[0]
+            frame.seek(offset + start)
+            return fastapi.responses.Response(
+                frame.read(end - start + 1),
+                status_code=206,
+                media_type=media_type,
+                headers={**RANGES_OK, "Content-Range": f"bytes {start}-{end}/{size}"},
+            )
+        # Several at once, which is one round trip instead of one each: RFC 7233
+        # carries them as a multipart body, each part saying which bytes it holds
+        boundary = secrets.token_hex(16)
+        body = bytearray()
+        for start, end in spans:
+            frame.seek(offset + start)
+            body += (
+                f"--{boundary}\r\nContent-Type: {media_type}\r\n"
+                f"Content-Range: bytes {start}-{end}/{size}\r\n\r\n"
+            ).encode()
+            body += frame.read(end - start + 1) + b"\r\n"
+        body += f"--{boundary}--\r\n".encode()
+    return fastapi.responses.Response(
+        bytes(body),
+        status_code=206,
+        media_type=f"multipart/byteranges; boundary={boundary}",
+        headers=RANGES_OK,
+    )
+
+
+def window_response(abspath, window, range_header=None):
+    """The stored image of a container leaf, out of the *window* of *abspath*.
+
+    What `FileResponse` is for a dataset with a file of its own, for one that
+    lives inside a container: the whole of its frame, or the ranges of it a
+    client asked for.  Streamed rather than read whole, since a leaf can be as
+    large as any dataset.
+    """
+    if range_header:
+        ranged = ranged_window_response(abspath, window, range_header)
+        if ranged is not None:  # None: not a byte range, so answer as if unasked
+            return ranged
+    offset, size = window
+
+    def stream():
+        with open(abspath, "rb") as container:
+            container.seek(offset)
+            left = size
+            while left > 0:
+                data = container.read(min(left, 2**20))
+                if not data:
+                    break
+                left -= len(data)
+                yield data
+
+    return fastapi.responses.StreamingResponse(
+        stream(),
+        media_type="application/octet-stream",
+        headers={**RANGES_OK, "Content-Length": str(size)},
+    )
 
 
 def refuse_range(range_header, path):

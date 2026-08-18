@@ -500,6 +500,40 @@ async def partial_download(abspath, path, slice_=None):
 # mtime is in the key and unused in the body, so that a container rewritten
 # underneath is reopened instead of served from here (as get_filtered_array does)
 @functools.lru_cache(maxsize=16)
+def member_window(abspath, inner_key, mtime):
+    """Where a container leaf's frame lies in the file, as (offset, nbytes), or None.
+
+    A `.b2z` is a zip of *stored* members, so an external leaf's bytes in the
+    file are the Blosc2 frame it would have been written as on its own -- which
+    is what lets a ranged request be answered by seeking to it instead of
+    rebuilding the leaf.  None where there is no such window: a leaf embedded in
+    the store's own super-chunk, a `C2Array` reference, an HDF5 dataset (not a
+    Blosc2 frame at all), a CTable `.b2z` (not a store of leaves).
+
+    The frame's own magic is checked before the window is offered, so a `.b2z`
+    written by something else -- with compressed members, say -- cannot have a
+    window handed out that would decode to nonsense.
+    """
+    if abspath.suffix != ".b2z":
+        return None
+    try:
+        store = blosc2.open(abspath)
+    except Exception:
+        return None
+    if not isinstance(store, blosc2.DictStore):
+        return None
+    window = store.member_window(inner_key)
+    if window is None:
+        return None
+    offset, size = window
+    with open(abspath, "rb") as container:
+        container.seek(offset)
+        if container.read(10)[2:9] != b"b2frame":
+            return None
+    return window
+
+
+@functools.lru_cache(maxsize=16)
 def open_member(abspath, inner_key, mtime):
     """The leaf at *inner_key* inside a container file, kept between requests.
 
@@ -683,6 +717,7 @@ async def fetch_data(
             "use the download API if you only want to download the file"
         )
 
+    window = None  # where a container leaf's frame lies, when it has one
     filter = filter.strip() if filter else filter
     if filter:
         if field:
@@ -696,6 +731,11 @@ async def fetch_data(
             srv_utils.raise_bad_request(str(exc))
     elif inner_key is not None:
         # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf).
+        # A leaf that is a whole frame inside the container can be served in
+        # ranges, by seeking to it -- what a stored dataset gets from
+        # FileResponse, and what lets a client read its blocks.  Not when a
+        # field is projected out of it: that is computed, not stored.
+        window = member_window(abspath, inner_key, abspath.stat().st_mtime)
         container = srv_utils.open_container_member(abspath, inner_key)
         if container is None:
             srv_utils.raise_not_found()
@@ -704,6 +744,19 @@ async def fetch_data(
 
     if field:
         container = container[field]
+
+    if isinstance(container, blosc2.DictStore):
+        # A container is a file of leaves rather than an array: its stored image
+        # is the file, which is what a client opening it as a store expects --
+        # and what the type ladder below used to die on, asking a TreeStore for
+        # a typesize it has not got (a 500 where the docstring promises the
+        # stored image).  Ranges come with FileResponse, so a leaf of it is
+        # reachable byte-wise too.
+        if slice_ is not None:
+            srv_utils.raise_bad_request(
+                f"{path} is a container, so there is nothing to slice; ask for a dataset inside it"
+            )
+        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
         array = container
@@ -739,13 +792,20 @@ async def fetch_data(
         whole
         and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
         and (not filter)
-        and inner_key is None  # abspath is the container, not this leaf: never stream it whole
     ):
-        # Send the data in the file straight to the client,
-        # avoiding slicing and re-compression.  This is also the one branch that
-        # serves byte ranges: FileResponse seeks into the file and sends only
-        # what was asked for, which is what block-granular clients read.
-        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+        if inner_key is None:
+            # Send the data in the file straight to the client,
+            # avoiding slicing and re-compression.  This is also the one branch that
+            # serves byte ranges: FileResponse seeks into the file and sends only
+            # what was asked for, which is what block-granular clients read.
+            return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+        if window is not None and not field:
+            # The same for a leaf, whose frame lies inside the container: its
+            # stored image is a window of that file, ranges included.  Not only
+            # cheaper than the rebuild below -- more faithful, since the rebuild
+            # re-partitions (it slices and recompresses), and so disagrees with
+            # the chunks and blocks api/info reports for the very same leaf.
+            return srv_utils.window_response(abspath, window, range_header)
 
     # Everything below builds its answer, so a range cannot be honoured: say so
     # here, before computing a body that is not going to be sent

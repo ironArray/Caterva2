@@ -372,3 +372,112 @@ def test_the_opened_leaf_is_kept_between_requests(fill_tree_public):
     assert open_member(abspath, "/g/a", mtime) is leaf
     assert open_member(abspath, "/g/b", mtime) is not leaf
     assert open_member(abspath, "/g/a", mtime + 1) is not leaf  # rewritten since
+
+
+# --- byte ranges into a leaf's frame ----------------------------------------
+
+
+def _fetch_url(client, path):
+    return f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{path}"
+
+
+def _window(path, key):
+    store = blosc2.open(str(path))
+    return store.member_window(key)
+
+
+def test_a_leaf_is_served_from_its_window(fill_tree_public, client):
+    """A .b2z keeps each leaf as a stored zip member, so the leaf's frame is in
+    the file and the whole of it can be served by seeking to it."""
+    fname, _root = fill_tree_public
+    abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    offset, nbytes = _window(abspath, "/g/a")
+
+    response = httpx.get(_fetch_url(client, f"{fname}/g/a"))
+    assert response.status_code == 200
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.content == abspath.read_bytes()[offset : offset + nbytes]
+    assert np.array_equal(
+        blosc2.ndarray_from_cframe(response.content)[:], np.arange(6, dtype="i4").reshape(2, 3)
+    )
+
+
+def test_a_leaf_keeps_the_partitioning_info_reports(fill_tree_public, client):
+    """The rebuild this replaced re-sliced and recompressed, so what came back
+    disagreed with the chunks and blocks api/info reports for the same leaf."""
+    fname, _root = fill_tree_public
+    dest = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    with blosc2.TreeStore(str(dest), mode="a") as tstore:
+        tstore["/chunked"] = blosc2.asarray(
+            np.arange(4000, dtype="i4").reshape(200, 20), chunks=(50, 20), blocks=(10, 20)
+        )
+
+    fetched = blosc2.ndarray_from_cframe(httpx.get(_fetch_url(client, f"{fname}/chunked")).content)
+    info = httpx.get(f"{client.urlbase}/api/info/{TEST_CATERVA2_ROOT}/{fname}/chunked").json()
+    assert fetched.chunks == tuple(info["chunks"]) == (50, 20)
+    assert fetched.blocks == tuple(info["blocks"]) == (10, 20)
+
+
+def test_ranges_of_a_leaf(fill_tree_public, client):
+    fname, _root = fill_tree_public
+    abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    offset, nbytes = _window(abspath, "/g/a")
+    raw = abspath.read_bytes()
+
+    response = httpx.get(_fetch_url(client, f"{fname}/g/a"), headers={"Range": "bytes=0-31"})
+    assert response.status_code == 206
+    assert response.headers["content-range"] == f"bytes 0-31/{nbytes}"
+    assert response.content == raw[offset : offset + 32]
+    # ... and the leaf's byte 0 is the frame's, not the container's
+    assert response.content[2:9] == b"b2frame"
+
+
+def test_a_range_cannot_reach_past_the_leaf(fill_tree_public, client):
+    # The window is the whole of what this path is about: a range that would
+    # run into the next member is clamped, and one that starts beyond it is a 416
+    fname, _root = fill_tree_public
+    abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    _offset, nbytes = _window(abspath, "/g/a")
+
+    clamped = httpx.get(_fetch_url(client, f"{fname}/g/a"), headers={"Range": f"bytes=0-{nbytes + 999}"})
+    assert clamped.status_code == 206
+    assert clamped.headers["content-range"] == f"bytes 0-{nbytes - 1}/{nbytes}"
+    assert len(clamped.content) == nbytes
+
+    beyond = httpx.get(_fetch_url(client, f"{fname}/g/a"), headers={"Range": f"bytes={nbytes}-{nbytes + 9}"})
+    assert beyond.status_code == 416
+    assert beyond.headers["content-range"] == f"bytes */{nbytes}"
+
+
+def test_several_ranges_of_a_leaf_come_back_multipart(fill_tree_public, client):
+    fname, _root = fill_tree_public
+    abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+    offset, _nbytes = _window(abspath, "/g/a")
+    raw = abspath.read_bytes()
+
+    response = httpx.get(_fetch_url(client, f"{fname}/g/a"), headers={"Range": "bytes=0-15, 40-55"})
+    assert response.status_code == 206
+    assert response.headers["content-type"].startswith("multipart/byteranges")
+    assert raw[offset : offset + 16] in response.content
+    assert raw[offset + 40 : offset + 56] in response.content
+
+
+def test_a_sliced_leaf_still_refuses_ranges(fill_tree_public, client):
+    # A slice is computed per request whatever it is a slice of
+    fname, _root = fill_tree_public
+    response = httpx.get(
+        _fetch_url(client, f"{fname}/h/c"), params={"slice_": "2:5"}, headers={"Range": "bytes=0-31"}
+    )
+    assert response.status_code == 416
+
+
+def test_a_container_is_served_whole(fill_tree_public, client):
+    """A container is a file of leaves rather than an array; asking for it used
+    to die in the type ladder, on a typesize a TreeStore has not got."""
+    fname, _root = fill_tree_public
+    abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
+
+    response = httpx.get(_fetch_url(client, fname))
+    assert response.status_code == 200
+    assert response.content == abspath.read_bytes()
+    assert httpx.get(_fetch_url(client, fname), params={"slice_": "0:2"}).status_code == 400
