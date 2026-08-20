@@ -243,10 +243,13 @@ def test_a_filled_array_is_published_by_itself(presized):
         time.sleep(0.05)
     assert published.is_file()
 
-    # What landed is the array, readable as one
+    # What landed is the array, readable as one.  It is readable the moment it is
+    # there, too: the copy goes to a name of its own and is moved into place, so
+    # a reader polling for the array cannot open it half-written
     np.testing.assert_array_equal(
         blosc2.open(str(published))[:], np.repeat(np.arange(NCHUNKS, dtype=DTYPE), CHUNKS[0])
     )
+    assert not list(published.parent.glob("*.partial"))
 
 
 def test_publishing_says_where_the_array_went(presized, auth_client):

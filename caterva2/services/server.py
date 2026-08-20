@@ -1124,8 +1124,21 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
     except ImportError:
         srv_utils.raise_bad_request("publishing needs fsspec, which is not installed here")
     destination = publish_destination(path)
-    with open(abspath, "rb") as source, fsspec.open(destination, "wb") as target:
-        shutil.copyfileobj(source, target)
+    fs, target = fsspec.url_to_fs(destination)
+    # Published under a name of its own and moved into place, so that what
+    # appears at the destination is a whole frame or nothing.  A reader that
+    # polls for the array would otherwise open it mid-copy: the file exists from
+    # the first byte written, and a frame is not readable until its last.
+    # (An object store makes a write visible only once it completes, so the move
+    # is redundant there and costs a server-side copy.  Kept all the same: which
+    # backends stream a partial file into view is not something to guess at.)
+    staging = f"{target}.partial"
+    parent = target.rsplit("/", 1)[0]
+    if parent != target:
+        fs.makedirs(parent, exist_ok=True)
+    with open(abspath, "rb") as source, fs.open(staging, "wb") as target_file:
+        shutil.copyfileobj(source, target_file)
+    fs.mv(staging, target)
     array = blosc2.open(abspath, mode="a", locking=True)
     with array.schunk.holding_lock():
         array.schunk.vlmeta[PUBLISHED_URL] = destination
