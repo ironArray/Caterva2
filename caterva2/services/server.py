@@ -48,7 +48,7 @@ import uvicorn
 from blosc2 import linalg_funcs_list as linalg_funcs
 
 # FastAPI
-from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
+from fastapi import Depends, FastAPI, Form, Request, Response, UploadFile, concurrency, responses
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -435,6 +435,7 @@ async def get_list(
 @app.get("/api/info/{path:path}")
 async def get_info(
     path: pathlib.Path,
+    response: Response,
     user: db.User = Depends(optional_user),
 ):
     """
@@ -470,6 +471,11 @@ async def get_info(
         files = list(srv_utils.walk_files(abspath))
         size = sum(f.stat().st_size for f, _ in files)
         return models.Directory(mtime=abspath.stat().st_mtime, size=size, nfiles=len(files))
+    # The same validator the file responses carry, so a client that opens a frame
+    # over two requests can tell that both saw the same one
+    etag = dataset_etag(abspath)
+    if etag:
+        response.headers["ETag"] = etag
     return srv_utils.read_metadata(abspath)
 
 
@@ -756,7 +762,12 @@ async def fetch_data(
             srv_utils.raise_bad_request(
                 f"{path} is a container, so there is nothing to slice; ask for a dataset inside it"
             )
-        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+        return FileResponse(
+            abspath,
+            filename=abspath.name,
+            media_type="application/octet-stream",
+            headers=with_etag(abspath),
+        )
 
     if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
         array = container
@@ -797,8 +808,15 @@ async def fetch_data(
             # Send the data in the file straight to the client,
             # avoiding slicing and re-compression.  This is also the one branch that
             # serves byte ranges: FileResponse seeks into the file and sends only
-            # what was asked for, which is what block-granular clients read.
-            return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+            # what was asked for, which is what block-granular clients read.  The
+            # `ETag` is ours: Starlette's is a digest of the mtime and the size,
+            # and a chunk written as a run of zeros can leave both untouched
+            return FileResponse(
+                abspath,
+                filename=abspath.name,
+                media_type="application/octet-stream",
+                headers=with_etag(abspath),
+            )
         if window is not None and not field:
             # The same for a leaf, whose frame lies inside the container: its
             # stored image is a window of that file, ranges included.  Not only
@@ -975,6 +993,215 @@ async def get_chunk(
 
     downloader = srv_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
+
+
+# Where the frame's generation counter lives in its lock sidecar: past the byte
+# range Windows locks, as c-blosc2 puts it
+LOCK_SEQ_OFFSET = 8
+
+
+def frame_generation(abspath: pathlib.Path) -> int | None:
+    """The frame's own count of how many times it has been written to.
+
+    Blosc2 bumps it in the `.b2lock` sidecar every time a handle takes the
+    exclusive lock, which is what makes it a validator where the file's length is
+    not one: a chunk written as a run of zeros stores no payload, so the frame can
+    come out of a write exactly as long as it went in, with different content.
+
+    None where nothing has ever written the frame under locking, which is every
+    dataset that was only ever uploaded whole.
+    """
+    sidecar = abspath.with_name(abspath.name + ".b2lock")
+    try:
+        with open(sidecar, "rb") as counter:
+            counter.seek(LOCK_SEQ_OFFSET)
+            raw = counter.read(8)
+    except OSError:
+        return None
+    return int.from_bytes(raw, "little") if len(raw) == 8 else None
+
+
+def dataset_etag(abspath: pathlib.Path) -> str | None:
+    """A validator that changes whenever the bytes behind *abspath* do.
+
+    The generation counter and the file's own size and mtime together, because
+    neither half is enough alone: the counter does not move when a dataset is
+    replaced wholesale by an upload (which may leave the old sidecar behind), and
+    the size and mtime do not reliably move when a chunk is written as a run of
+    zeros.  Either changing is enough to change this.
+
+    What it is for: a client reads a frame's header in one request and its
+    offsets in another, and the second is only meaningful if the frame did not
+    move in between -- a chunk written by someone else lands exactly where the
+    old offsets block was.  With this the client can tell, rather than decoding
+    the bytes of a chunk as though they were an index.
+    """
+    try:
+        stat = abspath.stat()
+    except OSError:
+        return None
+    generation = frame_generation(abspath)
+    generation = "u" if generation is None else f"{generation:x}"
+    return f'"{generation}-{stat.st_size:x}-{stat.st_mtime_ns:x}"'
+
+
+def with_etag(abspath: pathlib.Path) -> dict:
+    """`ETag` for a file response, where the file has one to give."""
+    etag = dataset_etag(abspath)
+    return {"etag": etag} if etag else {}
+
+
+# What a frame codes in the top nibble of a chunk's flags byte: an uninitialized
+# chunk is one nothing was ever written to, which is what `blosc2.uninit` lays an
+# array out with and what a fill claims one slot at a time
+CHUNK_FLAGS_BYTE = 31
+SPECIAL_UNINIT = 0x4
+
+
+def chunk_is_unwritten(schunk, nchunk: int) -> bool:
+    """Whether a slot of a frame still holds no content at all.
+
+    Read from the chunk's own header, not from a scan of the array: a lazy chunk
+    is the header alone, so this is one small read whatever the array's size,
+    where walking every chunk would make a fill cost the square of its length.
+
+    A run of zeros is *not* unwritten -- a writer that stored an all-zero chunk
+    stored something, and the frame tags it as zeros rather than as
+    uninitialized.  That distinction is the whole reason an array to be filled is
+    laid out with `blosc2.uninit` rather than `blosc2.zeros`.
+    """
+    lazychunk = schunk.get_lazychunk(nchunk)
+    return (lazychunk[CHUNK_FLAGS_BYTE] >> 4) & 0x7 == SPECIAL_UNINIT
+
+
+def count_written(abspath: pathlib.Path) -> tuple[int, int]:
+    """How many chunks of a frame hold content, and how many there are.
+
+    Read from the frame's offsets in one go, which is a couple of reads and a
+    decompress: the alternative walks the chunks and costs a read apiece, some
+    50x more on an array of a few thousand chunks.  The offsets are also where
+    the answer really lives -- a fill records itself there and nowhere else, so
+    there is no count for this to fall out of step with.
+    """
+    source = blosc2.FsspecNDSource(str(abspath))
+    written = source.written_chunks()
+    return int(written.sum()), int(written.size)
+
+
+def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
+    """Write one chunk into a slot that holds none, and say where the fill is.
+
+    Blocking, and meant to be run off the event loop: it compresses nothing, but
+    it locks the frame, writes to it and reads its offsets back.
+
+    The exclusive lock covers the check and the write together, which is what
+    makes the refusal a compare-and-swap rather than a race: two writers that
+    both find the slot free would otherwise both write it, and the second would
+    move every chunk that came after the first.
+    """
+    try:
+        array = blosc2.open(abspath, mode="a", locking=True)
+    except Exception as exc:
+        srv_utils.raise_bad_request(f"{abspath.name} cannot be opened for writing: {exc}")
+    if not isinstance(array, blosc2.NDArray):
+        srv_utils.raise_bad_request(
+            f"{abspath.name} is not an NDArray, so it has no chunks of a shape to write into"
+        )
+    schunk = array.schunk
+    if not 0 <= nchunk < schunk.nchunks:
+        srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
+    try:
+        nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
+    except Exception:
+        srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
+    # A chunk of another geometry would be stored and then read as nonsense, so
+    # it is refused here rather than left for whoever reads the array next
+    if nbytes != schunk.chunksize:
+        srv_utils.raise_bad_request(
+            f"the chunk holds {nbytes} bytes where this array's chunks hold {schunk.chunksize}"
+        )
+    if blocksize != schunk.blocksize:
+        srv_utils.raise_bad_request(
+            f"the chunk is split into blocks of {blocksize} bytes where this array's are "
+            f"{schunk.blocksize}; compress it against the array's blocks"
+        )
+    with schunk.holding_lock():
+        if not chunk_is_unwritten(schunk, nchunk):
+            raise fastapi.HTTPException(
+                status_code=409, detail=f"chunk {nchunk} of {abspath.name} was already written"
+            )
+        schunk.update_chunk(nchunk, chunk)
+    # Drop the handle before anything reads the file again: a handle left open
+    # over a frame another one writes is the stale-handle hazard, and it is silent
+    del array, schunk
+    written, nchunks = count_written(abspath)
+    return {"nchunk": nchunk, "written": written, "nchunks": nchunks}
+
+
+@app.post("/api/chunk/{path:path}")
+async def write_chunk(
+    path: pathlib.Path,
+    nchunk: int,
+    request: Request,
+    user: db.User = Depends(current_active_user),
+):
+    """Write one compressed chunk into a slot of a stored array.
+
+    How several writers fill one array at once: each takes the chunks it owns and
+    posts them, and the slot itself is the coordination.  A slot nothing was
+    written to is free, and a write claims it; a second write to it is refused
+    with a 409, so two writers that both believe they own a chunk are resolved by
+    the array rather than by anything either of them holds.
+
+    The array has to be laid out already -- `blosc2.uninit` and an upload is what
+    makes one, and costs a couple of hundred bytes whatever the array's size --
+    and it is never resized here: the geometry a writer compresses against is the
+    geometry it was created with.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The dataset to write into, in a root the user may write to.
+    nchunk : int
+        Which chunk of the array to write.
+    request : Request
+        Carries the compressed chunk as its body.
+
+    Returns
+    -------
+    dict
+        ``nchunk``, and the ``written`` count out of ``nchunks``, so a writer
+        sees a fill finish without asking again.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Writing chunks requires authentication")
+    if providers.provider_for(path.parts[0]) is not None:
+        # As the read side does: a peer's dataset is not ours to write to
+        raise fastapi.HTTPException(status_code=404, detail="external roots are non-transitive")
+
+    abspath = get_writable_path(path, user)
+    if abspath.suffix != ".b2nd":
+        srv_utils.raise_bad_request(
+            f"{path} is not a .b2nd array; chunks can only be written to a stored NDArray"
+        )
+    if not abspath.is_file():
+        srv_utils.raise_not_found(f"{path} does not exist; create it before filling it")
+
+    chunk = await request.body()
+    if not chunk:
+        srv_utils.raise_bad_request("no chunk was sent")
+    if settings.quota:
+        # The array was laid out empty, so its slots were never charged for: what
+        # a fill costs arrives a chunk at a time, and is checked the same way
+        total_size = get_disk_usage() + len(chunk)
+        if total_size > settings.quota:
+            srv_utils.raise_bad_request("Write failed because quota limit has been exceeded.")
+
+    # One lock per dataset in this process, and the frame's own lock across
+    # processes: the write below blocks, so it cannot hold the event loop
+    lock = locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        return await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
 
 
 def make_expr(
