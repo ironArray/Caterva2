@@ -329,3 +329,17 @@ def test_web_bogus_h5_no_500(client):
     # Mounting it as a virtual root just lists nothing, no crash.
     r = httpx.get(f"{base}/htmx/path-list/", params={"roots": [f"{root.name}/bogus.h5"]})
     assert r.status_code == 200
+
+
+# --- api/chunk on an HDF5 leaf ---------------------------------------------
+
+
+def test_chunk_of_an_hdf5_leaf_is_refused(fill_h5_public, client):
+    """An HDF5 dataset is HDF5-compressed, so a Blosc2 chunk of one would have to
+    be read and recompressed per request. The endpoint says so instead, and
+    api/fetch with a slice_ computes exactly the region wanted."""
+    fname, _root = fill_h5_public
+    for path in (f"{fname}/g/a", fname):  # a leaf, and the file itself
+        response = httpx.get(f"{client.urlbase}/api/chunk/{TEST_CATERVA2_ROOT}/{path}?nchunk=0")
+        assert response.status_code == 400
+        assert "slice_" in response.json()["detail"]

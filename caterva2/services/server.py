@@ -497,6 +497,57 @@ async def partial_download(abspath, path, slice_=None):
         await proxy.afetch(slice_)
 
 
+# mtime is in the key and unused in the body, so that a container rewritten
+# underneath is reopened instead of served from here (as get_filtered_array does)
+@functools.lru_cache(maxsize=16)
+def member_window(abspath, inner_key, mtime):
+    """Where a container leaf's frame lies in the file, as (offset, nbytes), or None.
+
+    A `.b2z` is a zip of *stored* members, so an external leaf's bytes in the
+    file are the Blosc2 frame it would have been written as on its own -- which
+    is what lets a ranged request be answered by seeking to it instead of
+    rebuilding the leaf.  None where there is no such window: a leaf embedded in
+    the store's own super-chunk, a `C2Array` reference, an HDF5 dataset (not a
+    Blosc2 frame at all), a CTable `.b2z` (not a store of leaves).
+
+    The frame's own magic is checked before the window is offered, so a `.b2z`
+    written by something else -- with compressed members, say -- cannot have a
+    window handed out that would decode to nonsense.
+    """
+    if abspath.suffix != ".b2z":
+        return None
+    try:
+        store = blosc2.open(abspath)
+    except Exception:
+        return None
+    if not isinstance(store, blosc2.DictStore):
+        return None
+    window = store.member_window(inner_key)
+    if window is None:
+        return None
+    offset, size = window
+    with open(abspath, "rb") as container:
+        container.seek(offset)
+        if container.read(10)[2:9] != b"b2frame":
+            return None
+    return window
+
+
+@functools.lru_cache(maxsize=16)
+def open_member(abspath, inner_key, mtime):
+    """The leaf at *inner_key* inside a container file, kept between requests.
+
+    Reading a leaf chunk by chunk, which is what a proxy over one does, would
+    otherwise reopen the container for every chunk.  Holding on to the leaf is
+    safe: a TreeStore leaf is an independent object once fetched, and outlives
+    the adapter that produced it.
+    """
+    leaf = srv_utils.open_container_member(abspath, inner_key)
+    if leaf is None:  # no such key, or it names a group rather than a dataset
+        srv_utils.raise_not_found()
+    return leaf
+
+
 def get_abspath(
     path: pathlib.Path, user: (db.User | None), may_not_exist=False
 ) -> tuple[
@@ -585,6 +636,7 @@ async def fetch_data(
     user: db.User = Depends(optional_user),
     filter: str | None = None,
     field: str | None = None,
+    range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
     """
     Fetch a dataset.
@@ -610,6 +662,12 @@ async def fetch_data(
         to be downloaded (instead of some slice which does not cover it fully),
         its stored image is served containing all data and metadata (including
         variable length fields).
+
+    The `FileResponse` case, and only that one, serves byte ranges: a client
+    can read the header, the chunk offsets and single blocks of a stored frame
+    instead of transferring it whole (blosc2's Proxy over a C2Array does).
+    Everything else is built as it is sent and answers a `Range` header with a
+    416, rather than quietly returning the whole body with a 200.
     """
 
     slice_ = parse_slice(slice_)
@@ -631,12 +689,20 @@ async def fetch_data(
         if isinstance(data, bytes):
             # Already a serialized cframe (e.g. a peer CTable row range):
             # stream it as-is, no numpy wrap.
+            srv_utils.refuse_range(range_header, path)
             return responses.StreamingResponse(
-                srv_utils.iterchunk(data), media_type="application/octet-stream"
+                srv_utils.iterchunk(data),
+                media_type="application/octet-stream",
+                headers=srv_utils.NO_RANGES,
             )
+        # A peer dataset is fetched from its owner and re-serialized here, so
+        # there is no file to seek into
+        srv_utils.refuse_range(range_header, path)
         cframe = await asyncio.to_thread(lambda: blosc2.asarray(np.ascontiguousarray(data)).to_cframe())
         downloader = srv_utils.iterchunk(cframe)
-        return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+        return responses.StreamingResponse(
+            downloader, media_type="application/octet-stream", headers=srv_utils.NO_RANGES
+        )
 
     abspath, inner_key = split_and_resolve(path, user)
 
@@ -651,6 +717,7 @@ async def fetch_data(
             "use the download API if you only want to download the file"
         )
 
+    window = None  # where a container leaf's frame lies, when it has one
     filter = filter.strip() if filter else filter
     if filter:
         if field:
@@ -664,6 +731,11 @@ async def fetch_data(
             srv_utils.raise_bad_request(str(exc))
     elif inner_key is not None:
         # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf).
+        # A leaf that is a whole frame inside the container can be served in
+        # ranges, by seeking to it -- what a stored dataset gets from
+        # FileResponse, and what lets a client read its blocks.  Not when a
+        # field is projected out of it: that is computed, not stored.
+        window = member_window(abspath, inner_key, abspath.stat().st_mtime)
         container = srv_utils.open_container_member(abspath, inner_key)
         if container is None:
             srv_utils.raise_not_found()
@@ -672,6 +744,19 @@ async def fetch_data(
 
     if field:
         container = container[field]
+
+    if isinstance(container, blosc2.DictStore):
+        # A container is a file of leaves rather than an array: its stored image
+        # is the file, which is what a client opening it as a store expects --
+        # and what the type ladder below used to die on, asking a TreeStore for
+        # a typesize it has not got (a 500 where the docstring promises the
+        # stored image).  Ranges come with FileResponse, so a leaf of it is
+        # reachable byte-wise too.
+        if slice_ is not None:
+            srv_utils.raise_bad_request(
+                f"{path} is a container, so there is nothing to slice; ask for a dataset inside it"
+            )
+        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
 
     if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
         array = container
@@ -707,11 +792,24 @@ async def fetch_data(
         whole
         and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
         and (not filter)
-        and inner_key is None  # abspath is the container, not this leaf: never stream it whole
     ):
-        # Send the data in the file straight to the client,
-        # avoiding slicing and re-compression.
-        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+        if inner_key is None:
+            # Send the data in the file straight to the client,
+            # avoiding slicing and re-compression.  This is also the one branch that
+            # serves byte ranges: FileResponse seeks into the file and sends only
+            # what was asked for, which is what block-granular clients read.
+            return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+        if window is not None and not field:
+            # The same for a leaf, whose frame lies inside the container: its
+            # stored image is a window of that file, ranges included.  Not only
+            # cheaper than the rebuild below -- more faithful, since the rebuild
+            # re-partitions (it slices and recompresses), and so disagrees with
+            # the chunks and blocks api/info reports for the very same leaf.
+            return srv_utils.window_response(abspath, window, range_header)
+
+    # Everything below builds its answer, so a range cannot be honoured: say so
+    # here, before computing a body that is not going to be sent
+    srv_utils.refuse_range(range_header, path)
 
     if isinstance(array, blosc2.CTable):
         row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
@@ -743,7 +841,9 @@ async def fetch_data(
         data = schunk.to_cframe()
 
     downloader = srv_utils.iterchunk(data)
-    return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+    return responses.StreamingResponse(
+        downloader, media_type="application/octet-stream", headers=srv_utils.NO_RANGES
+    )
 
 
 @app.get("/api/download/{path:path}")
@@ -751,7 +851,12 @@ async def download_data(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
     accept_encoding: str | None = fastapi.Header(None),
+    range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
+    # This one always streams, decompressing on the way out more often than not,
+    # so it never serves ranges; api/fetch on a stored dataset is what does.  The
+    # refusal comes after the path is resolved, so a path that does not exist is
+    # still a 404 rather than a 416 about a file nobody has.
     provider = providers.provider_for(path.parts[0])
     if provider is not None:
         try:
@@ -760,19 +865,22 @@ async def download_data(
             )
         except providers.ProviderError as exc:
             raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        srv_utils.refuse_range(range_header, path)
         headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
+        headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 
     decompress = accept_encoding != "blosc2"
     # Read before creating the response: a bad path must 404 up front, not
     # abort the stream after the 200 headers already went out.
     content = await get_file_content(path, user, decompress=decompress)
+    srv_utils.refuse_range(range_header, path)
 
     async def downloader():
         yield content
 
     mimetype = guess_type(path)
-    headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
+    headers = {"Content-Disposition": f'attachment; filename="{path.name}"', **srv_utils.NO_RANGES}
     if accept_encoding == "blosc2":
         abspath = get_abspath(path, user)
         suffix = abspath.suffix
@@ -819,17 +927,45 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(optional_user),
 ):
+    """One compressed chunk of a dataset, as it is stored.
+
+    This is how a client caches a remote array a chunk at a time, so it serves
+    what is *stored* in Blosc2 chunks and nothing else.  A container leaf counts:
+    a TreeStore keeps its leaves as ordinary Blosc2 arrays, and the chunk is
+    handed over as it lies in the ``.b2z``.  An HDF5 dataset and a CTable do not,
+    and say so rather than being taken apart and recompressed once per request --
+    ``api/fetch`` with a ``slice_`` computes exactly the region wanted for those,
+    which is both less work here and fewer bytes over the wire.
+    """
     if providers.provider_for(path.parts[0]) is not None:
         # Non-transitivity guard: peer roots are never re-exposed chunk-wise.
         raise fastapi.HTTPException(status_code=404, detail="external roots are non-transitive")
 
-    abspath = get_abspath(path, user)
-    lock = locks.setdefault(path, asyncio.Lock())
+    # Resolve the way api/fetch does, so a leaf inside a container is reachable:
+    # get_abspath alone drops the inner key and 404s on the container's own path
+    abspath, inner_key = split_and_resolve(path, user)
+    if abspath.suffix in srv_utils.HDF5_SUFFIXES:
+        srv_utils.raise_bad_request(
+            f"{path} is HDF5, whose chunks are HDF5-compressed rather than Blosc2 chunks; "
+            "fetch it with the slice_ parameter instead"
+        )
+    # One lock per container, so the leaves of a .b2z serialize with each other
+    # over the file they share; a plain dataset is its own container, as before
+    container_path = pathlib.Path(str(path)[: -len(inner_key)]) if inner_key else path
+    lock = locks.setdefault(container_path, asyncio.Lock())
     async with lock:
         root = path.parts[0]
         get_rootdir_or_error(root, user)
 
-        container = open_b2(abspath, path)
+        if inner_key is None:
+            container = open_b2(abspath, path)
+        else:
+            container = open_member(abspath, inner_key, abspath.stat().st_mtime)
+        if isinstance(container, blosc2.CTable):
+            srv_utils.raise_bad_request(
+                f"{path} is a CTable, which is a set of columns rather than one chunked array; "
+                "fetch it with the slice_ parameter instead"
+            )
         if isinstance(container, blosc2.LazyArray):
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
