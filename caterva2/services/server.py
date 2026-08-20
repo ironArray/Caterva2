@@ -1088,6 +1088,51 @@ def count_written(abspath: pathlib.Path) -> tuple[int, int]:
     return int(written.sum()), int(written.size)
 
 
+# Where a fill records itself for the server's own use.  Not a second record of
+# which chunks are written -- that is the frame's offsets and only them -- but of
+# what is to happen once they all are
+FILL_STATE = "fill_state"
+PUBLISHED_URL = "published_url"
+FILLING, PUBLISHING, PUBLISHED = "filling", "publishing", "published"
+
+
+def publish_destination(path: pathlib.Path) -> str:
+    """Where a finished array is published, under the root the server configures.
+
+    The client says which key it wants below that root and nothing above it: a
+    destination taken from the request would let a caller point the server at a
+    bucket they control and have it write someone else's data into it.
+    """
+    if not settings.publish_root:
+        srv_utils.raise_bad_request("this server publishes nowhere: set publish_root in its configuration")
+    return f"{str(settings.publish_root).rstrip('/')}/{path}"
+
+
+def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
+    """Copy a finished frame out to the publish root, and record where it went.
+
+    Blocking, and run off the event loop and outside the per-dataset lock: it is
+    a whole-file upload, and holding either for its duration would stall every
+    writer of every other array on the server.
+
+    Nothing here has to lock the frame for the copy.  A complete array is one
+    nothing can write to any more -- every slot is claimed, so every write is
+    refused -- so what is being read cannot change under the read.
+    """
+    try:
+        import fsspec
+    except ImportError:
+        srv_utils.raise_bad_request("publishing needs fsspec, which is not installed here")
+    destination = publish_destination(path)
+    with open(abspath, "rb") as source, fsspec.open(destination, "wb") as target:
+        shutil.copyfileobj(source, target)
+    array = blosc2.open(abspath, mode="a", locking=True)
+    with array.schunk.holding_lock():
+        array.schunk.vlmeta[PUBLISHED_URL] = destination
+        array.schunk.vlmeta[FILL_STATE] = PUBLISHED
+    return destination
+
+
 def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
     """Write one chunk into a slot that holds none, and say where the fill is.
 
@@ -1125,17 +1170,31 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
             f"the chunk is split into blocks of {blocksize} bytes where this array's are "
             f"{schunk.blocksize}; compress it against the array's blocks"
         )
+    complete = False
     with schunk.holding_lock():
         if not chunk_is_unwritten(schunk, nchunk):
             raise fastapi.HTTPException(
                 status_code=409, detail=f"chunk {nchunk} of {abspath.name} was already written"
             )
         schunk.update_chunk(nchunk, chunk)
+        written, nchunks = count_written(abspath)
+        state = schunk.vlmeta.get(FILL_STATE, FILLING)
+        if written == nchunks and state == FILLING and settings.publish_root:
+            # Exactly once, whichever writer got here: the lock is held, so of two
+            # writers that both see the array complete only one makes this move,
+            # and that one owns the publishing
+            schunk.vlmeta[FILL_STATE] = PUBLISHING
+            state, complete = PUBLISHING, True
     # Drop the handle before anything reads the file again: a handle left open
     # over a frame another one writes is the stale-handle hazard, and it is silent
     del array, schunk
-    written, nchunks = count_written(abspath)
-    return {"nchunk": nchunk, "written": written, "nchunks": nchunks}
+    return {
+        "nchunk": nchunk,
+        "written": written,
+        "nchunks": nchunks,
+        "state": state,
+        "publish": complete,
+    }
 
 
 @app.post("/api/chunk/{path:path}")
@@ -1143,6 +1202,7 @@ async def write_chunk(
     path: pathlib.Path,
     nchunk: int,
     request: Request,
+    background: fastapi.BackgroundTasks,
     user: db.User = Depends(current_active_user),
 ):
     """Write one compressed chunk into a slot of a stored array.
@@ -1201,7 +1261,53 @@ async def write_chunk(
     # processes: the write below blocks, so it cannot hold the event loop
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
-        return await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
+        answer = await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
+    if answer.pop("publish"):
+        # After the response, and outside the lock: the writer that finished the
+        # fill should not wait for the upload, and no other writer should either
+        background.add_task(publish_dataset, abspath, path)
+    return answer
+
+
+@app.post("/api/publish/{path:path}")
+async def publish(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """Copy a filled array out to the server's publish root.
+
+    What a fill is for: the array is written here a chunk at a time, by as many
+    writers as there are chunks, and what leaves is one finished frame -- which
+    is exactly what a byte-range reader over an object store wants, and none of
+    what writing chunks to one would need.
+
+    Runs by itself when the last chunk of an array lands, where a publish root is
+    configured.  It is an endpoint of its own as well, because that automatic run
+    can be interrupted: a server that dies mid-upload leaves the array saying
+    ``publishing``, and this is what finishes it.
+
+    Returns
+    -------
+    dict
+        Where the array was published to.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Publishing requires authentication")
+    abspath = get_writable_path(path, user)
+    if not abspath.is_file():
+        srv_utils.raise_not_found(f"{path} does not exist")
+    publish_destination(path)  # refuses here if this server publishes nowhere
+
+    lock = locks.setdefault(path, asyncio.Lock())
+    async with lock:
+        written, nchunks = await concurrency.run_in_threadpool(count_written, abspath)
+        if written != nchunks:
+            srv_utils.raise_bad_request(
+                f"{path} has {nchunks - written} of its {nchunks} chunks still unwritten; "
+                "it is published once it is filled"
+            )
+    destination = await concurrency.run_in_threadpool(publish_dataset, abspath, path)
+    return {"published": destination}
 
 
 def make_expr(

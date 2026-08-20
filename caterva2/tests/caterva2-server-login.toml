@@ -2,3 +2,6 @@
 login = true
 register = true
 maxusers = 5
+# Where a filled array is published to.  A local directory here, since what is
+# being tested is the handover and not the object store at the far end
+publish_root = "_caterva2_tests/published"

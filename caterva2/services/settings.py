@@ -37,6 +37,13 @@ demo = conf.get(".demo", False)
 quota = parse_size(conf.get(".quota"))
 maxusers = conf.get(".maxusers")
 
+# Where a finished array is published, as an fsspec URL of a *directory*
+# ("s3://bucket/prefix", "file:///srv/published").  A dataset names the key it
+# wants underneath this and nothing above it: a destination that came from the
+# client would let a caller aim the server at a bucket of their own and have it
+# write user data there.  Unset means publishing is refused, which is the default.
+publish_root = conf.get(".publish_root")
+
 
 # Not strictly necessary but useful for documentation
 statedir = None

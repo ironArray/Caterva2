@@ -17,11 +17,14 @@ the array's own offsets rather than in anything the writers hold between them.
 
 import concurrent.futures
 import pathlib
+import time
 
 import blosc2
 import httpx
 import numpy as np
 import pytest
+
+from .services import TEST_STATE_DIR
 
 CHUNKS = (1000,)
 BLOCKS = (250,)
@@ -55,7 +58,12 @@ def test_a_chunk_lands_in_a_pre_sized_array(presized):
 
 
 def test_a_write_says_how_far_the_fill_has_got(presized):
-    assert presized.update_chunk(0, _chunk(1)) == {"nchunk": 0, "written": 1, "nchunks": NCHUNKS}
+    assert presized.update_chunk(0, _chunk(1)) == {
+        "nchunk": 0,
+        "written": 1,
+        "nchunks": NCHUNKS,
+        "state": "filling",
+    }
     assert presized.update_chunk(3, _chunk(1))["written"] == 2
 
 
@@ -212,3 +220,65 @@ def test_a_chunk_out_of_range_is_refused(presized):
     with pytest.raises(httpx.HTTPStatusError) as raised:
         presized.update_chunk(NCHUNKS + 3, _chunk(1))
     assert raised.value.response.status_code == 404
+
+
+def _published_dir():
+    return pathlib.Path(TEST_STATE_DIR) / "published"
+
+
+def test_a_filled_array_is_published_by_itself(presized):
+    """The handover: Caterva2 is written to a chunk at a time, and what leaves is
+    one finished frame -- which is what a byte-range reader wants of an object
+    store, and none of what writing chunks to one would need.
+    """
+    for nchunk in range(NCHUNKS):
+        answer = presized.update_chunk(nchunk, _chunk(nchunk))
+    assert answer["written"] == NCHUNKS
+    assert answer["state"] == "publishing"
+
+    published = _published_dir() / "@personal/run.b2nd"
+    for _ in range(100):  # the upload runs after the response
+        if published.is_file():
+            break
+        time.sleep(0.05)
+    assert published.is_file()
+
+    # What landed is the array, readable as one
+    np.testing.assert_array_equal(
+        blosc2.open(str(published))[:], np.repeat(np.arange(NCHUNKS, dtype=DTYPE), CHUNKS[0])
+    )
+
+
+def test_publishing_says_where_the_array_went(presized, auth_client):
+    for nchunk in range(NCHUNKS):
+        presized.update_chunk(nchunk, _chunk(nchunk))
+    url = f"{auth_client.urlbase}/api/publish/{presized.path}"
+    response = httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30)
+    response.raise_for_status()
+    assert response.json()["published"].endswith("@personal/run.b2nd")
+    # ... and the array says so itself, where any reader of it can see
+    vlmeta = blosc2.C2Array(presized.path, urlbase=presized.urlbase, auth_token=presized.auth_token).vlmeta
+    assert vlmeta["fill_state"] == "published"
+    assert vlmeta["published_url"].endswith("@personal/run.b2nd")
+
+
+def test_an_unfinished_array_is_not_published(presized, auth_client):
+    presized.update_chunk(0, _chunk(0))  # one of NCHUNKS
+    url = f"{auth_client.urlbase}/api/publish/{presized.path}"
+    response = httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30)
+    assert response.status_code == 400
+    assert "unwritten" in response.text
+
+
+def test_publishing_can_be_retried_after_it_was_interrupted(presized, auth_client):
+    """A server that dies mid-upload leaves the array saying `publishing`.
+
+    Nothing recovers that by itself, which is why the publish is an endpoint of
+    its own and not only something the last chunk sets off.
+    """
+    for nchunk in range(NCHUNKS):
+        presized.update_chunk(nchunk, _chunk(nchunk))
+    url = f"{auth_client.urlbase}/api/publish/{presized.path}"
+    assert httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30).status_code == 200
+    # Again, as a retry would: a finished array publishes as many times as asked
+    assert httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30).status_code == 200
