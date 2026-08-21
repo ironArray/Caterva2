@@ -11,6 +11,11 @@
 # - maxusers: if defined, it will limit the number of users (default: 0, no limit)
 # - login: if true, users will need to authenticate (default: true)
 # - register: if true, users will be able to register (default: false)
+# - publish_root: if defined, where an array filled a chunk at a time is copied
+#   once every one of its chunks has landed.  An fsspec URL of a directory
+#   ("s3://bucket/prefix", "file:///srv/published"); a dataset names the key it
+#   wants underneath it and nothing above it.  Credentials for it are the
+#   server's own.  Unset (the default) means such arrays are simply not published.
 #
 [server]
 # listen = "_caterva2/state/uvicorn.socket"  # server supports listening from UNIX sockets
@@ -19,3 +24,4 @@ urlbase = "http://localhost:8000"
 quota = "10G"
 maxusers = 5
 register = true  # allow users to register
+# publish_root = "s3://a-bucket/published"

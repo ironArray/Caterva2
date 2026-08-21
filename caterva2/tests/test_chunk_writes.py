@@ -330,3 +330,40 @@ def test_the_stamp_freezes_when_the_array_does(presized):
 def _reopen(array):
     """A fresh C2Array, so api/info is read again rather than remembered."""
     return blosc2.C2Array(array.path, urlbase=array.urlbase, auth_token=array.auth_token)
+
+
+def test_the_client_lays_out_and_fills_an_array(auth_client):
+    """The whole workflow through the Caterva2 client, without reaching past it."""
+    if auth_client is None:
+        pytest.skip("writing chunks requires an authenticated user")
+    array = auth_client.lay_out("@personal/client-fill.b2nd", SHAPE, DTYPE, chunks=CHUNKS, blocks=BLOCKS)
+    assert not array.written_chunks().any()
+
+    for nchunk in range(NCHUNKS):
+        answer = array.fill_chunk(nchunk, _chunk(nchunk))
+    assert answer["written"] == NCHUNKS
+    assert array.written_chunks().all()
+    np.testing.assert_array_equal(array[:], np.repeat(np.arange(NCHUNKS, dtype=DTYPE), CHUNKS[0]))
+
+    with pytest.raises(blosc2.ChunkAlreadyWritten):
+        array.fill_chunk(0, _chunk(0))
+
+
+def test_the_client_publishes_a_filled_array(auth_client):
+    if auth_client is None:
+        pytest.skip("writing chunks requires an authenticated user")
+    array = auth_client.lay_out("@personal/client-publish.b2nd", SHAPE, DTYPE, chunks=CHUNKS, blocks=BLOCKS)
+    for nchunk in range(NCHUNKS):
+        array.fill_chunk(nchunk, _chunk(nchunk))
+    assert auth_client.publish("@personal/client-publish.b2nd").endswith("client-publish.b2nd")
+
+
+def test_a_laid_out_array_costs_almost_nothing(auth_client):
+    """An unwritten chunk lives in the frame's offsets, not in the file."""
+    if auth_client is None:
+        pytest.skip("writing chunks requires an authenticated user")
+    big = (CHUNKS[0] * 5000,)
+    auth_client.lay_out("@personal/client-big.b2nd", big, DTYPE, chunks=CHUNKS, blocks=BLOCKS)
+    laid_out = pathlib.Path(TEST_STATE_DIR) / "server/personal"
+    stored = next(laid_out.rglob("client-big.b2nd"))
+    assert stored.stat().st_size < 4096  # for an array of 20 GB

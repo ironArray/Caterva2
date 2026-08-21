@@ -730,6 +730,36 @@ class Array(Dataset, blosc2.Operand):
         """
         return self.client.append(self.path, data)
 
+    def fill_chunk(self, nchunk, chunk):
+        """
+        Writes one compressed chunk into a slot of this array; see
+        :meth:`Client.fill_chunk`.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2, blosc2, numpy as np
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> array = client.lay_out('@personal/run.b2nd', (1000,), np.int32, chunks=(100,))  # doctest: +SKIP
+        >>> chunk = blosc2.compress2(np.arange(100, dtype=np.int32), typesize=4)  # doctest: +SKIP
+        >>> array.fill_chunk(0, chunk)["written"]  # doctest: +SKIP
+        1
+        """
+        return self.client.fill_chunk(self.path, nchunk, chunk)
+
+    def written_chunks(self):
+        """
+        Says which chunks of this array hold anything yet; see
+        :meth:`Client.written_chunks`.
+        """
+        return self.client.written_chunks(self.path)
+
+    def publish(self):
+        """
+        Copies this array out to wherever the server publishes to; see
+        :meth:`Client.publish`.
+        """
+        return self.client.publish(self.path)
+
     def __getitem__(self, item):
         """
         Retrieves a slice of the dataset.
@@ -1558,6 +1588,159 @@ class Client:
             urlbase,
             auth_cookie=self.cookie,
         )
+
+    def lay_out(self, remotepath, shape, dtype, chunks=None, blocks=None, cparams=None):
+        """
+        Lays out an empty array on the server, ready to be filled a chunk at a time.
+
+        Every chunk of it is a slot nothing has been written to, and the whole
+        thing costs a couple of hundred bytes whatever its shape -- an unwritten
+        chunk lives in the frame's offsets and nowhere else.  Fill it with
+        :meth:`fill_chunk`, from as many processes at once as it has chunks.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path to lay the array out at, in a root you may write to.
+        shape : tuple
+            The shape of the array.  It is fixed here: filling never resizes.
+        dtype : numpy.dtype
+            The data type of the array.
+        chunks : tuple, optional
+            The chunkshape.  Writers compress against this, so it is worth
+            choosing rather than leaving to a default.
+        blocks : tuple, optional
+            The blockshape.
+        cparams : dict, optional
+            Compression parameters writers are to compress their chunks with.
+
+        Returns
+        -------
+        out: Dataset
+            Object representing the array that was laid out.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2, numpy as np
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> client.lay_out('@personal/run.b2nd', (1000,), np.int32, chunks=(100,))  # doctest: +SKIP
+        <Dataset: @personal/run.b2nd>
+        """
+        array = blosc2.uninit(shape, dtype=dtype, chunks=chunks, blocks=blocks, cparams=cparams)
+        return self.upload(array, remotepath)
+
+    def fill_chunk(self, remotepath, nchunk, chunk):
+        """
+        Writes one compressed chunk into a slot of an array that holds none.
+
+        How several writers fill one array at once: each takes the chunks it
+        owns and writes them, and the slot itself is the coordination.  A slot
+        nothing was written to is free, and this claims it; a second write to
+        the same slot raises, so two writers that both believe they own a chunk
+        are resolved by the array rather than by anything either of them holds.
+
+        The chunk must match the array's geometry -- its chunkshape, its
+        typesize and its blockshape -- which is what compressing against the
+        array's own ``chunks``, ``blocks`` and ``cparams`` gives.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path of the array to write into.
+        nchunk : int
+            Which chunk of the array to write.
+        chunk : bytes
+            The compressed chunk, as :func:`blosc2.compress2` produces it.
+
+        Returns
+        -------
+        out: dict
+            ``nchunk``, the ``written`` count out of ``nchunks``, and the
+            array's ``state``, so a writer sees a fill finish without asking.
+
+        Raises
+        ------
+        blosc2.ChunkAlreadyWritten
+            The slot already holds a chunk.  The array is untouched.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2, blosc2, numpy as np
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> data = np.arange(100, dtype=np.int32)  # doctest: +SKIP
+        >>> chunk = blosc2.compress2(data, typesize=4)  # doctest: +SKIP
+        >>> client.fill_chunk('@personal/run.b2nd', 0, chunk)  # doctest: +SKIP
+        {'nchunk': 0, 'written': 1, 'nchunks': 10, 'state': 'filling'}
+        """
+        return self._c2array(remotepath).update_chunk(nchunk, chunk)
+
+    def written_chunks(self, remotepath):
+        """
+        Says which chunks of an array hold anything yet.
+
+        Read from the frame's own offsets, which is where a fill records itself:
+        one range request, and no bookkeeping on the server to fall out of step
+        with the array.  False only for a chunk nobody has written; a chunk
+        written as all zeros counts as written, and says so.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path of the array to look at.
+
+        Returns
+        -------
+        out: numpy.ndarray
+            One boolean per chunk.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> done = client.written_chunks('@personal/run.b2nd')  # doctest: +SKIP
+        >>> f"{done.sum()}/{done.size} chunks written"  # doctest: +SKIP
+        '3/10 chunks written'
+        """
+        return self._c2array(remotepath).written_chunks()
+
+    def publish(self, remotepath):
+        """
+        Copies a filled array out to wherever the server publishes to.
+
+        What a fill is for: the array is written here a chunk at a time, and
+        what leaves is one finished frame.  Runs by itself when the last chunk
+        of an array lands, where the server is configured to publish at all;
+        this is for finishing a publish that was interrupted, and for a server
+        that leaves it to be asked for.
+
+        The array has to be complete.  Where it goes is the server's own
+        configuration, not something a caller chooses.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path of the array to publish.
+
+        Returns
+        -------
+        out: str
+            Where the array was published to.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> client.publish('@personal/run.b2nd')  # doctest: +SKIP
+        's3://a-bucket/published/@personal/run.b2nd'
+        """
+        url = f"{self.urlbase}/api/publish/{remotepath}"
+        response = self.httpx_client.post(url, headers={"Cookie": self.cookie}, timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()["published"]
+
+    def _c2array(self, remotepath):
+        """The blosc2 view of a remote array, which is what reads and writes chunks."""
+        return blosc2.C2Array(str(remotepath), urlbase=self.urlbase, auth_token=self.cookie)
 
     def append(self, remotepath, data):
         """

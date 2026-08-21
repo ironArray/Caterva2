@@ -4,6 +4,31 @@
 
 #XXX version-specific blurb XXX#
 
+* Arrays can be filled a chunk at a time, by several writers at once. An array
+  is laid out empty first (`Client.lay_out()`, a couple of hundred bytes
+  whatever its shape) and each writer posts the chunks it owns with
+  `Client.fill_chunk()`, over the new `POST api/chunk/{path}`. Every chunk of a
+  laid-out array is a slot nothing has been written to; a writer claims one by
+  writing it, and a second write to the same slot is refused with a 409 -- so
+  two writers that both believe they own a chunk are resolved by the array
+  rather than by anything either of them holds. `Client.written_chunks()` says
+  how far a fill has got, read from the frame's own offsets, so there is no
+  bookkeeping to fall out of step with the array.
+
+* A filled array is published as one finished frame. Set `publish_root` in the
+  server configuration -- an fsspec URL of a directory -- and an array is copied
+  there as soon as its last chunk lands, moved into place so that what appears
+  at the destination is a whole frame or nothing. `POST api/publish/{path}`
+  (`Client.publish()`) is the primitive underneath, for finishing a publish that
+  was interrupted. The destination is the server's own configuration and never
+  something a caller names.
+
+* `api/info` and the ranged file responses carry an `ETag` of our own, built
+  from the frame's generation counter as well as its size and mtime. Starlette's
+  default is a digest of the mtime and the size, which a chunk written as a run
+  of zeros can leave untouched -- such a write stores no payload, so the frame
+  can come out of it exactly as long as it went in.
+
 ## Changes from 2025.11.17.1 to 2025.12.3
 
 * Upload in-memory objects
