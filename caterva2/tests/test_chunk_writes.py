@@ -285,3 +285,48 @@ def test_publishing_can_be_retried_after_it_was_interrupted(presized, auth_clien
     assert httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30).status_code == 200
     # Again, as a retry would: a finished array publishes as many times as asked
     assert httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30).status_code == 200
+
+
+def test_a_filled_array_carries_a_nonce_and_says_it_is_complete(presized):
+    """What lets a client tell this array from another that comes to sit here.
+
+    A size and an mtime can both be repeated by a different array at the same
+    path; the nonce cannot, and it is written the first time a chunk lands.
+    """
+    presized.update_chunk(0, _chunk(0))
+    vlmeta = _reopen(presized).vlmeta
+    nonce = vlmeta["fill_nonce"]
+    assert nonce
+    assert vlmeta["fill_state"] == "filling"
+
+    for nchunk in range(1, NCHUNKS):
+        presized.update_chunk(nchunk, _chunk(nchunk))
+    vlmeta = _reopen(presized).vlmeta
+    assert vlmeta["fill_nonce"] == nonce  # written once, never again
+    assert vlmeta["fill_state"] != "filling"  # every slot is claimed
+
+
+def test_the_stamp_freezes_when_the_array_does(presized):
+    """A cache of a complete array stands; one of an array still filling does not.
+
+    An unfinished array is stamped afresh on every write because it has to be: a
+    cache built while a chunk was unwritten holds the zeros an unwritten chunk
+    reads as, and the offset it had, and both are wrong once a writer fills it.
+    """
+    stamps = []
+    for nchunk in range(NCHUNKS):
+        presized.update_chunk(nchunk, _chunk(nchunk))
+        stamps.append(_reopen(presized).stamp)
+    assert len(set(stamps)) == len(stamps)  # every write moved it
+    assert stamps[-1].startswith("n")
+
+    # Complete now, so nothing can write to it again and the stamp holds still
+    assert _reopen(presized).stamp == stamps[-1]
+    with pytest.raises(blosc2.ChunkAlreadyWritten):
+        presized.update_chunk(0, _chunk(0))
+    assert _reopen(presized).stamp == stamps[-1]
+
+
+def _reopen(array):
+    """A fresh C2Array, so api/info is read again rather than remembered."""
+    return blosc2.C2Array(array.path, urlbase=array.urlbase, auth_token=array.auth_token)

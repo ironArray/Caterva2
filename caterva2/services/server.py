@@ -1093,7 +1093,8 @@ def count_written(abspath: pathlib.Path) -> tuple[int, int]:
 # what is to happen once they all are
 FILL_STATE = "fill_state"
 PUBLISHED_URL = "published_url"
-FILLING, PUBLISHING, PUBLISHED = "filling", "publishing", "published"
+FILL_NONCE = "fill_nonce"
+FILLING, COMPLETE, PUBLISHING, PUBLISHED = "filling", "complete", "publishing", "published"
 
 
 def publish_destination(path: pathlib.Path) -> str:
@@ -1190,14 +1191,28 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
                 status_code=409, detail=f"chunk {nchunk} of {abspath.name} was already written"
             )
         schunk.update_chunk(nchunk, chunk)
+        if FILL_NONCE not in schunk.vlmeta:
+            # What names *this* array, as against another one that came to sit at
+            # the same path with the same size.  A client caching the array reads
+            # it from api/info and can tell the two apart, which a size and an
+            # mtime cannot always do.  Written once, by whichever writer arrived
+            # first, and never again
+            schunk.vlmeta[FILL_NONCE] = uuid.uuid4().hex
+            # Said out loud rather than left to be inferred from the absence of
+            # it, and free here: the same locked region, the same trailer
+            schunk.vlmeta[FILL_STATE] = FILLING
         written, nchunks = count_written(abspath)
         state = schunk.vlmeta.get(FILL_STATE, FILLING)
-        if written == nchunks and state == FILLING and settings.publish_root:
+        if written == nchunks and state == FILLING:
             # Exactly once, whichever writer got here: the lock is held, so of two
             # writers that both see the array complete only one makes this move,
-            # and that one owns the publishing
-            schunk.vlmeta[FILL_STATE] = PUBLISHING
-            state, complete = PUBLISHING, True
+            # and that one owns the publishing.  Recorded even where there is
+            # nowhere to publish to, because "every slot is claimed" is worth
+            # saying on its own: it is what tells a reader the array can no
+            # longer change under a cache of it
+            complete = bool(settings.publish_root)
+            state = PUBLISHING if complete else COMPLETE
+            schunk.vlmeta[FILL_STATE] = state
     # Drop the handle before anything reads the file again: a handle left open
     # over a frame another one writes is the stale-handle hazard, and it is silent
     del array, schunk
