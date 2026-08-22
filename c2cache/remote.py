@@ -212,15 +212,33 @@ CTABLE_MAX_CHUNK_BYTES = 512 * 2**20
 CTABLE_FETCH_CONCURRENCY = 4
 
 
+def _mask_stored_nulls(schema_dict):
+    """Whether any column keeps its nulls outside its values.
+
+    A nullable column either marks a null with a value of its own -- a
+    `null_value` sentinel, which is one of the values and travels with them --
+    or keeps a mask beside them, which the schema spells `null_storage: mask`.
+    This cache carries values and nothing else, so a mask does not survive it:
+    the null comes back as whatever the value slot held, which for a string is
+    the empty one and for an integer a zero, neither distinguishable from data
+    that was really there.  Such a table is passed through to the peer instead.
+    """
+    return any(
+        col.get("nullable") and col.get("null_value") is None for col in schema_dict.get("columns") or ()
+    )
+
+
 def _ctable_fixed_dtypes(schema_dict):
     """Compound numpy dtype covering every column of `schema_dict` in schema
     order, or None when the table is non-cacheable: any list/varlen-scalar/
-    dictionary/ndarray column, or column names numpy rejects as structured
-    field names."""
+    dictionary/ndarray column, a column whose nulls live in a mask rather than
+    in a value, or column names numpy rejects as structured field names."""
     # Internal blosc2 APIs (schema_compiler, CTable._is_* predicates),
     # pinned to the blosc2>=4.8.1 floor in pyproject.
     from blosc2.schema_compiler import schema_from_dict
 
+    if _mask_stored_nulls(schema_dict):
+        return None
     try:
         compiled = schema_from_dict(schema_dict)
         for col in compiled.columns:

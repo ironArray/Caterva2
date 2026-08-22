@@ -109,6 +109,50 @@ def treestore_size(tree, prefix="/"):
     return sum(info.get("length", 0) for m, info in get_offsets().items() if m.startswith(rel))
 
 
+class _DictStoreAdapter:
+    """Adapter for a ``.b2z`` holding a flat DictStore.
+
+    A DictStore has no tree of its own -- no children, no descendants -- but its
+    keys are paths, so the hierarchy a listing needs is the one they spell.  A
+    group is a prefix that some key continues, and every key is a leaf.
+    """
+
+    def __init__(self, store):
+        self.store = store
+
+    def _keys(self):
+        return [k if k.startswith("/") else f"/{k}" for k in list(self.store.keys())]
+
+    def leaves(self, prefix="/"):
+        rel = prefix if prefix.startswith("/") else f"/{prefix}"
+        rel = rel.rstrip("/")
+        return [k for k in self._keys() if k == rel or k.startswith(f"{rel}/")]
+
+    def size(self, prefix="/"):
+        return treestore_size(self.store, prefix)
+
+    def get(self, key):
+        try:
+            return self.store[key]
+        except (KeyError, ValueError):
+            # As for a TreeStore: keys come straight from the URL, so a
+            # malformed one is a 404 rather than a 500
+            return None
+
+    def leaf_size(self, key):
+        node = self.get(key)
+        return None if node is None else getattr(node, "cbytes", None)
+
+    def is_group(self, node):
+        # Nothing a DictStore hands back is a group: it stores leaves only, and
+        # the prefixes its keys share are not objects of their own
+        return False
+
+    def close(self):
+        with contextlib.suppress(Exception):
+            self.store.close()
+
+
 class _TreeStoreAdapter:
     """Adapter for a ``.b2z`` holding a TreeStore. Leaves survive `close()`
     (they're independent objects once fetched), so callers may close eagerly."""
@@ -206,10 +250,19 @@ def open_container(abspath):
     suffix = abspath.suffix
     if suffix == ".b2z":
         try:
-            tree = blosc2.open(abspath)
+            store = blosc2.open(abspath)
         except Exception:
             return None
-        return _TreeStoreAdapter(tree) if isinstance(tree, blosc2.TreeStore) else None
+        # A `.b2z` used to open as a TreeStore whatever wrote it, the extension
+        # deciding; blosc2 now reads the store type the file records, so one
+        # written through the flat DictStore API comes back a DictStore.  Its
+        # keys are still paths, and paths are all a listing needs -- a
+        # `TreeStore` is a `DictStore`, so this order is the specific one first
+        if isinstance(store, blosc2.TreeStore):
+            return _TreeStoreAdapter(store)
+        if isinstance(store, blosc2.DictStore):
+            return _DictStoreAdapter(store)
+        return None
     if suffix in HDF5_SUFFIXES:
         try:
             return _HDF5Adapter(h5py.File(abspath, "r"))
@@ -366,6 +419,12 @@ def read_metadata(obj, mtime=None):
         # container itself as a directory (the root group).
         if isinstance(obj, blosc2.TreeStore):
             return models.Directory(mtime=mtime, size=size, nfiles=len(treestore_leaves(obj, "/")))
+        if isinstance(obj, blosc2.DictStore):
+            # A `.b2z` written through the flat DictStore API: browsed as a group
+            # like a TreeStore one, its keys being the paths of its leaves.  After
+            # the TreeStore branch, which is the specific one -- a `TreeStore` is
+            # a `DictStore` and would be caught here otherwise
+            return models.Directory(mtime=mtime, size=size, nfiles=len(list(obj.keys())))
     # else: obj is an already-opened object; keep the caller-supplied mtime
 
     # Read metadata
