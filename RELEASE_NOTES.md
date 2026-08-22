@@ -34,6 +34,14 @@
   `filter` or `field`, and refused for anything that is not an array of its own.
   blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
 
+* `POST api/fetch` takes the same parameters in a body that the GET takes in a
+  query, and is the same code behind them. It exists for the one thing a query
+  string cannot do: carry a key of more coordinates than a URL has room for,
+  which is a few thousand and no encoding moves by much. 200,000 coordinates go
+  through it in one request. Nothing moves off GET -- blosc2 changes verb only
+  where a query could not have been made, so every deployment goes on serving
+  what it already served, and byte ranges stay with the GET they belong to.
+
 * `api/fetch` is explicit about byte ranges, which is what lets a client read
   single *blocks* of a dataset instead of whole chunks. A stored dataset is
   served from its file and honours a `Range` as it always did, and now says so

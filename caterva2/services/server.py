@@ -942,6 +942,46 @@ async def fetch_data(
     )
 
 
+@app.post("/api/fetch/{path:path}")
+async def post_fetch_data(
+    path: pathlib.Path,
+    payload: models.FetchPayload,
+    user: db.User = Depends(optional_user),
+):
+    """
+    Fetch a dataset, with the parameters in the body rather than the query.
+
+    The same fetch as `GET api/fetch` in every respect -- it is the same code,
+    called with what the body holds -- and it exists for the one thing a query
+    string cannot do: carry a key of more coordinates than a URL has room for.
+    A client small enough to fit its key in an URL has no reason to come here.
+
+    Byte ranges are not offered.  A `Range` header pairs with a GET of a stored
+    frame, and nothing that would arrive by this route is one.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to the dataset.
+    payload : models.FetchPayload
+        `indices`, `slice_`, `filter` and `field`, as the query takes them.
+
+    Returns
+    -------
+    FileResponse or StreamingResponse
+        Whatever the GET would have returned for the same parameters.
+    """
+    return await fetch_data(
+        path=path,
+        slice_=payload.slice_,
+        user=user,
+        filter=payload.filter,
+        field=payload.field,
+        indices=payload.indices,
+        range_header=None,
+    )
+
+
 @app.get("/api/download/{path:path}")
 async def download_data(
     path: pathlib.Path,

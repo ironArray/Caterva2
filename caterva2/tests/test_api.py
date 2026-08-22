@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 import contextlib
+import json
 import os
 import pathlib
 
@@ -390,6 +391,30 @@ def test_coordinates_refuse_what_they_cannot_read(indices, detail, examples_dir,
     else:
         assert response.status_code == 400
         assert detail in response.json()["detail"]
+
+
+def test_coordinates_may_arrive_in_a_body(examples_dir, client, fill_public):
+    """More coordinates than an URL carries, which is the whole reason for POST."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    key = [int(i % len(a)) for i in range(20_000)]
+
+    response = httpx.post(url, json={"indices": json.dumps([key])}, timeout=60)
+    assert response.status_code == 200
+    np.testing.assert_array_equal(blosc2.ndarray_from_cframe(response.content)[:], a[key])
+
+
+def test_a_post_fetch_is_the_get_by_another_route(examples_dir, client, fill_public):
+    # The same parameters and the same code behind them, so the two may not
+    # answer differently for anything both can be asked
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    for params in ({"indices": "[[1,5,9]]"}, {"slice_": "0:10"}):
+        got = httpx.post(url, json=params, timeout=30)
+        expected = httpx.get(url, params=params, timeout=30)
+        assert got.status_code == expected.status_code == 200
+        assert got.content == expected.content
 
 
 def test_coordinates_do_not_combine_with_a_slice(examples_dir, client, fill_public):

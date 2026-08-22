@@ -107,6 +107,24 @@ class Cat2LazyArr(pydantic.BaseModel):
     compute: bool
 
 
+class FetchPayload(pydantic.BaseModel):
+    """What `POST api/fetch` carries, which is what its query string carries.
+
+    A URL is a poor place for a long list of coordinates: a key of more than
+    some thousands of them does not fit in one, and no encoding fixes that so
+    much as move where it breaks.  A body has no such limit.
+
+    The fields are the GET parameters by the same names, `indices` included as
+    the same JSON string, so that one grammar and one parser serve both verbs
+    and neither can drift from the other.
+    """
+
+    indices: str | None = None
+    slice_: str | None = None
+    filter: str | None = None
+    field: str | None = None
+
+
 class MoveCopyPayload(pydantic.BaseModel):
     src: str
     dst: str
