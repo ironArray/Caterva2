@@ -110,6 +110,19 @@ def test_a_streamed_response_says_it_serves_no_ranges(client, public_dataset):
     assert response.headers["accept-ranges"] == "none"
 
 
+def test_info_says_a_stored_dataset_serves_ranges(client, public_dataset):
+    # Reported a request earlier than `api/fetch` would: a client deciding
+    # whether to read blocks asks `api/info` anyway, and can then skip the probe
+    # it would otherwise spend finding out that the answer is yes.  A field of
+    # the dataset's description, not an `Accept-Ranges` header, which would be
+    # claiming that `api/info` itself served ranges
+    url = f"{client.urlbase}/api/info/{TEST_CATERVA2_ROOT}/{public_dataset}"
+    response = httpx.get(url)
+    assert response.status_code == 200
+    assert response.json()["accept_ranges"] == "bytes"
+    assert "accept-ranges" not in response.headers
+
+
 def test_download_refuses_ranges(client, public_dataset):
     url = f"{client.urlbase}/api/download/{TEST_CATERVA2_ROOT}/{public_dataset}"
     response = httpx.get(url, headers={"Range": "bytes=0-31"})

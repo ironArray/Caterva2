@@ -23,6 +23,30 @@
   was interrupted. The destination is the server's own configuration and never
   something a caller names.
 
+* `api/fetch` is explicit about byte ranges, which is what lets a client read
+  single *blocks* of a dataset instead of whole chunks. A stored dataset is
+  served from its file and honours a `Range` as it always did, and now says so
+  with `Accept-Ranges: bytes`; anything built per request -- a slice, a field, a
+  lazy expression, a download -- refuses with a 416 and `Accept-Ranges: none`,
+  where before it answered 200 with the whole body, which is the download such a
+  client was trying to avoid in the first place. A leaf inside a container (a
+  `.b2z` member, or an HDF5 leaf that is a whole frame) is served by seeking to
+  its window in the file, several spans in one `multipart/byteranges` answer if
+  that is what was asked for, so it is readable block-wise like any dataset of
+  its own. `caterva2/tests/test_ranges.py` pins all of it down: a refactor
+  turning that one `FileResponse` into a `StreamingResponse` would otherwise
+  silently cost every such client its block granularity.
+
+* `api/info` reports `accept_ranges` for a dataset: `"bytes"` for one served
+  from a file, `"none"` for one mounted from a peer and re-serialized here, and
+  absent where it is not settled by the description alone (a container leaf,
+  whose answer depends on its own window). It says of `api/fetch` what that
+  endpoint would answer, a request earlier: a client reading blocks over byte
+  ranges asks `api/info` anyway, and can now tell a dataset it may range-read
+  from one it may not without spending a request to find out. A field rather
+  than an `Accept-Ranges` header, which would be claiming that `api/info` itself
+  served ranges. Clients that do not know the field are unaffected.
+
 * `api/info` and the ranged file responses carry an `ETag` of our own, built
   from the frame's generation counter as well as its size and mtime. Starlette's
   default is a digest of the mtime and the size, which a chunk written as a run

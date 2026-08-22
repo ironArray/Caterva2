@@ -63,6 +63,14 @@ class Metadata(pydantic.BaseModel):
     dtype: str
     schunk: SChunk
     mtime: datetime.datetime | None
+    # Whether `api/fetch` will serve byte ranges of this dataset: "bytes" for one
+    # this server has a file for, "none" for one it mounts from a peer and
+    # re-serializes.  None where it is not settled here -- a container leaf,
+    # whose answer depends on its own window -- and a client told None asks, as
+    # every client did before this field existed.  It describes `api/fetch`, not
+    # the reply carrying it, which is why it is a field and not an
+    # `Accept-Ranges` header: that one would claim `api/info` served ranges.
+    accept_ranges: str | None = None
 
 
 class LazyArray(pydantic.BaseModel):

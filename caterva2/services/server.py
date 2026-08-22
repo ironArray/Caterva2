@@ -456,9 +456,17 @@ async def get_info(
     if provider is not None:
         rel = "/".join(path.parts[1:])
         try:
-            return await provider.info(root, rel)
+            info = await provider.info(root, rel)
         except providers.ProviderError as exc:
             raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        # A peer dataset is fetched from its owner and re-serialized here, so
+        # `api/fetch` will 416 a range for it.  Saying so now saves the client
+        # the request it would otherwise spend finding that out: a `Proxy` over
+        # a stored dataset reads blocks, and asks first whether it may.  Set over
+        # whatever the peer said of its own copy, which is stored *there*
+        if isinstance(info, dict):
+            info["accept_ranges"] = "none"
+        return info
 
     abspath, inner_key = split_and_resolve(path, user)
     if inner_key is not None:
@@ -476,7 +484,15 @@ async def get_info(
     etag = dataset_etag(abspath)
     if etag:
         response.headers["ETag"] = etag
-    return srv_utils.read_metadata(abspath)
+    meta = srv_utils.read_metadata(abspath)
+    # A dataset with a file of its own is served by `FileResponse`, which honours
+    # a range.  Only said where it is certain: a directory or a lazy expression
+    # is not a stored frame, and a container member depends on whether its leaf
+    # has a window, so a client told nothing asks as it always did -- an omission
+    # costs a request, a wrong answer would cost correctness
+    if isinstance(meta, models.Metadata):
+        meta.accept_ranges = "bytes"
+    return meta
 
 
 async def partial_download(abspath, path, slice_=None):
