@@ -34,6 +34,14 @@
   `filter` or `field`, and refused for anything that is not an array of its own.
   blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
 
+* `Client.get_slice()` and `ds[key]` take a fancy key -- a list or array of
+  coordinates, or a boolean mask -- and send it as `indices` for the server to
+  gather, changing verb to POST where it is too long for a URL. What comes back
+  is the points, not the chunks holding them. `slice_to_string()` now refuses an
+  index it cannot express instead of dropping it: a dropped index left an empty
+  slice string, which asks for the whole dataset and hands back all of it,
+  neither what was asked for nor smaller.
+
 * `POST api/fetch` takes the same parameters in a body that the GET takes in a
   query, and is the same code behind them. It exists for the one thing a query
   string cannot do: carry a key of more coordinates than a URL has room for,

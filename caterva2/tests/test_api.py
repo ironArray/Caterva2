@@ -353,9 +353,13 @@ def test_getitem_dataset_coordinates(key, examples_dir, client, fill_public):
     through blosc2's own `C2Array`, which is what sends `indices`; this package's
     client still speaks only slices.
     """
-    ds = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd", urlbase=client.urlbase)
     a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    # Both clients speak it: blosc2's `C2Array`, and this package's own
+    c2 = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd", urlbase=client.urlbase)
+    np.testing.assert_array_equal(c2[key], a[key])
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
     np.testing.assert_array_equal(ds[key], a[key])
+    np.testing.assert_array_equal(ds.slice(key, as_blosc2=False), a[key])
 
 
 def test_coordinates_send_only_what_they_select(examples_dir, client, fill_public):
@@ -391,6 +395,22 @@ def test_coordinates_refuse_what_they_cannot_read(indices, detail, examples_dir,
     else:
         assert response.status_code == 400
         assert detail in response.json()["detail"]
+
+
+def test_the_client_sends_a_long_key_in_a_body(examples_dir, client, fill_public):
+    """Past what a query carries this client changes verb too, not just blosc2's."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    key = [int(i % len(a)) for i in range(20_000)]
+    np.testing.assert_array_equal(ds[key], a[key])
+
+
+def test_the_client_refuses_a_key_it_cannot_spell(examples_dir, client, fill_public):
+    # Dropped instead of refused, an index asks for the whole dataset and hands
+    # back all of it -- neither what was asked for nor smaller
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    with pytest.raises(IndexError, match="step=1"):
+        ds[::2]
 
 
 def test_coordinates_may_arrive_in_a_body(examples_dir, client, fill_public):

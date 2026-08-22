@@ -993,9 +993,11 @@ class Client:
         return False
 
     def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5, kind=None):
-        response = self._xget(
-            f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, timeout=timeout
-        )
+        url = f"{urlbase}/api/fetch/{path}"
+        if sum(len(str(v)) for v in params.values() if v is not None) > api_utils.MAX_QUERY_CHARS:
+            response = self._post_fetch(url, params, auth_cookie, timeout)
+        else:
+            response = self._xget(url, params=params, auth_cookie=auth_cookie, timeout=timeout)
         data = response.content
         # Zero-copy deserialization is safe even when the object escapes
         # this frame: blosc2 >= 4.8.1 (the required floor) pins the source
@@ -1087,6 +1089,31 @@ class Client:
 
         json = response.json()
         return json if model is None else model(**json)
+
+    def _post_fetch(self, url, params, auth_cookie, timeout):
+        """`api/fetch` again, with the parameters in the body.
+
+        For a key too long to be a query and nothing else.  A server that has
+        never heard of this answers 405, which says what it is rather than what
+        went wrong, so it is turned into the sentence a caller can act on.
+        """
+        client = self.httpx_client
+        headers = {"Cookie": auth_cookie} if auth_cookie else None
+        try:
+            response = client.post(url, json=params, headers=headers, timeout=timeout)
+        except httpx.ReadTimeout as e:
+            raise TimeoutError(
+                f"Timeout after {timeout} seconds while trying to access {url}. "
+                f"Try increasing the timeout (currently {timeout} s) for Client instance."
+            ) from e
+        if response.status_code == 405:
+            raise IndexError(
+                "This many coordinates do not fit in an URL, and the server does not accept "
+                "them in a request body (it predates `POST api/fetch`). Ask in batches, or "
+                "upgrade the server."
+            )
+        response.raise_for_status()
+        return response
 
     def _post(self, url, json=None, auth_cookie=None, timeout=5):
         client = self.httpx_client
@@ -1350,13 +1377,16 @@ class Client:
                 timeout=self.timeout,
                 kind=kind,
             )
-        else:  # Convert slices to strings
-            slice_ = api_utils.slice_to_string(key)
+        else:
+            # Coordinates go over as `indices` and are gathered by the server;
+            # a plain box is a `slice_`, which says the same thing more cheaply
+            indices = api_utils.key_to_indices(key)
+            params = {"slice_": api_utils.slice_to_string(key)} if indices is None else {"indices": indices}
             # Fetch and return the data as a Blosc2 object / NumPy array
             return self._fetch_data(
                 path,
                 urlbase,
-                {"slice_": slice_},
+                params,
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
