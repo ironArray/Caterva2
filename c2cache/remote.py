@@ -212,20 +212,28 @@ CTABLE_MAX_CHUNK_BYTES = 512 * 2**20
 CTABLE_FETCH_CONCURRENCY = 4
 
 
-def _mask_stored_nulls(schema_dict):
-    """Whether any column keeps its nulls outside its values.
+MASK_FIELD_PREFIX = "_notnull:"
+"""Prefix for the compound field carrying a column's validity, in the cache only.
 
-    A nullable column either marks a null with a value of its own -- a
-    `null_value` sentinel, which is one of the values and travels with them --
-    or keeps a mask beside them, which the schema spells `null_storage: mask`.
-    This cache carries values and nothing else, so a mask does not survive it:
-    the null comes back as whatever the value slot held, which for a string is
-    the empty one and for an integer a zero, neither distinguishable from data
-    that was really there.  Such a table is passed through to the peer instead.
-    """
-    return any(
-        col.get("nullable") and col.get("null_value") is None for col in schema_dict.get("columns") or ()
-    )
+A nullable column either marks a null with a value of its own -- a `null_value`
+sentinel, which is one of the values and travels with them -- or keeps a mask
+beside them, which the schema spells `null_storage: mask`.  A mask is not a
+value, so it needs a field of its own to cross a cache that stores rows: one
+bool per masked column, packed alongside and unpacked into the `.notnull`
+sidecar a CTable reads its nulls from.
+
+The prefix cannot be a column name -- `:` is not legal in one -- and a table
+that managed it anyway is refused rather than silently merged.
+"""
+
+
+def _mask_columns(schema_dict):
+    """Names of the columns whose nulls live in a mask rather than in a value."""
+    return [
+        col["name"]
+        for col in schema_dict.get("columns") or ()
+        if col.get("nullable") and col.get("null_value") is None
+    ]
 
 
 def _ctable_fixed_dtypes(schema_dict):
@@ -237,8 +245,6 @@ def _ctable_fixed_dtypes(schema_dict):
     # pinned to the blosc2>=4.8.1 floor in pyproject.
     from blosc2.schema_compiler import schema_from_dict
 
-    if _mask_stored_nulls(schema_dict):
-        return None
     try:
         compiled = schema_from_dict(schema_dict)
         for col in compiled.columns:
@@ -249,7 +255,15 @@ def _ctable_fixed_dtypes(schema_dict):
                 or blosc2.CTable._is_ndarray_column(col)
             ):
                 return None
-        return np.dtype([(col.name, col.dtype) for col in compiled.columns])
+        fields = [(col.name, col.dtype) for col in compiled.columns]
+        names = {col.name for col in compiled.columns}
+        # One bool per masked column, so its nulls cross the cache with its values
+        for name in _mask_columns(schema_dict):
+            field = MASK_FIELD_PREFIX + name
+            if field in names:  # unreachable for a legal column name; not assumed
+                return None
+            fields.append((field, np.bool_))
+        return np.dtype(fields)
     except Exception:
         return None
 
@@ -257,7 +271,13 @@ def _ctable_fixed_dtypes(schema_dict):
 def _synth_ctable_cframe(schema_dict, cols, n):
     """A valid CTable cframe from per-column numpy arrays: an EmbedStore with
     /_meta, an all-True /_valid_rows and /_cols/<relpath> per column,
-    mirroring CTable.to_cframe (ctable.py) for the fixed-width scalar case."""
+    mirroring CTable.to_cframe (ctable.py) for the fixed-width scalar case.
+
+    A column whose nulls live in a mask arrives with its validity beside it,
+    under `MASK_FIELD_PREFIX` + its name, and is written as the `.notnull`
+    sidecar a CTable reads them from.  An all-valid mask is left out: the
+    sidecar's absence says exactly that, which is what a null-free column
+    stores anyway."""
     from blosc2.ctable_storage import _column_name_to_relpath  # blosc2>=4.8.1 internal
 
     estore = blosc2.EmbedStore(urlpath=None, mode="w")
@@ -267,8 +287,19 @@ def _synth_ctable_cframe(schema_dict, cols, n):
     meta.vlmeta["schema"] = json.dumps(schema_dict)
     estore["/_meta"] = meta
     estore["/_valid_rows"] = blosc2.asarray(np.ones(n, dtype=np.bool_))
+    masks = {
+        name[len(MASK_FIELD_PREFIX) :]: arr
+        for name, arr in cols.items()
+        if name.startswith(MASK_FIELD_PREFIX)
+    }
     for name, arr in cols.items():
-        estore[f"/_cols/{_column_name_to_relpath(name)}"] = blosc2.asarray(arr)
+        if name.startswith(MASK_FIELD_PREFIX):
+            continue
+        relpath = _column_name_to_relpath(name)
+        estore[f"/_cols/{relpath}"] = blosc2.asarray(arr)
+        mask = masks.get(name)
+        if mask is not None and not mask.all():
+            estore[f"/_cols/{relpath}.notnull"] = blosc2.asarray(np.ascontiguousarray(mask))
     return estore.to_cframe()
 
 
@@ -294,6 +325,13 @@ class CTableSource:
     def _pack_rows(self, table, start, stop):
         rows = np.zeros(self.chunks[0], dtype=self.dtype)  # zero-pad trailing chunk
         for name in self.dtype.names:
+            if name.startswith(MASK_FIELD_PREFIX):
+                # True where the row is not null.  The padding of a trailing
+                # chunk is left valid rather than null: nothing reads it, and a
+                # null there would be a claim about a row that does not exist
+                rows[name] = True
+                rows[name][: stop - start] = np.asarray(table[name[len(MASK_FIELD_PREFIX) :]].notnull())
+                continue
             rows[name][: stop - start] = table[name][:]
         # Keep `packed` referenced while reading the chunk: NDArray.schunk
         # does NOT keep its parent alive, so a one-liner here is a

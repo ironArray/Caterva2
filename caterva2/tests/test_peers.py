@@ -756,11 +756,11 @@ def test_synth_ctable_cframe_roundtrip(tmp_path):
 
 
 def test_synth_ctable_cframe_preserves_null_sentinels(tmp_path):
-    """A sentinel null survives the full structured-cache loop, and a masked
-    one is not asked to: numpy columns -> packed structured frame -> field
-    reads -> synthesized cframe -> reconstructed CTable carries values and
-    nothing else, so a column whose nulls live beside its values is refused by
-    `ctable_cacheable` and passed through to the peer instead."""
+    """Nulls survive the full structured-cache loop however they are stored:
+    numpy columns -> packed structured frame -> field reads -> synthesized
+    cframe -> reconstructed CTable.  A sentinel null is one of the values and
+    rides along with them; a masked one is not a value at all, and crosses in
+    a bool field of its own that becomes the `.notnull` sidecar again."""
     from c2cache import remote
 
     int_null = np.iinfo(np.int32).min
@@ -772,51 +772,42 @@ def test_synth_ctable_cframe_preserves_null_sentinels(tmp_path):
         f: float = blosc2.field(blosc2.float64(nullable=True), chunks=(16,), blocks=(8,))
 
     t = blosc2.CTable(NRow, urlpath=str(tmp_path / "n.b2z"), mode="w", compact=True, expected_size=40)
-    str_null = t["y"].null_value
     for i in range(40):
+        # None is a null whatever the column stores; `int_null` is a value that
+        # happens to look like one, and must come back as the value it is
         t.append(
             (
-                int_null if i % 7 == 3 else i,
-                str_null if i % 5 == 2 else f"s{i}",
-                float("nan") if i % 3 == 1 else i / 2,
+                None if i % 7 == 3 else (int_null if i == 0 else i),
+                None if i % 5 == 2 else f"s{i}",
+                None if i % 3 == 1 else i / 2,
             )
         )
     sd = t.schema_dict()
-    # Nulls kept in a mask do not survive a cache that carries values only, so
-    # such a table is refused here and passed through to the peer instead
-    assert remote.ctable_cacheable({"nrows": 40, "chunks": (16,), "schema_dict": sd}) is None
-
-    # A sentinel says "null" in a value, and a value is what the cache carries
-    @dataclass
-    class SRow:
-        x: int = blosc2.field(blosc2.int32(nullable=True, null_value=int_null), chunks=(16,), blocks=(8,))
-        f: float = blosc2.field(
-            blosc2.float64(nullable=True, null_value=float("nan")), chunks=(16,), blocks=(8,)
-        )
-
-    t = blosc2.CTable(SRow, urlpath=str(tmp_path / "s.b2z"), mode="w", compact=True, expected_size=40)
-    for i in range(40):
-        t.append((int_null if i % 7 == 3 else i, float("nan") if i % 3 == 1 else i / 2))
-    sd = t.schema_dict()
     dtype = remote.ctable_cacheable({"nrows": 40, "chunks": (16,), "schema_dict": sd})
-    assert dtype is not None  # sentinel-nullable fixed-width columns are cacheable
+    assert dtype is not None  # nullable fixed-width columns are cacheable
+    # A mask is not a value, so it crosses the cache in a field of its own
+    assert set(dtype.names) == {"x", "y", "f"} | {f"{remote.MASK_FIELD_PREFIX}{c}" for c in "xyf"}
 
     # pack -> sparse structured frame -> read back (the cache's data path)
     rows = np.zeros(40, dtype=dtype)
     for name in dtype.names:
-        rows[name] = t[name][0:40]
+        if name.startswith(remote.MASK_FIELD_PREFIX):
+            rows[name] = np.asarray(t[name[len(remote.MASK_FIELD_PREFIX) :]].notnull())
+        else:
+            rows[name] = t[name][0:40]
     frame = blosc2.asarray(rows, chunks=(16,))
     back = frame[0:40]
 
     cols = {name: back[name] for name in dtype.names}
     t2 = blosc2.ctable_from_cframe(remote._synth_ctable_cframe(sd, cols, 40))
 
-    for name in ("x", "f"):
+    for name in ("x", "y", "f"):
         np.testing.assert_array_equal(t2[name][:], t[name][:])  # NaN-safe
         assert t2[name].null_count() == t[name].null_count()
+        # Which rows, not merely how many: an empty string and a null read the
+        # same out of the values, and only the mask tells them apart
+        np.testing.assert_array_equal(np.asarray(t2[name].is_null()), np.asarray(t[name].is_null()))
     assert t2["x"].null_count() == sum(1 for i in range(40) if i % 7 == 3)
-    assert t2["x"].null_value == int_null
-    assert np.isnan(t2["f"].null_value)
 
 
 def test_ctable_cacheable_detection(tmp_path):
