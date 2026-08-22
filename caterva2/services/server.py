@@ -637,18 +637,59 @@ def split_and_resolve(path, user, resolver=None):
     return resolver(pathlib.Path(path), user), None
 
 
+def parse_segment(segment):
+    """One dimension of a slice string: `3`, `1:4`, `:9`, `:`."""
+    if ":" not in segment:
+        return int(segment)
+    return slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
+
+
 def parse_slice(string):
     if not string:
         return None
-    obj = []
-    for segment in string.split(","):
-        if ":" not in segment:
-            segment = int(segment)
-        else:
-            segment = slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
-        obj.append(segment)
-
+    obj = [parse_segment(segment) for segment in string.split(",")]
     return tuple(obj) if len(obj) > 1 else obj[0]
+
+
+def parse_indices(string):
+    """The fancy key `indices` names, ready to index an array with.
+
+    JSON, one entry per dimension: a list of integers for a dimension indexed by
+    an array, an integer for one indexed by a scalar, a string for one indexed by
+    a slice (spelled as `slice_` spells it), and null for one taken whole.  So
+    `[[1,5,9],450,"0:10",null]` is `array[[1,5,9], 450, 0:10, :]`.
+
+    JSON rather than the spelling `slice_` uses, because a list of coordinates
+    has no unambiguous reading as a comma-separated string, and `json.loads` is
+    the one parser here that is not this module's to get wrong.  Every entry is
+    checked: what comes back indexes an array, so nothing else may reach it.
+    """
+    try:
+        raw = json.loads(string)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"indices is not JSON: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ValueError("indices must be a JSON list, one entry per dimension")
+    key = []
+    for entry in raw:
+        # `bool` is an `int` in Python and a mask is not one of these, so it is
+        # ruled out before the integer branch can take it for a coordinate
+        if entry is None:
+            key.append(slice(None))
+        elif isinstance(entry, str):
+            try:
+                key.append(parse_segment(entry))
+            except ValueError as exc:
+                raise ValueError(f"indices entry {entry!r} is not a slice: {exc}") from exc
+        elif isinstance(entry, bool) or not isinstance(entry, (int, list)):
+            raise ValueError(f"indices entry {entry!r} is not an integer, a list of them, a slice or null")
+        elif isinstance(entry, int):
+            key.append(entry)
+        else:
+            if any(isinstance(v, bool) or not isinstance(v, int) for v in entry):
+                raise ValueError("an indices list may hold only integers")
+            key.append(np.array(entry, dtype=np.int64))
+    return tuple(key)
 
 
 @app.get("/api/fetch/{path:path}")
@@ -658,6 +699,7 @@ async def fetch_data(
     user: db.User = Depends(optional_user),
     filter: str | None = None,
     field: str | None = None,
+    indices: str | None = None,
     range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
     """
@@ -693,6 +735,17 @@ async def fetch_data(
     """
 
     slice_ = parse_slice(slice_)
+    if indices is not None:
+        # Gathered here rather than at the client, which would have to fetch the
+        # blocks holding the points to pick them out of: scattered points are
+        # the case where a block is nearly all waste, and a shared uplink is
+        # what a server runs out of first
+        if slice_ is not None or filter or field:
+            srv_utils.raise_bad_request("indices cannot be combined with slice_, filter or field")
+        try:
+            indices = parse_indices(indices)
+        except ValueError as exc:
+            srv_utils.raise_bad_request(str(exc))
 
     root = path.parts[0]
     provider = providers.provider_for(root)
@@ -805,7 +858,7 @@ async def fetch_data(
             # TODO: make SChunk support integer as slice
             slice_ = slice(slice_, slice_ + 1)
 
-    whole = slice_ is None or slice_ == ()
+    whole = (slice_ is None or slice_ == ()) and indices is None
     if not whole and isinstance(slice_, tuple):
         whole = all(
             isinstance(sl, slice)
@@ -845,7 +898,16 @@ async def fetch_data(
     # here, before computing a body that is not going to be sent
     srv_utils.refuse_range(range_header, path)
 
-    if isinstance(array, blosc2.CTable):
+    if indices is not None:
+        if not isinstance(array, blosc2.NDArray):
+            srv_utils.raise_bad_request(f"{path} is not an array that can be indexed by coordinates")
+        try:
+            # `NDArray` reads scattered coordinates through its own sparse gather,
+            # so this touches the chunks the points land in and not the dataset
+            data = blosc2.asarray(array[indices]).to_cframe()
+        except (IndexError, ValueError) as exc:
+            srv_utils.raise_bad_request(str(exc))
+    elif isinstance(array, blosc2.CTable):
         row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
         view = array.slice(row_start, row_stop)
         data = view.to_cframe()

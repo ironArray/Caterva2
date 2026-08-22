@@ -341,6 +341,66 @@ def test_dataset_step_diff_1(client):
 
 
 @pytest.mark.parametrize(
+    "key",
+    [[1, 5, 9], [0, -1], [7], np.array([2, 4, 6]), np.array([True] + [False] * 999)],
+)
+def test_getitem_dataset_coordinates(key, examples_dir, client, fill_public):
+    """A fancy key is gathered by the server, which sends the points and no more.
+
+    The alternative is fetching the blocks the points live in and picking them
+    out here, and a block is nearly all waste for a single coordinate.  Asked
+    through blosc2's own `C2Array`, which is what sends `indices`; this package's
+    client still speaks only slices.
+    """
+    ds = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd", urlbase=client.urlbase)
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    np.testing.assert_array_equal(ds[key], a[key])
+
+
+def test_coordinates_send_only_what_they_select(examples_dir, client, fill_public):
+    # The whole point: what comes back is the size of the answer, not of the
+    # chunks the answer was gathered from
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    points = httpx.get(url, params={"indices": "[[1,5,9]]"})
+    whole = httpx.get(url)
+    assert points.status_code == 200
+    assert len(points.content) < len(whole.content)
+
+
+@pytest.mark.parametrize(
+    ("indices", "detail"),
+    [
+        ("[[1,2]]", None),
+        ("[[1,true]]", "only integers"),
+        ("[{}]", "not an integer"),
+        ("nonsense", "not JSON"),
+        ('{"a": 1}', "JSON list"),
+        ("[[999999]]", "out of bounds"),
+    ],
+)
+def test_coordinates_refuse_what_they_cannot_read(indices, detail, examples_dir, client, fill_public):
+    # Whatever arrives goes on to index a real array, so nothing that is not
+    # coordinates may reach it -- and saying which is which is the endpoint's job
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    response = httpx.get(url, params={"indices": indices})
+    if detail is None:
+        assert response.status_code == 200
+    else:
+        assert response.status_code == 400
+        assert detail in response.json()["detail"]
+
+
+def test_coordinates_do_not_combine_with_a_slice(examples_dir, client, fill_public):
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    response = httpx.get(url, params={"indices": "[[1,2]]", "slice_": "0:3"})
+    assert response.status_code == 400
+    assert "cannot be combined" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
     "slice_",
     [0, 1, slice(None, 1), slice(0, 10), slice(10, 20), slice(None), slice(1, 5, 1)],
 )

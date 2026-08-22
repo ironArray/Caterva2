@@ -23,6 +23,17 @@
   was interrupted. The destination is the server's own configuration and never
   something a caller names.
 
+* `api/fetch` takes an `indices` parameter: a fancy key as JSON, one entry per
+  dimension -- a list of integers for a dimension indexed by coordinates, an
+  integer for one indexed by a scalar, a string for one indexed by a slice, null
+  for one taken whole. The server gathers the points and sends those, reading
+  only the chunks they land in. The alternative is a client fetching the blocks
+  the points live in and picking them out, and a block is nearly all waste for a
+  single coordinate: nine scattered points of a 900^3 array cost 271 bytes in one
+  request this way against 237 KB in nineteen. Not combinable with `slice_`,
+  `filter` or `field`, and refused for anything that is not an array of its own.
+  blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
+
 * `api/fetch` is explicit about byte ranges, which is what lets a client read
   single *blocks* of a dataset instead of whole chunks. A stored dataset is
   served from its file and honours a `Range` as it always did, and now says so
