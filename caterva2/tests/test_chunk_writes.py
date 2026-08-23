@@ -97,6 +97,23 @@ def test_a_chunk_of_another_geometry_is_refused(presized):
     assert not presized.written_chunks().any()
 
 
+def test_a_chunk_of_another_typesize_is_refused(presized):
+    """The part of the geometry the sizes do not carry.
+
+    A chunk compressed against another typesize is the right number of bytes,
+    split into the right blocks, and decompresses to values in the wrong places:
+    the shuffle filters run on a stride, and this one ran on somebody else's.
+    Nothing downstream notices, which is why it has to be refused here.
+    """
+    data = np.full(CHUNKS, 3, dtype=DTYPE)
+    wrong = blosc2.compress2(data, typesize=3, blocksize=BLOCKS[0] * DTYPE.itemsize)
+    assert blosc2.get_cbuffer_sizes(wrong)[0] == CHUNKS[0] * DTYPE.itemsize  # the sizes agree
+    with pytest.raises(httpx.HTTPStatusError) as raised:
+        presized.update_chunk(0, wrong)
+    assert raised.value.response.status_code == 400
+    assert not presized.written_chunks().any()
+
+
 def test_a_chunk_of_another_blocksize_is_refused(presized):
     data = np.full(CHUNKS, 3, dtype=DTYPE)
     wrong = blosc2.compress2(data, typesize=DTYPE.itemsize)  # blosc2 picks the blocksize
@@ -300,6 +317,35 @@ def test_publishing_says_where_the_array_went(presized, auth_client):
     vlmeta = blosc2.C2Array(presized.path, urlbase=presized.urlbase, auth_token=presized.auth_token).vlmeta
     assert vlmeta["fill_state"] == "published"
     assert vlmeta["published_url"].endswith("@personal/run.b2nd")
+
+
+def test_publishes_that_overlap_do_not_stage_over_each_other(presized, auth_client):
+    """Two publishes of one array can overlap, and neither holds a lock.
+
+    The background task the last chunk starts, and a client that calls the
+    endpoint to finish an interrupted one, used to open the same `.partial`
+    file: their bytes interleave into it, one `fs.mv` renames the wreck into
+    place and the other raises inside a background task.  A name per attempt
+    makes them write the same thing twice instead.
+    """
+    for nchunk in range(NCHUNKS):
+        presized.update_chunk(nchunk, _chunk(nchunk))
+    url = f"{auth_client.urlbase}/api/publish/{presized.path}"
+    headers = {"Cookie": auth_client.cookie}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        answers = [pool.submit(httpx.post, url, headers=headers, timeout=30) for _ in range(4)]
+        answers = [a.result() for a in answers]
+    assert all(a.status_code == 200 for a in answers)
+    assert len({a.json()["published"] for a in answers}) == 1
+
+    published = _published_dir() / "@personal/run.b2nd"
+    assert published.is_file()
+    np.testing.assert_array_equal(
+        blosc2.open(str(published))[:],
+        np.concatenate([np.full(CHUNKS, n, DTYPE) for n in range(NCHUNKS)]),
+    )
+    # ... and nothing staged is left lying about
+    assert not list(_published_dir().rglob("*.partial"))
 
 
 def test_an_unfinished_array_is_not_published(presized, auth_client):

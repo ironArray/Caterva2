@@ -23,6 +23,7 @@ import pathlib
 import shutil
 import string
 import tarfile
+import time
 import traceback
 import types
 import typing
@@ -82,6 +83,38 @@ def guess_type(path):
 def get_disk_usage():
     exclude = {"db.json", "db.sqlite"}
     return sum(path.stat().st_size for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude))
+
+
+DISK_USAGE_TTL = 10.0
+"""How long a walk of the state directory is reused before another is made."""
+
+_disk_usage = {"walked_at": 0.0, "walked": 0, "written": 0}
+
+
+def get_disk_usage_written(pending: int) -> int:
+    """What the state directory holds, for a check made once per chunk written.
+
+    `get_disk_usage` stats every file under the state directory.  That is a fair
+    price for an upload, which happens once; a fill writes a chunk at a time and
+    would pay it per chunk, so the walk that costs the most in the array's size
+    would run the most often on the largest arrays -- an array of ten thousand
+    chunks is ten thousand walks.
+
+    The walk is kept for `DISK_USAGE_TTL` and the chunks written since are added
+    to it, so the answer only ever *over*states what is on disk: a write this
+    process made is counted from the moment it is made, and a file removed
+    meanwhile is still counted until the next walk.  A quota can therefore bite
+    slightly early, never slightly late, which is the direction to be wrong in.
+    """
+    now = time.time()
+    if now - _disk_usage["walked_at"] > DISK_USAGE_TTL:
+        _disk_usage.update(walked_at=now, walked=get_disk_usage(), written=0)
+    return _disk_usage["walked"] + _disk_usage["written"] + pending
+
+
+def account_chunk_written(nbytes: int) -> None:
+    """Count a chunk just written against the kept walk; see `get_disk_usage_written`."""
+    _disk_usage["written"] += nbytes
 
 
 def truncate_path(path, size=35):
@@ -1250,9 +1283,34 @@ def with_etag(abspath: pathlib.Path) -> dict:
 
 # What a frame codes in the top nibble of a chunk's flags byte: an uninitialized
 # chunk is one nothing was ever written to, which is what `blosc2.uninit` lays an
-# array out with and what a fill claims one slot at a time
+# array out with and what a fill claims one slot at a time.  The value is
+# blosc2's own, so a rename or a renumbering of it travels; the offset and the
+# nibble are the header's layout, which is what reading one byte instead of
+# walking the array costs (see `chunk_is_unwritten`)
 CHUNK_FLAGS_BYTE = 31
-SPECIAL_UNINIT = 0x4
+SPECIAL_UNINIT = blosc2.SpecialValue.UNINIT.value
+
+
+# Where a chunk says what its filters ran on.  Byte 3 of the Blosc header, which
+# every chunk carries and `get_cbuffer_sizes` does not report
+CHUNK_TYPESIZE_BYTE = 3
+MAX_HEADER_TYPESIZE = 255
+
+
+def chunk_typesize(chunk: bytes) -> int:
+    """The typesize a chunk's filters were run on, off its own header."""
+    return chunk[CHUNK_TYPESIZE_BYTE]
+
+
+def filter_typesize(typesize: int) -> int:
+    """What a chunk of an array of this typesize carries in its header.
+
+    Itself, up to what one byte holds.  Past that a chunk records 1 instead:
+    shuffling on a stride that wide buys nothing, so the filters run bytewise and
+    the header says so.  Which makes this check weaker for such an array -- every
+    typesize past 255 looks alike -- and no weaker than not making it.
+    """
+    return typesize if typesize <= MAX_HEADER_TYPESIZE else 1
 
 
 def chunk_is_unwritten(schunk, nchunk: int) -> bool:
@@ -1261,6 +1319,9 @@ def chunk_is_unwritten(schunk, nchunk: int) -> bool:
     Read from the chunk's own header, not from a scan of the array: a lazy chunk
     is the header alone, so this is one small read whatever the array's size,
     where walking every chunk would make a fill cost the square of its length.
+    Which is why `iterchunks_info()` -- the way this question is asked where a
+    whole array is checked at once -- is not the way it is asked here: that one
+    reads every chunk to answer about one, and this runs once per write.
 
     A run of zeros is *not* unwritten -- a writer that stored an all-zero chunk
     stored something, and the frame tags it as zeros rather than as
@@ -1337,13 +1398,27 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
     # (An object store makes a write visible only once it completes, so the move
     # is redundant there and costs a server-side copy.  Kept all the same: which
     # backends stream a partial file into view is not something to guess at.)
-    staging = f"{target}.partial"
+    # Named for this copy and not for the array: two publishes of one array can
+    # overlap -- the background task the last chunk starts, and a client that
+    # calls the endpoint to finish an interrupted one -- and neither holds the
+    # per-dataset lock across the upload.  On one staging name they would
+    # interleave their bytes into a single file and move the wreck into place;
+    # on names of their own they write the same thing twice and the second move
+    # wins, which is the same file either way
+    staging = f"{target}.{uuid.uuid4().hex}.partial"
     parent = target.rsplit("/", 1)[0]
     if parent != target:
         fs.makedirs(parent, exist_ok=True)
-    with open(abspath, "rb") as source, fs.open(staging, "wb") as target_file:
-        shutil.copyfileobj(source, target_file)
-    fs.mv(staging, target)
+    try:
+        with open(abspath, "rb") as source, fs.open(staging, "wb") as target_file:
+            shutil.copyfileobj(source, target_file)
+        fs.mv(staging, target)
+    except BaseException:
+        # A staging file nothing will ever move is litter, and one per attempt
+        # accumulates where one per array overwrote itself
+        with contextlib.suppress(Exception):
+            fs.rm(staging)
+        raise
     array = blosc2.open(abspath, mode="a", locking=True)
     with array.schunk.holding_lock():
         array.schunk.vlmeta[PUBLISHED_URL] = destination
@@ -1375,6 +1450,7 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
         srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
     try:
         nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
+        typesize = chunk_typesize(chunk)
     except Exception:
         srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
     # A chunk of another geometry would be stored and then read as nonsense, so
@@ -1387,6 +1463,16 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
         srv_utils.raise_bad_request(
             f"the chunk is split into blocks of {blocksize} bytes where this array's are "
             f"{schunk.blocksize}; compress it against the array's blocks"
+        )
+    # The one part of the geometry the sizes do not carry, and the one whose
+    # mismatch is silent: the shuffle filters read and write on a stride of it,
+    # so a chunk compressed against another typesize decompresses to the right
+    # number of bytes with every one of them in the wrong place -- no error
+    # anywhere, just an array of scrambled values
+    if typesize != filter_typesize(schunk.typesize):
+        srv_utils.raise_bad_request(
+            f"the chunk was compressed with a typesize of {typesize} where this array's is "
+            f"{schunk.typesize}; compress it against the array's dtype"
         )
     complete = False
     with schunk.holding_lock():
@@ -1484,8 +1570,10 @@ async def write_chunk(
         srv_utils.raise_bad_request("no chunk was sent")
     if settings.quota:
         # The array was laid out empty, so its slots were never charged for: what
-        # a fill costs arrives a chunk at a time, and is checked the same way
-        total_size = get_disk_usage() + len(chunk)
+        # a fill costs arrives a chunk at a time, and is checked the same way --
+        # off a kept walk of the state directory rather than a fresh one, since
+        # this runs once per chunk (see `get_disk_usage_written`)
+        total_size = get_disk_usage_written(len(chunk))
         if total_size > settings.quota:
             srv_utils.raise_bad_request("Write failed because quota limit has been exceeded.")
 
@@ -1494,6 +1582,9 @@ async def write_chunk(
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
         answer = await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
+    if settings.quota:
+        # Counted only where it is checked, so the two stay paired
+        account_chunk_written(len(chunk))
     if answer.pop("publish"):
         # After the response, and outside the lock: the writer that finished the
         # fill should not wait for the upload, and no other writer should either
