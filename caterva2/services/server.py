@@ -590,7 +590,15 @@ def member_window(abspath, inner_key, mtime):
         return None
     if not isinstance(store, blosc2.DictStore):
         return None
-    window = store.member_window(inner_key)
+    # A blosc2 that cannot say where a member lies is one more way there is no
+    # window to offer, not an error: this is an optimization -- seek to the
+    # leaf's frame instead of rebuilding it -- and the caller already has the
+    # rebuild for every other case that returns None here.  Asked of the store
+    # rather than of a version, so it starts working when the API arrives
+    locate = getattr(store, "member_window", None)
+    if locate is None:
+        return None
+    window = locate(inner_key)
     if window is None:
         return None
     offset, size = window
