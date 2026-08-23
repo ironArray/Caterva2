@@ -205,6 +205,43 @@ def test_a_dataset_that_is_not_an_array_is_refused(auth_client, tmp_path):
     assert response.status_code == 400
 
 
+def test_a_path_that_climbs_out_of_its_root_is_refused(presized, auth_client):
+    """The root is the whole of the authorization, so leaving it is refused.
+
+    `@personal` is this user's directory; a `..` in what follows names a place
+    the root said nothing about.  Every later check passes on such a path -- it
+    resolves to a real file, so it exists and can be written and published --
+    which is why it is stopped where the root is read.
+    """
+    headers = {"Cookie": auth_client.cookie}
+    # `presized` is here to have put something in this user's personal area: a
+    # `..` climbs through directories that have to exist, and an empty root has
+    # no directory of the user's for it to climb out of
+    #
+    # A real array in a root this user does not write to, so that what the
+    # traversal names exists: every check after the root is about the file on
+    # disk, and all of them pass for a path that resolves to this one
+    public = pathlib.Path(TEST_STATE_DIR) / "server/public/target.b2nd"
+    public.parent.mkdir(parents=True, exist_ok=True)
+    array = blosc2.uninit(SHAPE, dtype=DTYPE, chunks=CHUNKS, blocks=BLOCKS, urlpath=str(public), mode="w")
+    del array
+    # Percent-encoded, because an HTTP client normalizes a literal `..` out of an
+    # URL before it is sent: what reaches the server is what the server has to
+    # refuse, and this is the spelling that reaches it intact
+    escape = "@personal/%2E%2E/%2E%2E/public/target.b2nd"
+    response = httpx.post(
+        f"{auth_client.urlbase}/api/chunk/{escape}",
+        params={"nchunk": 0},
+        content=_chunk(1),
+        headers=headers,
+    )
+    assert response.status_code == 400
+    response = httpx.post(f"{auth_client.urlbase}/api/publish/{escape}", headers=headers)
+    assert response.status_code == 400
+    # ... and the array it named is untouched
+    assert not blosc2.FsspecNDSource(str(public)).written_chunks().any()
+
+
 def test_an_array_that_does_not_exist_is_not_created(auth_client):
     """A fill writes into a layout; it does not invent one."""
     if auth_client is None:

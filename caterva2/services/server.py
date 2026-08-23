@@ -1221,9 +1221,16 @@ def publish_destination(path: pathlib.Path) -> str:
     The client says which key it wants below that root and nothing above it: a
     destination taken from the request would let a caller point the server at a
     bucket they control and have it write someone else's data into it.
+
+    "Below that root" is checked here and not only where the path was resolved on
+    disk.  What comes back is an URL, and `fsspec.url_to_fs` normalizes a `..` in
+    one just as a filesystem does: a segment that survived this far would move
+    the write out of the publish root, or to another prefix of the same bucket.
     """
     if not settings.publish_root:
         srv_utils.raise_bad_request("this server publishes nowhere: set publish_root in its configuration")
+    if ".." in path.parts:
+        srv_utils.raise_bad_request(f"{path} climbs out of the root this server publishes to")
     return f"{str(settings.publish_root).rstrip('/')}/{path}"
 
 
@@ -1748,10 +1755,18 @@ def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
     Raises
     ------
     fastapi.HTTPException
-        If the path is not in a writable root
+        If the path is not in a writable root, or leaves it
     """
     root, *subpath = path.parts
     rootdir = get_rootdir_or_error(root, user)
+    # The root is the whole of the authorization: `@personal` is this user's
+    # directory and nobody else's, and a path that climbs out of it is asking for
+    # a place the root said nothing about.  Refused on the way in, before a
+    # `..` becomes a real directory that exists and passes every later check --
+    # `Path.joinpath` keeps the segment, and everything downstream (`is_file`,
+    # `fsspec.url_to_fs`) resolves it away without ever asking whether it should
+    if ".." in subpath:
+        srv_utils.raise_bad_request(f"{path} climbs out of {root}, which is where it may write")
     return rootdir / pathlib.Path(*subpath)
 
 
