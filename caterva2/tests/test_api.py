@@ -19,7 +19,7 @@ import pytest
 
 import caterva2 as cat2
 
-from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
+from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR, c2array_sends_indices
 
 
 @pytest.fixture
@@ -349,14 +349,17 @@ def test_getitem_dataset_coordinates(key, examples_dir, client, fill_public):
     """A fancy key is gathered by the server, which sends the points and no more.
 
     The alternative is fetching the blocks the points live in and picking them
-    out here, and a block is nearly all waste for a single coordinate.  Asked
-    through blosc2's own `C2Array`, which is what sends `indices`; this package's
-    client still speaks only slices.
+    out here, and a block is nearly all waste for a single coordinate.
+
+    Two clients send it: blosc2's own `C2Array` and this package's.  Only the
+    first needs a blosc2 newer than any release, so only that half stands down
+    on an older one -- what the server does with the key is what this is really
+    about, and this package's client exercises it on every blosc2.
     """
     a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
-    # Both clients speak it: blosc2's `C2Array`, and this package's own
-    c2 = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd", urlbase=client.urlbase)
-    np.testing.assert_array_equal(c2[key], a[key])
+    if c2array_sends_indices:
+        c2 = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd", urlbase=client.urlbase)
+        np.testing.assert_array_equal(c2[key], a[key])
     ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
     np.testing.assert_array_equal(ds[key], a[key])
     np.testing.assert_array_equal(ds.slice(key, as_blosc2=False), a[key])

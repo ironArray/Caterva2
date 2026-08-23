@@ -42,11 +42,60 @@ import subprocess
 import sys
 import time
 
+import blosc2
 import httpx
 import pytest
 
 from caterva2 import utils
 from caterva2.services import srv_utils
+
+# --- blosc2 features these tests need ahead of a blosc2 release --------------
+#
+# Feature-detected rather than pinned to a version.  What the packaging asks for
+# is a *released* blosc2, and these are APIs that are not in one yet: a test that
+# names the API it wants starts running by itself the day it arrives, with no
+# floor to remember to raise and no CI job left red in the meantime.
+#
+# Skipping is right here and not merely convenient.  Neither feature is one this
+# server needs in order to work: without `member_window` it rebuilds a container
+# leaf instead of seeking to it (the same bytes, more work), and without a
+# `C2Array` that sends `indices` a fancy key is still read by Caterva2's own
+# client, which is covered on every blosc2.  What is skipped is the faster path,
+# not the answer.
+
+needs_member_window = pytest.mark.skipif(
+    not hasattr(blosc2.DictStore, "member_window"),
+    reason="needs a blosc2 with DictStore.member_window (not in 4.11.0)",
+)
+"""For a leaf served out of its window in the container file, rather than rebuilt."""
+
+c2array_writes_chunks = hasattr(blosc2.C2Array, "update_chunk")
+"""Whether blosc2's own `C2Array` can write a chunk (not in 4.11.0).
+
+For a fill driven through blosc2's remote-array view.
+
+The server's `POST api/chunk` needs nothing of blosc2 -- it is checked directly
+over HTTP by the tests that do not take the fixture below -- but every client
+that drives a fill goes through `C2Array.update_chunk`, this package's
+`Client.fill_chunk` included.
+
+A plain value rather than a mark, because what needs it here is a *fixture*, and
+pytest ignores a mark on one of those.
+"""
+
+needs_chunk_writes = pytest.mark.skipif(
+    not c2array_writes_chunks,
+    reason="needs a blosc2 whose C2Array can write chunks (not in 4.11.0)",
+)
+"""The same, for a test that does not take the `presized` fixture."""
+
+c2array_sends_indices = hasattr(blosc2.c2array, "key_to_indices")
+"""Whether blosc2's own `C2Array` sends a fancy key as `indices` (not in 4.11.0).
+
+`key_to_indices` is the function that turns one into the parameter, so its
+presence is the feature.  Not a flag blosc2 publishes, which is why this is one
+named check here rather than a `hasattr` scattered over the tests.
+"""
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = "_caterva2"
@@ -140,14 +189,14 @@ class ManagedServices:
             returncode = popen.poll()
             if returncode is not None:
                 raise RuntimeError(
-                    f"service {name} failed with returncode={returncode}, " f"command = {command_line}"
+                    f"service {name} failed with returncode={returncode}, command = {command_line}"
                 )
             time.sleep(start_sleep_secs)
             if check():
                 break
         else:
             raise RuntimeError(
-                f"service {name} timeout after {start_timeout_secs} seconds, " f"command = {command_line}"
+                f"service {name} timeout after {start_timeout_secs} seconds, command = {command_line}"
             )
 
     def _get_data_path(self, root):
@@ -250,7 +299,7 @@ def main(defer):
 
     if "--help" in sys.argv:
         rspecs = " ".join(f'"{r.name}={r.source}"' for r in roots)
-        print(f"Usage: {sys.argv[0]} " f'[STATE_DIRECTORY="{DEFAULT_STATE_DIR}" [ROOTS={rspecs}]]')
+        print(f'Usage: {sys.argv[0]} [STATE_DIRECTORY="{DEFAULT_STATE_DIR}" [ROOTS={rspecs}]]')
         return
 
     state_dir = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_STATE_DIR
@@ -263,7 +312,7 @@ def main(defer):
         rname = rname if rname else TEST_DEFAULT_ROOT
         if rname in rnames:
             raise ValueError(
-                f"root name {rname!r} already in use; " f"please set a different name for {rsource!r}"
+                f"root name {rname!r} already in use; please set a different name for {rsource!r}"
             )
         root = TestRoot(rname, pathlib.Path(rsource))
         roots.append(root)

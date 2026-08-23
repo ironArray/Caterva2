@@ -9,7 +9,7 @@ import pytest
 
 from caterva2.services import srv_utils
 
-from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
+from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR, needs_member_window
 
 
 def _make_tree(path):
@@ -437,6 +437,7 @@ def _window(path, key):
     return store.member_window(key)
 
 
+@needs_member_window
 def test_a_leaf_is_served_from_its_window(fill_tree_public, client):
     """A .b2z keeps each leaf as a stored zip member, so the leaf's frame is in
     the file and the whole of it can be served by seeking to it."""
@@ -453,6 +454,7 @@ def test_a_leaf_is_served_from_its_window(fill_tree_public, client):
     )
 
 
+@needs_member_window
 def test_a_leaf_keeps_the_partitioning_info_reports(fill_tree_public, client):
     """The rebuild this replaced re-sliced and recompressed, so what came back
     disagreed with the chunks and blocks api/info reports for the same leaf."""
@@ -469,6 +471,7 @@ def test_a_leaf_keeps_the_partitioning_info_reports(fill_tree_public, client):
     assert fetched.blocks == tuple(info["blocks"]) == (10, 20)
 
 
+@needs_member_window
 def test_ranges_of_a_leaf(fill_tree_public, client):
     fname, _root = fill_tree_public
     abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
@@ -483,6 +486,7 @@ def test_ranges_of_a_leaf(fill_tree_public, client):
     assert response.content[2:9] == b"b2frame"
 
 
+@needs_member_window
 def test_a_range_cannot_reach_past_the_leaf(fill_tree_public, client):
     # The window is the whole of what this path is about: a range that would
     # run into the next member is clamped, and one that starts beyond it is a 416
@@ -500,6 +504,7 @@ def test_a_range_cannot_reach_past_the_leaf(fill_tree_public, client):
     assert beyond.headers["content-range"] == f"bytes */{nbytes}"
 
 
+@needs_member_window
 def test_several_ranges_of_a_leaf_come_back_multipart(fill_tree_public, client):
     fname, _root = fill_tree_public
     abspath = pathlib.Path(TEST_STATE_DIR) / "server/public" / fname
@@ -513,6 +518,7 @@ def test_several_ranges_of_a_leaf_come_back_multipart(fill_tree_public, client):
     assert raw[offset + 40 : offset + 56] in response.content
 
 
+@needs_member_window
 def test_a_leaf_s_ranges_carry_the_container_s_validator(fill_tree_public, client):
     """The two-request read is what the validator is for, leaves included.
 

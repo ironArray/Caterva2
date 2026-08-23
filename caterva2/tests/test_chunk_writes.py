@@ -24,7 +24,7 @@ import httpx
 import numpy as np
 import pytest
 
-from .services import TEST_STATE_DIR
+from .services import TEST_STATE_DIR, c2array_writes_chunks, needs_chunk_writes
 
 CHUNKS = (1000,)
 BLOCKS = (250,)
@@ -44,6 +44,8 @@ def presized(auth_client, tmp_path):
     """A pre-sized array in the user's personal area, and a C2Array over it."""
     if auth_client is None:
         pytest.skip("writing chunks requires an authenticated user")
+    if not c2array_writes_chunks:
+        pytest.skip("needs a blosc2 whose C2Array can write chunks (not in 4.11.0)")
     local = tmp_path / "run.b2nd"
     array = blosc2.uninit(SHAPE, dtype=DTYPE, chunks=CHUNKS, blocks=BLOCKS, urlpath=str(local))
     del array  # the server's handle is to be the only one over the uploaded copy
@@ -222,7 +224,7 @@ def test_a_dataset_that_is_not_an_array_is_refused(auth_client, tmp_path):
     assert response.status_code == 400
 
 
-def test_a_path_that_climbs_out_of_its_root_is_refused(presized, auth_client):
+def test_a_path_that_climbs_out_of_its_root_is_refused(auth_client, tmp_path):
     """The root is the whole of the authorization, so leaving it is refused.
 
     `@personal` is this user's directory; a `..` in what follows names a place
@@ -230,11 +232,16 @@ def test_a_path_that_climbs_out_of_its_root_is_refused(presized, auth_client):
     resolves to a real file, so it exists and can be written and published --
     which is why it is stopped where the root is read.
     """
+    if auth_client is None:
+        pytest.skip("the traversal is only reachable as an authenticated user")
     headers = {"Cookie": auth_client.cookie}
-    # `presized` is here to have put something in this user's personal area: a
-    # `..` climbs through directories that have to exist, and an empty root has
-    # no directory of the user's for it to climb out of
-    #
+    # Something of this user's, so their personal directory exists: a `..`
+    # climbs through directories that have to be there, and an empty root has
+    # none of the user's own to climb out of.  An upload rather than a fill,
+    # so this keeps running wherever `POST api/chunk` does
+    local = pathlib.Path(tmp_path) / "seed.b2nd"
+    blosc2.uninit(SHAPE, dtype=DTYPE, chunks=CHUNKS, blocks=BLOCKS, urlpath=str(local))
+    auth_client.upload(str(local), "@personal/seed.b2nd")
     # A real array in a root this user does not write to, so that what the
     # traversal names exists: every check after the root is about the file on
     # disk, and all of them pass for a path that resolves to this one
@@ -246,6 +253,7 @@ def test_a_path_that_climbs_out_of_its_root_is_refused(presized, auth_client):
     # URL before it is sent: what reaches the server is what the server has to
     # refuse, and this is the spelling that reaches it intact
     escape = "@personal/%2E%2E/%2E%2E/public/target.b2nd"
+    before = public.read_bytes()
     response = httpx.post(
         f"{auth_client.urlbase}/api/chunk/{escape}",
         params={"nchunk": 0},
@@ -255,8 +263,10 @@ def test_a_path_that_climbs_out_of_its_root_is_refused(presized, auth_client):
     assert response.status_code == 400
     response = httpx.post(f"{auth_client.urlbase}/api/publish/{escape}", headers=headers)
     assert response.status_code == 400
-    # ... and the array it named is untouched
-    assert not blosc2.FsspecNDSource(str(public)).written_chunks().any()
+    # ... and the array it named is untouched.  Compared byte for byte rather
+    # than through the frame's offsets, so this says the same thing on a blosc2
+    # that cannot read them (see `c2array_writes_chunks`)
+    assert public.read_bytes() == before
 
 
 def test_an_array_that_does_not_exist_is_not_created(auth_client):
@@ -415,6 +425,7 @@ def _reopen(array):
     return blosc2.C2Array(array.path, urlbase=array.urlbase, auth_token=array.auth_token)
 
 
+@needs_chunk_writes
 def test_the_client_lays_out_and_fills_an_array(auth_client):
     """The whole workflow through the Caterva2 client, without reaching past it."""
     if auth_client is None:
@@ -432,6 +443,7 @@ def test_the_client_lays_out_and_fills_an_array(auth_client):
         array.fill_chunk(0, _chunk(0))
 
 
+@needs_chunk_writes
 def test_the_client_publishes_a_filled_array(auth_client):
     if auth_client is None:
         pytest.skip("writing chunks requires an authenticated user")
