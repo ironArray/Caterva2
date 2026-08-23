@@ -437,6 +437,48 @@ def test_a_post_fetch_is_the_get_by_another_route(examples_dir, client, fill_pub
         assert got.content == expected.content
 
 
+def test_a_model_survives_a_peer_that_never_heard_of_a_field():
+    """A peer's `api/info` is a dict, and a dict has only the keys it has.
+
+    `htmx/path-info` rebuilds the local model from whatever a peer answered, so
+    every field added here is one an older peer does not send.  Left at its
+    default, exactly as for an object that lacks the attribute -- the alternative
+    is a `KeyError` nothing catches, and a 500 on the panel for every dataset
+    that peer serves.
+    """
+    from caterva2 import models
+    from caterva2.services import srv_utils
+
+    schunk = {
+        "cbytes": 1,
+        "chunkshape": 1,
+        "chunksize": 1,
+        "contiguous": True,
+        "cparams": {
+            "codec": 0,
+            "codec_meta": 0,
+            "clevel": 1,
+            "filters": [0],
+            "filters_meta": [0],
+            "typesize": 4,
+            "blocksize": 0,
+            "nthreads": 1,
+            "splitmode": 1,
+            "tuner": 0,
+            "use_dict": False,
+        },
+        "cratio": 1.0,
+        "nbytes": 1,
+        "urlpath": None,
+        "nchunks": 1,
+    }
+    # As a peer running a Caterva2 from before `accept_ranges` existed answers
+    info = {"shape": (4,), "chunks": (4,), "blocks": (4,), "dtype": "int32", "mtime": None}
+    meta = srv_utils.get_model_from_obj({**info, "schunk": schunk}, models.Metadata)
+    assert meta.accept_ranges is None
+    assert meta.shape == (4,)
+
+
 @pytest.mark.parametrize(
     ("params", "detail"),
     [

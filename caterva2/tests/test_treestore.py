@@ -158,6 +158,41 @@ def test_dir_and_group_info(fill_tree_public, client):
     assert ginfo["mtime"] is not None
 
 
+@pytest.fixture
+def fill_dict_public(client):
+    """A `.b2z` written through the flat DictStore API, which stays one.
+
+    It has no tree: its keys are paths, so a group in it is a prefix that some
+    key continues rather than an object of its own.
+    """
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    fname = "test_dict.b2z"
+    store = blosc2.DictStore(str(dest_dir / fname), mode="w")
+    store["/flat"] = blosc2.asarray(np.arange(7))
+    store["/grp/nested"] = blosc2.asarray(np.arange(30))
+    store.close()
+    return fname, client.get(TEST_CATERVA2_ROOT)
+
+
+def test_a_dictstore_prefix_is_a_group(fill_dict_public, client):
+    """What the listing hands out, `api/info` has to answer for.
+
+    A DictStore has no object for a group, so a prefix used to resolve to
+    nothing and 404 -- for a path the listing itself named.
+    """
+    fname, root = fill_dict_public
+    assert client.get_list(f"{root.name}/{fname}") == ["flat", "grp/nested"]
+    info = client.get_info(f"{root.name}/{fname}/grp")
+    assert info["kind"] == "group"
+    assert info["nfiles"] == 1
+    assert info["size"] > 0
+    # ...and a leaf is still a leaf, a missing key still missing
+    assert tuple(client.get_info(f"{root.name}/{fname}/flat")["shape"]) == (7,)
+    response = httpx.get(f"{client.urlbase}/api/info/{root.name}/{fname}/nope")
+    assert response.status_code == 404
+
+
 def test_a_container_refuses_coordinates(fill_tree_public, client):
     """A container is served as the file it is, so there is nothing to narrow.
 
@@ -476,6 +511,32 @@ def test_several_ranges_of_a_leaf_come_back_multipart(fill_tree_public, client):
     assert response.headers["content-type"].startswith("multipart/byteranges")
     assert raw[offset : offset + 16] in response.content
     assert raw[offset + 40 : offset + 56] in response.content
+
+
+def test_a_leaf_s_ranges_carry_the_container_s_validator(fill_tree_public, client):
+    """The two-request read is what the validator is for, leaves included.
+
+    A client reads a leaf's frame header in one ranged request and its chunk
+    offsets in another; without an `ETag` on either it cannot tell that the
+    container was not rewritten in between, which is exactly when the bytes it
+    reads as offsets are a chunk's.  `api/info` reports the same one, so the
+    client has something to compare against.
+    """
+    fname, root = fill_tree_public
+    info = httpx.get(f"{client.urlbase}/api/info/{root.name}/{fname}/g/a")
+    assert info.status_code == 200
+    etag = info.headers["etag"]
+    assert etag
+
+    ranged = httpx.get(_fetch_url(client, f"{fname}/g/a"), headers={"Range": "bytes=0-31"})
+    assert ranged.status_code == 206
+    assert ranged.headers["etag"] == etag
+    multi = httpx.get(_fetch_url(client, f"{fname}/g/a"), headers={"Range": "bytes=0-15, 40-55"})
+    assert multi.status_code == 206
+    assert multi.headers["etag"] == etag
+    whole = httpx.get(_fetch_url(client, f"{fname}/g/a"))
+    assert whole.status_code == 200
+    assert whole.headers["etag"] == etag
 
 
 def test_a_sliced_leaf_still_refuses_ranges(fill_tree_public, client):

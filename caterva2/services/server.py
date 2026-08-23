@@ -474,6 +474,12 @@ async def get_info(
         meta = srv_utils.container_member_info(abspath, inner_key)
         if meta is None:
             srv_utils.raise_not_found()
+        # The container's validator, which is the leaf's too: a leaf served in
+        # ranges is a window of that file, so what tells a client the window
+        # still holds is what tells it the file did not change under it
+        etag = dataset_etag(abspath)
+        if etag:
+            response.headers["ETag"] = etag
         return meta
     if abspath.is_dir():
         files = list(srv_utils.walk_files(abspath))
@@ -489,8 +495,15 @@ async def get_info(
     # a range.  Only said where it is certain: a directory or a lazy expression
     # is not a stored frame, and a container member depends on whether its leaf
     # has a window, so a client told nothing asks as it always did -- an omission
-    # costs a request, a wrong answer would cost correctness
-    if isinstance(meta, models.Metadata):
+    # costs a request, a wrong answer would cost correctness.
+    #
+    # A `.b2nd` that proxies an HDF5 dataset is one of those wrong answers: it
+    # reads as an `NDArray` here, so it arrives with a `Metadata` like any other,
+    # but `api/fetch` opens it as an `HDF5Proxy` and rebuilds what it serves --
+    # the file on disk is a proxy's chunks, not the array's.  It 416s a range,
+    # and a client that took "bytes" on trust would find that out on its first
+    # block read rather than on a probe it could have made
+    if isinstance(meta, models.Metadata) and not srv_utils.is_hdf5_proxy_meta(meta):
         meta.accept_ranges = "bytes"
     return meta
 
@@ -955,7 +968,7 @@ async def fetch_data(
             # cheaper than the rebuild below -- more faithful, since the rebuild
             # re-partitions (it slices and recompresses), and so disagrees with
             # the chunks and blocks api/info reports for the very same leaf.
-            return srv_utils.window_response(abspath, window, range_header)
+            return srv_utils.window_response(abspath, window, range_header, headers=with_etag(abspath))
 
     # Everything below builds its answer, so a range cannot be honoured: say so
     # here, before computing a body that is not going to be sent

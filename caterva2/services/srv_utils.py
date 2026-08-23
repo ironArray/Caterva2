@@ -109,6 +109,22 @@ def treestore_size(tree, prefix="/"):
     return sum(info.get("length", 0) for m, info in get_offsets().items() if m.startswith(rel))
 
 
+class _Group:
+    """What a container hands back for a group it has no object for.
+
+    A DictStore is flat: its keys are paths, so the hierarchy a listing walks is
+    the one they spell and a group is a prefix rather than a thing.  Something
+    still has to come back for one, since `is_group` is how every caller here
+    tells a group from a leaf.
+    """
+
+    def __repr__(self):
+        return "<group>"
+
+
+GROUP = _Group()
+
+
 class _DictStoreAdapter:
     """Adapter for a ``.b2z`` holding a flat DictStore.
 
@@ -137,16 +153,27 @@ class _DictStoreAdapter:
         except (KeyError, ValueError):
             # As for a TreeStore: keys come straight from the URL, so a
             # malformed one is a 404 rather than a 500
-            return None
+            pass
+        # Not a key, so it may still be a group: the store has no object for one
+        # -- its keys are paths and nothing else -- but a prefix some key
+        # continues is a directory as far as anything browsing this is
+        # concerned, and answering None for it would 404 a path the listing
+        # itself hands out
+        rel = f"/{key.lstrip('/')}".rstrip("/")
+        if not rel or any(k.startswith(f"{rel}/") for k in self._keys()):
+            return GROUP
+        return None
 
     def leaf_size(self, key):
         node = self.get(key)
-        return None if node is None else getattr(node, "cbytes", None)
+        if node is None or self.is_group(node):
+            return None
+        return getattr(node, "cbytes", None)
 
     def is_group(self, node):
-        # Nothing a DictStore hands back is a group: it stores leaves only, and
-        # the prefixes its keys share are not objects of their own
-        return False
+        # A DictStore stores leaves only, so the only group it has is the one
+        # `get` synthesizes from a prefix its keys share
+        return node is GROUP
 
     def close(self):
         with contextlib.suppress(Exception):
@@ -342,9 +369,15 @@ def compress_file(path):
 
 def get_model_from_obj(obj, model_class, **kwargs):
     if isinstance(obj, dict):
-
+        # A missing key is a missing attribute: a model may name a field that
+        # whoever produced this dict never heard of (a peer running an older
+        # Caterva2 answering `api/info`, say), and that field is to be left at
+        # its default, exactly as for an object that lacks the attribute
         def getter(o, k):
-            return o[k]
+            try:
+                return o[k]
+            except KeyError as exc:
+                raise AttributeError(k) from exc
     else:
         getter = getattr
 
@@ -376,6 +409,18 @@ def get_model_from_obj(obj, model_class, **kwargs):
     # from pprint import pprint
     # pprint(data)
     return model_class(**data)
+
+
+def is_hdf5_proxy_meta(meta):
+    """Whether `meta` describes a `.b2nd` that proxies an HDF5 dataset.
+
+    The same mark `open_b2` keys on, read back off the metadata: such a file is
+    an `NDArray` on disk and an `HDF5Proxy` once opened, and only the second of
+    those says what `api/fetch` will do with it -- rebuild what it serves, rather
+    than send the stored file.
+    """
+    vlmeta = getattr(getattr(meta, "schunk", None), "vlmeta", None) or {}
+    return vlmeta.get("_ftype") == "hdf5"
 
 
 def read_metadata(obj, mtime=None):
@@ -640,7 +685,9 @@ def parse_ranges(range_header, size):
     return merged
 
 
-def ranged_window_response(abspath, window, range_header, media_type="application/octet-stream"):
+def ranged_window_response(
+    abspath, window, range_header, media_type="application/octet-stream", headers=None
+):
     """Answer *range_header* out of the ``(offset, size)`` *window* of *abspath*.
 
     The window is a leaf's frame inside a container, so the coordinates are the
@@ -648,9 +695,15 @@ def ranged_window_response(abspath, window, range_header, media_type="applicatio
     its end is clamped to it.  Nothing outside the window a client named is ever
     served through here, whatever it asks for.
 
+    *headers* carries the validator, where the caller has one: a ranged read of a
+    leaf is the two-request pattern -- header first, chunk offsets second -- and
+    without an `ETag` the client cannot tell that the container was not rewritten
+    between them, which is exactly when the offsets it reads are someone else's.
+
     None when the header is not a byte range at all, which leaves the caller to
     answer as if it had not been sent.
     """
+    headers = headers or {}
     offset, size = window
     try:
         spans = parse_ranges(range_header, size)
@@ -672,7 +725,7 @@ def ranged_window_response(abspath, window, range_header, media_type="applicatio
                 frame.read(end - start + 1),
                 status_code=206,
                 media_type=media_type,
-                headers={**RANGES_OK, "Content-Range": f"bytes {start}-{end}/{size}"},
+                headers={**RANGES_OK, **headers, "Content-Range": f"bytes {start}-{end}/{size}"},
             )
         # Several at once, which is one round trip instead of one each: RFC 7233
         # carries them as a multipart body, each part saying which bytes it holds
@@ -690,20 +743,26 @@ def ranged_window_response(abspath, window, range_header, media_type="applicatio
         bytes(body),
         status_code=206,
         media_type=f"multipart/byteranges; boundary={boundary}",
-        headers=RANGES_OK,
+        headers={**RANGES_OK, **headers},
     )
 
 
-def window_response(abspath, window, range_header=None):
+def window_response(abspath, window, range_header=None, headers=None):
     """The stored image of a container leaf, out of the *window* of *abspath*.
 
     What `FileResponse` is for a dataset with a file of its own, for one that
     lives inside a container: the whole of its frame, or the ranges of it a
     client asked for.  Streamed rather than read whole, since a leaf can be as
     large as any dataset.
+
+    *headers* goes on either answer, and carries the container's validator: a
+    leaf is a window of that file, so what says the file did not change says the
+    window did not move.  `FileResponse` gets the same one for a stored dataset,
+    and `api/info` reports it for both, which is what a client compares against.
     """
+    headers = headers or {}
     if range_header:
-        ranged = ranged_window_response(abspath, window, range_header)
+        ranged = ranged_window_response(abspath, window, range_header, headers=headers)
         if ranged is not None:  # None: not a byte range, so answer as if unasked
             return ranged
     offset, size = window
@@ -722,7 +781,7 @@ def window_response(abspath, window, range_header=None):
     return fastapi.responses.StreamingResponse(
         stream(),
         media_type="application/octet-stream",
-        headers={**RANGES_OK, "Content-Length": str(size)},
+        headers={**RANGES_OK, **headers, "Content-Length": str(size)},
     )
 
 
