@@ -3,14 +3,22 @@
 
 name: Python Intel (ubuntu, amd64)
 
+# Every commit on every branch, not just `main`: work lives on long-running
+# feature branches here, and a branch nobody runs the tests on is a branch whose
+# tests are found broken at merge time.  A pull request from a fork triggers
+# `pull_request` (a fork's pushes are not pushes to this repo), so both are kept.
 on:
   push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
 permissions:
   contents: read
+
+# One run per branch: pushing again supersedes the run already going, which
+# matters most on the paid arm64 runner.  A run for `main` is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
