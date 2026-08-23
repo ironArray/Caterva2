@@ -62,6 +62,11 @@ server = [
     "caterva2[base-services]",
     "caterva2[hdf5]",
     "fastapi-mail",
+    # Not optional: `count_written` reads a frame's offsets through
+    # `blosc2.FsspecNDSource`, which is the whole of how a chunk fill reports
+    # itself, and `publish_dataset` writes through `fsspec.url_to_fs`.  blosc2
+    # keeps fsspec behind an extra, so nothing pulls it in on our account.
+    "fsspec",
     "fastapi-users[sqlalchemy]",
     "uvicorn[standard]",
     "furl",
