@@ -13,7 +13,10 @@
   two writers that both believe they own a chunk are resolved by the array
   rather than by anything either of them holds. `Client.written_chunks()` says
   how far a fill has got, read from the frame's own offsets, so there is no
-  bookkeeping to fall out of step with the array.
+  bookkeeping to fall out of step with the array. A chunk is checked against the
+  whole of the array's geometry before it is stored -- its chunksize, its
+  blocksize and its typesize -- since one compressed against another typesize
+  decompresses to values in the wrong places and says nothing about it.
 
 * A filled array is published as one finished frame. Set `publish_root` in the
   server configuration -- an fsspec URL of a directory -- and an array is copied
@@ -31,8 +34,11 @@
   the points live in and picking them out, and a block is nearly all waste for a
   single coordinate: nine scattered points of a 900^3 array cost 271 bytes in one
   request this way against 237 KB in nineteen. Not combinable with `slice_`,
-  `filter` or `field`, and refused for anything that is not an array of its own.
-  blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
+  `filter` or `field`, and refused -- rather than quietly dropped -- for
+  anything that cannot gather points: a container, or a dataset mounted from a
+  peer, which a provider fetches boxes of. A key may name at most a million
+  coordinates, since it travels in a body now and is no longer bounded by what a
+  URL holds. blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
 
 * `Client.get_slice()` and `ds[key]` take a fancy key -- a list or array of
   coordinates, or a boolean mask -- and send it as `indices` for the server to
@@ -40,7 +46,10 @@
   is the points, not the chunks holding them. `slice_to_string()` now refuses an
   index it cannot express instead of dropping it: a dropped index left an empty
   slice string, which asks for the whole dataset and hands back all of it,
-  neither what was asked for nor smaller.
+  neither what was asked for nor smaller. An `Ellipsis` is expanded against the
+  dataset's shape rather than refused, since it names the dimensions the key
+  does not, and a bound of 0 is written out: `ds[0:0]` selects nothing, where it
+  used to be spelled `:` and select everything.
 
 * `POST api/fetch` takes the same parameters in a body that the GET takes in a
   query, and is the same code behind them. It exists for the one thing a query
@@ -67,7 +76,9 @@
 * `api/info` reports `accept_ranges` for a dataset: `"bytes"` for one served
   from a file, `"none"` for one mounted from a peer and re-serialized here, and
   absent where it is not settled by the description alone (a container leaf,
-  whose answer depends on its own window). It says of `api/fetch` what that
+  whose answer depends on its own window, or a `.b2nd` that proxies an HDF5
+  dataset, which reads as a stored array here but is rebuilt when fetched).
+  A field an older peer does not send is simply absent, not an error. It says of `api/fetch` what that
   endpoint would answer, a request earlier: a client reading blocks over byte
   ranges asks `api/info` anyway, and can now tell a dataset it may range-read
   from one it may not without spending a request to find out. A field rather
@@ -78,7 +89,9 @@
   from the frame's generation counter as well as its size and mtime. Starlette's
   default is a digest of the mtime and the size, which a chunk written as a run
   of zeros can leave untouched -- such a write stores no payload, so the frame
-  can come out of it exactly as long as it went in.
+  can come out of it exactly as long as it went in. A container leaf carries the
+  container's, on `api/info` and on its ranged reads alike: a leaf is a window of
+  that file, so what says the file did not change says the window did not move.
 
 ## Changes from 2025.11.17.1 to 2025.12.3
 
