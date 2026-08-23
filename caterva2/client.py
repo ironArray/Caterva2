@@ -8,6 +8,7 @@
 ###############################################################################
 
 import ast
+import contextlib
 import functools
 import inspect
 import io
@@ -598,8 +599,13 @@ class File(_FileOpsMixin):
         >>> ds.slice(slice(0, 10))[:]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        # Fetch and return the data as a Blosc2 object / NumPy array
-        return self.client.get_slice(self.path, key, as_blosc2)
+        # Fetch and return the data as a Blosc2 object / NumPy array.  The path
+        # goes over rather than `self`, since that is what marks the response's
+        # kind; the shape travels beside it, for a key holding an `Ellipsis`
+        ndim = None
+        with contextlib.suppress(Exception):
+            ndim = len(self.shape)
+        return self.client.get_slice(self.path, key, as_blosc2, ndim=ndim)
 
 
 class Dataset(File):
@@ -956,6 +962,7 @@ class Client:
         self.urlbase = utils.urlbase_type(urlbase)
         self.cookie = None
         self.timeout = timeout
+        self._c2arrays = {}  # kept blosc2 views of remote arrays; see `_c2array`
         if auth is not None:
             if isinstance(auth, BasicAuth):
                 username = auth.username
@@ -994,7 +1001,7 @@ class Client:
 
     def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5, kind=None):
         url = f"{urlbase}/api/fetch/{path}"
-        if sum(len(str(v)) for v in params.values() if v is not None) > api_utils.MAX_QUERY_CHARS:
+        if api_utils.query_too_long(params):
             response = self._post_fetch(url, params, auth_cookie, timeout)
         else:
             response = self._xget(url, params=params, auth_cookie=auth_cookie, timeout=timeout)
@@ -1312,7 +1319,7 @@ class Client:
         # Does the same as get_slice but forces return of np array
         return self.get_slice(path, key=slice_, as_blosc2=False)
 
-    def get_slice(self, path, key=None, as_blosc2=True, field=None):
+    def get_slice(self, path, key=None, as_blosc2=True, field=None, ndim=None):
         """Get a slice of a File/Dataset.
 
         Parameters
@@ -1330,6 +1337,10 @@ class Client:
             as a NumPy array (equivalent to `self[key]`).
         field: str
             Shortcut to access a field in a structured array. If provided, `key` is ignored.
+        ndim: int
+            How many dimensions the dataset has, where the caller knows.  Only an
+            `Ellipsis` in the key needs it, and only one that is not its last
+            entry: what it stands for is every dimension the key does not name.
 
         Returns
         -------
@@ -1345,6 +1356,12 @@ class Client:
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
+        if ndim is None and isinstance(path, File):
+            # An `Ellipsis` needs it and nothing else does, so a dataset that
+            # cannot say how many dimensions it has is not a problem until one
+            # arrives -- where it does, `expand_ellipsis` says so
+            with contextlib.suppress(Exception):
+                ndim = len(path.shape)
         if isinstance(path, Table):
             kind = "ctable"
         elif isinstance(path, File):
@@ -1380,8 +1397,10 @@ class Client:
         else:
             # Coordinates go over as `indices` and are gathered by the server;
             # a plain box is a `slice_`, which says the same thing more cheaply
-            indices = api_utils.key_to_indices(key)
-            params = {"slice_": api_utils.slice_to_string(key)} if indices is None else {"indices": indices}
+            indices = api_utils.key_to_indices(key, ndim)
+            params = (
+                {"slice_": api_utils.slice_to_string(key, ndim)} if indices is None else {"indices": indices}
+            )
             # Fetch and return the data as a Blosc2 object / NumPy array
             return self._fetch_data(
                 path,
@@ -1577,6 +1596,7 @@ class Client:
         True
         """
         urlbase, remotepath = _format_paths(self.urlbase, remotepath)
+        self._forget_c2arrays()  # an upload puts a different array at a path
         return self._upload_file(
             local_dset,
             remotepath,
@@ -1612,6 +1632,7 @@ class Client:
             Object representing the file or dataset.
         """
         urlbase, _ = _format_paths(self.urlbase)
+        self._forget_c2arrays()  # a load puts a different array at a path
         return self._load_from_url(
             urlpath,
             dataset,
@@ -1764,13 +1785,39 @@ class Client:
         's3://a-bucket/published/@personal/run.b2nd'
         """
         url = f"{self.urlbase}/api/publish/{remotepath}"
-        response = self.httpx_client.post(url, headers={"Cookie": self.cookie}, timeout=self.timeout)
-        response.raise_for_status()
-        return response.json()["published"]
+        # Through `_post`, which is where a read timeout becomes a `TimeoutError`
+        # saying which timeout to raise -- a publish is a whole-file upload, so
+        # it is the call here most likely to hit one
+        return self._post(url, auth_cookie=self.cookie, timeout=self.timeout)["published"]
 
     def _c2array(self, remotepath):
-        """The blosc2 view of a remote array, which is what reads and writes chunks."""
-        return blosc2.C2Array(str(remotepath), urlbase=self.urlbase, auth_token=self.cookie)
+        """The blosc2 view of a remote array, which is what reads and writes chunks.
+
+        Kept between calls, because building one reads `api/info`: a fill writes
+        a chunk at a time, and would otherwise spend a round trip on the array's
+        geometry before every one of them -- a geometry that cannot change while
+        the fill runs, since an array is laid out once here and never resized.
+
+        Anything this client does that could put a different array at a path
+        drops the lot; see `_forget_c2arrays`.
+        """
+        key = str(remotepath)
+        c2array = self._c2arrays.get(key)
+        if c2array is None:
+            c2array = blosc2.C2Array(key, urlbase=self.urlbase, auth_token=self.cookie)
+            self._c2arrays[key] = c2array
+        return c2array
+
+    def _forget_c2arrays(self):
+        """Drop the kept `C2Array` views: one of the arrays they describe may
+        have just been replaced, moved or removed, and a view of the old one
+        would carry the old geometry into a write.
+
+        All of them rather than the path in hand, because a directory can be
+        removed, moved or copied whole: the paths that names are not this
+        client's to enumerate, and rebuilding a view costs one request.
+        """
+        self._c2arrays.clear()
 
     def append(self, remotepath, data):
         """
@@ -1816,6 +1863,7 @@ class Client:
         client = self.httpx_client
         url = f"{self.urlbase}/api/append/{remotepath}"
         headers = {"Cookie": self.cookie}
+        self._forget_c2arrays()  # an append resizes the array
         response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         new_shape = tuple(response.json())
@@ -1893,6 +1941,7 @@ class Client:
         if isinstance(path, File):
             path = path.path
         _, path = _format_paths(self.urlbase, path)
+        self._forget_c2arrays()  # what is removed may be a whole directory
         result = self._post(
             f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
@@ -1931,6 +1980,7 @@ class Client:
         """
         if isinstance(src, File):
             src = src.path
+        self._forget_c2arrays()  # what moves may be a whole directory
         result = self._post(
             f"{self.urlbase}/api/move/",
             {"src": str(src), "dst": str(dst)},
@@ -1976,6 +2026,7 @@ class Client:
         """
         if isinstance(src, File):
             src = src.path
+        self._forget_c2arrays()  # a copy may land on top of an existing array
         result = self._post(
             f"{self.urlbase}/api/copy/",
             {"src": str(src), "dst": str(dst)},

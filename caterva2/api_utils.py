@@ -9,24 +9,73 @@
 import json
 import os
 import re
+import urllib.parse
 
 # Requirements
 import blosc2
 import numpy as np
 
-MAX_QUERY_CHARS = 60_000
-"""How long a query may be before the parameters go in a body instead.
+MAX_QUERY_CHARS = 7_500
+"""How long an *encoded* query may be before the parameters go in a body instead.
 
-A URL is not a body: past roughly this much the HTTP client gives up, with an
-error about URL components rather than about coordinates.  `api/fetch` answers a
-POST carrying the same parameters for exactly this reason, so a key of more
-coordinates than a URL holds is a change of verb and nothing else.  Below it
-nothing changes, which is what keeps every server that ever served a GET
-serving one.
+Measured after percent-encoding, which is what actually travels: a list of
+coordinates is mostly `[`, `]` and `,`, and each of those is three characters on
+the wire, so the raw string is no guide to whether the request line fits.
+
+The bound is what deployments accept rather than what a client can build.  A
+request line has to pass every hop: uvicorn's h11 caps one at 16 KiB, nginx's
+`large_client_header_buffers` at 8 KiB by default, and some proxies lower still.
+This leaves room under the smallest of those for the path and the rest of the
+line.  `api/fetch` answers a POST carrying the same parameters for exactly this
+reason, so a key of more coordinates than a URL holds is a change of verb and
+nothing else.  Below it nothing changes, which is what keeps every server that
+ever served a GET serving one.
 """
 
 
-def slice_to_string(slice_):
+def query_too_long(params):
+    """Whether *params* spell a query string too long to send in an URL.
+
+    The encoded length, not the raw one: see `MAX_QUERY_CHARS`.
+    """
+    query = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    return len(query) > MAX_QUERY_CHARS
+
+
+def expand_ellipsis(key, ndim=None):
+    """*key* with its `Ellipsis` written out as the full slices it stands for.
+
+    `Ellipsis` is a shorthand for "every dimension not named here", so what it
+    stands for depends on how many there are.  Where *ndim* is known it is
+    written out; where it is not, a trailing one is dropped -- the dimensions it
+    covers are taken whole either way, which is what leaving them unnamed already
+    says -- and one anywhere else is refused rather than read as a different key,
+    since dropping it would shift every entry after it onto the wrong dimension.
+    """
+    entries = key if isinstance(key, tuple) else (key,)
+    count = sum(1 for entry in entries if entry is Ellipsis)
+    if count == 0:
+        return key
+    if count > 1:
+        raise IndexError("A key may hold at most one Ellipsis")
+    at = next(i for i, entry in enumerate(entries) if entry is Ellipsis)
+    named = len(entries) - 1
+    if ndim is None:
+        if at != named:  # not trailing, so what it covers cannot be counted here
+            raise IndexError(
+                "Cannot expand an Ellipsis that is not the last entry of the key "
+                "without knowing how many dimensions the dataset has"
+            )
+        filled = ()
+    else:
+        if named > ndim:
+            raise IndexError(f"The key names {named} dimensions where the dataset has {ndim}")
+        filled = (slice(None),) * (ndim - named)
+    return entries[:at] + filled + entries[at + 1 :]
+
+
+def slice_to_string(slice_, ndim=None):
+    slice_ = expand_ellipsis(slice_, ndim)
     if slice_ is None or slice_ == () or slice_ == slice(None):
         return ""
     slice_parts = []
@@ -36,8 +85,11 @@ def slice_to_string(slice_):
         if isinstance(index, int):
             slice_parts.append(str(index))
         elif isinstance(index, slice):
-            start = index.start or ""
-            stop = index.stop or ""
+            # Written out rather than tested for truth: a bound of 0 is a bound,
+            # and an empty string here says "no bound at all", which is the whole
+            # dimension.  `0:0` selects nothing and has to keep saying so
+            start = "" if index.start is None else str(index.start)
+            stop = "" if index.stop is None else str(index.stop)
             if index.step not in (1, None):
                 raise IndexError("Only step=1 is supported")
             # step = index.step or ''
@@ -55,7 +107,7 @@ def slice_to_string(slice_):
     return ", ".join(slice_parts)
 
 
-def key_to_indices(key):
+def key_to_indices(key, ndim=None):
     """*key* as the `indices` parameter names it, or None if it needs no such thing.
 
     `api/fetch` takes a fancy key as JSON, one entry per dimension, because a
@@ -70,6 +122,7 @@ def key_to_indices(key):
     The key goes over as it was written, not as numpy would expand it, since the
     server indexes a real array with it and its reading is numpy's own.
     """
+    key = expand_ellipsis(key, ndim)
     entries = key if isinstance(key, tuple) else (key,)
     if not any(isinstance(k, (list, np.ndarray)) for k in entries):
         return None
@@ -89,7 +142,11 @@ def key_to_indices(key):
         elif isinstance(entry, slice):
             if entry.step not in (1, None):
                 raise IndexError("Only step=1 is supported")
-            out.append(None if entry == slice(None) else f"{entry.start or ''}:{entry.stop or ''}")
+            # As `slice_to_string` spells one, bound of 0 included: an empty
+            # string is "no bound", which is the whole dimension and not `0:0`
+            start = "" if entry.start is None else str(entry.start)
+            stop = "" if entry.stop is None else str(entry.stop)
+            out.append(None if entry == slice(None) else f"{start}:{stop}")
         else:
             raise IndexError(f"Cannot index a remote array with {entry!r}")
     return json.dumps(out, separators=(",", ":"))

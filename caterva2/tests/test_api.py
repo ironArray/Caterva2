@@ -405,6 +405,33 @@ def test_the_client_sends_a_long_key_in_a_body(examples_dir, client, fill_public
     np.testing.assert_array_equal(ds[key], a[key])
 
 
+def test_an_ellipsis_is_the_dimensions_it_stands_for(examples_dir, client, fill_public):
+    """`...` names every dimension the key does not, so it is expanded, not
+    refused: dropping it shifts the entries after it onto the wrong dimension,
+    and refusing it turns a key numpy reads into an error."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    np.testing.assert_array_equal(ds[...], a[...])
+    np.testing.assert_array_equal(ds[..., 0], a[..., 0])
+    np.testing.assert_array_equal(ds[0, ...], a[0, ...])
+    np.testing.assert_array_equal(ds[..., [1, 5, 9]], a[..., [1, 5, 9]])
+
+    ds2 = client.get(TEST_CATERVA2_ROOT)["dir1/ds-2d.b2nd"]
+    a2 = blosc2.open(examples_dir / "dir1/ds-2d.b2nd")[:]
+    np.testing.assert_array_equal(ds2[..., 1], a2[..., 1])
+    np.testing.assert_array_equal(ds2[1, ...], a2[1, ...])
+
+
+def test_a_bound_of_zero_is_a_bound(examples_dir, client, fill_public):
+    """`0:0` selects nothing, and an empty string in a slice string says "no
+    bound at all" -- which is the whole dimension, the one answer it is not."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    assert len(ds[0:0]) == 0
+    np.testing.assert_array_equal(ds[0:0], a[0:0])
+    assert len(ds.slice(slice(2, 0), as_blosc2=False)) == 0
+
+
 def test_the_client_refuses_a_key_it_cannot_spell(examples_dir, client, fill_public):
     # Dropped instead of refused, an index asks for the whole dataset and hands
     # back all of it -- neither what was asked for nor smaller
