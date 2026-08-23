@@ -107,7 +107,7 @@ class Cat2LazyArr(pydantic.BaseModel):
     compute: bool
 
 
-class FetchPayload(pydantic.BaseModel):
+class FetchPayload(pydantic.BaseModel, extra="forbid"):
     """What `POST api/fetch` carries, which is what its query string carries.
 
     A URL is a poor place for a long list of coordinates: a key of more than
@@ -117,6 +117,11 @@ class FetchPayload(pydantic.BaseModel):
     The fields are the GET parameters by the same names, `indices` included as
     the same JSON string, so that one grammar and one parser serve both verbs
     and neither can drift from the other.
+
+    A field this does not name is refused rather than dropped.  Every parameter
+    here narrows the answer, so ignoring a misspelled one -- or one a newer
+    client sends -- would not fail: it would quietly serve the whole dataset to
+    a caller who asked for three coordinates.
     """
 
     indices: str | None = None

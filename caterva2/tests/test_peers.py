@@ -177,6 +177,20 @@ def test_fetch_rejects_filter_field_and_steps(two_servers):
         assert r.status_code == 400, params
 
 
+def test_fetch_rejects_coordinates_on_a_peer(two_servers):
+    """A provider fetches boxes, so coordinates have nowhere to go here.
+
+    Refused rather than dropped: a dropped key is not a smaller answer but the
+    whole dataset, handed back as though it were the points that were asked for.
+    """
+    urlbase, _data, _adir = two_servers
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"indices": "[[1,3]]"}, timeout=5)
+    assert r.status_code == 400
+    assert "indices" in r.json()["detail"]
+    # ...and nothing came back that could be read as the whole dataset instead
+    assert not r.content.startswith(b"\x00b2nd")
+
+
 def test_fetch_slice_correct(two_servers):
     urlbase, data, _adir = two_servers
     r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "2:4"}, timeout=5)

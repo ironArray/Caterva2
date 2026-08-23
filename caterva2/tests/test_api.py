@@ -437,6 +437,59 @@ def test_a_post_fetch_is_the_get_by_another_route(examples_dir, client, fill_pub
         assert got.content == expected.content
 
 
+@pytest.mark.parametrize(
+    ("params", "detail"),
+    [
+        ({"slice_": "1:2:3:4"}, "not a slice"),
+        ({"slice_": "abc"}, "not a slice"),
+        ({"indices": '["1:2:3:4"]'}, "not a slice"),
+    ],
+)
+def test_a_malformed_slice_is_the_caller_s_fault(params, detail, client, fill_public):
+    """A 400 about the request, not a 500 about the server.
+
+    A segment of four parts makes `slice()` raise a `TypeError`, which is not
+    what either parser catches, and `slice_` was not read inside a `try` at all.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    response = httpx.get(url, params=params)
+    assert response.status_code == 400
+    assert detail in response.json()["detail"]
+
+
+def test_a_post_fetch_refuses_a_field_it_does_not_know(client, fill_public):
+    """Every parameter narrows the answer, so an ignored one widens it.
+
+    A misspelled `indices` dropped silently leaves the request naming nothing,
+    and what comes back is the whole dataset with a 200 -- to a caller who
+    believes they asked for three coordinates.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    response = httpx.post(url, json={"indicies": "[[1,5,9]]"}, timeout=30)
+    assert response.status_code == 422
+
+
+def test_more_coordinates_than_are_gathered_are_refused(client, fill_public):
+    """`POST api/fetch` lifted the URL's length limit, which was the only bound.
+
+    Without one of its own, a single anonymous request can name any number of
+    points and have the server gather, materialize and serialize all of them.
+
+    The count is `caterva2.services.server.MAX_FETCH_COORDS`, written out rather
+    than imported: importing that module builds the app, which wants a secret
+    this process has no reason to have.  Raising the cap there fails this here.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    key = json.dumps([[0] * (1_000_000 + 1)], separators=(",", ":"))
+    response = httpx.post(url, json={"indices": key}, timeout=60)
+    assert response.status_code == 400
+    assert "batches" in response.json()["detail"]
+    # ...and the character bound refuses before the parse, not after it
+    response = httpx.post(url, json={"indices": "[" + "0" * (8 * 1024 * 1024 + 1) + "]"}, timeout=60)
+    assert response.status_code == 400
+    assert "at most" in response.json()["detail"]
+
+
 def test_coordinates_do_not_combine_with_a_slice(examples_dir, client, fill_public):
     ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
     url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"

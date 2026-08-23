@@ -638,17 +638,55 @@ def split_and_resolve(path, user, resolver=None):
 
 
 def parse_segment(segment):
-    """One dimension of a slice string: `3`, `1:4`, `:9`, `:`."""
+    """One dimension of a slice string: `3`, `1:4`, `:9`, `:`.
+
+    Raises `ValueError` for anything else, that being what the callers catch and
+    turn into a 400.  A segment of four parts would make `slice()` raise a
+    `TypeError` instead, which is a 500 about the server rather than a 400 about
+    the request, so it is counted here.
+    """
     if ":" not in segment:
         return int(segment)
-    return slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
+    parts = [int(x.strip()) if x.strip() else None for x in segment.split(":")]
+    if len(parts) > 3:
+        raise ValueError(f"{segment!r} is not a slice: a slice has a start, a stop and a step")
+    return slice(*parts)
 
 
 def parse_slice(string):
+    """A slice string as a key, or None where it names nothing.
+
+    Raises `ValueError` for a string that is not one; the callers turn that into
+    a 400, since what it describes is the request and not this server.
+    """
     if not string:
         return None
     obj = [parse_segment(segment) for segment in string.split(",")]
     return tuple(obj) if len(obj) > 1 else obj[0]
+
+
+MAX_INDICES_CHARS = 8 * 1024 * 1024
+"""How long the `indices` parameter may be, measured before it is parsed.
+
+The first bound anything here has, and the cheapest: it is a length, checked
+against a string already in hand, and it caps what `json.loads` is asked to
+build.  Generous enough for any key `MAX_FETCH_COORDS` allows -- a coordinate
+costs a handful of characters -- and small enough that no single request can
+spend the server's memory on a parse whose result is going to be refused.
+"""
+
+MAX_FETCH_COORDS = 1_000_000
+"""How many coordinates one fetch may name, across every dimension of the key.
+
+`POST api/fetch` exists to lift the length limit a query string put on a key,
+and that limit was the only thing bounding this: without a bound of its own, one
+request can ask the server to gather, materialize and serialize an array of any
+size at all.  The cap has to be said out loud now that the URL no longer says it.
+
+A million points is far past what a scattered read is for and still a bounded
+amount of work.  A caller with more of them has a whole dataset to fetch, or a
+few batches to ask for.
+"""
 
 
 def parse_indices(string):
@@ -663,13 +701,23 @@ def parse_indices(string):
     has no unambiguous reading as a comma-separated string, and `json.loads` is
     the one parser here that is not this module's to get wrong.  Every entry is
     checked: what comes back indexes an array, so nothing else may reach it.
+
+    Bounded as well as checked: see `MAX_INDICES_CHARS` and `MAX_FETCH_COORDS`.
     """
+    if len(string) > MAX_INDICES_CHARS:
+        raise ValueError(f"indices is {len(string)} characters where at most {MAX_INDICES_CHARS} are read")
     try:
         raw = json.loads(string)
     except json.JSONDecodeError as exc:
         raise ValueError(f"indices is not JSON: {exc}") from exc
     if not isinstance(raw, list):
         raise ValueError("indices must be a JSON list, one entry per dimension")
+    coords = sum(len(entry) for entry in raw if isinstance(entry, list))
+    if coords > MAX_FETCH_COORDS:
+        raise ValueError(
+            f"indices names {coords} coordinates where at most {MAX_FETCH_COORDS} are gathered; "
+            "ask for them in batches"
+        )
     key = []
     for entry in raw:
         # `bool` is an `int` in Python and a mask is not one of these, so it is
@@ -734,7 +782,10 @@ async def fetch_data(
     416, rather than quietly returning the whole body with a 200.
     """
 
-    slice_ = parse_slice(slice_)
+    try:
+        slice_ = parse_slice(slice_)
+    except ValueError as exc:
+        srv_utils.raise_bad_request(f"slice_ is not a slice: {exc}")
     if indices is not None:
         # Gathered here rather than at the client, which would have to fetch the
         # blocks holding the points to pick them out of: scattered points are
@@ -755,6 +806,15 @@ async def fetch_data(
             # datasets yet; refuse loudly rather than return wrong data.
             raise fastapi.HTTPException(
                 status_code=400, detail="filter/field are not supported on peer datasets yet"
+            )
+        if indices is not None:
+            # A provider fetches boxes: `RootProvider.fetch` takes a `slice_` and
+            # nothing else, so coordinates have nowhere to go here.  Refused
+            # rather than dropped -- a dropped key is not a smaller answer but
+            # the whole dataset, handed back as though it were the points asked
+            # for, which is the one failure this parameter must not have
+            raise fastapi.HTTPException(
+                status_code=400, detail="indices are not supported on peer datasets yet"
             )
         rel = "/".join(path.parts[1:])
         try:
@@ -827,7 +887,10 @@ async def fetch_data(
         # a typesize it has not got (a 500 where the docstring promises the
         # stored image).  Ranges come with FileResponse, so a leaf of it is
         # reachable byte-wise too.
-        if slice_ is not None:
+        if slice_ is not None or indices is not None:
+            # Both narrow an answer, and a container has nothing to narrow: what
+            # is served here is the file itself.  Answering the whole of it to a
+            # caller who named two coordinates would be a widening, not a slice
             srv_utils.raise_bad_request(
                 f"{path} is a container, so there is nothing to slice; ask for a dataset inside it"
             )
@@ -903,8 +966,11 @@ async def fetch_data(
             srv_utils.raise_bad_request(f"{path} is not an array that can be indexed by coordinates")
         try:
             # `NDArray` reads scattered coordinates through its own sparse gather,
-            # so this touches the chunks the points land in and not the dataset
-            data = blosc2.asarray(array[indices]).to_cframe()
+            # so this touches the chunks the points land in and not the dataset.
+            # Off the event loop: bounded by `MAX_FETCH_COORDS` but not small, and
+            # a gather that ran here would stall every other request for its
+            # duration -- it reads, materializes and serializes, all blocking
+            data = await concurrency.run_in_threadpool(lambda: blosc2.asarray(array[indices]).to_cframe())
         except (IndexError, ValueError) as exc:
             srv_utils.raise_bad_request(str(exc))
     elif isinstance(array, blosc2.CTable):

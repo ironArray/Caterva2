@@ -158,6 +158,22 @@ def test_dir_and_group_info(fill_tree_public, client):
     assert ginfo["mtime"] is not None
 
 
+def test_a_container_refuses_coordinates(fill_tree_public, client):
+    """A container is served as the file it is, so there is nothing to narrow.
+
+    `slice_` was refused here and `indices` was not, so a fetch naming two
+    coordinates got the whole container file back with a 200.
+    """
+    fname, root = fill_tree_public
+    url = f"{client.urlbase}/api/fetch/{root.name}/{fname}"
+    response = httpx.get(url, params={"indices": "[[1,2]]"})
+    assert response.status_code == 400
+    assert "nothing to slice" in response.json()["detail"]
+    # ...as `slice_` already was, and the whole of it still comes back unasked
+    assert httpx.get(url, params={"slice_": "0:1"}).status_code == 400
+    assert httpx.get(url).status_code == 200
+
+
 def test_malformed_inner_key_404(fill_tree_public, client):
     """Malformed TreeStore keys (e.g. NUL bytes survive URL decoding) raise
     ValueError inside blosc2; they must 404, not 500."""
