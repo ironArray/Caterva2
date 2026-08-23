@@ -111,7 +111,12 @@ class RootProvider(abc.ABC):
         """api/list contract: names relative to the requested path, sorted."""
 
     @abc.abstractmethod
-    async def rows(self, root: str, prefix: str = "") -> list[tuple[str, int, str | None]]:
+    # Quoted, and it has to be: `list` here is the method above, not the
+    # builtin -- these are named after the endpoints they serve -- so an
+    # annotation evaluated where it stands subscripts a function and raises at
+    # import, taking the whole server with it.  Python 3.14 defers annotations
+    # (PEP 649) and never looks, which is why this ran anywhere at all
+    async def rows(self, root: str, prefix: str = "") -> "list[tuple[str, int, str | None]]":
         """(key, size, kind) triples for the htmx path-list: the whole root
         when `prefix` is empty, else the members of the container at
         `prefix` (keys relative to it). kind is "container" (mountable),
