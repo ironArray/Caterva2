@@ -404,6 +404,41 @@ def test_ctable_cache_hit_and_layout(two_servers):
     assert not list((adir / "peercache").rglob("*.ctbl.json"))
 
 
+def test_a_cache_of_another_dtype_is_rebuilt(two_servers):
+    """The mtime says the remote did not change, not that this code did not.
+
+    A cache written before a column's validity crossed it holds a narrower dtype
+    than the source now describes: reused, it pairs a source whose chunks are one
+    itemsize with a cache laid out for another, and is read for a field it has
+    not got.  What the cache holds is recorded beside what the remote held.
+    """
+    from c2cache import remote
+
+    urlbase, _data, adir = two_servers
+    _fetch_table(urlbase, "@labb/tbl.b2z", "0:32")
+    matching = [(c, a, m) for c, a, m in _ctable_caches(adir) if m.get("path") == "@public/tbl.b2z"]
+    assert len(matching) == 1
+    cpath, arr, meta = matching[0]
+    assert meta["dtype"] == str(arr.dtype)
+    assert meta["layout"] == remote.CACHE_LAYOUT
+    mtime, dtype = meta["mtime"], meta["dtype"]
+    del arr
+
+    for stale in ({"dtype": "[('x', '<i4')]"}, {"layout": remote.CACHE_LAYOUT - 1}):
+        cache = blosc2.open(str(cpath), mode="a", locking=True)
+        cache.schunk.vlmeta["_peer_src"] = json.dumps({**meta, **stale})
+        del cache
+        # ...and the next read notices, rather than reading the old layout
+        t = _fetch_table(urlbase, "@labb/tbl.b2z", "0:32")
+        assert t["x"][:].tolist() == list(range(32))
+        again = [(c, a, m) for c, a, m in _ctable_caches(adir) if m.get("path") == "@public/tbl.b2z"]
+        assert len(again) == 1
+        _, arr, meta = again[0]
+        assert (meta["mtime"], meta["dtype"]) == (mtime, dtype)
+        assert meta["layout"] == remote.CACHE_LAYOUT
+        del arr
+
+
 def test_ctable_nested_in_tree_fetch(two_servers):
     urlbase, _data, _adir = two_servers
     t = _fetch_table(urlbase, "@labb/tree.b2z/dir/tbl", "10:20")

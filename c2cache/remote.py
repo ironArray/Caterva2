@@ -142,17 +142,37 @@ def cache_path(pool_dir, peer_id, remote_path):
     return pathlib.Path(pool_dir) / (h + ".b2nd")
 
 
+CACHE_LAYOUT = 2
+"""What version of this module's cache layout a cache on disk was written by.
+
+Bumped whenever what a cache holds stops being readable by the code that reads
+it -- as of 2: the `_notnull:` fields a masked-nullable CTable column now carries
+(MASK_FIELD_PREFIX), which widened the compound dtype of every cache of such a
+table.  The mtime says whether the *remote* changed and nothing about that, so
+without this a cache written before the change is reopened against a source of
+the new dtype: two chunk layouts for one buffer, and a read for a field the
+cached array has not got.
+"""
+
+
 def open_cached_proxy(source, cpath, remote_mtime):
     """Return a blosc2.Proxy over `source` with a persistent sparse cache at
     `cpath`. Creates the cache on first use; drops and recreates it when the
-    remote dataset changed (mtime mismatch -> stale-chunk protection)."""
+    remote dataset changed (mtime mismatch -> stale-chunk protection) or when
+    what is cached no longer matches what the source now describes (dtype or
+    cache-layout mismatch -> stale-format protection)."""
     cpath = pathlib.Path(cpath)
+    dtype = str(source.dtype)
     cache = None
     if cpath.exists():
         try:
             cache = blosc2.open(str(cpath), mode="a", locking=True)
             meta = json.loads(cache.schunk.vlmeta.get("_peer_src", "{}"))
-            valid = meta.get("mtime") == remote_mtime
+            valid = (
+                meta.get("mtime") == remote_mtime
+                and meta.get("dtype") == dtype
+                and meta.get("layout") == CACHE_LAYOUT
+            )
         except Exception:
             # A cache that won't open (e.g. left half-written by a crashed
             # writer) is just an invalid cache: rebuild it, don't crash.
@@ -178,7 +198,15 @@ def open_cached_proxy(source, cpath, remote_mtime):
         # kind/schema) so the offline path can rebuild responses from the
         # cache alone, without a fresh api/info.
         extra = getattr(source, "src_meta", None) or {}
-        cache.schunk.vlmeta["_peer_src"] = json.dumps({"path": source.path, "mtime": remote_mtime, **extra})
+        cache.schunk.vlmeta["_peer_src"] = json.dumps(
+            {
+                "path": source.path,
+                "mtime": remote_mtime,
+                "dtype": dtype,
+                "layout": CACHE_LAYOUT,
+                **extra,
+            }
+        )
     return blosc2.Proxy(source, _cache=cache)
 
 
@@ -239,8 +267,12 @@ def _mask_columns(schema_dict):
 def _ctable_fixed_dtypes(schema_dict):
     """Compound numpy dtype covering every column of `schema_dict` in schema
     order, or None when the table is non-cacheable: any list/varlen-scalar/
-    dictionary/ndarray column, a column whose nulls live in a mask rather than
-    in a value, or column names numpy rejects as structured field names."""
+    dictionary/ndarray column, or column names numpy rejects as structured field
+    names.
+
+    A column whose nulls live in a mask is cacheable, and gets a `bool` field of
+    its own after the columns to carry that mask across; see
+    `MASK_FIELD_PREFIX`."""
     # Internal blosc2 APIs (schema_compiler, CTable._is_* predicates),
     # pinned to the blosc2>=4.8.1 floor in pyproject.
     from blosc2.schema_compiler import schema_from_dict
