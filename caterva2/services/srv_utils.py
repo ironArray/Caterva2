@@ -791,6 +791,30 @@ def window_response(abspath, window, range_header=None, headers=None):
     )
 
 
+async def read_bounded_body(request, limit):
+    """The request's body, refused with a 413 as soon as it goes past *limit*.
+
+    Read off the stream rather than through `await request.body()`, which is
+    what makes this a bound: a body already in hand has already been allocated,
+    so a check after it is a check on what the server has finished spending.
+    Nothing here answers a request that big, and the length a client declares is
+    refused before a byte of it is read where it declares one.
+    """
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise fastapi.HTTPException(
+            status_code=413, detail=f"the body is {declared} bytes where at most {limit} are read"
+        )
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > limit:
+            raise fastapi.HTTPException(
+                status_code=413, detail=f"the body is longer than the {limit} bytes this reads"
+            )
+    return bytes(body)
+
+
 def refuse_range(range_header, path):
     """416 a ranged request for something that is computed rather than stored."""
     if range_header:

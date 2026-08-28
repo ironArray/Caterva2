@@ -44,6 +44,7 @@ import nbconvert
 import nbformat
 import numpy as np
 import PIL.Image
+import pydantic
 import pygments
 import uvicorn
 from blosc2 import linalg_funcs_list as linalg_funcs
@@ -737,11 +738,27 @@ def parse_slice(string):
 MAX_INDICES_CHARS = 8 * 1024 * 1024
 """How long the `indices` parameter may be, measured before it is parsed.
 
-The first bound anything here has, and the cheapest: it is a length, checked
+The first bound the parse has, and the cheapest: it is a length, checked
 against a string already in hand, and it caps what `json.loads` is asked to
 build.  Generous enough for any key `MAX_FETCH_COORDS` allows -- a coordinate
-costs a handful of characters -- and small enough that no single request can
-spend the server's memory on a parse whose result is going to be refused.
+costs a handful of characters.
+
+Not a bound on the request, though: by the time a string is in hand it has been
+read.  That bound is `MAX_FETCH_BODY`, which is what stops a body before it is
+allocated.
+"""
+
+MAX_FETCH_BODY = MAX_INDICES_CHARS + 2**20
+"""How much of a `POST api/fetch` body is read at all.
+
+What `MAX_INDICES_CHARS` cannot be: a body is read whole before any parameter
+of it can be measured, so a length checked after the read describes what the
+server already spent.  Read off the request stream against this instead, and a
+caller cannot make an anonymous fetch allocate half a gigabyte.
+
+A megabyte over the longest `indices` this parses, which is the room the JSON
+around it takes -- so every request that would have been answered still is, and
+the refusal a too-long key gets is still the one about the key.
 """
 
 MAX_FETCH_COORDS = 1_000_000
@@ -1077,10 +1094,20 @@ async def fetch_data(
     )
 
 
-@app.post("/api/fetch/{path:path}")
+@app.post(
+    "/api/fetch/{path:path}",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": models.FetchPayload.model_json_schema()},
+            },
+        }
+    },
+)
 async def post_fetch_data(
     path: pathlib.Path,
-    payload: models.FetchPayload,
+    request: Request,
     user: db.User = Depends(optional_user),
 ):
     """
@@ -1091,6 +1118,11 @@ async def post_fetch_data(
     string cannot do: carry a key of more coordinates than a URL has room for.
     A client small enough to fit its key in an URL has no reason to come here.
 
+    The body is read here rather than declared as a parameter, so that its
+    length is a bound and not a report: FastAPI reads a declared body whole
+    before anything of ours runs, so `MAX_INDICES_CHARS` would be checked
+    against a string the server had already been made to allocate.
+
     Byte ranges are not offered.  A `Range` header pairs with a GET of a stored
     frame, and nothing that would arrive by this route is one.
 
@@ -1098,14 +1130,22 @@ async def post_fetch_data(
     ----------
     path : pathlib.Path
         The path to the dataset.
-    payload : models.FetchPayload
-        `indices`, `slice_`, `filter` and `field`, as the query takes them.
+    request : Request
+        Carries `indices`, `slice_`, `filter` and `field` as JSON, by the names
+        the query takes them under (`models.FetchPayload`).
 
     Returns
     -------
     FileResponse or StreamingResponse
         Whatever the GET would have returned for the same parameters.
     """
+    body = await srv_utils.read_bounded_body(request, MAX_FETCH_BODY)
+    try:
+        payload = models.FetchPayload.model_validate_json(body)
+    except pydantic.ValidationError as exc:
+        # The status FastAPI answers a body it cannot read with, so a client
+        # that misspells a field sees the same thing however this is written
+        raise fastapi.HTTPException(status_code=422, detail=json.loads(exc.json())) from exc
     return await fetch_data(
         path=path,
         slice_=payload.slice_,

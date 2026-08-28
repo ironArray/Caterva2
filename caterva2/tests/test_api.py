@@ -562,6 +562,26 @@ def test_more_coordinates_than_are_gathered_are_refused(client, fill_public):
     assert "at most" in response.json()["detail"]
 
 
+def test_a_body_past_the_bound_is_refused_before_it_is_read(client, fill_public):
+    """The character bound on `indices` is a bound on the parse, not the request.
+
+    A body is read whole before any field of it can be measured, so
+    `MAX_INDICES_CHARS` described what the server had already been made to
+    allocate.  The request itself is bounded now, by `MAX_FETCH_BODY`, and a
+    body past it is refused with a 413 -- while a key that fits still gets the
+    400 about the key.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    # 32 MB, well past the 9 MB this reads (8 MB of `indices` plus the JSON
+    # around it); sent as one body rather than streamed, as a client would
+    body = b'{"indices": "[' + b"0" * (32 * 1024 * 1024) + b']"}'
+    response = httpx.post(url, content=body, headers={"Content-Type": "application/json"}, timeout=60)
+    assert response.status_code == 413
+    # ... and a body under the bound is still answered by the parse, not by this
+    response = httpx.post(url, json={"indices": "[[0,1]]"}, timeout=30)
+    assert response.status_code == 200
+
+
 def test_coordinates_do_not_combine_with_a_slice(examples_dir, client, fill_public):
     ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
     url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
