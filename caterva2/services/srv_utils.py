@@ -774,7 +774,13 @@ def window_response(abspath, window, range_header=None, headers=None):
             while left > 0:
                 data = container.read(min(left, 2**20))
                 if not data:
-                    break
+                    # The file ended before the window did -- it was rewritten or
+                    # truncated under the read.  `Content-Length` went out with
+                    # the headers and cannot be taken back, so stopping here
+                    # hands the client a short body it waits out or takes for the
+                    # whole leaf; raising breaks the connection instead, which is
+                    # what a truncated answer should look like
+                    raise OSError(f"{abspath} ended {left} bytes before the leaf's window did")
                 left -= len(data)
                 yield data
 
