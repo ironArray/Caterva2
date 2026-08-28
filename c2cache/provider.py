@@ -6,6 +6,7 @@ the provenance of each method."""
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import pathlib
 import tempfile
@@ -15,6 +16,8 @@ import httpx
 
 from c2cache import peercache, peers, remote
 from caterva2.services import providers
+
+logger = logging.getLogger("c2cache")
 
 
 def _read_sidecar(entry):
@@ -101,7 +104,13 @@ class C2CacheProvider(providers.RootProvider):
         await asyncio.to_thread(self.registry.handshake_all)
         peercache.pool_dir = self.settings.statedir / "peercache"
         peercache.pool_dir.mkdir(parents=True, exist_ok=True)
-        peercache.budget = providers.parse_size(self.settings.conf.get(".peer_cache_quota", "1G"))
+        try:
+            peercache.budget = providers.parse_size(self.settings.conf.get(".peer_cache_quota", "1G"))
+        except ValueError as exc:
+            # As for a peer's own quota: an unreadable size falls back to the
+            # default rather than taking the server down on the way up
+            logger.warning("peer_cache_quota is unreadable (%s); falling back to 1G", exc)
+            peercache.budget = providers.parse_size("1G")
         peercache.peer_quotas = {
             p.name: p.cache_quota for p in self.registry.peers.values() if p.cache_quota
         }

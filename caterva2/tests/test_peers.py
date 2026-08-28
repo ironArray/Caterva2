@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from unittest import mock
 
 import blosc2
 import httpx
@@ -1010,3 +1011,72 @@ def test_peer_ctable_info_renders(two_servers):
     # ... and the same for one nested inside a peer container
     r = httpx.get(f"{urlbase}/htmx/path-info/@labb/tree.b2z/dir/tbl", timeout=30)
     assert r.status_code == 200, r.text
+
+
+def test_a_peer_without_a_peer_id_is_disabled_not_raised():
+    """The handshake answer comes off the network, so it is not to be trusted.
+
+    A peer that omits `peer_id` used to raise a KeyError out of a method
+    documented never to raise -- a 500 on the peers panel, and a silently dead
+    probe thread everywhere else.  A null one was worse: it compared equal to
+    every peer not yet handshaken, and disabled a legitimate one as a duplicate.
+    """
+    from c2cache import peers
+
+    for answer in (
+        {"api_version": peers_api_version()},
+        {"peer_id": None, "api_version": peers_api_version()},
+    ):
+        registry = peers.PeerRegistry("me")
+        registry.load(
+            [
+                {"name": "quiet", "urlbase": "http://peer.invalid"},
+                {"name": "good", "urlbase": "http://other.invalid"},
+            ]
+        )
+        quiet, good = registry.peers["@quiet"], registry.peers["@good"]
+
+        class _Answer:
+            status_code = 200
+
+            def __init__(self, body):
+                self._body = body
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self._body
+
+        with mock.patch.object(peers.httpx, "get", return_value=_Answer(answer)):
+            registry._handshake(quiet)  # must not raise
+        assert quiet.online is False
+        assert quiet.peer_id is None
+        assert good.peer_id is None  # and the other one was not blamed for it
+
+
+def peers_api_version():
+    from caterva2.services.providers import PEER_API_VERSION
+
+    return PEER_API_VERSION
+
+
+def test_an_unreadable_cache_quota_skips_one_peer_not_the_server():
+    """Startup has to survive a typo in a config entry, not refuse to boot.
+
+    `load()` says invalid entries are logged and skipped; a `cache_quota` it
+    could not parse raised straight out of it instead, through the provider's
+    startup and the lifespan, and the server never came up.
+    """
+    from c2cache import peers
+
+    registry = peers.PeerRegistry("me")
+    registry.load(
+        [
+            {"name": "bad", "urlbase": "http://a.invalid", "cache_quota": "1T?"},
+            {"name": "worse", "urlbase": "http://b.invalid", "cache_quota": "plenty"},
+            {"name": "fine", "urlbase": "http://c.invalid", "cache_quota": "2G"},
+        ]
+    )
+    assert set(registry.peers) == {"@fine"}
+    assert registry.peers["@fine"].cache_quota == 2 * 2**30

@@ -10,20 +10,29 @@ from caterva2 import utils
 
 
 def parse_size(size):
+    """A size written as `"500"`, `"2K"`, `"1.5G"` -- in bytes.
+
+    Raises `ValueError` for anything else, which is what a caller reading a
+    size out of a configuration file catches: `"big"` matches no spelling and
+    `"1T"` no unit, and both used to come out of here as an `AttributeError` or
+    a `KeyError` about this function's insides rather than about the value.
+    """
     if size is None:
         return None
 
     units = {
         "": 1,
         "K": 2**10,
-        "k": 2**10,
         "M": 2**20,
-        "m": 2**20,
         "G": 2**30,
-        "g": 2**30,
+        "T": 2**40,
     }
     m = re.match(r"^([\d\.]+)\s*([a-zA-Z]{0,3})$", str(size).strip())
+    if m is None:
+        raise ValueError(f"{size!r} is not a size: write it as 500, 2K, 10M or 1.5G")
     number, unit = float(m.group(1)), m.group(2).upper()
+    if unit not in units:
+        raise ValueError(f"{size!r} names no unit this reads: {', '.join(u for u in units if u)}")
     return int(number * units[unit])
 
 

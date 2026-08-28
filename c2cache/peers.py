@@ -68,11 +68,15 @@ class PeerRegistry:
             if not name or not urlbase or not _NAME_RE.match(name) or name in _RESERVED:
                 logger.warning("skipping invalid [[server.peer]] entry: %r", conf)
                 continue
-            peer = Peer(
-                name=name,
-                urlbase=urlbase,
-                cache_quota=parse_size(conf.get("cache_quota")),
-            )
+            try:
+                cache_quota = parse_size(conf.get("cache_quota"))
+            except ValueError as exc:
+                # One unreadable size is one peer skipped, as every other
+                # invalid field here is: startup has to survive a typo in a
+                # config entry, not refuse to boot over it
+                logger.warning("peer %s has an unreadable cache_quota (%s); skipping", name, exc)
+                continue
+            peer = Peer(name=name, urlbase=urlbase, cache_quota=cache_quota)
             if peer.root in self.peers:
                 logger.warning("duplicate peer name %s, skipping", name)
                 continue
@@ -112,9 +116,19 @@ class PeerRegistry:
             )
             peer.online = False
             return
+        # Read once, and required: the answer comes off the network, so a peer
+        # that omits it (or sends null) must disable that peer rather than raise
+        # out of a probe that never blocks and never fails.  A null would also
+        # match every peer not yet handshaken in the dedupe below, and disable a
+        # legitimate one as a duplicate of nothing
+        peer_id = m.get("peer_id")
+        if not peer_id:
+            logger.warning("peer %s answered without a peer_id; disabling", peer.name)
+            peer.online = False
+            return
         # dedupe: same peer_id reached through two config entries
         for other in self.peers.values():
-            if other is not peer and other.peer_id == m["peer_id"]:
+            if other is not peer and other.peer_id == peer_id:
                 logger.warning(
                     "peer %s duplicates %s (same peer_id); disabling",
                     peer.name,
@@ -122,7 +136,7 @@ class PeerRegistry:
                 )
                 peer.online = False
                 return
-        peer.peer_id = m["peer_id"]
+        peer.peer_id = peer_id
         peer.api_version = m["api_version"]
         peer.capabilities = m.get("capabilities") or {}
         peer.online = True
