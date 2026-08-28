@@ -450,7 +450,22 @@ async def get_list(
                 # walk_files() semantics for directories.
                 prefix = inner_key or "/"
                 strip = prefix.rstrip("/") + "/"
-                return sorted(d[len(strip) :] for d in container.leaves(prefix))
+                # A prefix that names a leaf exactly is one of its own leaves,
+                # and it does not start with `strip`: stripping it anyway leaves
+                # the empty string, and the listing hands out a name nothing has.
+                # A single dataset lists as its own name, the way a single file
+                # does below
+                names = sorted(
+                    d[len(strip) :] if d.startswith(strip) else d.rsplit("/", 1)[-1]
+                    for d in container.leaves(prefix)
+                )
+                if not names and inner_key is not None:
+                    # ... and where the walk only descends groups (an HDF5 file),
+                    # a leaf named exactly is not in it at all
+                    node = container.get(inner_key)
+                    if node is not None and not container.is_group(node):
+                        names = [inner_key.rsplit("/", 1)[-1]]
+                return names
             finally:
                 container.close()
         if inner_key is not None:

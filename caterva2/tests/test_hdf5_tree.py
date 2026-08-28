@@ -73,9 +73,14 @@ def test_info_bogus_inner_key_404(fill_h5_public, client):
 
 
 def test_list_leaf_or_bogus_inner(fill_h5_public, client):
-    """get_list on a leaf or bogus inner path degrades to [] (no 500)."""
+    """A leaf lists as itself; a path that names nothing degrades to [] (no 500).
+
+    A single dataset lists as ``[name]`` everywhere else -- a plain file in a
+    root, a leaf of a ``.b2z``, a leaf of a peer's catalog -- so an HDF5 leaf
+    answering differently would be the odd one out for a client walking one.
+    """
     fname, root = fill_h5_public
-    assert client.get_list(f"{root.name}/{fname}/g/a") == []
+    assert client.get_list(f"{root.name}/{fname}/g/a") == ["a"]
     assert client.get_list(f"{root.name}/{fname}/does/not/exist") == []
 
 

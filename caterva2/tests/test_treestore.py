@@ -56,6 +56,22 @@ def test_list_descends(fill_tree_public, client):
     assert client.get_list(f"{root.name}/{fname}/g") == ["a", "b"]
 
 
+def test_listing_a_leaf_names_it(fill_tree_public, fill_dict_public, client):
+    """A path that names one dataset lists as that dataset, not as nothing.
+
+    The listing of a container strips the prefix off each leaf key, and a
+    prefix that names a leaf exactly is one character longer than the key it
+    matches: the strip left the empty string, and a client walking the answer
+    built `.../g/a/` and got a 404 for a path this handed it.  A single file
+    outside a container lists as `[name]`, and so does this now.
+    """
+    fname, root = fill_tree_public
+    assert client.get_list(f"{root.name}/{fname}/g/a") == ["a"]
+    # ...and the same for a flat DictStore, whose keys are the hierarchy
+    dname, _ = fill_dict_public
+    assert client.get_list(f"{root.name}/{dname}/grp/nested") == ["nested"]
+
+
 def test_info_leaf(fill_tree_public, client):
     fname, root = fill_tree_public
     info = client.get_info(f"{root.name}/{fname}/g/a")
