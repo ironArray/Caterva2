@@ -3014,8 +3014,22 @@ async def htmx_path_info(
 
 
 # Added mtime to implicitly check when underlying files are changed, and so can't use cache (see issue #207)
-@functools.lru_cache(maxsize=16)
 def get_filtered_array(abspath, path, filter, sortby, mtime, inner_key=None):
+    """One entry per distinct question, however the caller spells the call.
+
+    `lru_cache` keys on the shape of the call as well as on its values: a
+    keyword argument and the same argument positionally are two keys, and so are
+    `sortby=None` and `sortby=""`, which name the same order.  `api/fetch` and
+    the web view ask this the same question in both of those two ways, so a
+    dataset used from both used to be computed and held twice -- and to take
+    two of the sixteen entries there are.
+    """
+    sortby = sortby.strip() if sortby else None
+    return _filtered_array(abspath, path, filter, sortby or None, mtime, inner_key)
+
+
+@functools.lru_cache(maxsize=16)
+def _filtered_array(abspath, path, filter, sortby, mtime, inner_key):
     # Always sorts ascending (so "col asc" and "col desc" share one cache entry);
     # descending is rendered by reading a tail window of this order in reverse.
     if inner_key is not None:
@@ -3029,7 +3043,6 @@ def get_filtered_array(abspath, path, filter, sortby, mtime, inner_key=None):
             arr = arr.copy()
     else:
         arr = open_b2(abspath, path)
-    sortby = sortby.strip() if sortby else None
 
     if filter and isinstance(arr, hdf5.HDF5Proxy):
         # HDF5Proxy supports slicing only; no string-indexed LazyExpr yet.
