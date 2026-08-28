@@ -129,13 +129,28 @@ async def ensure_budget():
     Candidate gathering is lock-free (read-only; blosc2's own handle locking
     keeps it safe against concurrent mutation). Eviction itself is grouped by
     cache and run under that cache's lock, one cache at a time -- so it never
-    blocks a fetch/eviction of a *different* cache, only the same one."""
+    blocks a fetch/eviction of a *different* cache, only the same one.
+
+    The quotas are read first, and the candidates gathered only for a scope
+    that is actually over one. Gathering opens every cached frame in the pool
+    and walks its chunks, which is the expensive part of this and was being
+    paid on every single fetch -- against a cache with room to spare, for a
+    list nothing then evicted from."""
     if pool_dir is None or (budget is None and not peer_quotas):
         return
+    scopes = [(pool_dir / name, quota) for name, quota in peer_quotas.items()]
+    scopes.append((pool_dir, budget))
+    over = []
+    for scope, quota in scopes:
+        if quota is None:
+            continue
+        if await asyncio.to_thread(_usage, scope) > HIGH * quota:
+            over.append((scope, quota))
+    if not over:
+        return
     candidates = await asyncio.to_thread(_gather_candidates)
-    for name, quota in peer_quotas.items():
-        await _evict_to_quota(candidates, pool_dir / name, quota)
-    await _evict_to_quota(candidates, pool_dir, budget)
+    for scope, quota in over:
+        await _evict_to_quota(candidates, scope, quota)
 
 
 async def _evict_to_quota(candidates, scope, quota):
