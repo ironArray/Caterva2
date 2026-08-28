@@ -751,6 +751,31 @@ def test_cache_lock_is_per_path():
     asyncio.run(run())
 
 
+def test_the_lock_table_sheds_locks_nobody_holds():
+    """Bounded by what is in use, not by what has ever been asked for.
+
+    The pool is bounded in bytes and not in keys -- a peer catalog runs to
+    10 000 entries -- so a table that kept a lock per distinct path ever
+    touched grew for as long as the server ran, including for keys whose
+    cache files eviction had already deleted.
+    """
+    import gc
+
+    from c2cache import peercache
+
+    async def run():
+        held = peercache.cache_lock("/tmp/held")
+        async with held:
+            for i in range(5000):
+                peercache.cache_lock(f"/tmp/transient-{i}")
+            gc.collect()
+            # the one being held is still there, and is still the same lock
+            assert peercache.cache_lock("/tmp/held") is held
+            assert len(peercache._locks) < 100  # the rest have gone
+
+    asyncio.run(run())
+
+
 @pytest.fixture(scope="module")
 def two_dataset_peers(tmp_path_factory):
     # Two distinct datasets sharing one tiny-quota pool: fetches/evictions of

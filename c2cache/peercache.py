@@ -12,6 +12,7 @@ import os
 import pathlib
 import tempfile
 import time
+import weakref
 
 import blosc2
 import numpy as np
@@ -37,7 +38,7 @@ WHOLE_FILE = -1
 # can reclaim a chunk between its fetch and its touch and the read silently
 # returns UNINIT zeros. Per-cache (rather than one global lock) means
 # fetches of different datasets no longer serialize against each other.
-_locks: dict[str, asyncio.Lock] = {}
+_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 pool_dir: pathlib.Path | None = None  # set at startup
 budget: int | None = None  # bytes, set at startup
 peer_quotas: dict[str, int] = {}  # peer name -> bytes for pool_dir/<name>, set at startup
@@ -46,10 +47,24 @@ peer_quotas: dict[str, int] = {}  # peer name -> bytes for pool_dir/<name>, set 
 def cache_lock(cpath) -> asyncio.Lock:
     """Serialize fetch->read->touch vs eviction, per cache frame.
 
-    Bounded by the number of caches in the pool; never pruned (ponytail:
-    fine, a pool has at most a few hundred entries).
+    Held weakly, so the table holds locks that are in use and nothing else. The
+    pool is bounded in bytes and not in keys -- a peer catalog runs to 10 000
+    entries, several peers to as many again -- and a strong table grows one
+    entry per distinct key ever touched, including keys whose cache files
+    eviction deleted long ago, for as long as the server runs.
+
+    Weak is safe because every caller takes the lock in an `async with` on this
+    call's result: whoever holds it, and whoever waits on it, is a strong
+    reference to it for as long as that matters. A lock nobody holds has no
+    state worth keeping.
     """
-    return _locks.setdefault(str(cpath), asyncio.Lock())
+    lock = _locks.get(str(cpath))
+    if lock is None:
+        # Bound to a name first: the table's own reference is weak, so an
+        # unnamed lock could be collected before it is returned
+        lock = asyncio.Lock()
+        lock = _locks.setdefault(str(cpath), lock)
+    return lock
 
 
 def _atime_file(cache_urlpath):
