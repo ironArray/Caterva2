@@ -1363,8 +1363,29 @@ FILL_NONCE = "fill_nonce"
 FILLING, COMPLETE, PUBLISHING, PUBLISHED = "filling", "complete", "publishing", "published"
 
 
+def publish_key(path: pathlib.Path, user: db.User) -> pathlib.Path:
+    """The key an array is published under, which separates users as the store does.
+
+    `@personal` is a name every user spells the same way and no two of them share:
+    on disk it is `personal/<user id>/...`, and a key taken from the request path
+    alone would drop that id.  Two users filling `@personal/run.b2nd` would then
+    publish to one destination, where the second overwrites the first's data --
+    and reads it back, by publishing and then fetching what is there.
+
+    `@shared` and `@public` are shared by design, and keep the name they are asked
+    for: what several users write to one place there they meant to.
+    """
+    root, *subpath = path.parts
+    if root == "@personal":
+        return pathlib.Path(root, str(user.id), *subpath)
+    return path
+
+
 def publish_destination(path: pathlib.Path) -> str:
     """Where a finished array is published, under the root the server configures.
+
+    *path* is a publish key (see `publish_key`), not the request path: the two
+    differ where a root means a different place to each user.
 
     The client says which key it wants below that root and nothing above it: a
     destination taken from the request would let a caller point the server at a
@@ -1384,6 +1405,9 @@ def publish_destination(path: pathlib.Path) -> str:
 
 def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
     """Copy a finished frame out to the publish root, and record where it went.
+
+    *path* is a publish key (see `publish_key`), which is what names the array at
+    the destination -- not the path the request spelled.
 
     Blocking, and run off the event loop and outside the per-dataset lock: it is
     a whole-file upload, and holding either for its duration would stall every
@@ -1596,7 +1620,7 @@ async def write_chunk(
     if answer.pop("publish"):
         # After the response, and outside the lock: the writer that finished the
         # fill should not wait for the upload, and no other writer should either
-        background.add_task(publish_dataset, abspath, path)
+        background.add_task(publish_dataset, abspath, publish_key(path, user))
     return answer
 
 
@@ -1627,7 +1651,8 @@ async def publish(
     abspath = get_writable_path(path, user)
     if not abspath.is_file():
         srv_utils.raise_not_found(f"{path} does not exist")
-    publish_destination(path)  # refuses here if this server publishes nowhere
+    key = publish_key(path, user)
+    publish_destination(key)  # refuses here if this server publishes nowhere
 
     lock = locks.setdefault(path, asyncio.Lock())
     async with lock:
@@ -1637,7 +1662,7 @@ async def publish(
                 f"{path} has {nchunks - written} of its {nchunks} chunks still unwritten; "
                 "it is published once it is filled"
             )
-    destination = await concurrency.run_in_threadpool(publish_dataset, abspath, path)
+    destination = await concurrency.run_in_threadpool(publish_dataset, abspath, key)
     return {"published": destination}
 
 

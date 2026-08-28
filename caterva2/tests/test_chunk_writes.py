@@ -24,6 +24,9 @@ import httpx
 import numpy as np
 import pytest
 
+import caterva2 as cat2
+from caterva2.services import srv_utils
+
 from .services import TEST_STATE_DIR, c2array_writes_chunks, needs_chunk_writes
 
 CHUNKS = (1000,)
@@ -286,8 +289,22 @@ def test_a_chunk_out_of_range_is_refused(presized):
     assert raised.value.response.status_code == 404
 
 
+def _server_dir():
+    return pathlib.Path(TEST_STATE_DIR) / "server"
+
+
 def _published_dir():
     return pathlib.Path(TEST_STATE_DIR) / "published"
+
+
+def _published(name):
+    """The one published copy of *name*, wherever under the publish root it went.
+
+    Found rather than spelled out: what `@personal` publishes to carries the
+    user's id, which is what keeps two users' arrays of the same name apart (see
+    `test_two_users_publishing_one_name_do_not_collide`).
+    """
+    return next(_published_dir().rglob(name), None)
 
 
 def test_a_filled_array_is_published_by_itself(presized):
@@ -300,11 +317,12 @@ def test_a_filled_array_is_published_by_itself(presized):
     assert answer["written"] == NCHUNKS
     assert answer["state"] == "publishing"
 
-    published = _published_dir() / "@personal/run.b2nd"
     for _ in range(100):  # the upload runs after the response
-        if published.is_file():
+        published = _published("run.b2nd")
+        if published is not None:
             break
         time.sleep(0.05)
+    assert published is not None
     assert published.is_file()
 
     # What landed is the array, readable as one.  It is readable the moment it is
@@ -322,11 +340,11 @@ def test_publishing_says_where_the_array_went(presized, auth_client):
     url = f"{auth_client.urlbase}/api/publish/{presized.path}"
     response = httpx.post(url, headers={"Cookie": auth_client.cookie}, timeout=30)
     response.raise_for_status()
-    assert response.json()["published"].endswith("@personal/run.b2nd")
+    assert response.json()["published"].endswith("/run.b2nd")
     # ... and the array says so itself, where any reader of it can see
     vlmeta = blosc2.C2Array(presized.path, urlbase=presized.urlbase, auth_token=presized.auth_token).vlmeta
     assert vlmeta["fill_state"] == "published"
-    assert vlmeta["published_url"].endswith("@personal/run.b2nd")
+    assert vlmeta["published_url"].endswith("/run.b2nd")
 
 
 def test_publishes_that_overlap_do_not_stage_over_each_other(presized, auth_client):
@@ -348,7 +366,8 @@ def test_publishes_that_overlap_do_not_stage_over_each_other(presized, auth_clie
     assert all(a.status_code == 200 for a in answers)
     assert len({a.json()["published"] for a in answers}) == 1
 
-    published = _published_dir() / "@personal/run.b2nd"
+    published = _published("run.b2nd")
+    assert published is not None
     assert published.is_file()
     np.testing.assert_array_equal(
         blosc2.open(str(published))[:],
@@ -356,6 +375,46 @@ def test_publishes_that_overlap_do_not_stage_over_each_other(presized, auth_clie
     )
     # ... and nothing staged is left lying about
     assert not list(_published_dir().rglob("*.partial"))
+
+
+def test_two_users_publishing_one_name_do_not_collide(auth_client, tmp_path):
+    """`@personal` is a name every user spells the same way and no two of them share.
+
+    The key an array is published under used to be the request path, which drops
+    the user's id: two users filling `@personal/collide.b2nd` published to one
+    destination, and the second overwrote -- and could then read back -- the
+    first's data.
+    """
+    if auth_client is None:
+        pytest.skip("publishing requires authenticated users")
+    if not c2array_writes_chunks:
+        pytest.skip("needs a blosc2 whose C2Array can write chunks (not in 4.11.0)")
+    other = srv_utils.add_user(
+        "second@example.com", password="foobar22", is_superuser=False, state_dir=_server_dir()
+    )
+    others = cat2.Client(auth_client.urlbase, other)
+
+    filled = []
+    for client, value in ((auth_client, 1), (others, 2)):
+        local = tmp_path / f"collide-{value}.b2nd"
+        blosc2.uninit(SHAPE, dtype=DTYPE, chunks=CHUNKS, blocks=BLOCKS, urlpath=str(local), mode="w")
+        remote = client.upload(str(local), "@personal/collide.b2nd")
+        array = blosc2.C2Array(str(remote), urlbase=client.urlbase, auth_token=client.cookie)
+        for nchunk in range(NCHUNKS):
+            array.update_chunk(nchunk, _chunk(value))
+        filled.append(value)
+
+    for _ in range(100):  # the uploads run after the responses
+        published = sorted(_published_dir().rglob("collide.b2nd"))
+        if len(published) == len(filled):
+            break
+        time.sleep(0.05)
+    # One copy per user, under a key of their own ...
+    assert len(published) == 2
+    assert published[0] != published[1]
+    # ... each holding what its own owner wrote
+    written = sorted(int(blosc2.open(str(f))[0]) for f in published)
+    assert written == filled
 
 
 def test_an_unfinished_array_is_not_published(presized, auth_client):
