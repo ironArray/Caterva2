@@ -33,6 +33,13 @@ RUN systemctl mask \
 WORKDIR /opt/caterva2
 COPY pyproject.toml README.md ./
 COPY caterva2/ ./caterva2/
+# Every package the wheel declares, not only the core one: pyproject registers
+# `c2cache` as a `caterva2.providers` entry point, so an image built without it
+# installs metadata pointing at a module that is not there -- provider discovery
+# logs a ModuleNotFoundError traceback on every boot and the image, whose whole
+# purpose here is to be a caching peer, can never act as one.
+COPY c2cache/ ./c2cache/
+COPY root-example/ ./root-example/
 
 RUN pip install --no-cache-dir uv \
  && uv pip install --system --no-cache-dir '.[server,hdf5]'
