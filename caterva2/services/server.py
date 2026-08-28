@@ -1122,7 +1122,12 @@ async def download_data(
         except providers.ProviderError as exc:
             raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
         srv_utils.refuse_range(range_header, path)
-        headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
+        # Case-insensitively, because these came off an httpx response and httpx
+        # hands back lowercased names: a plain `setdefault` sees no match, adds a
+        # second one, and the answer carries two `Content-Disposition` headers --
+        # the peer's filename and ours -- for a client to choose between
+        if not any(k.lower() == "content-disposition" for k in headers):
+            headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
         headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 

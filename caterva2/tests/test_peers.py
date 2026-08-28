@@ -233,6 +233,21 @@ def test_download_relays_peer_file(two_servers):
     assert r.status_code == 404
 
 
+def test_a_relayed_download_carries_one_content_disposition(two_servers):
+    """The peer already said what the file is called, so we must not say it again.
+
+    The relayed headers come off an httpx response, which lowercases their
+    names; `setdefault("Content-Disposition", ...)` matched none of them and
+    added a second, and the answer went out naming the file twice for a client
+    or proxy to choose between.
+    """
+    urlbase, _data, _adir = two_servers
+    for path in ("@labb/dir1/small.b2nd", "@labb/readme.txt"):
+        r = httpx.get(f"{urlbase}/api/download/{path}", timeout=10)
+        assert r.status_code == 200
+        assert len(r.headers.get_list("content-disposition")) == 1, path
+
+
 def test_plain_file_download_fills_cache(two_servers):
     """A plain-file download through A fills a whole-file .b2 entry (+ JSON
     sidecar) and serves identical bytes to B's own download, both encodings
