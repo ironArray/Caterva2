@@ -2813,6 +2813,11 @@ def _model_from_info(info):
     # B serves the JSON of the same pydantic models we build locally;
     # round-trip it into the right one so the attribute access in the
     # templates below works unchanged.
+    # `kind` first, where the peer says it: a CTable's metadata has neither a
+    # shape nor a size, so anything reading it off the fields alone falls
+    # through to `File` and raises on the `size` it does not carry.
+    if info.get("kind") == "ctable":
+        return srv_utils.get_model_from_obj(info, models.CTableMetadata)
     if "shape" in info:
         return srv_utils.get_model_from_obj(info, models.Metadata)
     elif "cparams" in info:

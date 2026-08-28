@@ -978,3 +978,20 @@ def test_concurrent_fetches_of_different_datasets_dont_serialize(two_dataset_pee
 
     roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
     assert "@labb4" in roots
+
+
+def test_peer_ctable_info_renders(two_servers):
+    """A peer CTable's metadata is a CTable's, and must be read back as one.
+
+    `api/info` for one carries `kind`, `nrows`, `ncols` -- no shape, no size --
+    so the model picked off the field names alone fell through to `File`,
+    whose required `size` is not there: a 500 for every click on a peer table,
+    and no Display tab even if it had built.
+    """
+    urlbase, _data, _adir = two_servers
+    r = httpx.get(f"{urlbase}/htmx/path-info/@labb/tbl.b2z", timeout=30)
+    assert r.status_code == 200, r.text
+    assert "Display" in r.text  # the tab a table gets, off meta.kind
+    # ... and the same for one nested inside a peer container
+    r = httpx.get(f"{urlbase}/htmx/path-info/@labb/tree.b2z/dir/tbl", timeout=30)
+    assert r.status_code == 200, r.text
