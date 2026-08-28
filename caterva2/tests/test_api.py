@@ -1098,6 +1098,17 @@ def test_lazyexpr_getchunk(auth_client, fill_public):
     np.testing.assert_array_equal(out, out_expr)
 
 
+def test_get_chunk_refuses_a_path_with_a_leading_slash(client, fill_public):
+    """Every other Client method normalizes its path; this one stopped doing it.
+
+    A leading slash makes an URL with an empty first segment, which the server
+    resolves as a root nobody has: a confusing 404 about a path the client
+    could have refused itself, which is what `_format_paths` is for.
+    """
+    with pytest.raises(ValueError, match="slash"):
+        client.get_chunk(f"/{TEST_CATERVA2_ROOT}/ds-1d.b2nd", 0)
+
+
 def test_lazyexpr_fields(auth_client, fill_public):
     if not auth_client:
         pytest.skip("authentication support needed")

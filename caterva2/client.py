@@ -1447,6 +1447,7 @@ class Client:
             raise TypeError(
                 "get_chunk() only supports Array datasets (.b2nd/.b2frame), not regular files or tables"
             )
+        _, path = _format_paths(self.urlbase, path)
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
             {"nchunk": nchunk},
