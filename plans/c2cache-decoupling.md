@@ -1,5 +1,13 @@
 # C2Cache decoupling — Phase 1: in-repo provider seam
 
+**Packaging direction superseded (2026-08-31):** C2Cache remains in the
+Caterva2 repository, wheel, version, and release lifecycle as the internal
+`caterva2.c2cache` subpackage. It is registered directly as a built-in through
+the generic provider seam (entry-point discovery remains for external
+providers), but its factory is inert unless `[[server.peer]]` configuration
+activates it. References below to a top-level `c2cache/` package or a future
+separate C2Cache distribution are historical.
+
 **Superseded (2026-07-08):** every reference below to the module-global
 `peercache.io_lock` describes the pre-locking design. It has been replaced
 by per-cache locks (`peercache.cache_lock(cpath)`); see

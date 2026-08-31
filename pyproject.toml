@@ -124,7 +124,7 @@ blosc2-plugins = [
 ]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["caterva2", "c2cache", "root-example"]
+only-include = ["caterva2", "root-example"]
 
 # Ship the caterva2-save JupyterLite extension inside the wheel as a federated
 # labextension, so `jupyter lite build` discovers and bundles it (replaces the
@@ -146,10 +146,6 @@ cat2-server = "caterva2.services.server:main"
 cat2-agent = "caterva2.clients.agent:main"
 cat2-client = "caterva2.clients.cli:main"
 cat2-admin = "caterva2.tools.admin:main"
-
-[project.entry-points."caterva2.providers"]
-c2cache = "c2cache:provider_factory"
-
 
 [tool.ruff]
 line-length = 109

@@ -433,7 +433,7 @@ async def fetch_ctable_slice(adapter, key, info, start, stop):
     Caller holds cache_lock(adapter.cache_path(key)). Cacheable tables go
     through the structured sparse cache (offline-capable); the rest pass
     through to the peer's api/fetch."""
-    from c2cache import peercache  # late: keeps remote.py importable standalone in tests
+    from . import peercache  # late: keeps remote.py importable standalone in tests
 
     remote_path = adapter._remote_path(key)
     dtype = ctable_cacheable(info)

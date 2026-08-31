@@ -16,6 +16,9 @@
 #   ("s3://bucket/prefix", "file:///srv/published"); a dataset names the key it
 #   wants underneath it and nothing above it.  Credentials for it are the
 #   server's own.  Unset (the default) means such arrays are simply not published.
+# - peer_cache_quota: maximum total size of the optional C2Cache peer cache
+#   (default: "1G"). C2Cache ships inside Caterva2 and remains inactive unless
+#   one or more [[server.peer]] entries are configured.
 #
 [server]
 # listen = "_caterva2/state/uvicorn.socket"  # server supports listening from UNIX sockets
@@ -25,3 +28,12 @@ quota = "10G"
 maxusers = 5
 register = true  # allow users to register
 # publish_root = "s3://a-bucket/published"
+# peer_cache_quota = "1G"
+
+# Mount a remote Caterva2 server's locally owned @public root as @labb.  This
+# activates the bundled C2Cache provider.  Repeat the table to mount more peers.
+# An optional per-peer cache_quota further bounds this peer within the pool.
+# [[server.peer]]
+# name = "labb"
+# urlbase = "http://server-b:8000"
+# cache_quota = "500M"

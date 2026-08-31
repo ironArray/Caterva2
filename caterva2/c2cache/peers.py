@@ -1,4 +1,4 @@
-"""Caterva3 peer registry: config, handshake, liveness.
+"""Caterva2 peer registry: config, handshake, liveness.
 
 A "peer" is another Caterva3/Caterva2 server whose @public root this server
 mounts as a virtual root @<name>.  See plans/caterva3-remote-peer-mounts.md.

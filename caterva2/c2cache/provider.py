@@ -1,7 +1,9 @@
-"""C2CacheProvider: Caterva2 root provider mounting remote peers' @public
-roots with a local chunk cache. Orchestration moved verbatim from the
-pre-decoupling server.py branches — see plans/c2cache-decoupling.md §5 for
-the provenance of each method."""
+"""Bundled Caterva2 provider mounting remote peers' @public roots.
+
+The provider is discovered with the other root providers but its factory
+returns ``None`` until at least one ``[[server.peer]]`` entry activates it.
+See plans/c2cache-decoupling.md §5 for the provenance of each method.
+"""
 
 import asyncio
 import contextlib
@@ -14,8 +16,9 @@ import tempfile
 import blosc2
 import httpx
 
-from c2cache import peercache, peers, remote
 from caterva2.services import providers
+
+from . import peercache, peers, remote
 
 logger = logging.getLogger("c2cache")
 
@@ -98,7 +101,7 @@ class C2CacheProvider(providers.RootProvider):
         self.settings = settings
         self.peer_confs = peer_confs
         self.registry = None  # created in startup (needs settings.peer_id)
-        from c2cache.panel import make_router  # late: avoids import cycle
+        from .panel import make_router  # late: avoids import cycle
 
         self.router = make_router(self)
 

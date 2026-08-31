@@ -10,9 +10,10 @@ BASE_DIR = pathlib.Path(__file__).resolve().parent
 
 
 def make_router(provider):
-    from c2cache import peercache
     from caterva2.services.server import custom_filesizeformat
     from caterva2.services.server import templates as srv_templates
+
+    from . import peercache
 
     templates = Jinja2Templates(directory=BASE_DIR / "templates")
     templates.env.loader = jinja2.ChoiceLoader([templates.env.loader, srv_templates.env.loader])

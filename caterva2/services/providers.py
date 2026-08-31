@@ -1,5 +1,5 @@
-"""Root providers: extension seam for packages that contribute virtual roots
-(e.g. c2cache peer mounts). See plans/c2cache-decoupling.md."""
+"""Root providers: extension seam for components that contribute virtual roots
+(e.g. the bundled C2Cache peer mounts). See plans/c2cache-decoupling.md."""
 
 import abc
 import importlib.metadata
@@ -21,9 +21,9 @@ from caterva2.services.srv_utils import (  # noqa: F401
 
 logger = logging.getLogger("providers")
 
-# Peer-mount wire-protocol version. Lives in CORE (not c2cache) because the
-# B-side /api/peer endpoint must serve it from a vanilla install; c2cache
-# imports it for the A-side handshake check. Bump on any breaking change.
+# Peer-mount wire-protocol version. Lives in the generic provider seam rather
+# than the C2Cache implementation because the B-side /api/peer endpoint must
+# serve it even when no peers are configured. Bump on any breaking change.
 PEER_API_VERSION = 1
 
 ENTRY_POINT_GROUP = "caterva2.providers"
@@ -156,17 +156,46 @@ def provider_for(root: str) -> RootProvider | None:
 
 
 def discover(settings_module) -> list[RootProvider]:
-    """Load entry points in group `caterva2.providers`. Each resolves to a
-    factory f(settings_module) -> RootProvider | None (None = installed but
-    not configured -> inert). Failures are logged and skipped: a broken
-    provider must never prevent server boot."""
+    """Discover bundled and third-party root providers.
+
+    C2Cache is part of Caterva2, so it is registered directly and works from a
+    source checkout without relying on installed distribution metadata.  Truly
+    external providers are loaded from the ``caterva2.providers`` entry-point
+    group.  Every factory receives *settings_module* and returns either a
+    provider or ``None`` when it is not configured.  A broken provider must
+    never prevent server boot.
+    """
     found = []
+
+    # Built-ins are code, not packaging metadata.  Keeping this import inside
+    # discovery preserves the cheap/inert import path when Caterva2 is used as
+    # a client library, while making `PYTHONPATH=<checkout> cat2-server` behave
+    # exactly like an installed wheel.
+    try:
+        from caterva2.c2cache import provider_factory as c2cache_factory
+    except Exception:
+        logger.exception("bundled provider c2cache failed to load; skipping")
+    else:
+        try:
+            provider = c2cache_factory(settings_module)
+        except Exception:
+            logger.exception("bundled provider c2cache failed to initialize; skipping")
+        else:
+            if provider is not None:
+                found.append(provider)
+                logger.info("provider %s active (roots: %s)", provider.name, provider.roots())
+
     try:
         eps = importlib.metadata.entry_points(group=ENTRY_POINT_GROUP)
     except Exception:
         logger.exception("entry-point scan failed")
-        return found
+        eps = ()
     for ep in eps:
+        # Ignore stale metadata left by an editable install from before
+        # C2Cache became a bundled provider, and prevent double activation if
+        # an already-built wheel with that old entry point remains installed.
+        if ep.name == "c2cache":
+            continue
         try:
             factory = ep.load()
             provider = factory(settings_module)

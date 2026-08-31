@@ -4,6 +4,11 @@
 
 #XXX version-specific blurb XXX#
 
+* C2Cache is bundled and registered as the internal `caterva2.c2cache`
+  provider. It is part of the Caterva2 wheel and release lifecycle, needs no
+  separate package or installed entry-point metadata, and is inert unless at
+  least one `[[server.peer]]` entry activates it.
+
 * Arrays can be filled a chunk at a time, by several writers at once. An array
   is laid out empty first (`Client.lay_out()`, a couple of hundred bytes
   whatever its shape) and each writer posts the chunks it owns with

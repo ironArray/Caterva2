@@ -83,6 +83,15 @@ Append `[extra1,extra2,...]` to any install command:
 
 **Note:** Test runs create a `_caterva2_tests` directory with state files for inspection.
 
+### Optional peer caching
+
+C2Cache is bundled as an internal Caterva2 provider; it requires no separate
+package or installation extra. It remains inactive unless the server
+configuration contains at least one `[[server.peer]]` entry. Each configured
+peer exposes that server's locally owned `@public` root under the configured
+local name and caches requested data on demand. See
+`caterva2-server.sample.toml` for the configuration fields and cache quotas.
+
 ## Quick start
 
 See [Caterva2 documentation](https://ironarray.io/caterva2-doc/index.html) for detailed tutorials.

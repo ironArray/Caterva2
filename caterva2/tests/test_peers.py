@@ -1,9 +1,9 @@
 """Caterva3 remote peer mounts: two real servers, one mounting the other's
 @public root. See plans/caterva3-remote-peer-mounts-impl.md Phase 7.
 
-Uses its own subprocess pair (ports 8031/8032) instead of the port-8000
-pytest harness in services.py, since peer mounts need two servers talking
-to each other.
+Uses its own subprocess pairs on dynamically allocated ports instead of the
+port-8000 pytest harness in services.py, since peer mounts need two servers
+talking to each other.
 """
 
 import asyncio
@@ -11,9 +11,11 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
+import tomllib
 from dataclasses import dataclass
 from unittest import mock
 
@@ -21,8 +23,6 @@ import blosc2
 import httpx
 import numpy as np
 import pytest
-
-B_PORT, A_PORT = 8031, 8032
 
 
 def _fixed_row(chunks=(16,), blocks=(8,)):
@@ -78,9 +78,23 @@ def _seed_ctables(pub):
     ds.close()
 
 
+def _unused_tcp_ports(count):
+    """Ask the OS for distinct unused loopback ports for server processes."""
+    sockets = []
+    try:
+        for _ in range(count):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", 0))
+            sockets.append(sock)
+        return tuple(sock.getsockname()[1] for sock in sockets)
+    finally:
+        for sock in sockets:
+            sock.close()
+
+
 def _start(statedir, port, extra_toml=""):
     statedir = str(statedir)
-    toml = f'[server]\nurlbase = "http://localhost:{port}"\nlogin = false\n{extra_toml}'
+    toml = f'[server]\nurlbase = "http://127.0.0.1:{port}"\nlogin = false\n{extra_toml}'
     conf = f"{statedir}/caterva2-server.toml"
     os.makedirs(statedir, exist_ok=True)
     with open(conf, "w") as f:
@@ -94,7 +108,7 @@ def _start(statedir, port, extra_toml=""):
             "--statedir",
             statedir,
             "--listen",
-            f"localhost:{port}",
+            f"127.0.0.1:{port}",
             "--conf",
             conf,
         ],
@@ -104,13 +118,28 @@ def _start(statedir, port, extra_toml=""):
         cwd=statedir,
     )
     for _ in range(50):  # wait until it answers
+        returncode = proc.poll()
+        if returncode is not None:
+            raise RuntimeError(f"server on port {port} exited during startup with status {returncode}")
         try:
-            httpx.get(f"http://localhost:{port}/api/roots", timeout=1)
+            httpx.get(f"http://127.0.0.1:{port}/api/roots", timeout=1)
+            returncode = proc.poll()
+            if returncode is not None:
+                raise RuntimeError(
+                    f"another process answered port {port}; the test server exited with status {returncode}"
+                )
             return proc
         except Exception:
             time.sleep(0.2)
     proc.kill()
+    proc.wait(timeout=10)
     raise RuntimeError("server did not start")
+
+
+def _configured_peer_url(statedir):
+    """Read the peer URL back from one test server's generated configuration."""
+    with (statedir / "caterva2-server.toml").open("rb") as conf_file:
+        return tomllib.load(conf_file)["server"]["peer"][0]["urlbase"]
 
 
 @pytest.fixture(scope="module")
@@ -129,10 +158,11 @@ def two_servers(tmp_path_factory):
     # gives it a whole-file cache entry (plans/plain-files-caching.md)
     (pub / "readme.txt").write_text("peer plain-file caching\n" * 200)
     _seed_ctables(pub)
-    b = _start(bdir, B_PORT)
-    peer_toml = f'[[server.peer]]\nname = "labb"\nurlbase = "http://localhost:{B_PORT}"\n'
-    a = _start(adir, A_PORT, peer_toml)
-    yield f"http://localhost:{A_PORT}", data, adir
+    b_port, a_port = _unused_tcp_ports(2)
+    b = _start(bdir, b_port)
+    peer_toml = f'[[server.peer]]\nname = "labb"\nurlbase = "http://127.0.0.1:{b_port}"\n'
+    a = _start(adir, a_port, peer_toml)
+    yield f"http://127.0.0.1:{a_port}", data, adir
     for p in (a, b):
         p.send_signal(signal.SIGTERM)
         p.wait(timeout=10)
@@ -219,11 +249,10 @@ def test_download_relays_peer_file(two_servers):
     (used to be a flat 404); a bad path relays the peer's status. Scope
     guard: a dataset download must NOT grow the whole-file (.b2) cache."""
     urlbase, _data, adir = two_servers
+    peer_url = _configured_peer_url(adir)
     entries_before = set((adir / "peercache" / "labb").glob("*.b2"))
     for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
-        direct = httpx.get(
-            f"http://localhost:{B_PORT}/api/download/@public/dir1/small.b2nd", headers=hdrs, timeout=10
-        )
+        direct = httpx.get(f"{peer_url}/api/download/@public/dir1/small.b2nd", headers=hdrs, timeout=10)
         relayed = httpx.get(f"{urlbase}/api/download/@labb/dir1/small.b2nd", headers=hdrs, timeout=10)
         assert relayed.status_code == direct.status_code == 200
         assert relayed.content == direct.content
@@ -253,10 +282,9 @@ def test_plain_file_download_fills_cache(two_servers):
     sidecar) and serves identical bytes to B's own download, both encodings
     (plans/plain-files-caching.md)."""
     urlbase, _data, adir = two_servers
+    peer_url = _configured_peer_url(adir)
     for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
-        direct = httpx.get(
-            f"http://localhost:{B_PORT}/api/download/@public/readme.txt", headers=hdrs, timeout=10
-        )
+        direct = httpx.get(f"{peer_url}/api/download/@public/readme.txt", headers=hdrs, timeout=10)
         relayed = httpx.get(f"{urlbase}/api/download/@labb/readme.txt", headers=hdrs, timeout=10)
         assert relayed.status_code == direct.status_code == 200
         assert relayed.content == direct.content
@@ -299,12 +327,12 @@ def test_peer_offline_tolerated(tmp_path_factory):
     blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
     (pub / "hello.txt").write_text("v1 " * 100)
     (pub / "never.txt").write_text("never downloaded while B was up")
-    b_port, a_port = 8033, 8034
+    b_port, a_port = _unused_tcp_ports(2)
     b = _start(bdir, b_port)
-    peer_toml = f'[[server.peer]]\nname = "labb2"\nurlbase = "http://localhost:{b_port}"\n'
+    peer_toml = f'[[server.peer]]\nname = "labb2"\nurlbase = "http://127.0.0.1:{b_port}"\n'
     a = _start(adir, a_port, peer_toml)
     try:
-        urlbase = f"http://localhost:{a_port}"
+        urlbase = f"http://127.0.0.1:{a_port}"
         # warm the cache for one slice before killing B
         r = httpx.get(f"{urlbase}/api/fetch/@labb2/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
         r.raise_for_status()
@@ -317,7 +345,7 @@ def test_peer_offline_tolerated(tmp_path_factory):
         # ...then change it on B (mtime bump): the next download refetches.
         # Hit B directly first so it recompresses the rewritten file.
         (pub / "hello.txt").write_text("v2 " * 100)
-        httpx.get(f"http://localhost:{b_port}/api/download/@public/hello.txt", timeout=10).raise_for_status()
+        httpx.get(f"http://127.0.0.1:{b_port}/api/download/@public/hello.txt", timeout=10).raise_for_status()
         r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
         r.raise_for_status()
         assert r.content == b"v2 " * 100
@@ -427,7 +455,7 @@ def test_a_cache_of_another_dtype_is_rebuilt(two_servers):
     itemsize with a cache laid out for another, and is read for a field it has
     not got.  What the cache holds is recorded beside what the remote held.
     """
-    from c2cache import remote
+    from caterva2.c2cache import remote
 
     urlbase, _data, adir = two_servers
     _fetch_table(urlbase, "@labb/tbl.b2z", "0:32")
@@ -546,12 +574,12 @@ def test_ctable_offline_reads_cached_range(tmp_path_factory):
     pub = bdir / "public"
     pub.mkdir()
     _make_fixed_table(pub / "tbl.b2z")
-    b_port, a_port = 8039, 8040
+    b_port, a_port = _unused_tcp_ports(2)
     b = _start(bdir, b_port)
-    peer_toml = f'[[server.peer]]\nname = "labb5"\nurlbase = "http://localhost:{b_port}"\n'
+    peer_toml = f'[[server.peer]]\nname = "labb5"\nurlbase = "http://127.0.0.1:{b_port}"\n'
     a = _start(adir, a_port, peer_toml)
     try:
-        urlbase = f"http://localhost:{a_port}"
+        urlbase = f"http://127.0.0.1:{a_port}"
         t = _fetch_table(urlbase, "@labb5/tbl.b2z", "0:20")
         assert t["x"][:].tolist() == list(range(20))
 
@@ -584,14 +612,14 @@ def tiny_quota_peers(tmp_path_factory):
     data = np.random.default_rng(2).random((8, 100_000))
     blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
     _make_fixed_table(pub / "tbl.b2z")  # CTable fetches join the storm too
-    b_port, a_port = 8035, 8036
+    b_port, a_port = _unused_tcp_ports(2)
     b = _start(bdir, b_port)
     peer_toml = (
         'peer_cache_quota = "100K"\n'
-        f'[[server.peer]]\nname = "labb3"\nurlbase = "http://localhost:{b_port}"\n'
+        f'[[server.peer]]\nname = "labb3"\nurlbase = "http://127.0.0.1:{b_port}"\n'
     )
     a = _start(adir, a_port, peer_toml)
-    yield f"http://localhost:{a_port}", data
+    yield f"http://127.0.0.1:{a_port}", data
     for p in (a, b):
         p.send_signal(signal.SIGTERM)
         p.wait(timeout=10)
@@ -659,7 +687,7 @@ def test_concurrent_requests_under_tiny_quota_dont_crash(tiny_quota_peers):
 def test_per_peer_quota_evicts_only_that_peer(tmp_path):
     """A per-peer cache_quota only evicts under that peer's pool subtree;
     other peers' caches and the (disabled) pool-wide budget are untouched."""
-    from c2cache import peercache
+    from caterva2.c2cache import peercache
 
     def make_cache(peer):
         d = tmp_path / peer
@@ -701,7 +729,7 @@ def test_whole_file_entry_evicted_whole(tmp_path):
     files compete in the same LRU order as dataset chunks."""
     import time
 
-    from c2cache import peercache
+    from caterva2.c2cache import peercache
 
     d = tmp_path / "peer-a"
     d.mkdir()
@@ -736,7 +764,7 @@ def test_cache_lock_is_per_path():
     per-cache locking, plans/peercache-locking.md §2): locking one must not
     block acquiring the other, and the same path always maps to the same
     lock object."""
-    from c2cache import peercache
+    from caterva2.c2cache import peercache
 
     async def run():
         lock_a = peercache.cache_lock("/tmp/does-not-exist-a")
@@ -760,7 +788,7 @@ def test_the_lock_table_sheds_locks_nobody_holds():
     """
     import gc
 
-    from c2cache import peercache
+    from caterva2.c2cache import peercache
 
     async def run():
         held = peercache.cache_lock("/tmp/held")
@@ -788,14 +816,14 @@ def two_dataset_peers(tmp_path_factory):
     data2 = np.random.default_rng(4).random((8, 100_000))
     blosc2.asarray(data1, chunks=(1, 100_000), urlpath=str(pub / "mc1.b2nd"))
     blosc2.asarray(data2, chunks=(1, 100_000), urlpath=str(pub / "mc2.b2nd"))
-    b_port, a_port = 8037, 8038
+    b_port, a_port = _unused_tcp_ports(2)
     b = _start(bdir, b_port)
     peer_toml = (
         'peer_cache_quota = "100K"\n'
-        f'[[server.peer]]\nname = "labb4"\nurlbase = "http://localhost:{b_port}"\n'
+        f'[[server.peer]]\nname = "labb4"\nurlbase = "http://127.0.0.1:{b_port}"\n'
     )
     a = _start(adir, a_port, peer_toml)
-    yield f"http://localhost:{a_port}", data1, data2
+    yield f"http://127.0.0.1:{a_port}", data1, data2
     for p in (a, b):
         p.send_signal(signal.SIGTERM)
         p.wait(timeout=10)
@@ -829,7 +857,7 @@ def test_ctable_row_range_edges():
 
 
 def test_synth_ctable_cframe_roundtrip(tmp_path):
-    from c2cache import remote
+    from caterva2.c2cache import remote
 
     _make_fixed_table(tmp_path / "t.b2z", n=20)
     t = blosc2.open(str(tmp_path / "t.b2z"))
@@ -850,7 +878,7 @@ def test_synth_ctable_cframe_preserves_null_sentinels(tmp_path):
     cframe -> reconstructed CTable.  A sentinel null is one of the values and
     rides along with them; a masked one is not a value at all, and crosses in
     a bool field of its own that becomes the `.notnull` sidecar again."""
-    from c2cache import remote
+    from caterva2.c2cache import remote
 
     int_null = np.iinfo(np.int32).min
 
@@ -900,7 +928,7 @@ def test_synth_ctable_cframe_preserves_null_sentinels(tmp_path):
 
 
 def test_ctable_cacheable_detection(tmp_path):
-    from c2cache import remote
+    from caterva2.c2cache import remote
 
     _make_fixed_table(tmp_path / "t.b2z", n=20)
     sd = blosc2.open(str(tmp_path / "t.b2z")).schema_dict()
@@ -929,7 +957,7 @@ def test_ctable_cacheable_detection(tmp_path):
 def test_ctable_source_aget_chunk(tmp_path):
     """One api/fetch call per chunk; the trailing partial chunk comes back
     zero-padded to the full chunkshape."""
-    from c2cache import remote
+    from caterva2.c2cache import remote
 
     _make_fixed_table(tmp_path / "t.b2z", n=70)
     t = blosc2.open(str(tmp_path / "t.b2z"))
@@ -970,7 +998,7 @@ def test_afetch_retry_once():
     """A single transport timeout inside afetch is retried once (sporadic
     503 flake on concurrent first-touch fetches); a second failure still
     propagates for the caller's mark_offline handling."""
-    from c2cache import remote
+    from caterva2.c2cache import remote
 
     class FlakyProxy:
         def __init__(self, failures):
@@ -1045,7 +1073,7 @@ def test_a_peer_without_a_peer_id_is_disabled_not_raised():
     probe thread everywhere else.  A null one was worse: it compared equal to
     every peer not yet handshaken, and disabled a legitimate one as a duplicate.
     """
-    from c2cache import peers
+    from caterva2.c2cache import peers
 
     for answer in (
         {"api_version": peers_api_version()},
@@ -1095,7 +1123,7 @@ def test_an_unreadable_cache_quota_costs_the_quota_not_the_peer():
     is an optional eviction budget, and dropping the peer over it left every
     dataset under `@bad` answering 404 with one line at boot to say why.
     """
-    from c2cache import peers
+    from caterva2.c2cache import peers
 
     registry = peers.PeerRegistry("me")
     registry.load(
@@ -1120,7 +1148,7 @@ def test_a_handshake_answer_that_is_not_an_object_disables_the_peer(monkeypatch)
     -- a captive portal, a proxy's error page -- used to do exactly that on the
     `.get` below the parse.
     """
-    from c2cache import peers
+    from caterva2.c2cache import peers
 
     class _Answer:
         def raise_for_status(self):
