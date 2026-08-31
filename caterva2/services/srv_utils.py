@@ -140,9 +140,14 @@ class _DictStoreAdapter:
         return [k if k.startswith("/") else f"/{k}" for k in list(self.store.keys())]
 
     def leaves(self, prefix="/"):
+        # Descendants of `prefix`, and a key that *is* `prefix` is not one of
+        # them: a DictStore's keys spell a hierarchy, and a leaf is no more a
+        # member of itself here than a TreeStore leaf or an HDF5 dataset is.
+        # A listing takes what it hands out from this, so one that included the
+        # prefix would name the container among its own contents
         rel = prefix if prefix.startswith("/") else f"/{prefix}"
         rel = rel.rstrip("/")
-        return [k for k in self._keys() if k == rel or k.startswith(f"{rel}/")]
+        return [k for k in self._keys() if k.startswith(f"{rel}/")]
 
     def size(self, prefix="/"):
         return treestore_size(self.store, prefix)
@@ -169,6 +174,11 @@ class _DictStoreAdapter:
         if node is None or self.is_group(node):
             return None
         return getattr(node, "cbytes", None)
+
+    def is_leaf(self, key):
+        """Whether `key` names a leaf (rather than a group or nothing)."""
+        node = self.get(key)
+        return node is not None and not self.is_group(node)
 
     def is_group(self, node):
         # A DictStore stores leaves only, so the only group it has is the one
@@ -213,6 +223,11 @@ class _TreeStoreAdapter:
         if node is None or self.is_group(node):
             return None
         return node.cbytes
+
+    def is_leaf(self, key):
+        """Whether `key` names a leaf (rather than a group or nothing)."""
+        node = self.get(key)
+        return node is not None and not self.is_group(node)
 
     def is_group(self, node):
         return isinstance(node, blosc2.TreeStore)
@@ -263,6 +278,18 @@ class _HDF5Adapter:
         if isinstance(node, (h5py.Group, h5py.File)):
             return None
         return node.id.get_storage_size()
+
+    def is_leaf(self, key):
+        """Whether `key` names a readable dataset (rather than a group, an
+        incompatible dataset, or nothing).  Asked of h5py directly, as
+        `leaf_size` is: `get()` would build a full HDF5Proxy -- reading Blosc2
+        super-chunk metadata -- for an answer this throws away."""
+        key = key.strip("/")
+        try:
+            node = self.h5file[key] if key else self.h5file
+        except KeyError:
+            return False
+        return not isinstance(node, (h5py.Group, h5py.File)) and hdf5.h5dset_is_compatible(node)
 
     def is_group(self, node):
         return isinstance(node, (h5py.Group, h5py.File))
@@ -792,7 +819,8 @@ def window_response(abspath, window, range_header=None, headers=None):
 
 
 async def read_bounded_body(request, limit):
-    """The request's body, refused with a 413 as soon as it goes past *limit*.
+    """The request's body as a `bytearray`, refused with a 413 as soon as it
+    goes past *limit*.
 
     Read off the stream rather than through `await request.body()`, which is
     what makes this a bound: a body already in hand has already been allocated,
@@ -812,7 +840,10 @@ async def read_bounded_body(request, limit):
             raise fastapi.HTTPException(
                 status_code=413, detail=f"the body is longer than the {limit} bytes this reads"
             )
-    return bytes(body)
+    # The buffer itself, not a `bytes` copy of it: what reads this parses it
+    # (pydantic takes a bytearray), and copying would spend a second *limit*
+    # bytes inside the function whose whole purpose is to bound the first
+    return body
 
 
 def refuse_range(range_header, path):

@@ -289,10 +289,6 @@ def test_a_chunk_out_of_range_is_refused(presized):
     assert raised.value.response.status_code == 404
 
 
-def _server_dir():
-    return pathlib.Path(TEST_STATE_DIR) / "server"
-
-
 def _published_dir():
     return pathlib.Path(TEST_STATE_DIR) / "published"
 
@@ -377,7 +373,7 @@ def test_publishes_that_overlap_do_not_stage_over_each_other(presized, auth_clie
     assert not list(_published_dir().rglob("*.partial"))
 
 
-def test_two_users_publishing_one_name_do_not_collide(auth_client, tmp_path):
+def test_two_users_publishing_one_name_do_not_collide(services, auth_client, tmp_path):
     """`@personal` is a name every user spells the same way and no two of them share.
 
     The key an array is published under used to be the request path, which drops
@@ -389,8 +385,15 @@ def test_two_users_publishing_one_name_do_not_collide(auth_client, tmp_path):
         pytest.skip("publishing requires authenticated users")
     if not c2array_writes_chunks:
         pytest.skip("needs a blosc2 whose C2Array can write chunks (not in 4.11.0)")
+    # The state directory the running server reads its users from, the way
+    # `make_sub_user` spells it: `ManagedServices` resolves it, and a path
+    # relative to the process cwd writes the second user into a database
+    # nothing serving this test ever opens
     other = srv_utils.add_user(
-        "second@example.com", password="foobar22", is_superuser=False, state_dir=_server_dir()
+        "second@example.com",
+        password="foobar22",
+        is_superuser=False,
+        state_dir=services.state_dir / "server",
     )
     others = cat2.Client(auth_client.urlbase, other)
 

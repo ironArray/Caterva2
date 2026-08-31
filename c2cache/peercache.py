@@ -125,6 +125,29 @@ def _usage(scope=None):
     return total
 
 
+def _pool_usage():
+    """One walk of the pool: `(total bytes, {top-level subdirectory: bytes})`.
+
+    The scopes a quota is checked against are the pool and its per-peer
+    subdirectories, and `_usage(pool_dir)` already stats every file that each
+    `_usage(pool_dir / <name>)` does: with N peers configured, walking once
+    here is N+1 full recursive scans of the pool saved on every fetch.
+
+    Lock-free and tolerant of files vanishing mid-walk, as `_usage` is.
+    """
+    total = 0
+    per_peer: dict[str, int] = {}
+    for f in pool_dir.rglob("*"):
+        with contextlib.suppress(OSError):
+            if f.is_file():
+                size = f.stat().st_size
+                total += size
+                parts = f.relative_to(pool_dir).parts
+                if len(parts) > 1:
+                    per_peer[parts[0]] = per_peer.get(parts[0], 0) + size
+    return total, per_peer
+
+
 def _uninit_chunk(schunk, nchunk):
     """A compressed UNINIT special chunk sized for `nchunk` (handles the
     trailing partial chunk)."""
@@ -150,31 +173,34 @@ async def ensure_budget():
     that is actually over one. Gathering opens every cached frame in the pool
     and walks its chunks, which is the expensive part of this and was being
     paid on every single fetch -- against a cache with room to spare, for a
-    list nothing then evicted from."""
+    list nothing then evicted from.
+
+    Reading them costs one walk of the pool for all of them, and that measure
+    is what the eviction pass then works from: a per-scope `_usage` here and
+    another inside `_evict_to_quota` walked the same files two or three times
+    over on the very fetches this is meant to be cheap on."""
     if pool_dir is None or (budget is None and not peer_quotas):
         return
-    scopes = [(pool_dir / name, quota) for name, quota in peer_quotas.items()]
-    scopes.append((pool_dir, budget))
-    over = []
-    for scope, quota in scopes:
-        if quota is None:
-            continue
-        if await asyncio.to_thread(_usage, scope) > HIGH * quota:
-            over.append((scope, quota))
+    total, per_peer = await asyncio.to_thread(_pool_usage)
+    over = [
+        (pool_dir / name, quota, per_peer.get(name, 0))
+        for name, quota in peer_quotas.items()
+        if quota is not None and per_peer.get(name, 0) > HIGH * quota
+    ]
+    if budget is not None and total > HIGH * budget:
+        over.append((pool_dir, budget, total))
     if not over:
         return
     candidates = await asyncio.to_thread(_gather_candidates)
-    for scope, quota in over:
-        await _evict_to_quota(candidates, scope, quota)
+    for scope, quota, usage in over:
+        await _evict_to_quota(candidates, scope, quota, usage)
 
 
-async def _evict_to_quota(candidates, scope, quota):
-    """One LRU eviction pass over the caches under `scope` (a directory),
-    down to LOW * quota when usage exceeds HIGH * quota."""
-    if quota is None:
-        return
-    usage = await asyncio.to_thread(_usage, scope)
-    if usage <= HIGH * quota:
+async def _evict_to_quota(candidates, scope, quota, usage):
+    """One LRU eviction pass over the caches under `scope` (a directory), down
+    to LOW * quota. `usage` is `scope`'s measured size, from the caller's walk
+    of the pool; the pass is a no-op unless it exceeds HIGH * quota."""
+    if quota is None or usage <= HIGH * quota:
         return
     target = LOW * quota
     by_cache: dict[str, list[tuple[float, int]]] = {}

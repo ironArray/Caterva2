@@ -28,6 +28,7 @@ import traceback
 import types
 import typing
 import uuid
+import weakref
 import zipfile
 
 # Requirements
@@ -55,6 +56,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.datastructures import MutableHeaders
 
 # Project
 from caterva2 import hdf5, models, utils
@@ -68,7 +70,35 @@ dotenv.load_dotenv()
 
 
 # State
-locks = {}
+# Per-array locks, held weakly, so the table holds the locks in use and nothing
+# else: a strong dict grows one entry per distinct array ever written, and never
+# loses one, for as long as the server runs.
+_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+
+
+def dataset_lock(abspath) -> asyncio.Lock:
+    """Serialize the writes to one array within this process.
+
+    Keyed on where the array is stored and not on the path it was asked for:
+    `@personal/run.b2nd` is a name every user spells the same way and no two of
+    them share (see `publish_key`), so a lock keyed on the request path makes
+    every user's chunk writes wait on every other user's writes to a different
+    file.
+
+    Weak is safe because every caller takes the lock in an `async with` on this
+    call's result: whoever holds it, and whoever waits on it, is a strong
+    reference to it for as long as that matters.  A lock nobody holds has no
+    state worth keeping.
+    """
+    key = str(abspath)
+    lock = _locks.get(key)
+    if lock is None:
+        # Bound to a name first: the table's own reference is weak, so an
+        # unnamed lock could be collected before it is returned
+        lock = asyncio.Lock()
+        lock = _locks.setdefault(key, lock)
+    return lock
+
 
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
 mimetypes.add_type("application/x-ipynb+json", ".ipynb")
@@ -451,21 +481,12 @@ async def get_list(
                 # walk_files() semantics for directories.
                 prefix = inner_key or "/"
                 strip = prefix.rstrip("/") + "/"
-                # A prefix that names a leaf exactly is one of its own leaves,
-                # and it does not start with `strip`: stripping it anyway leaves
-                # the empty string, and the listing hands out a name nothing has.
-                # A single dataset lists as its own name, the way a single file
-                # does below
-                names = sorted(
-                    d[len(strip) :] if d.startswith(strip) else d.rsplit("/", 1)[-1]
-                    for d in container.leaves(prefix)
-                )
-                if not names and inner_key is not None:
-                    # ... and where the walk only descends groups (an HDF5 file),
-                    # a leaf named exactly is not in it at all
-                    node = container.get(inner_key)
-                    if node is not None and not container.is_group(node):
-                        names = [inner_key.rsplit("/", 1)[-1]]
+                names = sorted(d[len(strip) :] for d in container.leaves(prefix))
+                if not names and inner_key is not None and container.is_leaf(inner_key):
+                    # `leaves` answers with a prefix's descendants, and a leaf is
+                    # not one of its own: a path that names one lists as that
+                    # name, the way a single file does below
+                    names = [inner_key.rsplit("/", 1)[-1]]
                 return names
             finally:
                 container.close()
@@ -575,7 +596,7 @@ async def partial_download(abspath, path, slice_=None):
     None
         When finished, the dataset is available in cache.
     """
-    lock = locks.setdefault(path, asyncio.Lock())
+    lock = dataset_lock(abspath)
     async with lock:
         proxy = open_b2(abspath, path)
         await proxy.afetch(slice_)
@@ -617,7 +638,7 @@ def member_window(abspath, inner_key, mtime):
     window = locate(inner_key)
     if window is None:
         return None
-    offset, size = window
+    offset, _size = window
     with open(abspath, "rb") as container:
         container.seek(offset)
         if container.read(10)[2:9] != b"b2frame":
@@ -1143,9 +1164,18 @@ async def post_fetch_data(
     try:
         payload = models.FetchPayload.model_validate_json(body)
     except pydantic.ValidationError as exc:
-        # The status FastAPI answers a body it cannot read with, so a client
-        # that misspells a field sees the same thing however this is written
-        raise fastapi.HTTPException(status_code=422, detail=json.loads(exc.json())) from exc
+        # 422, the status FastAPI answers a body it cannot read with, and
+        # reported the way FastAPI reports its own: without the input that
+        # failed (`fastapi.routing` builds this error with an empty `input`).
+        # Pydantic puts the *whole body* there for malformed JSON, so echoing
+        # its errors back hands a caller who sent MAX_FETCH_BODY bytes of
+        # nonsense every one of them again -- an amplifier on the one endpoint
+        # this bound exists to keep small
+        detail = [
+            {"type": err["type"], "loc": err["loc"], "msg": err["msg"]}
+            for err in exc.errors(include_url=False)
+        ]
+        raise fastapi.HTTPException(status_code=422, detail=detail) from exc
     return await fetch_data(
         path=path,
         slice_=payload.slice_,
@@ -1177,12 +1207,16 @@ async def download_data(
         except providers.ProviderError as exc:
             raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
         srv_utils.refuse_range(range_header, path)
-        # Case-insensitively, because these came off an httpx response and httpx
-        # hands back lowercased names: a plain `setdefault` sees no match, adds a
-        # second one, and the answer carries two `Content-Disposition` headers --
-        # the peer's filename and ours -- for a client to choose between
-        if not any(k.lower() == "content-disposition" for k in headers):
-            headers["Content-Disposition"] = f'attachment; filename="{path.name}"'
+        # Case-insensitive once, for everything added below, rather than per
+        # header at each addition: these came off an httpx response and httpx
+        # hands back lowercased names, so a plain dict sees no match, adds a
+        # second entry, and the answer goes out carrying the header twice -- the
+        # peer's `Content-Disposition` and ours, for a client to choose between.
+        # `download` is a provider interface that answers with headers of its
+        # own choosing, so this holds for whatever else it comes back with and
+        # not only for the two names spelled out here
+        headers = MutableHeaders(headers)
+        headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
         headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 
@@ -1266,9 +1300,11 @@ async def get_chunk(
             "fetch it with the slice_ parameter instead"
         )
     # One lock per container, so the leaves of a .b2z serialize with each other
-    # over the file they share; a plain dataset is its own container, as before
-    container_path = pathlib.Path(str(path)[: -len(inner_key)]) if inner_key else path
-    lock = locks.setdefault(container_path, asyncio.Lock())
+    # over the file they share; a plain dataset is its own container, as before.
+    # `abspath` *is* the container (`split_and_resolve` splits the inner key off
+    # it), and it is where the file lives rather than what it was asked for --
+    # so two users' `@personal` arrays of one name do not wait on each other
+    lock = dataset_lock(abspath)
     async with lock:
         root = path.parts[0]
         get_rootdir_or_error(root, user)
@@ -1671,7 +1707,7 @@ async def write_chunk(
 
     # One lock per dataset in this process, and the frame's own lock across
     # processes: the write below blocks, so it cannot hold the event loop
-    lock = locks.setdefault(path, asyncio.Lock())
+    lock = dataset_lock(abspath)
     async with lock:
         answer = await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
     if settings.quota:
@@ -1714,7 +1750,7 @@ async def publish(
     key = publish_key(path, user)
     publish_destination(key)  # refuses here if this server publishes nowhere
 
-    lock = locks.setdefault(path, asyncio.Lock())
+    lock = dataset_lock(abspath)
     async with lock:
         written, nchunks = await concurrency.run_in_threadpool(count_written, abspath)
         if written != nchunks:
@@ -2875,8 +2911,11 @@ def _model_from_info(info):
     # templates below works unchanged.
     # `kind` first, where the peer says it: a CTable's metadata has neither a
     # shape nor a size, so anything reading it off the fields alone falls
-    # through to `File` and raises on the `size` it does not carry.
-    if info.get("kind") == "ctable":
+    # through to `File` and raises on the `size` it does not carry.  Asked for
+    # rather than read off `info` directly, because `RootProvider.info` is not
+    # promised to be a dict (`get_info` guards its own use of it the same way)
+    # and a `.get` on something else would 500 the panel this renders
+    if isinstance(info, dict) and info.get("kind") == "ctable":
         return srv_utils.get_model_from_obj(info, models.CTableMetadata)
     if "shape" in info:
         return srv_utils.get_model_from_obj(info, models.Metadata)

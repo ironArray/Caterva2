@@ -209,6 +209,41 @@ def test_a_dictstore_prefix_is_a_group(fill_dict_public, client):
     assert response.status_code == 404
 
 
+@pytest.fixture
+def fill_dict_namesake_public(client):
+    """A DictStore holding both a leaf `/grp` and a key under `/grp/`.
+
+    A flat store's keys are its hierarchy, and nothing keeps one key from
+    naming what another one uses as a prefix.
+    """
+    dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    fname = "test_dict_namesake.b2z"
+    store = blosc2.DictStore(str(dest_dir / fname), mode="w")
+    store["/grp"] = blosc2.asarray(np.arange(5))
+    store["/grp/a"] = blosc2.asarray(np.arange(9))
+    store.close()
+    return fname, client.get(TEST_CATERVA2_ROOT)
+
+
+def test_a_dictstore_key_is_not_a_member_of_itself(fill_dict_namesake_public, client):
+    """A key that is also a prefix must not list among its own contents.
+
+    The flat store's leaves were "the prefix and everything under it", so the
+    prefix arrived at the listing as a leaf that does not start with what is
+    stripped off one -- and came back rendered as the container's own name.
+    `/grp` listed as one of `/grp`'s contents, and a client walking that built
+    `.../grp/grp`, a path nothing resolves.
+    """
+    fname, root = fill_dict_namesake_public
+    listing = client.get_list(f"{root.name}/{fname}/grp")
+    assert listing == ["a"]
+    # ... and what a listing hands out, the server answers for
+    for name in listing:
+        r = httpx.get(f"{client.urlbase}/api/info/{root.name}/{fname}/grp/{name}")
+        assert r.status_code == 200, name
+
+
 def test_a_container_refuses_coordinates(fill_tree_public, client):
     """A container is served as the file it is, so there is nothing to narrow.
 

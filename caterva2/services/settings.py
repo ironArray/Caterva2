@@ -43,7 +43,17 @@ login = conf.get(".login", True)
 register = conf.get(".register", False)
 demo = conf.get(".demo", False)
 
-quota = parse_size(conf.get(".quota"))
+try:
+    quota = parse_size(conf.get(".quota"))
+except ValueError as exc:
+    # Fatal, unlike the peer cache quotas, which fall back to a default and log
+    # it: those are eviction budgets, and running without one costs a fuller
+    # cache.  This one is the limit on what users may store, and its absence
+    # means "no limit" -- a typo must not quietly lift it.  Re-raised here only
+    # to name the setting: this runs at import, so the bare ValueError came out
+    # of the lifespan pointing at this module rather than at the line in the
+    # configuration file that the operator has to fix.
+    raise ValueError(f"the `quota` setting is unreadable: {exc}") from None
 maxusers = conf.get(".maxusers")
 
 # Where a finished array is published, as an fsspec URL of a *directory*

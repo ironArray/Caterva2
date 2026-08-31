@@ -71,11 +71,14 @@ class PeerRegistry:
             try:
                 cache_quota = parse_size(conf.get("cache_quota"))
             except ValueError as exc:
-                # One unreadable size is one peer skipped, as every other
-                # invalid field here is: startup has to survive a typo in a
-                # config entry, not refuse to boot over it
-                logger.warning("peer %s has an unreadable cache_quota (%s); skipping", name, exc)
-                continue
+                # The quota, not the peer.  `cache_quota` is an optional
+                # eviction budget whose absence means "none", so a typo in it
+                # degrades to what leaving it out would have meant -- where
+                # dropping the entry would unmount the root instead, and every
+                # dataset under it would 404 with nothing but a line at boot
+                # to say why
+                logger.warning("peer %s has an unreadable cache_quota (%s); ignoring it", name, exc)
+                cache_quota = None
             peer = Peer(name=name, urlbase=urlbase, cache_quota=cache_quota)
             if peer.root in self.peers:
                 logger.warning("duplicate peer name %s, skipping", name)
@@ -97,6 +100,13 @@ class PeerRegistry:
             r = httpx.get(peer.urlbase + "/api/peer", timeout=HTTP_TIMEOUT)
             r.raise_for_status()
             m = r.json()
+            # In here, so that it disables the peer rather than raising: a 200
+            # from a captive portal or a proxy's error page is JSON often
+            # enough, and the `.get`s below are what would raise on it -- out
+            # of a probe that runs in a thread of its own, and takes the thread
+            # with it
+            if not isinstance(m, dict):
+                raise TypeError(f"answered {type(m).__name__}, not a JSON object")
         except Exception as exc:
             logger.warning("peer %s offline: %s", peer.name, exc)
             peer.online = False

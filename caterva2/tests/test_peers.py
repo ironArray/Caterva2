@@ -5,7 +5,11 @@ Uses its own subprocess pair (ports 8031/8032) instead of the port-8000
 pytest harness in services.py, since peer mounts need two servers talking
 to each other.
 """
-# ruff: noqa: RUF009  # blosc2.field() is the standard CTable dataclass default API
+# RUF009: blosc2.field() is the standard CTable dataclass default API.  RUF100
+# with it, because the two ruffs disagree about this file: the version the
+# pre-commit hook pins reports RUF009 here ten times over, and a newer one does
+# not report it at all and calls the directive unused.
+# ruff: noqa: RUF009, RUF100
 
 import asyncio
 import json
@@ -1086,12 +1090,15 @@ def peers_api_version():
     return PEER_API_VERSION
 
 
-def test_an_unreadable_cache_quota_skips_one_peer_not_the_server():
-    """Startup has to survive a typo in a config entry, not refuse to boot.
+def test_an_unreadable_cache_quota_costs_the_quota_not_the_peer():
+    """Startup has to survive a typo in a config entry, not refuse to boot --
+    and not quietly unmount a root either.
 
-    `load()` says invalid entries are logged and skipped; a `cache_quota` it
-    could not parse raised straight out of it instead, through the provider's
-    startup and the lifespan, and the server never came up.
+    A `cache_quota` it could not parse raised straight out of `load()` at first,
+    through the provider's startup and the lifespan, and the server never came
+    up.  Skipping the entry instead cost as much in a quieter way: `cache_quota`
+    is an optional eviction budget, and dropping the peer over it left every
+    dataset under `@bad` answering 404 with one line at boot to say why.
     """
     from c2cache import peers
 
@@ -1103,5 +1110,36 @@ def test_an_unreadable_cache_quota_skips_one_peer_not_the_server():
             {"name": "fine", "urlbase": "http://c.invalid", "cache_quota": "2G"},
         ]
     )
-    assert set(registry.peers) == {"@fine"}
+    # Every peer is still mounted ...
+    assert set(registry.peers) == {"@bad", "@worse", "@fine"}
+    # ... the unreadable ones with the budget that leaving it out would mean
+    assert registry.peers["@bad"].cache_quota is None
+    assert registry.peers["@worse"].cache_quota is None
     assert registry.peers["@fine"].cache_quota == 2 * 2**30
+
+
+def test_a_handshake_answer_that_is_not_an_object_disables_the_peer(monkeypatch):
+    """`_handshake` never raises: it runs in a thread of its own, and an
+    exception out of it takes the thread with it, leaving the peer offline with
+    no peer_id and nothing to say so.  A 200 carrying JSON that is not an object
+    -- a captive portal, a proxy's error page -- used to do exactly that on the
+    `.get` below the parse.
+    """
+    from c2cache import peers
+
+    class _Answer:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return ["not", "an", "object"]
+
+    monkeypatch.setattr(peers.httpx, "get", lambda *a, **kw: _Answer())
+    registry = peers.PeerRegistry("me")
+    registry.load([{"name": "portal", "urlbase": "http://a.invalid"}])
+    peer = registry.peers["@portal"]
+
+    registry.handshake_all()  # the thread must finish, not die in it
+
+    assert peer.online is False
+    assert peer.peer_id is None

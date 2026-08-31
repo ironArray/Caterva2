@@ -19,6 +19,12 @@ from caterva2.services import providers
 
 logger = logging.getLogger("c2cache")
 
+# What the whole peer-cache pool is allowed to hold where the configuration says
+# nothing, and what an unreadable `peer_cache_quota` falls back to.  Named once:
+# the default, the fallback and the line that tells an operator which one they
+# got are three spellings of the same number otherwise.
+DEFAULT_PEER_CACHE_QUOTA = "1G"
+
 
 def _read_sidecar(entry):
     """The JSON sidecar of a whole-file cache entry, or None if missing or
@@ -105,12 +111,18 @@ class C2CacheProvider(providers.RootProvider):
         peercache.pool_dir = self.settings.statedir / "peercache"
         peercache.pool_dir.mkdir(parents=True, exist_ok=True)
         try:
-            peercache.budget = providers.parse_size(self.settings.conf.get(".peer_cache_quota", "1G"))
+            peercache.budget = providers.parse_size(
+                self.settings.conf.get(".peer_cache_quota", DEFAULT_PEER_CACHE_QUOTA)
+            )
         except ValueError as exc:
             # As for a peer's own quota: an unreadable size falls back to the
             # default rather than taking the server down on the way up
-            logger.warning("peer_cache_quota is unreadable (%s); falling back to 1G", exc)
-            peercache.budget = providers.parse_size("1G")
+            logger.warning(
+                "peer_cache_quota is unreadable (%s); falling back to %s",
+                exc,
+                DEFAULT_PEER_CACHE_QUOTA,
+            )
+            peercache.budget = providers.parse_size(DEFAULT_PEER_CACHE_QUOTA)
         peercache.peer_quotas = {
             p.name: p.cache_quota for p in self.registry.peers.values() if p.cache_quota
         }

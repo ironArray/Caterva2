@@ -582,6 +582,25 @@ def test_a_body_past_the_bound_is_refused_before_it_is_read(client, fill_public)
     assert response.status_code == 200
 
 
+def test_a_body_that_is_not_json_is_not_echoed_back(client, fill_public):
+    """The refusal must not hand the body back.
+
+    Pydantic reports a body it could not parse by carrying the whole of it in
+    the error's `input`, so answering with those errors verbatim made this
+    endpoint an amplifier of exactly what `MAX_FETCH_BODY` bounds: a caller
+    sending a megabyte of nonsense was sent every byte of it again.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    # Under the bound, so it is read and parsed; unterminated, so it is refused
+    body = b'{"indices": "[' + b"7" * (1024 * 1024)
+    response = httpx.post(url, content=body, headers={"Content-Type": "application/json"}, timeout=60)
+    assert response.status_code == 422
+    assert b"7777" not in response.content
+    assert len(response.content) < 1000
+    # ... while still saying what was wrong with it
+    assert response.json()["detail"][0]["type"] == "json_invalid"
+
+
 def test_coordinates_do_not_combine_with_a_slice(examples_dir, client, fill_public):
     ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
     url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
