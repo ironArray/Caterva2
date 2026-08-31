@@ -217,8 +217,7 @@ def b2chunkers_from_blosc2(
         # TODO: check if schunk is compatible with creation arguments
         if b2_schunk.nchunks < 1:
             raise OSError(
-                f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
-                f"contains Blosc2 super-chunk with no chunks"
+                f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} contains Blosc2 super-chunk with no chunks"
             )
         if b2_schunk.nchunks > 1:
             # TODO: warn, check shape, re-compress as single chunk

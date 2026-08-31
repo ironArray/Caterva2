@@ -29,5 +29,5 @@ def main(verbose=False, args=None):
     return pytest.main(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(args=sys.argv)

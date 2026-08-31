@@ -155,7 +155,17 @@ c2cache = "c2cache:provider_factory"
 line-length = 109
 
 [tool.ruff.lint]
-extend-select = [
+# `select`, not `extend-select`: what a bare `extend-select` extends is ruff's
+# own default set, and that set grows between releases -- 0.16 added eight
+# linters to it, and every one of them arrived here as errors nobody had opted
+# into.  The first four entries are what that default used to be, so this list
+# is the whole selection and a ruff upgrade changes nothing but the rules
+# themselves.
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F",
     "B",
     "C4",
     "C90",
@@ -165,7 +175,7 @@ extend-select = [
     "RET",
     "RUF",
     "SIM",
-    "TCH",
+    "TC",  # spelled TCH before ruff renamed it
     "UP",
 ]
 ignore = [
@@ -179,7 +189,6 @@ ignore = [
     "RUF005",
     "RUF015",
     "SIM108",
-    "UP038",  # https://github.com/astral-sh/ruff/issues/7871
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]

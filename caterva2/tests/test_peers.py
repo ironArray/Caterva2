@@ -5,11 +5,6 @@ Uses its own subprocess pair (ports 8031/8032) instead of the port-8000
 pytest harness in services.py, since peer mounts need two servers talking
 to each other.
 """
-# RUF009: blosc2.field() is the standard CTable dataclass default API.  RUF100
-# with it, because the two ruffs disagree about this file: the version the
-# pre-commit hook pins reports RUF009 here ten times over, and a newer one does
-# not report it at all and calls the directive unused.
-# ruff: noqa: RUF009, RUF100
 
 import asyncio
 import json
