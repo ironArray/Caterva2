@@ -13,3 +13,7 @@ __pycache__
 # jupyterlite
 /.jupyterlite.doit.db
 /caterva2/services/static/jupyterlite/
+/jupyterlite-exts/.dev-jupyter-path/
+
+# container image exports (docker/caterva2-server/, see plans/remote-peer-containers.md)
+/caterva2-peer.tar

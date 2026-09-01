@@ -4,6 +4,100 @@
 
 #XXX version-specific blurb XXX#
 
+* C2Cache is bundled and registered as the internal `caterva2.c2cache`
+  provider. It is part of the Caterva2 wheel and release lifecycle, needs no
+  separate package or installed entry-point metadata, and is inert unless at
+  least one `[[server.peer]]` entry activates it.
+
+* Arrays can be filled a chunk at a time, by several writers at once. An array
+  is laid out empty first (`Client.lay_out()`, a couple of hundred bytes
+  whatever its shape) and each writer posts the chunks it owns with
+  `Client.fill_chunk()`, over the new `POST api/chunk/{path}`. Every chunk of a
+  laid-out array is a slot nothing has been written to; a writer claims one by
+  writing it, and a second write to the same slot is refused with a 409 -- so
+  two writers that both believe they own a chunk are resolved by the array
+  rather than by anything either of them holds. `Client.written_chunks()` says
+  how far a fill has got, read from the frame's own offsets, so there is no
+  bookkeeping to fall out of step with the array. A chunk is checked against the
+  whole of the array's geometry before it is stored -- its chunksize, its
+  blocksize and its typesize -- since one compressed against another typesize
+  decompresses to values in the wrong places and says nothing about it.
+
+* A filled array is published as one finished frame. Set `publish_root` in the
+  server configuration -- an fsspec URL of a directory -- and an array is copied
+  there as soon as its last chunk lands, moved into place so that what appears
+  at the destination is a whole frame or nothing. `POST api/publish/{path}`
+  (`Client.publish()`) is the primitive underneath, for finishing a publish that
+  was interrupted. The destination is the server's own configuration and never
+  something a caller names.
+
+* `api/fetch` takes an `indices` parameter: a fancy key as JSON, one entry per
+  dimension -- a list of integers for a dimension indexed by coordinates, an
+  integer for one indexed by a scalar, a string for one indexed by a slice, null
+  for one taken whole. The server gathers the points and sends those, reading
+  only the chunks they land in. The alternative is a client fetching the blocks
+  the points live in and picking them out, and a block is nearly all waste for a
+  single coordinate: nine scattered points of a 900^3 array cost 271 bytes in one
+  request this way against 237 KB in nineteen. Not combinable with `slice_`,
+  `filter` or `field`, and refused -- rather than quietly dropped -- for
+  anything that cannot gather points: a container, or a dataset mounted from a
+  peer, which a provider fetches boxes of. A key may name at most a million
+  coordinates, since it travels in a body now and is no longer bounded by what a
+  URL holds. blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
+
+* `Client.get_slice()` and `ds[key]` take a fancy key -- a list or array of
+  coordinates, or a boolean mask -- and send it as `indices` for the server to
+  gather, changing verb to POST where it is too long for a URL. What comes back
+  is the points, not the chunks holding them. `slice_to_string()` now refuses an
+  index it cannot express instead of dropping it: a dropped index left an empty
+  slice string, which asks for the whole dataset and hands back all of it,
+  neither what was asked for nor smaller. An `Ellipsis` is expanded against the
+  dataset's shape rather than refused, since it names the dimensions the key
+  does not, and a bound of 0 is written out: `ds[0:0]` selects nothing, where it
+  used to be spelled `:` and select everything.
+
+* `POST api/fetch` takes the same parameters in a body that the GET takes in a
+  query, and is the same code behind them. It exists for the one thing a query
+  string cannot do: carry a key of more coordinates than a URL has room for,
+  which is a few thousand and no encoding moves by much. 200,000 coordinates go
+  through it in one request. Nothing moves off GET -- blosc2 changes verb only
+  where a query could not have been made, so every deployment goes on serving
+  what it already served, and byte ranges stay with the GET they belong to.
+
+* `api/fetch` is explicit about byte ranges, which is what lets a client read
+  single *blocks* of a dataset instead of whole chunks. A stored dataset is
+  served from its file and honours a `Range` as it always did, and now says so
+  with `Accept-Ranges: bytes`; anything built per request -- a slice, a field, a
+  lazy expression, a download -- refuses with a 416 and `Accept-Ranges: none`,
+  where before it answered 200 with the whole body, which is the download such a
+  client was trying to avoid in the first place. A leaf inside a container (a
+  `.b2z` member, or an HDF5 leaf that is a whole frame) is served by seeking to
+  its window in the file, several spans in one `multipart/byteranges` answer if
+  that is what was asked for, so it is readable block-wise like any dataset of
+  its own. `caterva2/tests/test_ranges.py` pins all of it down: a refactor
+  turning that one `FileResponse` into a `StreamingResponse` would otherwise
+  silently cost every such client its block granularity.
+
+* `api/info` reports `accept_ranges` for a dataset: `"bytes"` for one served
+  from a file, `"none"` for one mounted from a peer and re-serialized here, and
+  absent where it is not settled by the description alone (a container leaf,
+  whose answer depends on its own window, or a `.b2nd` that proxies an HDF5
+  dataset, which reads as a stored array here but is rebuilt when fetched).
+  A field an older peer does not send is simply absent, not an error. It says of `api/fetch` what that
+  endpoint would answer, a request earlier: a client reading blocks over byte
+  ranges asks `api/info` anyway, and can now tell a dataset it may range-read
+  from one it may not without spending a request to find out. A field rather
+  than an `Accept-Ranges` header, which would be claiming that `api/info` itself
+  served ranges. Clients that do not know the field are unaffected.
+
+* `api/info` and the ranged file responses carry an `ETag` of our own, built
+  from the frame's generation counter as well as its size and mtime. Starlette's
+  default is a digest of the mtime and the size, which a chunk written as a run
+  of zeros can leave untouched -- such a write stores no payload, so the frame
+  can come out of it exactly as long as it went in. A container leaf carries the
+  container's, on `api/info` and on its ranged reads alike: a leaf is a window of
+  that file, so what says the file did not change says the window did not move.
+
 ## Changes from 2025.11.17.1 to 2025.12.3
 
 * Upload in-memory objects

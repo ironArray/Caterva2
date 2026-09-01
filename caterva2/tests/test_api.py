@@ -7,6 +7,7 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 import contextlib
+import json
 import os
 import pathlib
 
@@ -18,7 +19,7 @@ import pytest
 
 import caterva2 as cat2
 
-from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
+from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR, c2array_sends_indices
 
 
 @pytest.fixture
@@ -338,6 +339,274 @@ def test_dataset_step_diff_1(client):
     with pytest.raises(Exception) as e_info:  # noqa: PT012
         _ = ds[::2]
         assert str(e_info.value) == "Only step=1 is supported"
+
+
+@pytest.mark.parametrize(
+    "key",
+    [[1, 5, 9], [0, -1], [7], np.array([2, 4, 6]), np.array([True] + [False] * 999)],
+)
+def test_getitem_dataset_coordinates(key, examples_dir, client, fill_public):
+    """A fancy key is gathered by the server, which sends the points and no more.
+
+    The alternative is fetching the blocks the points live in and picking them
+    out here, and a block is nearly all waste for a single coordinate.
+
+    Two clients send it: blosc2's own `C2Array` and this package's.  Only the
+    first needs a blosc2 newer than any release, so only that half stands down
+    on an older one -- what the server does with the key is what this is really
+    about, and this package's client exercises it on every blosc2.
+    """
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    if c2array_sends_indices:
+        c2 = blosc2.C2Array(f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd", urlbase=client.urlbase)
+        np.testing.assert_array_equal(c2[key], a[key])
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    np.testing.assert_array_equal(ds[key], a[key])
+    np.testing.assert_array_equal(ds.slice(key, as_blosc2=False), a[key])
+
+
+def test_coordinates_send_only_what_they_select(examples_dir, client, fill_public):
+    # The whole point: what comes back is the size of the answer, not of the
+    # chunks the answer was gathered from
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    points = httpx.get(url, params={"indices": "[[1,5,9]]"})
+    whole = httpx.get(url)
+    assert points.status_code == 200
+    assert len(points.content) < len(whole.content)
+
+
+@pytest.mark.parametrize(
+    ("indices", "detail"),
+    [
+        ("[[1,2]]", None),
+        ("[[1,true]]", "only integers"),
+        ("[{}]", "not an integer"),
+        ("nonsense", "not JSON"),
+        ('{"a": 1}', "JSON list"),
+        ("[[999999]]", "out of bounds"),
+    ],
+)
+def test_coordinates_refuse_what_they_cannot_read(indices, detail, examples_dir, client, fill_public):
+    # Whatever arrives goes on to index a real array, so nothing that is not
+    # coordinates may reach it -- and saying which is which is the endpoint's job
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    response = httpx.get(url, params={"indices": indices})
+    if detail is None:
+        assert response.status_code == 200
+    else:
+        assert response.status_code == 400
+        assert detail in response.json()["detail"]
+
+
+def test_the_client_sends_a_long_key_in_a_body(examples_dir, client, fill_public):
+    """Past what a query carries this client changes verb too, not just blosc2's."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    key = [int(i % len(a)) for i in range(20_000)]
+    np.testing.assert_array_equal(ds[key], a[key])
+
+
+def test_an_ellipsis_is_the_dimensions_it_stands_for(examples_dir, client, fill_public):
+    """`...` names every dimension the key does not, so it is expanded, not
+    refused: dropping it shifts the entries after it onto the wrong dimension,
+    and refusing it turns a key numpy reads into an error."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    np.testing.assert_array_equal(ds[...], a[...])
+    np.testing.assert_array_equal(ds[..., 0], a[..., 0])
+    np.testing.assert_array_equal(ds[0, ...], a[0, ...])
+    np.testing.assert_array_equal(ds[..., [1, 5, 9]], a[..., [1, 5, 9]])
+
+    ds2 = client.get(TEST_CATERVA2_ROOT)["dir1/ds-2d.b2nd"]
+    a2 = blosc2.open(examples_dir / "dir1/ds-2d.b2nd")[:]
+    np.testing.assert_array_equal(ds2[..., 1], a2[..., 1])
+    np.testing.assert_array_equal(ds2[1, ...], a2[1, ...])
+
+
+def test_a_bound_of_zero_is_a_bound(examples_dir, client, fill_public):
+    """`0:0` selects nothing, and an empty string in a slice string says "no
+    bound at all" -- which is the whole dimension, the one answer it is not."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    assert len(ds[0:0]) == 0
+    np.testing.assert_array_equal(ds[0:0], a[0:0])
+    assert len(ds.slice(slice(2, 0), as_blosc2=False)) == 0
+
+
+def test_the_client_refuses_a_key_it_cannot_spell(examples_dir, client, fill_public):
+    # Dropped instead of refused, an index asks for the whole dataset and hands
+    # back all of it -- neither what was asked for nor smaller
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    with pytest.raises(IndexError, match="step=1"):
+        ds[::2]
+
+
+def test_coordinates_may_arrive_in_a_body(examples_dir, client, fill_public):
+    """More coordinates than an URL carries, which is the whole reason for POST."""
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    a = blosc2.open(examples_dir / "ds-1d.b2nd")[:]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    key = [int(i % len(a)) for i in range(20_000)]
+
+    response = httpx.post(url, json={"indices": json.dumps([key])}, timeout=60)
+    assert response.status_code == 200
+    np.testing.assert_array_equal(blosc2.ndarray_from_cframe(response.content)[:], a[key])
+
+
+def test_a_post_fetch_is_the_get_by_another_route(examples_dir, client, fill_public):
+    # The same parameters and the same code behind them, so the two may not
+    # answer differently for anything both can be asked
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    for params in ({"indices": "[[1,5,9]]"}, {"slice_": "0:10"}):
+        got = httpx.post(url, json=params, timeout=30)
+        expected = httpx.get(url, params=params, timeout=30)
+        assert got.status_code == expected.status_code == 200
+        assert got.content == expected.content
+
+
+def test_a_model_survives_a_peer_that_never_heard_of_a_field():
+    """A peer's `api/info` is a dict, and a dict has only the keys it has.
+
+    `htmx/path-info` rebuilds the local model from whatever a peer answered, so
+    every field added here is one an older peer does not send.  Left at its
+    default, exactly as for an object that lacks the attribute -- the alternative
+    is a `KeyError` nothing catches, and a 500 on the panel for every dataset
+    that peer serves.
+    """
+    from caterva2 import models
+    from caterva2.services import srv_utils
+
+    schunk = {
+        "cbytes": 1,
+        "chunkshape": 1,
+        "chunksize": 1,
+        "contiguous": True,
+        "cparams": {
+            "codec": 0,
+            "codec_meta": 0,
+            "clevel": 1,
+            "filters": [0],
+            "filters_meta": [0],
+            "typesize": 4,
+            "blocksize": 0,
+            "nthreads": 1,
+            "splitmode": 1,
+            "tuner": 0,
+            "use_dict": False,
+        },
+        "cratio": 1.0,
+        "nbytes": 1,
+        "urlpath": None,
+        "nchunks": 1,
+    }
+    # As a peer running a Caterva2 from before `accept_ranges` existed answers
+    info = {"shape": (4,), "chunks": (4,), "blocks": (4,), "dtype": "int32", "mtime": None}
+    meta = srv_utils.get_model_from_obj({**info, "schunk": schunk}, models.Metadata)
+    assert meta.accept_ranges is None
+    assert meta.shape == (4,)
+
+
+@pytest.mark.parametrize(
+    ("params", "detail"),
+    [
+        ({"slice_": "1:2:3:4"}, "not a slice"),
+        ({"slice_": "abc"}, "not a slice"),
+        ({"indices": '["1:2:3:4"]'}, "not a slice"),
+    ],
+)
+def test_a_malformed_slice_is_the_caller_s_fault(params, detail, client, fill_public):
+    """A 400 about the request, not a 500 about the server.
+
+    A segment of four parts makes `slice()` raise a `TypeError`, which is not
+    what either parser catches, and `slice_` was not read inside a `try` at all.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    response = httpx.get(url, params=params)
+    assert response.status_code == 400
+    assert detail in response.json()["detail"]
+
+
+def test_a_post_fetch_refuses_a_field_it_does_not_know(client, fill_public):
+    """Every parameter narrows the answer, so an ignored one widens it.
+
+    A misspelled `indices` dropped silently leaves the request naming nothing,
+    and what comes back is the whole dataset with a 200 -- to a caller who
+    believes they asked for three coordinates.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    response = httpx.post(url, json={"indicies": "[[1,5,9]]"}, timeout=30)
+    assert response.status_code == 422
+
+
+def test_more_coordinates_than_are_gathered_are_refused(client, fill_public):
+    """`POST api/fetch` lifted the URL's length limit, which was the only bound.
+
+    Without one of its own, a single anonymous request can name any number of
+    points and have the server gather, materialize and serialize all of them.
+
+    The count is `caterva2.services.server.MAX_FETCH_COORDS`, written out rather
+    than imported: importing that module builds the app, which wants a secret
+    this process has no reason to have.  Raising the cap there fails this here.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    key = json.dumps([[0] * (1_000_000 + 1)], separators=(",", ":"))
+    response = httpx.post(url, json={"indices": key}, timeout=60)
+    assert response.status_code == 400
+    assert "batches" in response.json()["detail"]
+    # ...and the character bound refuses before the parse, not after it
+    response = httpx.post(url, json={"indices": "[" + "0" * (8 * 1024 * 1024 + 1) + "]"}, timeout=60)
+    assert response.status_code == 400
+    assert "at most" in response.json()["detail"]
+
+
+def test_a_body_past_the_bound_is_refused_before_it_is_read(client, fill_public):
+    """The character bound on `indices` is a bound on the parse, not the request.
+
+    A body is read whole before any field of it can be measured, so
+    `MAX_INDICES_CHARS` described what the server had already been made to
+    allocate.  The request itself is bounded now, by `MAX_FETCH_BODY`, and a
+    body past it is refused with a 413 -- while a key that fits still gets the
+    400 about the key.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    # 32 MB, well past the 9 MB this reads (8 MB of `indices` plus the JSON
+    # around it); sent as one body rather than streamed, as a client would
+    body = b'{"indices": "[' + b"0" * (32 * 1024 * 1024) + b']"}'
+    response = httpx.post(url, content=body, headers={"Content-Type": "application/json"}, timeout=60)
+    assert response.status_code == 413
+    # ... and a body under the bound is still answered by the parse, not by this
+    response = httpx.post(url, json={"indices": "[[0,1]]"}, timeout=30)
+    assert response.status_code == 200
+
+
+def test_a_body_that_is_not_json_is_not_echoed_back(client, fill_public):
+    """The refusal must not hand the body back.
+
+    Pydantic reports a body it could not parse by carrying the whole of it in
+    the error's `input`, so answering with those errors verbatim made this
+    endpoint an amplifier of exactly what `MAX_FETCH_BODY` bounds: a caller
+    sending a megabyte of nonsense was sent every byte of it again.
+    """
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+    # Under the bound, so it is read and parsed; unterminated, so it is refused
+    body = b'{"indices": "[' + b"7" * (1024 * 1024)
+    response = httpx.post(url, content=body, headers={"Content-Type": "application/json"}, timeout=60)
+    assert response.status_code == 422
+    assert b"7777" not in response.content
+    assert len(response.content) < 1000
+    # ... while still saying what was wrong with it
+    assert response.json()["detail"][0]["type"] == "json_invalid"
+
+
+def test_coordinates_do_not_combine_with_a_slice(examples_dir, client, fill_public):
+    ds = client.get(TEST_CATERVA2_ROOT)["ds-1d.b2nd"]
+    url = f"{client.urlbase}/api/fetch/{TEST_CATERVA2_ROOT}/{ds.name}"
+    response = httpx.get(url, params={"indices": "[[1,2]]", "slice_": "0:3"})
+    assert response.status_code == 400
+    assert "cannot be combined" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(
@@ -866,6 +1135,17 @@ def test_lazyexpr_getchunk(auth_client, fill_public):
     out_expr = np.empty(chunksize, dtype=dtype)
     blosc2.decompress2(chunk_expr, out_expr)
     np.testing.assert_array_equal(out, out_expr)
+
+
+def test_get_chunk_refuses_a_path_with_a_leading_slash(client, fill_public):
+    """Every other Client method normalizes its path; this one stopped doing it.
+
+    A leading slash makes an URL with an empty first segment, which the server
+    resolves as a root nobody has: a confusing 404 about a path the client
+    could have refused itself, which is what `_format_paths` is for.
+    """
+    with pytest.raises(ValueError, match="slash"):
+        client.get_chunk(f"/{TEST_CATERVA2_ROOT}/ds-1d.b2nd", 0)
 
 
 def test_lazyexpr_fields(auth_client, fill_public):

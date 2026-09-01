@@ -1,0 +1,7 @@
+in current branch we have implemented the MVP described in @plans/caterva3-remote-peer-mounts.md. now, I am thinking that I'd like to drop plans of a new Caterva3 and keep maintaining
+  Caterva2; the only thing that I'd like is to factor out the peer "mounting" capability into another package (I think C2Cache can be a good name for now).  so the idea is to have all
+  single-host capabilities in Caterva2, and move the external Caterva2 access to new C2Cache project. Caterva2 will still have the new api/peer API so that they can be discovered by a
+  C2Cache server.  I am unsure which would be the best way to do that decoupling; maybe adding plugin/extension capabilities in Caterva2 so that C2Cache can use the existing
+  functionality?  Because C2Cache should be like a Caterva2 super-server, where users will be able to access remote servers as if they where hosting data locally (but the data will be
+  actually fetched remotely and cached locally). I am also a bit worried on when would be a good time for doing the decoupling (maybe waiting a bit more for increased funcionality in
+  Caterva2 would be better?)  analyze the possibilities and let's make a plan for the decoupling.

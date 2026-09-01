@@ -8,6 +8,7 @@
 ###############################################################################
 
 import ast
+import contextlib
 import functools
 import inspect
 import io
@@ -120,13 +121,23 @@ class Root:
         >>> client = cat2.Client('https://cat2.cloud/demo')
         >>> root = client.get('example')
         >>> root['ds-1d.b2nd']
-        <Dataset: example/ds-1d.b2nd>
+        <Array: example/ds-1d.b2nd>
         """
         path = path.as_posix() if hasattr(path, "as_posix") else str(path)
         if path.endswith((".b2nd", ".b2frame")):
-            return Dataset(self, path)
-        else:
-            return File(self, path)
+            return Array(self, path)
+        # Anything else (a directory, a .b2z CTable/TreeStore, a virtual group or
+        # leaf inside one, or a plain file) has no reliable suffix, so the
+        # server's metadata is what tells us the kind.
+        meta = self.client.get_info(f"{self.name}/{path}")
+        kind = meta.get("kind")
+        if kind == "group":
+            return Group(self, path, meta)
+        if kind == "ctable":
+            return Table(self, path, meta)
+        if "shape" in meta:
+            return Array(self, path, meta)
+        return File(self, path, meta)
 
     def __contains__(self, path):
         """
@@ -229,7 +240,7 @@ class Root:
         >>> root = client.get('@personal')
         >>> path = f'@personal/dir{np.random.randint(0, 100)}/ds-4d.b2nd'
         >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
         >>> 'root-example/dir2/ds-4d.b2nd' in root
         True
         """
@@ -270,8 +281,171 @@ class Root:
         return self.client.load_from_url(urlpath, remotepath)
 
 
-class File:
-    def __init__(self, root, path):
+# Mirrors ``srv_utils.BLOSC2_CONTAINER_SUFFIXES`` (not importable here: the
+# services package needs server-only dependencies).
+_CONTAINER_SUFFIXES = {".b2z", ".h5", ".hdf5"}
+
+
+class _FileOpsMixin:
+    """File-level operations shared by :class:`File` and :class:`Group`.
+
+    They act on the underlying *file* on the server, so they refuse paths
+    addressing a member inside a container (e.g. ``@personal/foo.h5/g``),
+    which has no file of its own.
+    """
+
+    def _toplevel_path(self):
+        parts = pathlib.PurePosixPath(self.path).parts
+        if any(pathlib.PurePosixPath(p).suffix in _CONTAINER_SUFFIXES for p in parts[:-1]):
+            raise ValueError(f"Not supported for a member inside a container file: {self.path}")
+        return self.path
+
+    def download(self, localpath=None):
+        """
+        Downloads the file to storage.
+
+        Parameters
+        ----------
+        localpath : Path, optional
+            The destination path for the downloaded file.  If not specified, the file will
+            be downloaded to the current working directory.
+
+        Returns
+        -------
+        Path
+            The path to the downloaded file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> file = root['ds-1d.b2nd']
+        >>> file.download()
+        PosixPath('example/ds-1d.b2nd')
+        >>> file.download('mydir/myarray.b2nd')
+        PosixPath('mydir/myarray.b2nd')
+        """
+        return self.client.download(
+            self._toplevel_path(),
+            localpath=localpath,
+        )
+
+    def unfold(self):
+        """
+        Unfolds the file in a remote directory.
+
+        Returns
+        -------
+        Path
+            The path to the unfolded directory.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> file = root['ds-1d.h5']
+        >>> file.unfold()
+        PurePosixPath('example/ds-1d.h5')
+        """
+        return self.client.unfold(self._toplevel_path())
+
+    def move(self, dst):
+        """
+        Moves the file to a new location.
+
+        Parameters
+        ----------
+        dst : Path
+            The destination path for the file.
+
+        Returns
+        -------
+        Path
+            The new path of the file after the move.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> # For moving a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd')
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
+        >>> file = root['root-example/dir2/ds-4d.b2nd']
+        >>> file.move('@personal/root-example/dir1/ds-4d-moved.b2nd')
+        PurePosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
+        >>> 'root-example/dir2/ds-4d.b2nd' in root
+        False
+        >>> 'root-example/dir1/ds-4d-moved.b2nd' in root
+        True
+        """
+        return self.client.move(self._toplevel_path(), dst)
+
+    def copy(self, dst):
+        """
+        Copies the file to a new location.
+
+        Parameters
+        ----------
+        dst : Path
+            The destination path for the file.
+
+        Returns
+        -------
+        Path
+            The new path of the copied file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # For copying a file you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> root.upload('root-example/dir2/ds-4d.b2nd')
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
+        >>> file = root['root-example/dir2/ds-4d.b2nd']
+        >>> file.copy('@personal/root-example/dir2/ds-4d-copy.b2nd')
+        PurePosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
+        >>> 'root-example/dir2/ds-4d.b2nd' in root
+        True
+        >>> 'root-example/dir2/ds-4d-copy.b2nd' in root
+        True
+        """
+        return self.client.copy(self._toplevel_path(), dst)
+
+    def remove(self):
+        """
+        Removes the file from the remote repository.
+
+        Returns
+        -------
+        str
+            The path of the removed file.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # To remove a file you need to be a registered user
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> root = client.get('@personal')
+        >>> path = 'root-example/dir2/ds-4d.b2nd'
+        >>> root.upload(path)
+        <Array: @personal/root-example/dir2/ds-4d.b2nd>
+        >>> file = root[path]
+        >>> file.remove()
+        '@personal/root-example/dir2/ds-4d.b2nd'
+        >>> path in root
+        False
+        """
+        return self.client.remove(self._toplevel_path())
+
+
+class File(_FileOpsMixin):
+    def __init__(self, root, path, meta=None):
         """
         Represents a file, which can be a Blosc2 dataset or a regular file on a root repository.
 
@@ -307,8 +481,16 @@ class File:
         _, root = _format_paths(root.urlbase, root.name)
         self.name = name
         self.path = pathlib.PurePosixPath(f"{self.root}/{self.name}")
-        self.meta = self.root.client._get(
-            f"{self.urlbase}/api/info/{self.path}", auth_cookie=self.cookie, timeout=self.root.client.timeout
+        # `meta` may be supplied by the caller (e.g. Root.__getitem__ already
+        # fetched it to pick the class) to avoid a redundant /api/info round-trip.
+        self.meta = (
+            meta
+            if meta is not None
+            else self.root.client._get(
+                f"{self.urlbase}/api/info/{self.path}",
+                auth_cookie=self.cookie,
+                timeout=self.root.client.timeout,
+            )
         )
         # TODO: 'cparams' is not always present (e.g. for .b2nd files)
         # print(f"self.meta: {self.meta['cparams']}")
@@ -368,6 +550,224 @@ class File:
 
     def __getitem__(self, item):
         """
+        Retrieves a slice of the file's data (only meaningful for datasets).
+
+        Parameters
+        ----------
+        item : int, slice, tuple of ints and slices, or None
+            Specifies the slice to fetch.
+
+        Returns
+        -------
+        numpy.ndarray
+            The requested slice of the dataset.
+        """
+        return self.slice(item, as_blosc2=False)
+
+    def slice(
+        self, key: int | slice | Sequence[slice], as_blosc2: bool = True
+    ) -> NDArray | SChunk | np.ndarray:
+        """Get a slice of a File/Dataset.
+
+        Parameters
+        ----------
+        key : int, slice, or sequence of slices
+            The slice to retrieve.  If a single slice is provided, it will be
+            applied to the first dimension.  If a sequence of slices is
+            provided, each slice will be applied to the corresponding
+            dimension.
+        as_blosc2 : bool
+            If True (default), the result will be returned as a Blosc2 object
+            (either a `SChunk` or `NDArray`).  If False, it will be returned
+            as a NumPy array (equivalent to `self[key]`).
+
+        Returns
+        -------
+        NDArray or SChunk or numpy.ndarray
+            A new Blosc2 object containing the requested slice.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.slice(1)
+        <blosc2.ndarray.NDArray object at 0x10747efd0>
+        >>> ds.slice(1)[()]
+        array(1)
+        >>> ds.slice(slice(0, 10))[:]
+        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        """
+        # Fetch and return the data as a Blosc2 object / NumPy array.  The path
+        # goes over rather than `self`, since that is what marks the response's
+        # kind; the shape travels beside it, for a key holding an `Ellipsis`
+        ndim = None
+        with contextlib.suppress(Exception):
+            ndim = len(self.shape)
+        return self.client.get_slice(self.path, key, as_blosc2, ndim=ndim)
+
+
+class Dataset(File):
+    """Generic fetchable-dataset base, shared by :class:`Array` and :class:`Table`.
+
+    This class is not intended to be instantiated directly; it should be
+    accessed through a :class:`Root` instance, which returns an :class:`Array`
+    or a :class:`Table` depending on the dataset kind.
+    """
+
+    def __str__(self):
+        return self.path.as_posix()
+
+    def __repr__(self):
+        return f"<Dataset: {self.path}>"
+
+
+class Array(Dataset, blosc2.Operand):
+    def __init__(self, root, path, meta=None):
+        """
+        Represents an array dataset (.b2nd, .b2frame) within a Blosc2 container.
+
+        This class is not intended to be instantiated directly; it should be accessed through a
+        :class:`Root` instance.
+
+        Parameters
+        ----------
+        root : Root
+            The root repository.
+        path : str
+            The path of the dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo')
+        >>> root = client.get('example')
+        >>> ds = root['ds-1d.b2nd']
+        >>> ds.dtype
+        'int64'
+        >>> ds.shape
+        (1000,)
+        >>> ds.chunks
+        (100,)
+        >>> ds.blocks
+        (10,)
+        """
+        super().__init__(root, path, meta)
+
+    def __str__(self):
+        return self.path.as_posix()
+
+    def __repr__(self):
+        # TODO: add more info about dims, types, etc.
+        return f"<Array: {self.path}>"
+
+    @property
+    def dtype(self):
+        """
+        The data type of the dataset.
+        """
+        try:
+            return self.meta["dtype"]
+        except KeyError as e:
+            raise AttributeError("'Array' object has no attribute 'dtype'.") from e
+
+    @property
+    def shape(self):
+        """
+        The shape of the dataset.
+        """
+        try:
+            return tuple(self.meta["shape"])
+        except KeyError as e:
+            raise AttributeError("'Array' object has no attribute 'shape'.") from e
+
+    @property
+    def ndim(self):
+        """
+        The number of dimensions of the dataset.
+        """
+        return len(self.shape)
+
+    @property
+    def chunks(self):
+        """
+        The chunkshape of the compressed dataset.
+        """
+        try:
+            return tuple(self.meta["chunks"])
+        except KeyError as e:
+            raise AttributeError("'Array' object has no attribute 'chunks'.") from e
+
+    @property
+    def blocks(self):
+        """
+        The blockshape of the compressed dataset.
+        """
+        try:
+            return tuple(self.meta["blocks"])
+        except KeyError as e:
+            raise AttributeError("'Array' object has no attribute 'blocks'.") from e
+
+    def append(self, data):
+        """
+        Appends data to the dataset.
+
+        Parameters
+        ----------
+        data : blosc2.NDArray, numpy.ndarray, sequence
+            The data to append to the dataset.
+
+        Returns
+        -------
+        out: Caterva2.Array
+            A pointer to the (modified) dataset.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> import numpy as np
+        >>> # To append data to a dataset you need to be a registered user
+        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
+        >>> data = client.copy('@public/examples/ds-1d.b2nd', '@personal/ds-1d.b2nd')
+        >>> dataset = client.get('@personal')['ds-1d.b2nd']
+        >>> dataset.append([1, 2, 3])
+        (1003,)
+        """
+        return self.client.append(self.path, data)
+
+    def fill_chunk(self, nchunk, chunk):
+        """
+        Writes one compressed chunk into a slot of this array; see
+        :meth:`Client.fill_chunk`.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2, blosc2, numpy as np
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> array = client.lay_out('@personal/run.b2nd', (1000,), np.int32, chunks=(100,))  # doctest: +SKIP
+        >>> chunk = blosc2.compress2(np.arange(100, dtype=np.int32), typesize=4)  # doctest: +SKIP
+        >>> array.fill_chunk(0, chunk)["written"]  # doctest: +SKIP
+        1
+        """
+        return self.client.fill_chunk(self.path, nchunk, chunk)
+
+    def written_chunks(self):
+        """
+        Says which chunks of this array hold anything yet; see
+        :meth:`Client.written_chunks`.
+        """
+        return self.client.written_chunks(self.path)
+
+    def publish(self):
+        """
+        Copies this array out to wherever the server publishes to; see
+        :meth:`Client.publish`.
+        """
+        return self.client.publish(self.path)
+
+    def __getitem__(self, item):
+        """
         Retrieves a slice of the dataset.
 
         Parameters
@@ -409,293 +809,117 @@ class File:
         else:
             return self.slice(item, as_blosc2=False)
 
-    def slice(
-        self, key: int | slice | Sequence[slice], as_blosc2: bool = True
-    ) -> NDArray | SChunk | np.ndarray:
-        """Get a slice of a File/Dataset.
 
-        Parameters
-        ----------
-        key : int, slice, or sequence of slices
-            The slice to retrieve.  If a single slice is provided, it will be
-            applied to the first dimension.  If a sequence of slices is
-            provided, each slice will be applied to the corresponding
-            dimension.
-        as_blosc2 : bool
-            If True (default), the result will be returned as a Blosc2 object
-            (either a `SChunk` or `NDArray`).  If False, it will be returned
-            as a NumPy array (equivalent to `self[key]`).
-
-        Returns
-        -------
-        NDArray or SChunk or numpy.ndarray
-            A new Blosc2 object containing the requested slice.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds.slice(1)
-        <blosc2.ndarray.NDArray object at 0x10747efd0>
-        >>> ds.slice(1)[()]
-        array(1)
-        >>> ds.slice(slice(0, 10))[:]
-        array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        """
-        # Fetch and return the data as a Blosc2 object / NumPy array
-        return self.client.get_slice(self.path, key, as_blosc2)
-
-    def download(self, localpath=None):
-        """
-        Downloads the file to storage.
-
-        Parameters
-        ----------
-        localpath : Path, optional
-            The destination path for the downloaded file.  If not specified, the file will
-            be downloaded to the current working directory.
-
-        Returns
-        -------
-        Path
-            The path to the downloaded file.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> file = root['ds-1d.b2nd']
-        >>> file.download()
-        PosixPath('example/ds-1d.b2nd')
-        >>> file.download('mydir/myarray.b2nd')
-        PosixPath('mydir/myarray.b2nd')
-        """
-        return self.client.download(
-            self.path,
-            localpath=localpath,
-        )
-
-    def unfold(self):
-        """
-        Unfolds the file in a remote directory.
-
-        Returns
-        -------
-        Path
-            The path to the unfolded directory.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> file = root['ds-1d.h5']
-        >>> file.unfold()
-        PurePosixPath('example/ds-1d.h5')
-        """
-        return self.client.unfold(self.path)
-
-    def move(self, dst):
-        """
-        Moves the file to a new location.
-
-        Parameters
-        ----------
-        dst : Path
-            The destination path for the file.
-
-        Returns
-        -------
-        Path
-            The new path of the file after the move.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> # For moving a file you need to be a registered user
-        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
-        >>> root = client.get('@personal')
-        >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> file = root['root-example/dir2/ds-4d.b2nd']
-        >>> file.move('@personal/root-example/dir1/ds-4d-moved.b2nd')
-        PurePosixPath('@personal/root-example/dir1/ds-4d-moved.b2nd')
-        >>> 'root-example/dir2/ds-4d.b2nd' in root
-        False
-        >>> 'root-example/dir1/ds-4d-moved.b2nd' in root
-        True
-        """
-        return self.client.move(self.path, dst)
-
-    def copy(self, dst):
-        """
-        Copies the file to a new location.
-
-        Parameters
-        ----------
-        dst : Path
-            The destination path for the file.
-
-        Returns
-        -------
-        Path
-            The new path of the copied file.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> # For copying a file you need to be a registered user
-        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
-        >>> root = client.get('@personal')
-        >>> root.upload('root-example/dir2/ds-4d.b2nd')
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> file = root['root-example/dir2/ds-4d.b2nd']
-        >>> file.copy('@personal/root-example/dir2/ds-4d-copy.b2nd')
-        PurePosixPath('@personal/root-example/dir2/ds-4d-copy.b2nd')
-        >>> 'root-example/dir2/ds-4d.b2nd' in root
-        True
-        >>> 'root-example/dir2/ds-4d-copy.b2nd' in root
-        True
-        """
-        return self.client.copy(self.path, dst)
-
-    def remove(self):
-        """
-        Removes the file from the remote repository.
-
-        Returns
-        -------
-        str
-            The path of the removed file.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> # To remove a file you need to be a registered user
-        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
-        >>> root = client.get('@personal')
-        >>> path = 'root-example/dir2/ds-4d.b2nd'
-        >>> root.upload(path)
-        <Dataset: @personal/root-example/dir2/ds-4d.b2nd>
-        >>> file = root[path]
-        >>> file.remove()
-        '@personal/root-example/dir2/ds-4d.b2nd'
-        >>> path in root
-        False
-        """
-        return self.client.remove(self.path)
-
-
-class Dataset(File, blosc2.Operand):
-    def __init__(self, root, path):
-        """
-        Represents a dataset within a Blosc2 container.
-
-        This class is not intended to be instantiated directly; it should be accessed through a
-        :class:`Root` instance.
-
-        Parameters
-        ----------
-        root : Root
-            The root repository.
-        path : str
-            The path of the dataset.
-
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> client = cat2.Client('https://cat2.cloud/demo')
-        >>> root = client.get('example')
-        >>> ds = root['ds-1d.b2nd']
-        >>> ds.dtype
-        'int64'
-        >>> ds.shape
-        (1000,)
-        >>> ds.chunks
-        (100,)
-        >>> ds.blocks
-        (10,)
-        """
-        super().__init__(root, path)
+class Table(Dataset):
+    """Represents a CTable (.b2z) dataset."""
 
     def __str__(self):
         return self.path.as_posix()
 
     def __repr__(self):
-        # TODO: add more info about dims, types, etc.
-        return f"<Dataset: {self.path}>"
+        return f"<Table: {self.path}>"
 
     @property
-    def dtype(self):
-        """
-        The data type of the dataset.
-        """
-        try:
-            return self.meta["dtype"]
-        except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'dtype'.") from e
+    def nrows(self):
+        return self.meta["nrows"]
 
     @property
-    def shape(self):
-        """
-        The shape of the dataset.
-        """
-        try:
-            return tuple(self.meta["shape"])
-        except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'shape'.") from e
+    def ncols(self):
+        return len(self.meta["columns"])
 
     @property
-    def chunks(self):
-        """
-        The chunkshape of the compressed dataset.
-        """
-        try:
-            return tuple(self.meta["chunks"])
-        except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'chunks'.") from e
+    def columns(self):
+        return self.meta["columns"]
 
     @property
-    def blocks(self):
-        """
-        The blockshape of the compressed dataset.
-        """
-        try:
-            return tuple(self.meta["blocks"])
-        except KeyError as e:
-            raise AttributeError("'Dataset' object has no attribute 'blocks'.") from e
+    def schema(self):
+        return self.meta["schema_dict"]
 
-    def append(self, data):
+    def slice(self, key):
+        """Get a row slice as a blosc2.CTable."""
+        # Pass self (not self.path): get_slice's Table isinstance check is
+        # what marks the response as a ctable cframe. The path-string
+        # fallback only recognizes bare `.b2z` paths, so a nested table
+        # (e.g. tree.b2z/dir/tbl) would be misread as an NDArray/SChunk.
+        return self.client.get_slice(self, key, as_blosc2=True)
+
+    def __getitem__(self, key):
+        """Shortcut: slice as a blosc2.CTable."""
+        return self.slice(key)
+
+    def rows(self, start=0, stop=50):
+        """Get rows [start, stop) as a list of tuples.
+
+        The default window is bounded (first 50 rows) to avoid accidentally
+        fetching a whole large table; pass ``stop=self.nrows`` for everything.
         """
-        Appends data to the dataset.
+        table = self.slice(slice(start, stop))
+        return [tuple(row) for row in table]
 
-        Parameters
-        ----------
-        data : blosc2.NDArray, numpy.ndarray, sequence
-            The data to append to the dataset.
+    def head(self, n=5):
+        """Get the first `n` rows as a list of tuples."""
+        return self.rows(0, n)
 
-        Returns
-        -------
-        out: Caterva2.Dataset
-            A pointer to the (modified) dataset.
 
-        Examples
-        --------
-        >>> import caterva2 as cat2
-        >>> import numpy as np
-        >>> # To append data to a dataset you need to be a registered user
-        >>> client = cat2.Client("https://cat2.cloud/demo", ("joedoe@example.com", "foobar"))
-        >>> data = client.copy('@public/examples/ds-1d.b2nd', '@personal/ds-1d.b2nd')
-        >>> dataset = client.get('@personal')['ds-1d.b2nd']
-        >>> dataset.append([1, 2, 3])
-        (1003,)
-        """
-        return self.client.append(self.path, data)
+class Group(_FileOpsMixin):
+    """A browsable group (HDF5 jargon): a directory, a TreeStore ``.b2z``, or a
+    virtual group inside one. Children are addressed by (inner) path.
+
+    Not instantiated directly; obtained from a :class:`Root`, e.g.
+    ``root['dir1']`` or ``root['tree.b2z/level1']``.
+    """
+
+    def __init__(self, root, path, meta=None):
+        self.root = root
+        _, name = _format_paths(root.urlbase, path)
+        _, rootname = _format_paths(root.urlbase, root.name)
+        self.name = name
+        self.path = pathlib.PurePosixPath(f"{rootname}/{self.name}")
+        self._meta = meta
+
+    @property
+    def client(self):
+        return self.root.client
+
+    @property
+    def urlbase(self):
+        return self.client.urlbase
+
+    @property
+    def cookie(self):
+        return self.client.cookie
+
+    @property
+    def meta(self):
+        if self._meta is None:
+            self._meta = self.client.get_info(str(self.path))
+        return self._meta
+
+    @property
+    def file_list(self):
+        """Deep list of leaf paths under this group (relative to it)."""
+        return self.client.get_list(str(self.path))
+
+    def __iter__(self):
+        return iter(self.file_list)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __contains__(self, item):
+        item = item.as_posix() if hasattr(item, "as_posix") else str(item)
+        return item in self.file_list
+
+    def __getitem__(self, item):
+        """Retrieve a child (dataset, file, or subgroup) by relative path."""
+        item = item.as_posix() if hasattr(item, "as_posix") else str(item)
+        return self.root[f"{self.name}/{item}"]
+
+    def __repr__(self):
+        return f"<Group: {self.path}>"
+
+    def __str__(self):
+        return self.path.as_posix()
 
 
 class BasicAuth:
@@ -738,6 +962,7 @@ class Client:
         self.urlbase = utils.urlbase_type(urlbase)
         self.cookie = None
         self.timeout = timeout
+        self._c2arrays = {}  # kept blosc2 views of remote arrays; see `_c2array`
         if auth is not None:
             if isinstance(auth, BasicAuth):
                 username = auth.username
@@ -774,21 +999,31 @@ class Client:
         self.close()
         return False
 
-    def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5):
-        response = self._xget(
-            f"{urlbase}/api/fetch/{path}", params=params, auth_cookie=auth_cookie, timeout=timeout
-        )
+    def _fetch_data(self, path, urlbase, params, auth_cookie=None, as_blosc2=False, timeout=5, kind=None):
+        url = f"{urlbase}/api/fetch/{path}"
+        if api_utils.query_too_long(params):
+            response = self._post_fetch(url, params, auth_cookie, timeout)
+        else:
+            response = self._xget(url, params=params, auth_cookie=auth_cookie, timeout=timeout)
         data = response.content
-        # Try different deserialization methods
-        try:
-            data = blosc2.ndarray_from_cframe(data)
-        except RuntimeError:
-            data = blosc2.schunk_from_cframe(data)
+        # Zero-copy deserialization is safe even when the object escapes
+        # this frame: blosc2 >= 4.8.1 (the required floor) pins the source
+        # buffer on the returned object.
+        if kind == "ctable":
+            data = blosc2.ctable_from_cframe(data)
+        else:
+            try:
+                data = blosc2.ndarray_from_cframe(data)
+            except RuntimeError:
+                data = blosc2.schunk_from_cframe(data)
         if as_blosc2:
             return data
         if hasattr(data, "ndim"):  # if b2nd or b2frame
             # catch 0d case where [:] fails
             return data[()] if data.ndim == 0 else data[:]
+        elif isinstance(data, blosc2.CTable):
+            # Return rows as list of tuples if not as_blosc2
+            return [tuple(row) for row in data[:]]
         else:
             return data[:]
 
@@ -861,6 +1096,31 @@ class Client:
 
         json = response.json()
         return json if model is None else model(**json)
+
+    def _post_fetch(self, url, params, auth_cookie, timeout):
+        """`api/fetch` again, with the parameters in the body.
+
+        For a key too long to be a query and nothing else.  A server that has
+        never heard of this answers 405, which says what it is rather than what
+        went wrong, so it is turned into the sentence a caller can act on.
+        """
+        client = self.httpx_client
+        headers = {"Cookie": auth_cookie} if auth_cookie else None
+        try:
+            response = client.post(url, json=params, headers=headers, timeout=timeout)
+        except httpx.ReadTimeout as e:
+            raise TimeoutError(
+                f"Timeout after {timeout} seconds while trying to access {url}. "
+                f"Try increasing the timeout (currently {timeout} s) for Client instance."
+            ) from e
+        if response.status_code == 405:
+            raise IndexError(
+                "This many coordinates do not fit in an URL, and the server does not accept "
+                "them in a request body (it predates `POST api/fetch`). Ask in batches, or "
+                "upgrade the server."
+            )
+        response.raise_for_status()
+        return response
 
     def _post(self, url, json=None, auth_cookie=None, timeout=5):
         client = self.httpx_client
@@ -964,7 +1224,7 @@ class Client:
         >>> ds[:10]
         array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         """
-        if isinstance(path, (File, Dataset, Root)):
+        if isinstance(path, (File, Root)):
             return path
         # Normalize the path to a POSIX path
         path = pathlib.PurePosixPath(path).as_posix()
@@ -1026,7 +1286,7 @@ class Client:
         >>> info['shape']
         [100, 200]
         """
-        if isinstance(path, (Dataset, File)):
+        if isinstance(path, File):
             path = path.path
         _, path = _format_paths(self.urlbase, path)
         return self._get(f"{self.urlbase}/api/info/{path}", auth_cookie=self.cookie, timeout=self.timeout)
@@ -1059,7 +1319,7 @@ class Client:
         # Does the same as get_slice but forces return of np array
         return self.get_slice(path, key=slice_, as_blosc2=False)
 
-    def get_slice(self, path, key=None, as_blosc2=True, field=None):
+    def get_slice(self, path, key=None, as_blosc2=True, field=None, ndim=None):
         """Get a slice of a File/Dataset.
 
         Parameters
@@ -1077,6 +1337,10 @@ class Client:
             as a NumPy array (equivalent to `self[key]`).
         field: str
             Shortcut to access a field in a structured array. If provided, `key` is ignored.
+        ndim: int
+            How many dimensions the dataset has, where the caller knows.  Only an
+            `Ellipsis` in the key needs it, and only one that is not its last
+            entry: what it stands for is every dimension the key does not name.
 
         Returns
         -------
@@ -1092,7 +1356,20 @@ class Client:
                [(1.0000500e-02, 1.0100005), (1.0050503e-02, 1.0100505)]],
               dtype=[('a', '<f4'), ('b', '<f8')])
         """
-        if isinstance(path, (Dataset, File)):
+        if ndim is None and isinstance(path, File):
+            # An `Ellipsis` needs it and nothing else does, so a dataset that
+            # cannot say how many dimensions it has is not a problem until one
+            # arrives -- where it does, `expand_ellipsis` says so
+            with contextlib.suppress(Exception):
+                ndim = len(path.shape)
+        if isinstance(path, Table):
+            kind = "ctable"
+        elif isinstance(path, File):
+            kind = None
+        else:
+            path_str = path.as_posix() if hasattr(path, "as_posix") else str(path)
+            kind = "ctable" if path_str.endswith(".b2z") else None
+        if isinstance(path, File):
             path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
         if field:  # blosc2 doesn't support indexing of multiple fields
@@ -1103,6 +1380,7 @@ class Client:
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
+                kind=kind,
             )
         if isinstance(key, str):
             # The key can still be a slice expression in string format (like for CLI utils)
@@ -1114,17 +1392,24 @@ class Client:
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
+                kind=kind,
             )
-        else:  # Convert slices to strings
-            slice_ = api_utils.slice_to_string(key)
+        else:
+            # Coordinates go over as `indices` and are gathered by the server;
+            # a plain box is a `slice_`, which says the same thing more cheaply
+            indices = api_utils.key_to_indices(key, ndim)
+            params = (
+                {"slice_": api_utils.slice_to_string(key, ndim)} if indices is None else {"indices": indices}
+            )
             # Fetch and return the data as a Blosc2 object / NumPy array
             return self._fetch_data(
                 path,
                 urlbase,
-                {"slice_": slice_},
+                params,
                 auth_cookie=self.cookie,
                 as_blosc2=as_blosc2,
                 timeout=self.timeout,
+                kind=kind,
             )
 
     def get_chunk(self, path, nchunk):
@@ -1156,8 +1441,12 @@ class Client:
         >>> info_schunk['chunksize'] / len(chunk)
         6.453000645300064
         """
-        if isinstance(path, Dataset):
+        if isinstance(path, Array):
             path = path.path
+        elif isinstance(path, File):
+            raise TypeError(
+                "get_chunk() only supports Array datasets (.b2nd/.b2frame), not regular files or tables"
+            )
         _, path = _format_paths(self.urlbase, path)
         data = self._xget(
             f"{self.urlbase}/api/chunk/{path}",
@@ -1308,6 +1597,7 @@ class Client:
         True
         """
         urlbase, remotepath = _format_paths(self.urlbase, remotepath)
+        self._forget_c2arrays()  # an upload puts a different array at a path
         return self._upload_file(
             local_dset,
             remotepath,
@@ -1343,12 +1633,192 @@ class Client:
             Object representing the file or dataset.
         """
         urlbase, _ = _format_paths(self.urlbase)
+        self._forget_c2arrays()  # a load puts a different array at a path
         return self._load_from_url(
             urlpath,
             dataset,
             urlbase,
             auth_cookie=self.cookie,
         )
+
+    def lay_out(self, remotepath, shape, dtype, chunks=None, blocks=None, cparams=None):
+        """
+        Lays out an empty array on the server, ready to be filled a chunk at a time.
+
+        Every chunk of it is a slot nothing has been written to, and the whole
+        thing costs a couple of hundred bytes whatever its shape -- an unwritten
+        chunk lives in the frame's offsets and nowhere else.  Fill it with
+        :meth:`fill_chunk`, from as many processes at once as it has chunks.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path to lay the array out at, in a root you may write to.
+        shape : tuple
+            The shape of the array.  It is fixed here: filling never resizes.
+        dtype : numpy.dtype
+            The data type of the array.
+        chunks : tuple, optional
+            The chunkshape.  Writers compress against this, so it is worth
+            choosing rather than leaving to a default.
+        blocks : tuple, optional
+            The blockshape.
+        cparams : dict, optional
+            Compression parameters writers are to compress their chunks with.
+
+        Returns
+        -------
+        out: Dataset
+            Object representing the array that was laid out.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2, numpy as np
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> client.lay_out('@personal/run.b2nd', (1000,), np.int32, chunks=(100,))  # doctest: +SKIP
+        <Dataset: @personal/run.b2nd>
+        """
+        array = blosc2.uninit(shape, dtype=dtype, chunks=chunks, blocks=blocks, cparams=cparams)
+        return self.upload(array, remotepath)
+
+    def fill_chunk(self, remotepath, nchunk, chunk):
+        """
+        Writes one compressed chunk into a slot of an array that holds none.
+
+        How several writers fill one array at once: each takes the chunks it
+        owns and writes them, and the slot itself is the coordination.  A slot
+        nothing was written to is free, and this claims it; a second write to
+        the same slot raises, so two writers that both believe they own a chunk
+        are resolved by the array rather than by anything either of them holds.
+
+        The chunk must match the array's geometry -- its chunkshape, its
+        typesize and its blockshape -- which is what compressing against the
+        array's own ``chunks``, ``blocks`` and ``cparams`` gives.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path of the array to write into.
+        nchunk : int
+            Which chunk of the array to write.
+        chunk : bytes
+            The compressed chunk, as :func:`blosc2.compress2` produces it.
+
+        Returns
+        -------
+        out: dict
+            ``nchunk``, the ``written`` count out of ``nchunks``, and the
+            array's ``state``, so a writer sees a fill finish without asking.
+
+        Raises
+        ------
+        blosc2.ChunkAlreadyWritten
+            The slot already holds a chunk.  The array is untouched.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2, blosc2, numpy as np
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> data = np.arange(100, dtype=np.int32)  # doctest: +SKIP
+        >>> chunk = blosc2.compress2(data, typesize=4)  # doctest: +SKIP
+        >>> client.fill_chunk('@personal/run.b2nd', 0, chunk)  # doctest: +SKIP
+        {'nchunk': 0, 'written': 1, 'nchunks': 10, 'state': 'filling'}
+        """
+        return self._c2array(remotepath).update_chunk(nchunk, chunk)
+
+    def written_chunks(self, remotepath):
+        """
+        Says which chunks of an array hold anything yet.
+
+        Read from the frame's own offsets, which is where a fill records itself:
+        one range request, and no bookkeeping on the server to fall out of step
+        with the array.  False only for a chunk nobody has written; a chunk
+        written as all zeros counts as written, and says so.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path of the array to look at.
+
+        Returns
+        -------
+        out: numpy.ndarray
+            One boolean per chunk.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> done = client.written_chunks('@personal/run.b2nd')  # doctest: +SKIP
+        >>> f"{done.sum()}/{done.size} chunks written"  # doctest: +SKIP
+        '3/10 chunks written'
+        """
+        return self._c2array(remotepath).written_chunks()
+
+    def publish(self, remotepath):
+        """
+        Copies a filled array out to wherever the server publishes to.
+
+        What a fill is for: the array is written here a chunk at a time, and
+        what leaves is one finished frame.  Runs by itself when the last chunk
+        of an array lands, where the server is configured to publish at all;
+        this is for finishing a publish that was interrupted, and for a server
+        that leaves it to be asked for.
+
+        The array has to be complete.  Where it goes is the server's own
+        configuration, not something a caller chooses.
+
+        Parameters
+        ----------
+        remotepath : Path
+            Remote path of the array to publish.
+
+        Returns
+        -------
+        out: str
+            Where the array was published to.
+
+        Examples
+        --------
+        >>> import caterva2 as cat2
+        >>> client = cat2.Client('https://cat2.cloud/demo', ("joedoe@example.com", "foobar"))
+        >>> client.publish('@personal/run.b2nd')  # doctest: +SKIP
+        's3://a-bucket/published/@personal/run.b2nd'
+        """
+        url = f"{self.urlbase}/api/publish/{remotepath}"
+        # Through `_post`, which is where a read timeout becomes a `TimeoutError`
+        # saying which timeout to raise -- a publish is a whole-file upload, so
+        # it is the call here most likely to hit one
+        return self._post(url, auth_cookie=self.cookie, timeout=self.timeout)["published"]
+
+    def _c2array(self, remotepath):
+        """The blosc2 view of a remote array, which is what reads and writes chunks.
+
+        Kept between calls, because building one reads `api/info`: a fill writes
+        a chunk at a time, and would otherwise spend a round trip on the array's
+        geometry before every one of them -- a geometry that cannot change while
+        the fill runs, since an array is laid out once here and never resized.
+
+        Anything this client does that could put a different array at a path
+        drops the lot; see `_forget_c2arrays`.
+        """
+        key = str(remotepath)
+        c2array = self._c2arrays.get(key)
+        if c2array is None:
+            c2array = blosc2.C2Array(key, urlbase=self.urlbase, auth_token=self.cookie)
+            self._c2arrays[key] = c2array
+        return c2array
+
+    def _forget_c2arrays(self):
+        """Drop the kept `C2Array` views: one of the arrays they describe may
+        have just been replaced, moved or removed, and a view of the old one
+        would carry the old geometry into a write.
+
+        All of them rather than the path in hand, because a directory can be
+        removed, moved or copied whole: the paths that names are not this
+        client's to enumerate, and rebuilding a view costs one request.
+        """
+        self._c2arrays.clear()
 
     def append(self, remotepath, data):
         """
@@ -1394,6 +1864,7 @@ class Client:
         client = self.httpx_client
         url = f"{self.urlbase}/api/append/{remotepath}"
         headers = {"Cookie": self.cookie}
+        self._forget_c2arrays()  # an append resizes the array
         response = client.post(url, files={"file": file}, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         new_shape = tuple(response.json())
@@ -1471,6 +1942,7 @@ class Client:
         if isinstance(path, File):
             path = path.path
         _, path = _format_paths(self.urlbase, path)
+        self._forget_c2arrays()  # what is removed may be a whole directory
         result = self._post(
             f"{self.urlbase}/api/remove/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
@@ -1509,6 +1981,7 @@ class Client:
         """
         if isinstance(src, File):
             src = src.path
+        self._forget_c2arrays()  # what moves may be a whole directory
         result = self._post(
             f"{self.urlbase}/api/move/",
             {"src": str(src), "dst": str(dst)},
@@ -1554,6 +2027,7 @@ class Client:
         """
         if isinstance(src, File):
             src = src.path
+        self._forget_c2arrays()  # a copy may land on top of an existing array
         result = self._post(
             f"{self.urlbase}/api/copy/",
             {"src": str(src), "dst": str(dst)},

@@ -12,6 +12,7 @@ import shutil
 
 import blosc2
 import h5py
+import httpx
 import numexpr as ne
 import numpy as np
 import pytest
@@ -211,6 +212,42 @@ def create_and_unfold_hdf5(tmp_path, remote_root, create_file=True, localpath="c
         file_list = [name + ".b2nd" for name in get_all_datasets(f)]
 
     return hdf5_path, remote_dir, file_list
+
+
+def test_a_proxy_does_not_claim_to_serve_ranges(examples_dir, tmp_path, auth_client):
+    """`api/info` may only say "bytes" for what `api/fetch` serves from a file.
+
+    An unfolded `.b2nd` reads as an `NDArray` where the metadata is built, so it
+    used to be stamped like any stored dataset; `api/fetch` opens it as an
+    `HDF5Proxy` and rebuilds what it sends, and 416s a range.  A client that took
+    the claim on trust would find that out on its first block read.
+    """
+    if not auth_client:
+        pytest.skip("authentication support needed")
+
+    root = pathlib.Path("@shared")
+    remote_root = auth_client.get(root)
+    with contextlib.chdir(tmp_path):
+        _hdf5_path, remote_dir, file_list = create_and_unfold_hdf5(tmp_path, remote_root)
+        checked = 0
+        for file_ in file_list:
+            if "unsupported" in file_:
+                continue
+            path = f"{root}/{remote_dir / file_}"
+            info = httpx.get(
+                f"{auth_client.urlbase}/api/info/{path}", headers={"Cookie": auth_client.cookie}
+            )
+            assert info.status_code == 200
+            if info.json().get("accept_ranges") != "bytes":
+                continue  # a lazy expression or a directory says nothing, rightly
+            # ...and whatever does claim it has to answer a range with one
+            ranged = httpx.get(
+                f"{auth_client.urlbase}/api/fetch/{path}",
+                headers={"Cookie": auth_client.cookie, "Range": "bytes=0-31"},
+            )
+            assert ranged.status_code == 206, path
+            checked += 1
+        assert checked == 0  # every one of these is a proxy, and none of them claims it
 
 
 def test_unfold_download(examples_dir, tmp_path, auth_client):

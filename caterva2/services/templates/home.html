@@ -91,6 +91,72 @@
 {% endif %}
 
 <script>
+const ROOT_LIST_URL = "{{ url('htmx/root-list/') }}";
+const PATH_LIST_URL = "{{ url('htmx/path-list/') }}";
+const PATH_INFO_URL = "{{ url('htmx/path-info/') }}";
+const MOUNT_KEY = 'caterva2:mounted';
+const getMounts = () => JSON.parse(localStorage.getItem(MOUNT_KEY) || '[]');
+
+htmx.on('htmx:configRequest', (evt) => {
+    if (evt.detail.path.includes('htmx/root-list'))
+        evt.detail.parameters['mounted'] = getMounts();
+});
+
+function checkedRoots() {
+    return [...document.querySelectorAll('input[name=roots]:checked')].map(e => e.value);
+}
+function refreshRoots(checked) {
+    const qs = new URLSearchParams(checked.map(r => ['roots', r]));
+    return htmx.ajax('GET', `${ROOT_LIST_URL}?${qs}`, '#root-list-wrapper');
+}
+function refreshPathList(roots) {
+    const search = document.querySelector('#query-search')?.value || '';
+    const qs = new URLSearchParams(roots.map(r => ['roots', r]));
+    if (search) qs.set('search', search);
+    return htmx.ajax('GET', `${PATH_LIST_URL}?${qs}`, '#path-list');
+}
+window.mountRoot = (path) => {
+    const m = getMounts();
+    if (!m.includes(path)) { m.push(path); localStorage.setItem(MOUNT_KEY, JSON.stringify(m)); }
+    // Auto-check the new root so its contents show up right away (a repeat
+    // click must not list the same root twice).
+    const roots = [...new Set([...checkedRoots(), path])];
+    refreshRoots(roots);
+    refreshPathList(roots);
+};
+// If a leaf inside `path` (a mounted container) is the one currently shown,
+// fall back to highlighting the container itself first. This also fixes the
+// pushed URL, so a subsequent path-list refresh doesn't re-pin the removed
+// leaf via its "keep current path visible" fallback.
+function highlightContainerIfCurrent(path) {
+    if (!decodeURIComponent(window.location.pathname).includes(`/${path}/`))
+        return Promise.resolve();
+    return htmx.ajax('GET', `${PATH_INFO_URL}${encodeURIComponent(path)}`, {
+        target: '#meta',
+        indicator: '#meta-wrapper .htmx-indicator',
+    });
+}
+window.unmountRoot = (path) => {
+    localStorage.setItem(MOUNT_KEY, JSON.stringify(getMounts().filter(p => p !== path)));
+    const roots = checkedRoots().filter(r => r !== path);
+
+    highlightContainerIfCurrent(path).then(() => {
+        refreshRoots(roots);
+        refreshPathList(roots);
+    });
+};
+// Unchecking a mounted root's checkbox normally lets the form's own
+// hx-get refresh #path-list directly. But if the leaf currently shown lives
+// under it, fix the current URL first (see highlightContainerIfCurrent) and
+// only then refresh the list, so the leaf isn't re-pinned into it.
+window.onMountedRootToggle = (event, path) => {
+    if (event.target.checked) return true;
+    if (!decodeURIComponent(window.location.pathname).includes(`/${path}/`)) return true;
+    event.stopPropagation();
+    highlightContainerIfCurrent(path).then(() => refreshPathList(checkedRoots()));
+    return false;
+};
+
 htmx.on('htmx:beforeSwap', function (evt) {
     // Allow 400 responses to swap, we treat these as form validation errors
     let detail = evt.detail;

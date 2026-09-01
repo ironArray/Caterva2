@@ -1,0 +1,11 @@
+{% for peer in peers %}
+<div class="d-flex gap-2 align-items-center text-nowrap small">
+    <span class="badge {{ 'bg-success' if peer.online else 'bg-secondary' }}">
+        {{ 'online' if peer.online else 'offline' }}
+    </span>
+    <span title="{{ peer.urlbase }}">@{{ peer.name }}</span>
+    <span class="text-muted">{{ peer.cached }} cached</span>
+</div>
+{% else %}
+<span class="text-muted small">No peers configured</span>
+{% endfor %}

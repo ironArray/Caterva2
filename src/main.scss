@@ -24,6 +24,14 @@ body {
     min-width: 0;
 }
 
+#root-list-wrapper {
+    /* Grid items default to min-width: auto, so a long mounted-root name
+       (e.g. a .h5 file) would overflow the fixed-width column instead of
+       shrinking/truncating, spilling into (and eating clicks meant for)
+       #path-list-wrapper next door. */
+    min-width: 0;
+}
+
 @media (min-width: 800px) and (max-width: 1300px) {
     #page {
         grid-template-columns: 10rem auto;
@@ -136,4 +144,42 @@ body {
 
 .file_upload .htmx-request i {
     display: none;
+}
+
+#dataset-list {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+#dataset-list a:focus {
+    // the row's own border-primary highlight already shows what's focused
+    outline: none;
+}
+
+tr.data-row {
+    cursor: pointer;
+}
+
+.info-view-scrollbar {
+    position: relative;
+    width: 6px;
+    align-self: stretch;
+    min-height: 100px;
+    background: #e9ecef;
+    border-radius: 3px;
+    cursor: grab;
+    touch-action: none;
+}
+
+.info-view-scrollbar.dragging {
+    cursor: grabbing;
+}
+
+.info-view-scrollbar-thumb {
+    position: absolute;
+    left: 0;
+    right: 0;
+    min-height: 4px;
+    background: $primary;
+    border-radius: 3px;
 }

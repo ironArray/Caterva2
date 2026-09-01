@@ -1,0 +1,7 @@
+*
+!caterva2/
+!c2cache/
+!root-example/
+!pyproject.toml
+!README.md
+!docker/

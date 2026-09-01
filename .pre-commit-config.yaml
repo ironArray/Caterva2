@@ -17,11 +17,16 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.1
+    rev: v0.16.5
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: ["--fix", "--show-fixes"]
       - id: ruff-format
+        # Python, notebooks and stubs only.  ruff-format grew Markdown support
+        # in 0.16 and the hook now claims `.md` by default, where blacken-docs
+        # below already owns those code blocks -- at black's width rather than
+        # this line-length, so the two rewrite each other on every run.
+        types_or: [python, pyi, jupyter]
         exclude: ^bench/
 
   - repo: https://github.com/adamchainz/blacken-docs

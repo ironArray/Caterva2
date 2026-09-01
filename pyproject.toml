@@ -39,7 +39,7 @@ classifiers = [
     "Operating System :: Unix",
 ]
 dependencies = [
-    "blosc2>=4.6.0",
+    "blosc2>=4.8.1",
     "httpx[http2]",
 ]
 
@@ -60,7 +60,13 @@ base-services = [
 server = [
     "aiosqlite",
     "caterva2[base-services]",
+    "caterva2[hdf5]",
     "fastapi-mail",
+    # Not optional: `count_written` reads a frame's offsets through
+    # `blosc2.FsspecNDSource`, which is the whole of how a chunk fill reports
+    # itself, and `publish_dataset` writes through `fsspec.url_to_fs`.  blosc2
+    # keeps fsspec behind an extra, so nothing pulls it in on our account.
+    "fsspec",
     "fastapi-users[sqlalchemy]",
     "uvicorn[standard]",
     "furl",
@@ -71,6 +77,7 @@ server = [
     "pygments",
     "python-dotenv",
     "python-multipart",
+    "requests",
 ]
 # Build-time only: tools to (re)build the static JupyterLite site with
 # `jupyter lite build` (see `make lite-build`). NOT a server runtime dependency —
@@ -124,9 +131,11 @@ only-include = ["caterva2", "root-example"]
 # old jupyterlite fork's save-back patch). The prebuilt `labextension/` output is
 # committed (see jupyterlite-exts/caterva2-save/), so no Node/JS build runs during
 # `pip install` — this is a pure data-files copy. Rebuild it with `make lite-ext`.
+# The labextension build already copies install.json into labextension/, so
+# only the directory mapping is needed (a second explicit mapping of the root
+# install.json to the same destination collides with it).
 [tool.hatch.build.targets.wheel.shared-data]
 "jupyterlite-exts/caterva2-save/labextension" = "share/jupyter/labextensions/caterva2-save"
-"jupyterlite-exts/caterva2-save/install.json" = "share/jupyter/labextensions/caterva2-save/install.json"
 
 [project.urls]
 Home = "https://github.com/ironArray/Caterva2"
@@ -138,12 +147,21 @@ cat2-agent = "caterva2.clients.agent:main"
 cat2-client = "caterva2.clients.cli:main"
 cat2-admin = "caterva2.tools.admin:main"
 
-
 [tool.ruff]
 line-length = 109
 
 [tool.ruff.lint]
-extend-select = [
+# `select`, not `extend-select`: what a bare `extend-select` extends is ruff's
+# own default set, and that set grows between releases -- 0.16 added eight
+# linters to it, and every one of them arrived here as errors nobody had opted
+# into.  The first four entries are what that default used to be, so this list
+# is the whole selection and a ruff upgrade changes nothing but the rules
+# themselves.
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F",
     "B",
     "C4",
     "C90",
@@ -153,7 +171,7 @@ extend-select = [
     "RET",
     "RUF",
     "SIM",
-    "TCH",
+    "TC",  # spelled TCH before ruff renamed it
     "UP",
 ]
 ignore = [
@@ -167,7 +185,6 @@ ignore = [
     "RUF005",
     "RUF015",
     "SIM108",
-    "UP038",  # https://github.com/astral-sh/ruff/issues/7871
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]

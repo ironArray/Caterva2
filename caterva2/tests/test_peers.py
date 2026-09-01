@@ -1,0 +1,1168 @@
+"""Caterva3 remote peer mounts: two real servers, one mounting the other's
+@public root. See plans/caterva3-remote-peer-mounts-impl.md Phase 7.
+
+Uses its own subprocess pairs on dynamically allocated ports instead of the
+port-8000 pytest harness in services.py, since peer mounts need two servers
+talking to each other.
+"""
+
+import asyncio
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import tomllib
+from dataclasses import dataclass
+from unittest import mock
+
+import blosc2
+import httpx
+import numpy as np
+import pytest
+
+
+def _fixed_row(chunks=(16,), blocks=(8,)):
+    """Row type for a fixed-width, multi-chunk test CTable."""
+
+    @dataclass
+    class Row:
+        x: int = blosc2.field(blosc2.int32(), chunks=chunks, blocks=blocks)
+        y: str = blosc2.field(blosc2.string(max_length=8), chunks=chunks, blocks=blocks)
+        f: float = blosc2.field(blosc2.float64(), chunks=chunks, blocks=blocks)
+
+    return Row
+
+
+def _make_fixed_table(urlpath, n=70):
+    # expected_size matters: default capacity with 16-row chunks means tens
+    # of thousands of chunks per column (minutes to create/compact).
+    t = blosc2.CTable(_fixed_row(), urlpath=str(urlpath), mode="w", compact=True, expected_size=n)
+    for i in range(n):
+        t.append((i, f"s{i}", i / 2))
+    t.close()
+
+
+def _seed_ctables(pub):
+    """Peer-B seeds for the CTable tests: a fixed-width table (5 chunks of
+    16 rows), a varlen-column table (non-cacheable -> pass-through), and a
+    TreeStore holding an NDArray leaf plus a nested CTable."""
+    _make_fixed_table(pub / "tbl.b2z")
+
+    @dataclass
+    class VRow:
+        a: int = blosc2.field(blosc2.int64())
+        s: str = blosc2.field(blosc2.vlstring())
+
+    tv = blosc2.CTable(VRow, urlpath=str(pub / "vtbl.b2z"), mode="w", compact=True, expected_size=10)
+    for i in range(10):
+        tv.append((i, "x" * (i + 1)))
+    tv.close()
+
+    tree = blosc2.TreeStore(str(pub / "tree.b2z"), mode="w")
+    tree["/dir/arr"] = blosc2.asarray(np.arange(20))
+    nested = blosc2.CTable(_fixed_row(), expected_size=40)
+    for i in range(40):
+        nested.append((i, f"n{i}", i * 1.5))
+    tree["/dir/tbl"] = nested
+    tree.close()
+
+    # a .b2z written via the flat DictStore API (blosc2.open promotes it to
+    # a TreeStore, so it browses like any container)
+    ds = blosc2.DictStore(str(pub / "dict.b2z"), mode="w")
+    ds["/flat"] = blosc2.asarray(np.arange(7))
+    ds["/grp/nested"] = blosc2.asarray(np.arange(30))
+    ds.close()
+
+
+def _unused_tcp_ports(count):
+    """Ask the OS for distinct unused loopback ports for server processes."""
+    sockets = []
+    try:
+        for _ in range(count):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", 0))
+            sockets.append(sock)
+        return tuple(sock.getsockname()[1] for sock in sockets)
+    finally:
+        for sock in sockets:
+            sock.close()
+
+
+def _start(statedir, port, extra_toml=""):
+    statedir = str(statedir)
+    toml = f'[server]\nurlbase = "http://127.0.0.1:{port}"\nlogin = false\n{extra_toml}'
+    conf = f"{statedir}/caterva2-server.toml"
+    os.makedirs(statedir, exist_ok=True)
+    with open(conf, "w") as f:
+        f.write(toml)
+    env = dict(os.environ, CATERVA2_SECRET="t", PYTHONPATH=os.getcwd())
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "caterva2.services.server",
+            "--statedir",
+            statedir,
+            "--listen",
+            f"127.0.0.1:{port}",
+            "--conf",
+            conf,
+        ],
+        env=env,
+        # settings.py reads caterva2-server.toml relative to the CWD (the
+        # --conf option is not honored, a known FIXME) — run from statedir.
+        cwd=statedir,
+    )
+    for _ in range(50):  # wait until it answers
+        returncode = proc.poll()
+        if returncode is not None:
+            raise RuntimeError(f"server on port {port} exited during startup with status {returncode}")
+        try:
+            httpx.get(f"http://127.0.0.1:{port}/api/roots", timeout=1)
+            returncode = proc.poll()
+            if returncode is not None:
+                raise RuntimeError(
+                    f"another process answered port {port}; the test server exited with status {returncode}"
+                )
+            return proc
+        except Exception:
+            time.sleep(0.2)
+    proc.kill()
+    proc.wait(timeout=10)
+    raise RuntimeError("server did not start")
+
+
+def _configured_peer_url(statedir):
+    """Read the peer URL back from one test server's generated configuration."""
+    with (statedir / "caterva2-server.toml").open("rb") as conf_file:
+        return tomllib.load(conf_file)["server"]["peer"][0]["urlbase"]
+
+
+@pytest.fixture(scope="module")
+def two_servers(tmp_path_factory):
+    bdir = tmp_path_factory.mktemp("peerB")
+    adir = tmp_path_factory.mktemp("peerA")
+    # seed B's @public with a 4-chunk dataset
+    pub = bdir / "public"
+    pub.mkdir()
+    data = np.random.default_rng(0).random((4, 100_000))
+    blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    # a nested dataset, to exercise path-relative listing
+    (pub / "dir1").mkdir()
+    blosc2.asarray(np.arange(10), urlpath=str(pub / "dir1" / "small.b2nd"))
+    # a plain (non-blosc2) file: B auto-compresses it to a .b2 frame, and A
+    # gives it a whole-file cache entry (plans/plain-files-caching.md)
+    (pub / "readme.txt").write_text("peer plain-file caching\n" * 200)
+    _seed_ctables(pub)
+    b_port, a_port = _unused_tcp_ports(2)
+    b = _start(bdir, b_port)
+    peer_toml = f'[[server.peer]]\nname = "labb"\nurlbase = "http://127.0.0.1:{b_port}"\n'
+    a = _start(adir, a_port, peer_toml)
+    yield f"http://127.0.0.1:{a_port}", data, adir
+    for p in (a, b):
+        p.send_signal(signal.SIGTERM)
+        p.wait(timeout=10)
+
+
+def test_roots_contains_peer(two_servers):
+    urlbase, _data, _adir = two_servers
+    roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
+    assert "@labb" in roots
+
+
+def test_list_and_info(two_servers):
+    urlbase, _data, _adir = two_servers
+    listing = httpx.get(f"{urlbase}/api/list/@labb", timeout=5).json()
+    assert "mc.b2nd" in listing
+    info = httpx.get(f"{urlbase}/api/info/@labb/mc.b2nd", timeout=5).json()
+    assert tuple(info["shape"]) == (4, 100_000)
+
+
+def test_list_is_path_relative(two_servers):
+    urlbase, _data, _adir = two_servers
+    listing = httpx.get(f"{urlbase}/api/list/@labb/dir1", timeout=5).json()
+    assert listing == ["small.b2nd"]  # not ["dir1/small.b2nd"]
+
+
+def test_info_404_relayed_and_peer_stays_online(two_servers):
+    urlbase, data, _adir = two_servers
+    # A bad path must relay the peer's 404 (not 503 "offline")...
+    r = httpx.get(f"{urlbase}/api/info/@labb/nope.b2nd", timeout=5)
+    assert r.status_code == 404
+    # ...and must NOT knock the whole peer offline: a fetch right after works.
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "1:2"}, timeout=5)
+    r.raise_for_status()
+    arr = blosc2.ndarray_from_cframe(r.content)
+    np.testing.assert_array_equal(arr[:], data[1:2])
+
+
+def test_fetch_rejects_filter_field_and_steps(two_servers):
+    urlbase, _data, _adir = two_servers
+    for params in ({"field": "x"}, {"filter": "a > 0"}, {"slice_": "0:4:2"}):
+        r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params=params, timeout=5)
+        assert r.status_code == 400, params
+
+
+def test_fetch_rejects_coordinates_on_a_peer(two_servers):
+    """A provider fetches boxes, so coordinates have nowhere to go here.
+
+    Refused rather than dropped: a dropped key is not a smaller answer but the
+    whole dataset, handed back as though it were the points that were asked for.
+    """
+    urlbase, _data, _adir = two_servers
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"indices": "[[1,3]]"}, timeout=5)
+    assert r.status_code == 400
+    assert "indices" in r.json()["detail"]
+    # ...and nothing came back that could be read as the whole dataset instead
+    assert not r.content.startswith(b"\x00b2nd")
+
+
+def test_fetch_slice_correct(two_servers):
+    urlbase, data, _adir = two_servers
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "2:4"}, timeout=5)
+    r.raise_for_status()
+    arr = blosc2.ndarray_from_cframe(r.content)
+    np.testing.assert_array_equal(arr[:], data[2:4])
+
+
+def test_cache_hit(two_servers):
+    urlbase, data, _adir = two_servers
+    for _ in range(2):
+        r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
+        r.raise_for_status()
+        arr = blosc2.ndarray_from_cframe(r.content)
+        np.testing.assert_array_equal(arr[:], data[0:1])
+
+
+def test_chunk_endpoint_is_404_on_peer_root(two_servers):
+    urlbase, _data, _adir = two_servers
+    r = httpx.get(f"{urlbase}/api/chunk/@labb/mc.b2nd", params={"nchunk": 0}, timeout=5)
+    assert r.status_code == 404
+
+
+def test_download_relays_peer_file(two_servers):
+    """api/download on a peer path streams the peer's own download verbatim
+    (used to be a flat 404); a bad path relays the peer's status. Scope
+    guard: a dataset download must NOT grow the whole-file (.b2) cache."""
+    urlbase, _data, adir = two_servers
+    peer_url = _configured_peer_url(adir)
+    entries_before = set((adir / "peercache" / "labb").glob("*.b2"))
+    for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
+        direct = httpx.get(f"{peer_url}/api/download/@public/dir1/small.b2nd", headers=hdrs, timeout=10)
+        relayed = httpx.get(f"{urlbase}/api/download/@labb/dir1/small.b2nd", headers=hdrs, timeout=10)
+        assert relayed.status_code == direct.status_code == 200
+        assert relayed.content == direct.content
+        assert "small.b2nd" in relayed.headers.get("content-disposition", "")
+    assert set((adir / "peercache" / "labb").glob("*.b2")) == entries_before
+    r = httpx.get(f"{urlbase}/api/download/@labb/nope.b2nd", timeout=10)
+    assert r.status_code == 404
+
+
+def test_a_relayed_download_carries_one_content_disposition(two_servers):
+    """The peer already said what the file is called, so we must not say it again.
+
+    The relayed headers come off an httpx response, which lowercases their
+    names; `setdefault("Content-Disposition", ...)` matched none of them and
+    added a second, and the answer went out naming the file twice for a client
+    or proxy to choose between.
+    """
+    urlbase, _data, _adir = two_servers
+    for path in ("@labb/dir1/small.b2nd", "@labb/readme.txt"):
+        r = httpx.get(f"{urlbase}/api/download/{path}", timeout=10)
+        assert r.status_code == 200
+        assert len(r.headers.get_list("content-disposition")) == 1, path
+
+
+def test_plain_file_download_fills_cache(two_servers):
+    """A plain-file download through A fills a whole-file .b2 entry (+ JSON
+    sidecar) and serves identical bytes to B's own download, both encodings
+    (plans/plain-files-caching.md)."""
+    urlbase, _data, adir = two_servers
+    peer_url = _configured_peer_url(adir)
+    for hdrs in ({}, {"Accept-Encoding": "blosc2"}):
+        direct = httpx.get(f"{peer_url}/api/download/@public/readme.txt", headers=hdrs, timeout=10)
+        relayed = httpx.get(f"{urlbase}/api/download/@labb/readme.txt", headers=hdrs, timeout=10)
+        assert relayed.status_code == direct.status_code == 200
+        assert relayed.content == direct.content
+        assert relayed.headers.get("content-encoding") == direct.headers.get("content-encoding")
+        assert "readme.txt" in relayed.headers.get("content-disposition", "")
+    entries = list((adir / "peercache" / "labb").glob("*.b2"))
+    assert len(entries) == 1, entries
+    entry = entries[0]
+    assert (entry.parent / (entry.name + ".json")).exists()
+    assert (entry.parent / (entry.name + ".atime.npy")).exists()
+
+
+def test_cache_sidecar_appears_and_is_removed_with_cache(two_servers):
+    """Every peer-cache handle opens with locking=True (plans/peercache-locking.md
+    §1): the cache's `.b2lock` sidecar must appear, and since the cache is
+    directory-backed (sframe), it lives inside that directory, so it
+    disappears together with the cache on removal -- no separate cleanup
+    needed."""
+    urlbase, _data, adir = two_servers
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
+    r.raise_for_status()
+
+    caches = list((adir / "peercache" / "labb").glob("*.b2nd"))
+    assert len(caches) == 1, caches
+    cache_dir = caches[0]
+    assert (cache_dir / ".b2lock").exists()
+
+    shutil.rmtree(cache_dir)
+    assert not cache_dir.exists()
+
+
+def test_peer_offline_tolerated(tmp_path_factory):
+    # Independent pair (own ports) so killing B here doesn't affect the
+    # module-scoped `two_servers` fixture used by the other tests.
+    bdir = tmp_path_factory.mktemp("peerB2")
+    adir = tmp_path_factory.mktemp("peerA2")
+    pub = bdir / "public"
+    pub.mkdir()
+    data = np.random.default_rng(1).random((4, 100_000))
+    blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    (pub / "hello.txt").write_text("v1 " * 100)
+    (pub / "never.txt").write_text("never downloaded while B was up")
+    b_port, a_port = _unused_tcp_ports(2)
+    b = _start(bdir, b_port)
+    peer_toml = f'[[server.peer]]\nname = "labb2"\nurlbase = "http://127.0.0.1:{b_port}"\n'
+    a = _start(adir, a_port, peer_toml)
+    try:
+        urlbase = f"http://127.0.0.1:{a_port}"
+        # warm the cache for one slice before killing B
+        r = httpx.get(f"{urlbase}/api/fetch/@labb2/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
+        r.raise_for_status()
+
+        # fill the whole-file cache for hello.txt...
+        r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
+        r.raise_for_status()
+        assert r.content == b"v1 " * 100
+
+        # ...then change it on B (mtime bump): the next download refetches.
+        # Hit B directly first so it recompresses the rewritten file.
+        (pub / "hello.txt").write_text("v2 " * 100)
+        httpx.get(f"http://127.0.0.1:{b_port}/api/download/@public/hello.txt", timeout=10).raise_for_status()
+        r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
+        r.raise_for_status()
+        assert r.content == b"v2 " * 100
+
+        b.send_signal(signal.SIGTERM)
+        b.wait(timeout=10)
+
+        # /api/roots still answers even though a mounted peer is down
+        roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
+        assert "@labb2" in roots
+
+        # cached slice still works
+        r = httpx.get(f"{urlbase}/api/fetch/@labb2/mc.b2nd", params={"slice_": "0:1"}, timeout=5)
+        r.raise_for_status()
+        arr = blosc2.ndarray_from_cframe(r.content)
+        np.testing.assert_array_equal(arr[:], data[0:1])
+
+        # uncached slice cannot be served while the peer is down
+        r = httpx.get(f"{urlbase}/api/fetch/@labb2/mc.b2nd", params={"slice_": "2:4"}, timeout=5)
+        assert r.status_code == 503
+
+        # the cached plain file still downloads offline, both encodings...
+        r = httpx.get(f"{urlbase}/api/download/@labb2/hello.txt", timeout=10)
+        assert r.status_code == 200
+        assert r.content == b"v2 " * 100
+        r = httpx.get(
+            f"{urlbase}/api/download/@labb2/hello.txt", headers={"Accept-Encoding": "blosc2"}, timeout=10
+        )
+        assert r.status_code == 200
+        assert bytes(blosc2.schunk_from_cframe(r.content)[:]) == b"v2 " * 100
+
+        # ...but a never-downloaded plain file is a 503
+        r = httpx.get(f"{urlbase}/api/download/@labb2/never.txt", timeout=10)
+        assert r.status_code == 503
+    finally:
+        a.send_signal(signal.SIGTERM)
+        a.wait(timeout=10)
+
+
+# --- peer CTables: fetch, cache layout, offline, navigation, web UI --------
+# (plans/caterva3-remote-peer-simplified.md)
+
+
+def _fetch_table(urlbase, path, slice_=None, timeout=15):
+    params = {"slice_": slice_} if slice_ else None
+    r = httpx.get(f"{urlbase}/api/fetch/{path}", params=params, timeout=timeout)
+    r.raise_for_status()
+    return blosc2.ctable_from_cframe(r.content)
+
+
+def _ctable_caches(adir, peer="labb"):
+    """(path, open handle, _peer_src meta) of every structured CTable cache
+    in the peer's pool dir."""
+    out = []
+    for c in (adir / "peercache" / peer).glob("*.b2nd"):
+        try:
+            arr = blosc2.open(str(c), mode="a", locking=True)
+            meta = json.loads(arr.schunk.vlmeta.get("_peer_src", "{}"))
+        except Exception:
+            continue
+        if meta.get("kind") == "ctable":
+            out.append((c, arr, meta))
+    return out
+
+
+def test_ctable_slice_fetch(two_servers):
+    urlbase, _data, _adir = two_servers
+    t = _fetch_table(urlbase, "@labb/tbl.b2z", "5:20")
+    assert t.nrows == 15
+    assert t["x"][:].tolist() == list(range(5, 20))
+    assert t["y"][:].tolist() == [f"s{i}" for i in range(5, 20)]
+    np.testing.assert_allclose(t["f"][:], [i / 2 for i in range(5, 20)])
+    # whole table (no slice_)
+    t = _fetch_table(urlbase, "@labb/tbl.b2z")
+    assert t.nrows == 70
+    assert t["x"][:].tolist() == list(range(70))
+    # single row
+    t = _fetch_table(urlbase, "@labb/tbl.b2z", "33")
+    assert t.nrows == 1
+    assert t["x"][0] == 33
+    assert t["y"][0] == "s33"
+
+
+def test_ctable_cache_hit_and_layout(two_servers):
+    urlbase, _data, adir = two_servers
+    vals = []
+    for _ in range(2):
+        t = _fetch_table(urlbase, "@labb/tbl.b2z", "0:32")
+        vals.append((t["x"][:].tolist(), t["y"][:].tolist()))
+    assert vals[0] == vals[1] == (list(range(32)), [f"s{i}" for i in range(32)])
+    # exactly one structured cache artifact for this table, schema in vlmeta
+    matching = [(c, a, m) for c, a, m in _ctable_caches(adir) if m.get("path") == "@public/tbl.b2z"]
+    assert len(matching) == 1, matching
+    cpath, arr, meta = matching[0]
+    assert arr.dtype.names == ("x", "y", "f")
+    assert [c["name"] for c in meta["schema"]["columns"]] == ["x", "y", "f"]
+    assert (cpath.parent / (cpath.name + ".atime.npy")).exists()
+    # the old per-column design's family manifest must not exist
+    assert not list((adir / "peercache").rglob("*.ctbl.json"))
+
+
+def test_a_cache_of_another_dtype_is_rebuilt(two_servers):
+    """The mtime says the remote did not change, not that this code did not.
+
+    A cache written before a column's validity crossed it holds a narrower dtype
+    than the source now describes: reused, it pairs a source whose chunks are one
+    itemsize with a cache laid out for another, and is read for a field it has
+    not got.  What the cache holds is recorded beside what the remote held.
+    """
+    from caterva2.c2cache import remote
+
+    urlbase, _data, adir = two_servers
+    _fetch_table(urlbase, "@labb/tbl.b2z", "0:32")
+    matching = [(c, a, m) for c, a, m in _ctable_caches(adir) if m.get("path") == "@public/tbl.b2z"]
+    assert len(matching) == 1
+    cpath, arr, meta = matching[0]
+    assert meta["dtype"] == str(arr.dtype)
+    assert meta["layout"] == remote.CACHE_LAYOUT
+    mtime, dtype = meta["mtime"], meta["dtype"]
+    del arr
+
+    for stale in ({"dtype": "[('x', '<i4')]"}, {"layout": remote.CACHE_LAYOUT - 1}):
+        cache = blosc2.open(str(cpath), mode="a", locking=True)
+        cache.schunk.vlmeta["_peer_src"] = json.dumps({**meta, **stale})
+        del cache
+        # ...and the next read notices, rather than reading the old layout
+        t = _fetch_table(urlbase, "@labb/tbl.b2z", "0:32")
+        assert t["x"][:].tolist() == list(range(32))
+        again = [(c, a, m) for c, a, m in _ctable_caches(adir) if m.get("path") == "@public/tbl.b2z"]
+        assert len(again) == 1
+        _, arr, meta = again[0]
+        assert (meta["mtime"], meta["dtype"]) == (mtime, dtype)
+        assert meta["layout"] == remote.CACHE_LAYOUT
+        del arr
+
+
+def test_ctable_nested_in_tree_fetch(two_servers):
+    urlbase, _data, _adir = two_servers
+    t = _fetch_table(urlbase, "@labb/tree.b2z/dir/tbl", "10:20")
+    assert t["y"][:].tolist() == [f"n{i}" for i in range(10, 20)]
+    np.testing.assert_allclose(t["f"][:], [i * 1.5 for i in range(10, 20)])
+
+
+def test_ctable_varlen_table_passthrough(two_servers):
+    urlbase, _data, adir = two_servers
+    before = set((adir / "peercache" / "labb").glob("*.b2nd"))
+    t = _fetch_table(urlbase, "@labb/vtbl.b2z", "2:6")
+    assert t["a"][:].tolist() == [2, 3, 4, 5]
+    assert [str(s) for s in t["s"][:]] == ["x" * (i + 1) for i in range(2, 6)]
+    # pass-through: no cache artifact appears for the varlen table
+    assert set((adir / "peercache" / "labb").glob("*.b2nd")) == before
+
+
+def test_peer_container_deep_list(two_servers):
+    urlbase, _data, _adir = two_servers
+    # the flat catalog still lists the container as one opaque entry
+    listing = httpx.get(f"{urlbase}/api/list/@labb", timeout=15).json()
+    assert "tree.b2z" in listing
+    assert not any(name.startswith("tree.b2z/") for name in listing)
+    # ...but a container path deep-lists members (relative names, B's rule)
+    listing = httpx.get(f"{urlbase}/api/list/@labb/tree.b2z", timeout=15).json()
+    assert sorted(listing) == ["dir/arr", "dir/tbl"]
+    listing = httpx.get(f"{urlbase}/api/list/@labb/tree.b2z/dir", timeout=15).json()
+    assert sorted(listing) == ["arr", "tbl"]
+
+
+def test_dictstore_b2z_browses_as_container(two_servers):
+    """A flat DictStore .b2z needs no server-side recognition of its own:
+    blosc2.open promotes it to a TreeStore, so it deep-lists, fetches, and
+    mounts like any peer container."""
+    urlbase, _data, _adir = two_servers
+    listing = httpx.get(f"{urlbase}/api/list/@labb/dict.b2z", timeout=15).json()
+    assert sorted(listing) == ["flat", "grp/nested"]
+    r = httpx.get(f"{urlbase}/api/fetch/@labb/dict.b2z/grp/nested", params={"slice_": "0:5"}, timeout=15)
+    r.raise_for_status()
+    arr = blosc2.ndarray_from_cframe(r.content)
+    np.testing.assert_array_equal(arr[:], np.arange(5))
+    # mountable in the UI, same as a TreeStore-written .b2z
+    html = httpx.get(f"{urlbase}/htmx/path-list/", params=[("roots", "@labb")], timeout=30).text
+    assert 'title="Mount as root" data-path="@labb/dict.b2z"' in html
+
+
+def test_peer_container_mount_ui(two_servers):
+    urlbase, _data, _adir = two_servers
+    # plug icon on the TreeStore row only; the CTable .b2z row opens directly
+    html = httpx.get(f"{urlbase}/htmx/path-list/", params=[("roots", "@labb")], timeout=30).text
+    assert 'title="Mount as root" data-path="@labb/tree.b2z"' in html  # plug icon
+    assert 'title="Mount as root" data-path="@labb/tbl.b2z"' not in html
+    assert "@labb/tbl.b2z" in html  # still listed as a plain row
+    # a mounted peer container expands into member rows
+    html = httpx.get(f"{urlbase}/htmx/path-list/", params=[("roots", "@labb/tree.b2z")], timeout=30).text
+    assert "@labb/tree.b2z/dir/arr" in html
+    assert "@labb/tree.b2z/dir/tbl" in html
+    # the root list keeps a mounted peer path (localStorage round-trip)
+    html = httpx.get(f"{urlbase}/htmx/root-list/", params=[("mounted", "@labb/tree.b2z")], timeout=15).text
+    assert "@labb/tree.b2z" in html
+
+
+def test_ctable_web_view(two_servers):
+    urlbase, _data, _adir = two_servers
+    r = httpx.post(f"{urlbase}/htmx/path-view/@labb/tbl.b2z", data={"index": 0, "sizes": 10}, timeout=30)
+    assert r.status_code == 200, r.text
+    assert "s0" in r.text
+    assert "s9" in r.text
+    # paging reflects the requested window
+    r = httpx.post(f"{urlbase}/htmx/path-view/@labb/tbl.b2z", data={"index": 32, "sizes": 10}, timeout=30)
+    assert r.status_code == 200, r.text
+    assert "s32" in r.text
+    assert "s41" in r.text
+    assert "s31<" not in r.text
+    # a nested CTable renders directly, no mount needed
+    r = httpx.post(
+        f"{urlbase}/htmx/path-view/@labb/tree.b2z/dir/tbl", data={"index": 0, "sizes": 5}, timeout=30
+    )
+    assert r.status_code == 200, r.text
+    assert "n0" in r.text
+    # filter/sort still refused on external roots
+    r = httpx.post(f"{urlbase}/htmx/path-view/@labb/tbl.b2z", data={"sortby": "x"}, timeout=15)
+    assert "not supported on external roots" in r.text
+
+
+def test_ctable_offline_reads_cached_range(tmp_path_factory):
+    # Independent pair: B gets SIGKILLed here.
+    bdir = tmp_path_factory.mktemp("peerB5")
+    adir = tmp_path_factory.mktemp("peerA5")
+    pub = bdir / "public"
+    pub.mkdir()
+    _make_fixed_table(pub / "tbl.b2z")
+    b_port, a_port = _unused_tcp_ports(2)
+    b = _start(bdir, b_port)
+    peer_toml = f'[[server.peer]]\nname = "labb5"\nurlbase = "http://127.0.0.1:{b_port}"\n'
+    a = _start(adir, a_port, peer_toml)
+    try:
+        urlbase = f"http://127.0.0.1:{a_port}"
+        t = _fetch_table(urlbase, "@labb5/tbl.b2z", "0:20")
+        assert t["x"][:].tolist() == list(range(20))
+
+        b.send_signal(signal.SIGKILL)
+        b.wait(timeout=10)
+
+        # the cached range is still served, values intact
+        t = _fetch_table(urlbase, "@labb5/tbl.b2z", "0:20", timeout=20)
+        assert t["x"][:].tolist() == list(range(20))
+        assert t["y"][:].tolist() == [f"s{i}" for i in range(20)]
+
+        # a disjoint, uncached range cannot be served while B is down
+        r = httpx.get(f"{urlbase}/api/fetch/@labb5/tbl.b2z", params={"slice_": "40:60"}, timeout=20)
+        assert r.status_code == 503
+    finally:
+        a.send_signal(signal.SIGTERM)
+        a.wait(timeout=10)
+
+
+@pytest.fixture(scope="module")
+def tiny_quota_peers(tmp_path_factory):
+    # A tiny peer_cache_quota forces peercache to evict under load, which is
+    # exactly the concurrency scenario that corrupted sparse-frame handles
+    # before per-cache locking + blosc2's frame-level locking closed the gap
+    # (see plans/peercache-locking.md).
+    bdir = tmp_path_factory.mktemp("peerB3")
+    adir = tmp_path_factory.mktemp("peerA3")
+    pub = bdir / "public"
+    pub.mkdir()
+    data = np.random.default_rng(2).random((8, 100_000))
+    blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    _make_fixed_table(pub / "tbl.b2z")  # CTable fetches join the storm too
+    b_port, a_port = _unused_tcp_ports(2)
+    b = _start(bdir, b_port)
+    peer_toml = (
+        'peer_cache_quota = "100K"\n'
+        f'[[server.peer]]\nname = "labb3"\nurlbase = "http://127.0.0.1:{b_port}"\n'
+    )
+    a = _start(adir, a_port, peer_toml)
+    yield f"http://127.0.0.1:{a_port}", data
+    for p in (a, b):
+        p.send_signal(signal.SIGTERM)
+        p.wait(timeout=10)
+
+
+async def _fetch(client, urlbase, i):
+    return await client.get(
+        f"{urlbase}/api/fetch/@labb3/mc.b2nd", params={"slice_": f"{i % 8}:{i % 8 + 1}"}, timeout=10
+    )
+
+
+async def _path_view(client, urlbase, i):
+    return await client.post(
+        f"{urlbase}/htmx/path-view/@labb3/mc.b2nd",
+        data={"index": [i % 8, 0], "sizes": [1, 10]},
+        timeout=10,
+    )
+
+
+async def _fetch_ctable(client, urlbase, j):
+    lo = (j * 8) % 64
+    return await client.get(
+        f"{urlbase}/api/fetch/@labb3/tbl.b2z", params={"slice_": f"{lo}:{lo + 8}"}, timeout=10
+    )
+
+
+async def _run_concurrent_requests(urlbase):
+    async with httpx.AsyncClient() as client:
+        calls = [
+            _fetch(client, urlbase, i) if i % 2 == 0 else _path_view(client, urlbase, i) for i in range(12)
+        ]
+        calls += [_fetch_ctable(client, urlbase, j) for j in range(6)]
+        return await asyncio.gather(*calls, return_exceptions=True)
+
+
+def test_concurrent_requests_under_tiny_quota_dont_crash(tiny_quota_peers):
+    urlbase, data = tiny_quota_peers
+    results = asyncio.run(_run_concurrent_requests(urlbase))
+    for i, r in enumerate(results[:12]):
+        assert not isinstance(r, Exception), r
+        # 200 (served), 503 (evicted before use, offline), 400 (bad request
+        # edge case) are all fine; a 500 means a crash/corruption regression.
+        assert r.status_code != 500, r.text
+        # A 200 from a fetch (the even i's) must never be silent UNINIT
+        # zeros: fetch->read->touch under this cache's lock must be atomic
+        # against a concurrent eviction of the same cache.
+        if i % 2 == 0 and r.status_code == 200:
+            arr = blosc2.ndarray_from_cframe(r.content)
+            np.testing.assert_array_equal(arr[:], data[i % 8 : i % 8 + 1])
+    # concurrent CTable fetches under the same tiny quota: single lock,
+    # single artifact — same no-corruption bar as the NDArray fetches.
+    for j, r in enumerate(results[12:]):
+        assert not isinstance(r, Exception), r
+        assert r.status_code != 500, r.text
+        if r.status_code == 200:
+            lo = (j * 8) % 64
+            t = blosc2.ctable_from_cframe(r.content)
+            assert t["x"][:].tolist() == list(range(lo, lo + 8))
+
+    # the peer must still be responsive after the storm, not knocked over
+    roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
+    assert "@labb3" in roots
+
+
+def test_per_peer_quota_evicts_only_that_peer(tmp_path):
+    """A per-peer cache_quota only evicts under that peer's pool subtree;
+    other peers' caches and the (disabled) pool-wide budget are untouched."""
+    from caterva2.c2cache import peercache
+
+    def make_cache(peer):
+        d = tmp_path / peer
+        d.mkdir()
+        arr = blosc2.empty(
+            (8000,),
+            np.float64,
+            chunks=(1000,),
+            urlpath=str(d / "x.b2nd"),
+            contiguous=False,
+            mode="w",
+            locking=True,
+        )
+        arr[:] = np.random.default_rng(7).random(8000)  # incompressible: ~8K/chunk
+        return d / "x.b2nd"
+
+    def filled_chunks(cpath):
+        # keep the NDArray referenced: a detached .schunk is a use-after-free
+        arr = blosc2.open(str(cpath), mode="a", locking=True)
+        return sum(i.special == blosc2.SpecialValue.NOT_SPECIAL for i in arr.schunk.iterchunks_info())
+
+    ca, cb = make_cache("peer-a"), make_cache("peer-b")
+    saved = peercache.pool_dir, peercache.budget, peercache.peer_quotas
+    try:
+        peercache.pool_dir = tmp_path
+        peercache.budget = None  # pool-wide budget off: isolate the per-peer pass
+        peercache.peer_quotas = {"peer-a": 20_000}
+        asyncio.run(peercache.ensure_budget())
+    finally:
+        peercache.pool_dir, peercache.budget, peercache.peer_quotas = saved
+
+    assert filled_chunks(ca) < 8  # peer-a evicted down toward LOW * quota
+    assert filled_chunks(cb) == 8  # peer-b untouched
+
+
+def test_whole_file_entry_evicted_whole(tmp_path):
+    """Under quota pressure a whole-file (.b2) entry is evicted whole (body +
+    JSON/atime sidecars unlinked), and a fresher entry survives an older one:
+    files compete in the same LRU order as dataset chunks."""
+    import time
+
+    from caterva2.c2cache import peercache
+
+    d = tmp_path / "peer-a"
+    d.mkdir()
+
+    def make_entry(name, at):
+        entry = d / name
+        entry.write_bytes(os.urandom(40_000))  # incompressible-ish, just bytes on disk
+        (d / (name + ".json")).write_text("{}")
+        peercache._stamp_atimes(peercache._atime_file(entry), np.array([at]))
+        return entry
+
+    old = make_entry("old.b2", time.time() - 100)
+    new = make_entry("new.b2", time.time())
+
+    saved = peercache.pool_dir, peercache.budget, peercache.peer_quotas
+    try:
+        peercache.pool_dir = tmp_path
+        peercache.budget = 60_000  # 80K on disk -> evict down to LOW * 60K
+        peercache.peer_quotas = {}
+        asyncio.run(peercache.ensure_budget())
+    finally:
+        peercache.pool_dir, peercache.budget, peercache.peer_quotas = saved
+
+    assert not old.exists()
+    assert not (d / "old.b2.json").exists()
+    assert not (d / "old.b2.atime.npy").exists()
+    assert new.exists()  # freshest entry survives
+
+
+def test_cache_lock_is_per_path():
+    """Two different cache paths get independent locks (the whole point of
+    per-cache locking, plans/peercache-locking.md §2): locking one must not
+    block acquiring the other, and the same path always maps to the same
+    lock object."""
+    from caterva2.c2cache import peercache
+
+    async def run():
+        lock_a = peercache.cache_lock("/tmp/does-not-exist-a")
+        lock_b = peercache.cache_lock("/tmp/does-not-exist-b")
+        assert lock_a is not lock_b
+        assert peercache.cache_lock("/tmp/does-not-exist-a") is lock_a
+
+        async with lock_a, asyncio.timeout(1), lock_b:
+            pass  # must not block/timeout: lock_b is independent of lock_a
+
+    asyncio.run(run())
+
+
+def test_the_lock_table_sheds_locks_nobody_holds():
+    """Bounded by what is in use, not by what has ever been asked for.
+
+    The pool is bounded in bytes and not in keys -- a peer catalog runs to
+    10 000 entries -- so a table that kept a lock per distinct path ever
+    touched grew for as long as the server ran, including for keys whose
+    cache files eviction had already deleted.
+    """
+    import gc
+
+    from caterva2.c2cache import peercache
+
+    async def run():
+        held = peercache.cache_lock("/tmp/held")
+        async with held:
+            for i in range(5000):
+                peercache.cache_lock(f"/tmp/transient-{i}")
+            gc.collect()
+            # the one being held is still there, and is still the same lock
+            assert peercache.cache_lock("/tmp/held") is held
+            assert len(peercache._locks) < 100  # the rest have gone
+
+    asyncio.run(run())
+
+
+@pytest.fixture(scope="module")
+def two_dataset_peers(tmp_path_factory):
+    # Two distinct datasets sharing one tiny-quota pool: fetches/evictions of
+    # one must not serialize behind the other now that locking is per-cache
+    # rather than pool-wide (plans/peercache-locking.md §3/§4).
+    bdir = tmp_path_factory.mktemp("peerB4")
+    adir = tmp_path_factory.mktemp("peerA4")
+    pub = bdir / "public"
+    pub.mkdir()
+    data1 = np.random.default_rng(3).random((8, 100_000))
+    data2 = np.random.default_rng(4).random((8, 100_000))
+    blosc2.asarray(data1, chunks=(1, 100_000), urlpath=str(pub / "mc1.b2nd"))
+    blosc2.asarray(data2, chunks=(1, 100_000), urlpath=str(pub / "mc2.b2nd"))
+    b_port, a_port = _unused_tcp_ports(2)
+    b = _start(bdir, b_port)
+    peer_toml = (
+        'peer_cache_quota = "100K"\n'
+        f'[[server.peer]]\nname = "labb4"\nurlbase = "http://127.0.0.1:{b_port}"\n'
+    )
+    a = _start(adir, a_port, peer_toml)
+    yield f"http://127.0.0.1:{a_port}", data1, data2
+    for p in (a, b):
+        p.send_signal(signal.SIGTERM)
+        p.wait(timeout=10)
+
+
+async def _fetch_dataset(client, urlbase, name, i):
+    return await client.get(
+        f"{urlbase}/api/fetch/@labb4/{name}.b2nd", params={"slice_": f"{i % 8}:{i % 8 + 1}"}, timeout=10
+    )
+
+
+# --- CTable units (no servers) ---------------------------------------------
+
+
+def test_ctable_row_range_edges():
+    from caterva2.services.srv_utils import ctable_row_range
+
+    n = 70
+    assert ctable_row_range(None, n) == (0, 70)
+    assert ctable_row_range((), n) == (0, 70)
+    assert ctable_row_range(slice(5, 20), n) == (5, 20)
+    assert ctable_row_range((slice(5, 20),), n) == (5, 20)
+    assert ctable_row_range(slice(-10, None), n) == (60, 70)
+    assert ctable_row_range(slice(None, -60), n) == (0, 10)
+    assert ctable_row_range(4, n) == (4, 5)
+    assert ctable_row_range(-1, n) == (69, 70)
+    assert ctable_row_range(slice(0, 0), n) == (0, 0)  # stop == 0 stays 0
+    assert ctable_row_range(slice(5, 500), n) == (5, 70)  # clamp
+    assert ctable_row_range(slice(50, 20), n) == (50, 50)  # inverted -> empty
+    assert ctable_row_range(500, n) == (70, 70)  # out-of-range int clamps
+
+
+def test_synth_ctable_cframe_roundtrip(tmp_path):
+    from caterva2.c2cache import remote
+
+    _make_fixed_table(tmp_path / "t.b2z", n=20)
+    t = blosc2.open(str(tmp_path / "t.b2z"))
+    sd = t.schema_dict()
+    cols = {name: t[name][5:15] for name in ("x", "y", "f")}
+    cf = remote._synth_ctable_cframe(sd, cols, 10)
+    t2 = blosc2.ctable_from_cframe(cf)
+    assert t2.nrows == 10
+    assert t2["x"][:].tolist() == list(range(5, 15))
+    assert t2["x"][:].dtype == np.int32
+    assert t2["y"][:].tolist() == [f"s{i}" for i in range(5, 15)]
+    np.testing.assert_allclose(t2["f"][:], [i / 2 for i in range(5, 15)])
+
+
+def test_synth_ctable_cframe_preserves_null_sentinels(tmp_path):
+    """Nulls survive the full structured-cache loop however they are stored:
+    numpy columns -> packed structured frame -> field reads -> synthesized
+    cframe -> reconstructed CTable.  A sentinel null is one of the values and
+    rides along with them; a masked one is not a value at all, and crosses in
+    a bool field of its own that becomes the `.notnull` sidecar again."""
+    from caterva2.c2cache import remote
+
+    int_null = np.iinfo(np.int32).min
+
+    @dataclass
+    class NRow:
+        x: int = blosc2.field(blosc2.int32(nullable=True), chunks=(16,), blocks=(8,))
+        y: str = blosc2.field(blosc2.string(max_length=16, nullable=True), chunks=(16,), blocks=(8,))
+        f: float = blosc2.field(blosc2.float64(nullable=True), chunks=(16,), blocks=(8,))
+
+    t = blosc2.CTable(NRow, urlpath=str(tmp_path / "n.b2z"), mode="w", compact=True, expected_size=40)
+    for i in range(40):
+        # None is a null whatever the column stores; `int_null` is a value that
+        # happens to look like one, and must come back as the value it is
+        t.append(
+            (
+                None if i % 7 == 3 else (int_null if i == 0 else i),
+                None if i % 5 == 2 else f"s{i}",
+                None if i % 3 == 1 else i / 2,
+            )
+        )
+    sd = t.schema_dict()
+    dtype = remote.ctable_cacheable({"nrows": 40, "chunks": (16,), "schema_dict": sd})
+    assert dtype is not None  # nullable fixed-width columns are cacheable
+    # A mask is not a value, so it crosses the cache in a field of its own
+    assert set(dtype.names) == {"x", "y", "f"} | {f"{remote.MASK_FIELD_PREFIX}{c}" for c in "xyf"}
+
+    # pack -> sparse structured frame -> read back (the cache's data path)
+    rows = np.zeros(40, dtype=dtype)
+    for name in dtype.names:
+        if name.startswith(remote.MASK_FIELD_PREFIX):
+            rows[name] = np.asarray(t[name[len(remote.MASK_FIELD_PREFIX) :]].notnull())
+        else:
+            rows[name] = t[name][0:40]
+    frame = blosc2.asarray(rows, chunks=(16,))
+    back = frame[0:40]
+
+    cols = {name: back[name] for name in dtype.names}
+    t2 = blosc2.ctable_from_cframe(remote._synth_ctable_cframe(sd, cols, 40))
+
+    for name in ("x", "y", "f"):
+        np.testing.assert_array_equal(t2[name][:], t[name][:])  # NaN-safe
+        assert t2[name].null_count() == t[name].null_count()
+        # Which rows, not merely how many: an empty string and a null read the
+        # same out of the values, and only the mask tells them apart
+        np.testing.assert_array_equal(np.asarray(t2[name].is_null()), np.asarray(t[name].is_null()))
+    assert t2["x"].null_count() == sum(1 for i in range(40) if i % 7 == 3)
+
+
+def test_ctable_cacheable_detection(tmp_path):
+    from caterva2.c2cache import remote
+
+    _make_fixed_table(tmp_path / "t.b2z", n=20)
+    sd = blosc2.open(str(tmp_path / "t.b2z")).schema_dict()
+    dtype = remote.ctable_cacheable({"nrows": 20, "chunks": (16,), "schema_dict": sd})
+    assert dtype is not None
+    assert dtype.names == ("x", "y", "f")
+
+    @dataclass
+    class VRow:
+        a: int = blosc2.field(blosc2.int64())
+        s: str = blosc2.field(blosc2.vlstring())
+
+    tv = blosc2.CTable(VRow)
+    tv.append((1, "abc"))
+    vsd = tv.schema_dict()
+    assert remote.ctable_cacheable({"nrows": 1, "chunks": (16,), "schema_dict": vsd}) is None
+    # no shared chunk grid
+    assert remote.ctable_cacheable({"nrows": 20, "chunks": None, "schema_dict": sd}) is None
+    # oversized compound chunk (rows_per_chunk x itemsize > cap)
+    assert remote.ctable_cacheable({"nrows": 20, "chunks": (2**24,), "schema_dict": sd}) is None
+    # numpy-hostile schema (duplicate field names)
+    dup = {"version": 1, "columns": [{"name": "a", "kind": "int32"}, {"name": "a", "kind": "int32"}]}
+    assert remote.ctable_cacheable({"nrows": 5, "chunks": (16,), "schema_dict": dup}) is None
+
+
+def test_ctable_source_aget_chunk(tmp_path):
+    """One api/fetch call per chunk; the trailing partial chunk comes back
+    zero-padded to the full chunkshape."""
+    from caterva2.c2cache import remote
+
+    _make_fixed_table(tmp_path / "t.b2z", n=70)
+    t = blosc2.open(str(tmp_path / "t.b2z"))
+    info = {"nrows": 70, "chunks": (16,), "schema_dict": t.schema_dict(), "mtime": None}
+    dtype = remote.ctable_cacheable(info)
+    src = remote.CTableSource("@public/t.b2z", "http://unused", info, dtype)
+
+    calls = []
+
+    class Resp:
+        def __init__(self, content):
+            self.content = content
+
+        def raise_for_status(self):
+            pass
+
+    class StubAClient:
+        async def get(self, url, params=None):
+            calls.append(params["slice_"])
+            lo, hi = map(int, params["slice_"].split(":"))
+            return Resp(t.slice(lo, hi).to_cframe())
+
+        async def aclose(self):
+            pass
+
+    src._aclient = StubAClient()
+    chunk = asyncio.run(src.aget_chunk(4))  # trailing chunk: rows 64:70 of 70
+    assert calls == ["64:70"]
+
+    arr = blosc2.empty((16,), dtype=dtype, chunks=(16,))
+    arr.schunk.update_chunk(0, chunk)
+    assert arr[:]["x"][:6].tolist() == list(range(64, 70))
+    assert (arr[:]["x"][6:] == 0).all()  # zero-padded tail
+    assert arr[:]["y"][:6].tolist() == [f"s{i}" for i in range(64, 70)]
+
+
+def test_afetch_retry_once():
+    """A single transport timeout inside afetch is retried once (sporadic
+    503 flake on concurrent first-touch fetches); a second failure still
+    propagates for the caller's mark_offline handling."""
+    from caterva2.c2cache import remote
+
+    class FlakyProxy:
+        def __init__(self, failures):
+            self.failures = failures
+            self.calls = []
+
+        async def afetch(self, slice_, **kwargs):
+            self.calls.append((slice_, kwargs))
+            if len(self.calls) <= self.failures:
+                raise httpx.ReadTimeout("slow chunk")
+
+    proxy = FlakyProxy(failures=1)
+    asyncio.run(remote.afetch_retry_once(proxy, slice(0, 8), max_concurrency=4))
+    assert proxy.calls == [(slice(0, 8), {"max_concurrency": 4})] * 2
+
+    proxy = FlakyProxy(failures=2)
+    with pytest.raises(httpx.ReadTimeout):
+        asyncio.run(remote.afetch_retry_once(proxy, slice(0, 8)))
+    assert len(proxy.calls) == 2
+
+
+def test_concurrent_fetches_of_different_datasets_dont_serialize(two_dataset_peers):
+    """Interleaved concurrent fetches of two different datasets under a tiny
+    shared quota: correctness under load is the regression net (per
+    plans/peercache-locking.md §Tests point 3 -- the locking mechanics/timing
+    itself is blosc2's own suite's job)."""
+    urlbase, data1, data2 = two_dataset_peers
+
+    async def run():
+        async with httpx.AsyncClient() as client:
+            calls = []
+            for i in range(12):
+                name = "mc1" if i % 2 == 0 else "mc2"
+                calls.append(_fetch_dataset(client, urlbase, name, i))
+            return await asyncio.gather(*calls, return_exceptions=True)
+
+    results = asyncio.run(run())
+    for i, r in enumerate(results):
+        assert not isinstance(r, Exception), r
+        assert r.status_code != 500, r.text
+        if r.status_code == 200:
+            data = data1 if i % 2 == 0 else data2
+            arr = blosc2.ndarray_from_cframe(r.content)
+            np.testing.assert_array_equal(arr[:], data[i % 8 : i % 8 + 1])
+
+    roots = httpx.get(f"{urlbase}/api/roots", timeout=5).json()
+    assert "@labb4" in roots
+
+
+def test_peer_ctable_info_renders(two_servers):
+    """A peer CTable's metadata is a CTable's, and must be read back as one.
+
+    `api/info` for one carries `kind`, `nrows`, `ncols` -- no shape, no size --
+    so the model picked off the field names alone fell through to `File`,
+    whose required `size` is not there: a 500 for every click on a peer table,
+    and no Display tab even if it had built.
+    """
+    urlbase, _data, _adir = two_servers
+    r = httpx.get(f"{urlbase}/htmx/path-info/@labb/tbl.b2z", timeout=30)
+    assert r.status_code == 200, r.text
+    assert "Display" in r.text  # the tab a table gets, off meta.kind
+    # ... and the same for one nested inside a peer container
+    r = httpx.get(f"{urlbase}/htmx/path-info/@labb/tree.b2z/dir/tbl", timeout=30)
+    assert r.status_code == 200, r.text
+
+
+def test_a_peer_without_a_peer_id_is_disabled_not_raised():
+    """The handshake answer comes off the network, so it is not to be trusted.
+
+    A peer that omits `peer_id` used to raise a KeyError out of a method
+    documented never to raise -- a 500 on the peers panel, and a silently dead
+    probe thread everywhere else.  A null one was worse: it compared equal to
+    every peer not yet handshaken, and disabled a legitimate one as a duplicate.
+    """
+    from caterva2.c2cache import peers
+
+    for answer in (
+        {"api_version": peers_api_version()},
+        {"peer_id": None, "api_version": peers_api_version()},
+    ):
+        registry = peers.PeerRegistry("me")
+        registry.load(
+            [
+                {"name": "quiet", "urlbase": "http://peer.invalid"},
+                {"name": "good", "urlbase": "http://other.invalid"},
+            ]
+        )
+        quiet, good = registry.peers["@quiet"], registry.peers["@good"]
+
+        class _Answer:
+            status_code = 200
+
+            def __init__(self, body):
+                self._body = body
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self._body
+
+        with mock.patch.object(peers.httpx, "get", return_value=_Answer(answer)):
+            registry._handshake(quiet)  # must not raise
+        assert quiet.online is False
+        assert quiet.peer_id is None
+        assert good.peer_id is None  # and the other one was not blamed for it
+
+
+def peers_api_version():
+    from caterva2.services.providers import PEER_API_VERSION
+
+    return PEER_API_VERSION
+
+
+def test_an_unreadable_cache_quota_costs_the_quota_not_the_peer():
+    """Startup has to survive a typo in a config entry, not refuse to boot --
+    and not quietly unmount a root either.
+
+    A `cache_quota` it could not parse raised straight out of `load()` at first,
+    through the provider's startup and the lifespan, and the server never came
+    up.  Skipping the entry instead cost as much in a quieter way: `cache_quota`
+    is an optional eviction budget, and dropping the peer over it left every
+    dataset under `@bad` answering 404 with one line at boot to say why.
+    """
+    from caterva2.c2cache import peers
+
+    registry = peers.PeerRegistry("me")
+    registry.load(
+        [
+            {"name": "bad", "urlbase": "http://a.invalid", "cache_quota": "1T?"},
+            {"name": "worse", "urlbase": "http://b.invalid", "cache_quota": "plenty"},
+            {"name": "fine", "urlbase": "http://c.invalid", "cache_quota": "2G"},
+        ]
+    )
+    # Every peer is still mounted ...
+    assert set(registry.peers) == {"@bad", "@worse", "@fine"}
+    # ... the unreadable ones with the budget that leaving it out would mean
+    assert registry.peers["@bad"].cache_quota is None
+    assert registry.peers["@worse"].cache_quota is None
+    assert registry.peers["@fine"].cache_quota == 2 * 2**30
+
+
+def test_a_handshake_answer_that_is_not_an_object_disables_the_peer(monkeypatch):
+    """`_handshake` never raises: it runs in a thread of its own, and an
+    exception out of it takes the thread with it, leaving the peer offline with
+    no peer_id and nothing to say so.  A 200 carrying JSON that is not an object
+    -- a captive portal, a proxy's error page -- used to do exactly that on the
+    `.get` below the parse.
+    """
+    from caterva2.c2cache import peers
+
+    class _Answer:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return ["not", "an", "object"]
+
+    monkeypatch.setattr(peers.httpx, "get", lambda *a, **kw: _Answer())
+    registry = peers.PeerRegistry("me")
+    registry.load([{"name": "portal", "urlbase": "http://a.invalid"}])
+    peer = registry.peers["@portal"]
+
+    registry.handshake_all()  # the thread must finish, not die in it
+
+    assert peer.online is False
+    assert peer.peer_id is None

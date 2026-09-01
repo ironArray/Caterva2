@@ -7,11 +7,12 @@
 # See LICENSE.txt for details about copyright and rights to use.
 ###############################################################################
 import json
+import math
 import os
 from collections.abc import Callable, Iterator, Mapping
 
 # Requirements
-import b2h5py.auto  # noqa: F401A
+import b2h5py.auto  # noqa: F401
 import blosc2
 import h5py
 
@@ -216,8 +217,7 @@ def b2chunkers_from_blosc2(
         # TODO: check if schunk is compatible with creation arguments
         if b2_schunk.nchunks < 1:
             raise OSError(
-                f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} "
-                f"contains Blosc2 super-chunk with no chunks"
+                f"chunk #{nchunk} of HDF5 node {h5_dset.name!r} contains Blosc2 super-chunk with no chunks"
             )
         if b2_schunk.nchunks > 1:
             # TODO: warn, check shape, re-compress as single chunk
@@ -297,12 +297,81 @@ def b2chunkers_from_chunked(
     return b2getchunk_chunked, b2iterchunks_chunked
 
 
+def _h5group(h5file, prefix):
+    """The group at ``prefix``, or None if it is missing or not a group.
+
+    URL-supplied prefixes may name a leaf dataset or nothing at all; both must
+    degrade gracefully (matching TreeStore's tolerant prefix matching), not
+    crash the caller.
+    """
+    rel = prefix.strip("/")
+    try:
+        node = h5file[rel] if rel else h5file
+    except (KeyError, ValueError):
+        return None
+    return node if isinstance(node, (h5py.Group, h5py.File)) else None
+
+
+def hdf5_leaves(h5file, prefix="/"):
+    """Full leaf keys (e.g. ``/g/a``) under ``prefix`` of an open HDF5 file.
+
+    Mirrors ``srv_utils.treestore_leaves``. Incompatible datasets (compound,
+    vlen, too many dims) are skipped rather than surfaced as broken leaves;
+    a missing or non-group ``prefix`` yields ``[]``.
+    """
+    grp = _h5group(h5file, prefix)
+    if grp is None:
+        return []
+    base = prefix.rstrip("/")
+    out = []
+
+    def visit(name, obj):
+        if isinstance(obj, h5py.Dataset) and h5dset_is_compatible(obj):
+            out.append(f"{base}/{name}")
+
+    grp.visititems(visit)
+    return out
+
+
+def hdf5_size(h5file, prefix="/"):
+    """On-disk size (bytes) of compatible leaves under ``prefix``, in a single
+    ``visititems`` walk (no per-leaf re-lookup)."""
+    grp = _h5group(h5file, prefix)
+    if grp is None:
+        return 0
+    total = 0
+
+    def visit(name, obj):
+        nonlocal total
+        if isinstance(obj, h5py.Dataset) and h5dset_is_compatible(obj):
+            total += obj.id.get_storage_size()
+
+    grp.visititems(visit)
+    return total
+
+
 class HDF5Proxy(blosc2.Operand):
     """
     Simple proxy for an HDF5 array (or similar) that can be used with the Blosc2 compute engine.
 
     This only supports the __getitem__ method. No caching is performed.
     """
+
+    @classmethod
+    def open_leaf(cls, h5file, dsetname):
+        """Build a file-less proxy for a dataset in an already-open HDF5 file.
+
+        Unlike the on-disk mode below, this creates no ``.b2nd`` proxy file:
+        ``b2arr`` is an in-memory, urlpath-less Blosc2 array used only to hold
+        creation-compatible metadata (cparams/dparams/chunks/dtype).
+        """
+        self = cls.__new__(cls)
+        self.fname = h5file.filename
+        self.dsetname = dsetname
+        self.dset = h5file[dsetname] if dsetname else h5file
+        b2args = b2args_from_h5dset(self.dset)
+        self.b2arr = blosc2.empty(self.dset.shape or (), dtype=self.dset.dtype, **b2args)
+        return self
 
     def __init__(self, b2arr, h5file=None, dsetname=None):
         if b2arr is not None:
@@ -484,25 +553,38 @@ class HDF5Proxy(blosc2.Operand):
             result = blosc2.empty((), dtype=self.dtype)
         return blosc2.asarray(result, cparams=self.b2arr.cparams)
 
-    def indices(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
+    def _as_blosc2(self) -> blosc2.NDArray:
+        """Materialize the whole dataset as an in-memory NDArray (memoized per proxy)."""
+        nda = getattr(self, "_nda", None)
+        if nda is None:
+            # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
+            chunks = self.dset.chunks
+            if chunks is not None and math.prod(chunks) * self.dset.dtype.itemsize < 2**20:
+                # Tiny HDF5 chunks (e.g. row-chunked tables) would be inherited by
+                # asarray and cripple blosc2 sorts; let blosc2 pick its own chunking.
+                chunks, _ = blosc2.compute_chunks_blocks(self.dset.shape, None, None, self.dset.dtype)
+            nda = self._nda = blosc2.asarray(self.dset, cparams=self.b2arr.cparams, chunks=chunks)
+        return nda
+
+    def argsort(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
         """
-        Get the indices of the HDF5 dataset.
+        Get the indices that would sort the HDF5 dataset.
 
         Parameters
         ----------
         order: str | list[str] | None
             The order of the indices. If None, use the default order.
         kwargs: Any
-            Additional arguments to pass to the Blosc2 array.
+            Additional arguments to pass to NDArray.argsort.
 
         Returns
         -------
         out: NDArray
             An array with the indices.
         """
-        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        nda = blosc2.asarray(self.dset[:], cparams=self.b2arr.cparams, **kwargs)
-        return nda.argsort(order=order, **kwargs)
+        return self._as_blosc2().argsort(order=order, **kwargs)
+
+    indices = argsort  # backwards-compatible name
 
     def sort(self, order: str | list[str] | None = None, **kwargs) -> blosc2.NDArray:
         """
@@ -513,16 +595,14 @@ class HDF5Proxy(blosc2.Operand):
         order: str | list[str] | None
             The order of the indices. If None, use the default order.
         kwargs: Any
-            Additional arguments to pass to the Blosc2 array.
+            Additional arguments to pass to NDArray.sort.
 
         Returns
         -------
         out: NDArray
             An array with the sorted data.
         """
-        # TODO: optimize this for the case where the Blosc2 codec is used inside HDF5
-        nda = blosc2.asarray(self.dset[:], cparams=self.b2arr.cparams, **kwargs)
-        return nda.sort(order=order, **kwargs)
+        return self._as_blosc2().sort(order=order, **kwargs)
 
     def to_cframe(self, item=()) -> bytes:
         # Convert the HDF5 dataset to a Blosc2 CFrame

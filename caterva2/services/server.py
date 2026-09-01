@@ -23,9 +23,12 @@ import pathlib
 import shutil
 import string
 import tarfile
+import time
 import traceback
 import types
 import typing
+import uuid
+import weakref
 import zipfile
 
 # Requirements
@@ -42,20 +45,22 @@ import nbconvert
 import nbformat
 import numpy as np
 import PIL.Image
+import pydantic
 import pygments
 import uvicorn
 from blosc2 import linalg_funcs_list as linalg_funcs
 
 # FastAPI
-from fastapi import Depends, FastAPI, Form, Request, UploadFile, responses
+from fastapi import Depends, FastAPI, Form, Request, Response, UploadFile, concurrency, responses
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.datastructures import MutableHeaders
 
 # Project
 from caterva2 import hdf5, models, utils
-from caterva2.services import db, schemas, settings, srv_utils, users
+from caterva2.services import db, providers, schemas, settings, srv_utils, users
 from caterva2.services.notebook import inject_pyodide_bootstrap_cell
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -65,7 +70,35 @@ dotenv.load_dotenv()
 
 
 # State
-locks = {}
+# Per-array locks, held weakly, so the table holds the locks in use and nothing
+# else: a strong dict grows one entry per distinct array ever written, and never
+# loses one, for as long as the server runs.
+_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+
+
+def dataset_lock(abspath) -> asyncio.Lock:
+    """Serialize the writes to one array within this process.
+
+    Keyed on where the array is stored and not on the path it was asked for:
+    `@personal/run.b2nd` is a name every user spells the same way and no two of
+    them share (see `publish_key`), so a lock keyed on the request path makes
+    every user's chunk writes wait on every other user's writes to a different
+    file.
+
+    Weak is safe because every caller takes the lock in an `async with` on this
+    call's result: whoever holds it, and whoever waits on it, is a strong
+    reference to it for as long as that matters.  A lock nobody holds has no
+    state worth keeping.
+    """
+    key = str(abspath)
+    lock = _locks.get(key)
+    if lock is None:
+        # Bound to a name first: the table's own reference is weak, so an
+        # unnamed lock could be collected before it is returned
+        lock = asyncio.Lock()
+        lock = _locks.setdefault(key, lock)
+    return lock
+
 
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
 mimetypes.add_type("application/x-ipynb+json", ".ipynb")
@@ -81,6 +114,38 @@ def guess_type(path):
 def get_disk_usage():
     exclude = {"db.json", "db.sqlite"}
     return sum(path.stat().st_size for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude))
+
+
+DISK_USAGE_TTL = 10.0
+"""How long a walk of the state directory is reused before another is made."""
+
+_disk_usage = {"walked_at": 0.0, "walked": 0, "written": 0}
+
+
+def get_disk_usage_written(pending: int) -> int:
+    """What the state directory holds, for a check made once per chunk written.
+
+    `get_disk_usage` stats every file under the state directory.  That is a fair
+    price for an upload, which happens once; a fill writes a chunk at a time and
+    would pay it per chunk, so the walk that costs the most in the array's size
+    would run the most often on the largest arrays -- an array of ten thousand
+    chunks is ten thousand walks.
+
+    The walk is kept for `DISK_USAGE_TTL` and the chunks written since are added
+    to it, so the answer only ever *over*states what is on disk: a write this
+    process made is counted from the moment it is made, and a file removed
+    meanwhile is still counted until the next walk.  A quota can therefore bite
+    slightly early, never slightly late, which is the direction to be wrong in.
+    """
+    now = time.time()
+    if now - _disk_usage["walked_at"] > DISK_USAGE_TTL:
+        _disk_usage.update(walked_at=now, walked=get_disk_usage(), written=0)
+    return _disk_usage["walked"] + _disk_usage["written"] + pending
+
+
+def account_chunk_written(nbytes: int) -> None:
+    """Count a chunk just written against the kept walk; see `get_disk_usage_written`."""
+    _disk_usage["written"] += nbytes
 
 
 def truncate_path(path, size=35):
@@ -127,6 +192,9 @@ def open_b2(abspath, path):
         raise ValueError(f"Unexpected root={root}")
 
     container = blosc2.open(abspath)
+    # CTable has its own storage and no table-level cparams/dparams; return early.
+    if isinstance(container, blosc2.CTable):
+        return container
     vlmeta = container.schunk.vlmeta if hasattr(container, "schunk") else container.vlmeta
     if isinstance(container, blosc2.LazyArray):
         # Open the operands properly
@@ -234,7 +302,19 @@ async def lifespan(app: FastAPI):
     if user_login_enabled():
         await db.create_db_and_tables(settings.statedir)
 
+    # Peer identity (Caterva3): a stable UUID for this server instance.
+    idfile = settings.statedir / "peer_id"
+    if not idfile.exists():
+        idfile.write_text(uuid.uuid4().hex)
+    settings.peer_id = idfile.read_text().strip()
+
+    for p in providers.active:
+        await p.startup()
+
     yield
+
+    for p in providers.active:
+        await p.shutdown()
 
     # Clean up the database engine on shutdown
     if user_login_enabled() and db.engine is not None:
@@ -324,6 +404,19 @@ with (BASE_DIR / BUILD_DIR / "manifest.json").open() as file:
     templates.env.globals["main_js"] = url(BUILD_DIR + entry["file"])
 
 
+@app.get("/api/peer")
+async def get_peer_manifest() -> dict:
+    """Identity manifest used by the Caterva3 peer handshake."""
+    return {
+        "peer_id": settings.peer_id,
+        "name": settings.urlbase,
+        "api_version": providers.PEER_API_VERSION,  # single source of truth in providers.py
+        "roots": ["@public"],  # only locally-owned public data: never mounts
+        "capabilities": {"chunk_api": "plain"},  # api/chunk works for plain
+        # datasets only (see design doc)
+    }
+
+
 @app.get("/api/roots")
 async def get_roots(user: db.User = Depends(optional_user)) -> dict:
     """
@@ -342,6 +435,10 @@ async def get_roots(user: db.User = Depends(optional_user)) -> dict:
         for name in ["@personal", "@shared"]:
             root = models.Root(name=name)
             roots[root.name] = root
+
+    for p in providers.active:
+        for name in p.roots():
+            roots[name] = models.Root(name=name)
 
     return roots
 
@@ -364,9 +461,37 @@ async def get_list(
     list
         The list of datasets, as name strings relative to path.
     """
-    # List the datasets in root or directory
-    directory = get_writable_path(path, user)
+    root = path.parts[0]
+    provider = providers.provider_for(root)
+    if provider is not None:
+        rel = "/".join(path.parts[1:])
+        try:
+            return await provider.list(root, rel)
+        except providers.ProviderError as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+
+    # A path may descend into a container (e.g. a TreeStore .b2z or .h5); list
+    # its members.
+    directory, inner_key = split_and_resolve(path, user, resolver=get_writable_path)
     if directory.is_file():
+        container = srv_utils.open_container(directory)
+        if container is not None:
+            try:
+                # Deep listing of leaves relative to the requested path, matching
+                # walk_files() semantics for directories.
+                prefix = inner_key or "/"
+                strip = prefix.rstrip("/") + "/"
+                names = sorted(d[len(strip) :] for d in container.leaves(prefix))
+                if not names and inner_key is not None and container.is_leaf(inner_key):
+                    # `leaves` answers with a prefix's descendants, and a leaf is
+                    # not one of its own: a path that names one lists as that
+                    # name, the way a single file does below
+                    names = [inner_key.rsplit("/", 1)[-1]]
+                return names
+            finally:
+                container.close()
+        if inner_key is not None:
+            srv_utils.raise_not_found()
         name = pathlib.Path(directory.name)
         return [str(name.with_suffix("") if name.suffix == ".b2" else name)]
     # Sort the list of datasets and return
@@ -380,6 +505,7 @@ async def get_list(
 @app.get("/api/info/{path:path}")
 async def get_info(
     path: pathlib.Path,
+    response: Response,
     user: db.User = Depends(optional_user),
 ):
     """
@@ -395,10 +521,61 @@ async def get_info(
     dict
         The metadata of the dataset.
     """
-    abspath = get_abspath(path, user)
+    root = path.parts[0]
+    provider = providers.provider_for(root)
+    if provider is not None:
+        rel = "/".join(path.parts[1:])
+        try:
+            info = await provider.info(root, rel)
+        except providers.ProviderError as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        # A peer dataset is fetched from its owner and re-serialized here, so
+        # `api/fetch` will 416 a range for it.  Saying so now saves the client
+        # the request it would otherwise spend finding that out: a `Proxy` over
+        # a stored dataset reads blocks, and asks first whether it may.  Set over
+        # whatever the peer said of its own copy, which is stored *there*
+        if isinstance(info, dict):
+            info["accept_ranges"] = "none"
+        return info
+
+    abspath, inner_key = split_and_resolve(path, user)
+    if inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf/group).
+        meta = srv_utils.container_member_info(abspath, inner_key)
+        if meta is None:
+            srv_utils.raise_not_found()
+        # The container's validator, which is the leaf's too: a leaf served in
+        # ranges is a window of that file, so what tells a client the window
+        # still holds is what tells it the file did not change under it
+        etag = dataset_etag(abspath)
+        if etag:
+            response.headers["ETag"] = etag
+        return meta
     if abspath.is_dir():
-        srv_utils.raise_not_found()
-    return srv_utils.read_metadata(abspath)
+        files = list(srv_utils.walk_files(abspath))
+        size = sum(f.stat().st_size for f, _ in files)
+        return models.Directory(mtime=abspath.stat().st_mtime, size=size, nfiles=len(files))
+    # The same validator the file responses carry, so a client that opens a frame
+    # over two requests can tell that both saw the same one
+    etag = dataset_etag(abspath)
+    if etag:
+        response.headers["ETag"] = etag
+    meta = srv_utils.read_metadata(abspath)
+    # A dataset with a file of its own is served by `FileResponse`, which honours
+    # a range.  Only said where it is certain: a directory or a lazy expression
+    # is not a stored frame, and a container member depends on whether its leaf
+    # has a window, so a client told nothing asks as it always did -- an omission
+    # costs a request, a wrong answer would cost correctness.
+    #
+    # A `.b2nd` that proxies an HDF5 dataset is one of those wrong answers: it
+    # reads as an `NDArray` here, so it arrives with a `Metadata` like any other,
+    # but `api/fetch` opens it as an `HDF5Proxy` and rebuilds what it serves --
+    # the file on disk is a proxy's chunks, not the array's.  It 416s a range,
+    # and a client that took "bytes" on trust would find that out on its first
+    # block read rather than on a probe it could have made
+    if isinstance(meta, models.Metadata) and not srv_utils.is_hdf5_proxy_meta(meta):
+        meta.accept_ranges = "bytes"
+    return meta
 
 
 async def partial_download(abspath, path, slice_=None):
@@ -419,10 +596,69 @@ async def partial_download(abspath, path, slice_=None):
     None
         When finished, the dataset is available in cache.
     """
-    lock = locks.setdefault(path, asyncio.Lock())
+    lock = dataset_lock(abspath)
     async with lock:
         proxy = open_b2(abspath, path)
         await proxy.afetch(slice_)
+
+
+# mtime is in the key and unused in the body, so that a container rewritten
+# underneath is reopened instead of served from here (as get_filtered_array does)
+@functools.lru_cache(maxsize=16)
+def member_window(abspath, inner_key, mtime):
+    """Where a container leaf's frame lies in the file, as (offset, nbytes), or None.
+
+    A `.b2z` is a zip of *stored* members, so an external leaf's bytes in the
+    file are the Blosc2 frame it would have been written as on its own -- which
+    is what lets a ranged request be answered by seeking to it instead of
+    rebuilding the leaf.  None where there is no such window: a leaf embedded in
+    the store's own super-chunk, a `C2Array` reference, an HDF5 dataset (not a
+    Blosc2 frame at all), a CTable `.b2z` (not a store of leaves).
+
+    The frame's own magic is checked before the window is offered, so a `.b2z`
+    written by something else -- with compressed members, say -- cannot have a
+    window handed out that would decode to nonsense.
+    """
+    if abspath.suffix != ".b2z":
+        return None
+    try:
+        store = blosc2.open(abspath)
+    except Exception:
+        return None
+    if not isinstance(store, blosc2.DictStore):
+        return None
+    # A blosc2 that cannot say where a member lies is one more way there is no
+    # window to offer, not an error: this is an optimization -- seek to the
+    # leaf's frame instead of rebuilding it -- and the caller already has the
+    # rebuild for every other case that returns None here.  Asked of the store
+    # rather than of a version, so it starts working when the API arrives
+    locate = getattr(store, "member_window", None)
+    if locate is None:
+        return None
+    window = locate(inner_key)
+    if window is None:
+        return None
+    offset, _size = window
+    with open(abspath, "rb") as container:
+        container.seek(offset)
+        if container.read(10)[2:9] != b"b2frame":
+            return None
+    return window
+
+
+@functools.lru_cache(maxsize=16)
+def open_member(abspath, inner_key, mtime):
+    """The leaf at *inner_key* inside a container file, kept between requests.
+
+    Reading a leaf chunk by chunk, which is what a proxy over one does, would
+    otherwise reopen the container for every chunk.  Holding on to the leaf is
+    safe: a TreeStore leaf is an independent object once fetched, and outlives
+    the adapter that produced it.
+    """
+    leaf = srv_utils.open_container_member(abspath, inner_key)
+    if leaf is None:  # no such key, or it names a group rather than a dataset
+        srv_utils.raise_not_found()
+    return leaf
 
 
 def get_abspath(
@@ -453,7 +689,10 @@ def get_abspath(
         return cachedir / filepath
 
     # HDF5 files cannot be compressed, as they are supported natively
-    if filepath.suffix not in {".b2frame", ".b2nd", ".h5"} and not may_not_exist:
+    if (
+        filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | srv_utils.HDF5_SUFFIXES
+        and not may_not_exist
+    ):
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
@@ -470,18 +709,142 @@ def get_abspath(
     return abspath
 
 
+def split_and_resolve(path, user, resolver=None):
+    """Split a container-descent path and resolve the container on disk.
+
+    Like ``srv_utils.split_container_path`` + resolving, but skips split
+    points that are real *directories* merely named like a container (e.g.
+    ``results.h5/``, creatable through the upload API), so files beneath them
+    stay reachable instead of 404ing. Returns ``(abspath, inner_key)``.
+    """
+    resolver = resolver or get_abspath
+    parts = pathlib.Path(path).parts
+    for i, part in enumerate(parts[:-1]):
+        if pathlib.PurePath(part).suffix in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
+            abspath = resolver(pathlib.Path(*parts[: i + 1]), user)
+            if abspath.is_dir():
+                continue  # a directory that merely looks like a container
+            return abspath, "/" + "/".join(parts[i + 1 :])
+    return resolver(pathlib.Path(path), user), None
+
+
+def parse_segment(segment):
+    """One dimension of a slice string: `3`, `1:4`, `:9`, `:`.
+
+    Raises `ValueError` for anything else, that being what the callers catch and
+    turn into a 400.  A segment of four parts would make `slice()` raise a
+    `TypeError` instead, which is a 500 about the server rather than a 400 about
+    the request, so it is counted here.
+    """
+    if ":" not in segment:
+        return int(segment)
+    parts = [int(x.strip()) if x.strip() else None for x in segment.split(":")]
+    if len(parts) > 3:
+        raise ValueError(f"{segment!r} is not a slice: a slice has a start, a stop and a step")
+    return slice(*parts)
+
+
 def parse_slice(string):
+    """A slice string as a key, or None where it names nothing.
+
+    Raises `ValueError` for a string that is not one; the callers turn that into
+    a 400, since what it describes is the request and not this server.
+    """
     if not string:
         return None
-    obj = []
-    for segment in string.split(","):
-        if ":" not in segment:
-            segment = int(segment)
-        else:
-            segment = slice(*(int(x.strip()) if x.strip() else None for x in segment.split(":")))
-        obj.append(segment)
-
+    obj = [parse_segment(segment) for segment in string.split(",")]
     return tuple(obj) if len(obj) > 1 else obj[0]
+
+
+MAX_INDICES_CHARS = 8 * 1024 * 1024
+"""How long the `indices` parameter may be, measured before it is parsed.
+
+The first bound the parse has, and the cheapest: it is a length, checked
+against a string already in hand, and it caps what `json.loads` is asked to
+build.  Generous enough for any key `MAX_FETCH_COORDS` allows -- a coordinate
+costs a handful of characters.
+
+Not a bound on the request, though: by the time a string is in hand it has been
+read.  That bound is `MAX_FETCH_BODY`, which is what stops a body before it is
+allocated.
+"""
+
+MAX_FETCH_BODY = MAX_INDICES_CHARS + 2**20
+"""How much of a `POST api/fetch` body is read at all.
+
+What `MAX_INDICES_CHARS` cannot be: a body is read whole before any parameter
+of it can be measured, so a length checked after the read describes what the
+server already spent.  Read off the request stream against this instead, and a
+caller cannot make an anonymous fetch allocate half a gigabyte.
+
+A megabyte over the longest `indices` this parses, which is the room the JSON
+around it takes -- so every request that would have been answered still is, and
+the refusal a too-long key gets is still the one about the key.
+"""
+
+MAX_FETCH_COORDS = 1_000_000
+"""How many coordinates one fetch may name, across every dimension of the key.
+
+`POST api/fetch` exists to lift the length limit a query string put on a key,
+and that limit was the only thing bounding this: without a bound of its own, one
+request can ask the server to gather, materialize and serialize an array of any
+size at all.  The cap has to be said out loud now that the URL no longer says it.
+
+A million points is far past what a scattered read is for and still a bounded
+amount of work.  A caller with more of them has a whole dataset to fetch, or a
+few batches to ask for.
+"""
+
+
+def parse_indices(string):
+    """The fancy key `indices` names, ready to index an array with.
+
+    JSON, one entry per dimension: a list of integers for a dimension indexed by
+    an array, an integer for one indexed by a scalar, a string for one indexed by
+    a slice (spelled as `slice_` spells it), and null for one taken whole.  So
+    `[[1,5,9],450,"0:10",null]` is `array[[1,5,9], 450, 0:10, :]`.
+
+    JSON rather than the spelling `slice_` uses, because a list of coordinates
+    has no unambiguous reading as a comma-separated string, and `json.loads` is
+    the one parser here that is not this module's to get wrong.  Every entry is
+    checked: what comes back indexes an array, so nothing else may reach it.
+
+    Bounded as well as checked: see `MAX_INDICES_CHARS` and `MAX_FETCH_COORDS`.
+    """
+    if len(string) > MAX_INDICES_CHARS:
+        raise ValueError(f"indices is {len(string)} characters where at most {MAX_INDICES_CHARS} are read")
+    try:
+        raw = json.loads(string)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"indices is not JSON: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ValueError("indices must be a JSON list, one entry per dimension")
+    coords = sum(len(entry) for entry in raw if isinstance(entry, list))
+    if coords > MAX_FETCH_COORDS:
+        raise ValueError(
+            f"indices names {coords} coordinates where at most {MAX_FETCH_COORDS} are gathered; "
+            "ask for them in batches"
+        )
+    key = []
+    for entry in raw:
+        # `bool` is an `int` in Python and a mask is not one of these, so it is
+        # ruled out before the integer branch can take it for a coordinate
+        if entry is None:
+            key.append(slice(None))
+        elif isinstance(entry, str):
+            try:
+                key.append(parse_segment(entry))
+            except ValueError as exc:
+                raise ValueError(f"indices entry {entry!r} is not a slice: {exc}") from exc
+        elif isinstance(entry, bool) or not isinstance(entry, (int, list)):
+            raise ValueError(f"indices entry {entry!r} is not an integer, a list of them, a slice or null")
+        elif isinstance(entry, int):
+            key.append(entry)
+        else:
+            if any(isinstance(v, bool) or not isinstance(v, int) for v in entry):
+                raise ValueError("an indices list may hold only integers")
+            key.append(np.array(entry, dtype=np.int64))
+    return tuple(key)
 
 
 @app.get("/api/fetch/{path:path}")
@@ -491,6 +854,8 @@ async def fetch_data(
     user: db.User = Depends(optional_user),
     filter: str | None = None,
     field: str | None = None,
+    indices: str | None = None,
+    range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
     """
     Fetch a dataset.
@@ -516,34 +881,143 @@ async def fetch_data(
         to be downloaded (instead of some slice which does not cover it fully),
         its stored image is served containing all data and metadata (including
         variable length fields).
+
+    The `FileResponse` case, and only that one, serves byte ranges: a client
+    can read the header, the chunk offsets and single blocks of a stored frame
+    instead of transferring it whole (blosc2's Proxy over a C2Array does).
+    Everything else is built as it is sent and answers a `Range` header with a
+    416, rather than quietly returning the whole body with a 200.
     """
 
-    slice_ = parse_slice(slice_)
-    abspath = get_abspath(path, user)
+    try:
+        slice_ = parse_slice(slice_)
+    except ValueError as exc:
+        srv_utils.raise_bad_request(f"slice_ is not a slice: {exc}")
+    if indices is not None:
+        # Gathered here rather than at the client, which would have to fetch the
+        # blocks holding the points to pick them out of: scattered points are
+        # the case where a block is nearly all waste, and a shared uplink is
+        # what a server runs out of first
+        if slice_ is not None or filter or field:
+            srv_utils.raise_bad_request("indices cannot be combined with slice_, filter or field")
+        try:
+            indices = parse_indices(indices)
+        except ValueError as exc:
+            srv_utils.raise_bad_request(str(exc))
 
-    if abspath.suffix not in {".b2frame", ".b2nd"}:
+    root = path.parts[0]
+    provider = providers.provider_for(root)
+    if provider is not None:
+        if filter or field:
+            # ponytail: filter/field post-processing is not wired for peer
+            # datasets yet; refuse loudly rather than return wrong data.
+            raise fastapi.HTTPException(
+                status_code=400, detail="filter/field are not supported on peer datasets yet"
+            )
+        if indices is not None:
+            # A provider fetches boxes: `RootProvider.fetch` takes a `slice_` and
+            # nothing else, so coordinates have nowhere to go here.  Refused
+            # rather than dropped -- a dropped key is not a smaller answer but
+            # the whole dataset, handed back as though it were the points asked
+            # for, which is the one failure this parameter must not have
+            raise fastapi.HTTPException(
+                status_code=400, detail="indices are not supported on peer datasets yet"
+            )
+        rel = "/".join(path.parts[1:])
+        try:
+            data = await provider.fetch(root, rel, slice_)
+        except providers.ProviderError as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        if isinstance(data, bytes):
+            # Already a serialized cframe (e.g. a peer CTable row range):
+            # stream it as-is, no numpy wrap.
+            srv_utils.refuse_range(range_header, path)
+            return responses.StreamingResponse(
+                srv_utils.iterchunk(data),
+                media_type="application/octet-stream",
+                headers=srv_utils.NO_RANGES,
+            )
+        # A peer dataset is fetched from its owner and re-serialized here, so
+        # there is no file to seek into
+        srv_utils.refuse_range(range_header, path)
+        cframe = await asyncio.to_thread(lambda: blosc2.asarray(np.ascontiguousarray(data)).to_cframe())
+        downloader = srv_utils.iterchunk(cframe)
+        return responses.StreamingResponse(
+            downloader, media_type="application/octet-stream", headers=srv_utils.NO_RANGES
+        )
+
+    abspath, inner_key = split_and_resolve(path, user)
+
+    # Container leaves are fetchable too; a plain .h5/.hdf5 (no inner_key) is
+    # a group, not a dataset, so it keeps the usual 400.
+    fetchable = abspath.suffix in {".b2frame", ".b2nd", ".b2z"} or (
+        abspath.suffix in srv_utils.HDF5_SUFFIXES and inner_key is not None
+    )
+    if not fetchable:
         srv_utils.raise_bad_request(
-            "The fetch API only supports datasets (.b2nd and .b2); "
+            "The fetch API only supports datasets (.b2nd, .b2frame, .b2z); "
             "use the download API if you only want to download the file"
         )
 
+    window = None  # where a container leaf's frame lies, when it has one
+    filter = filter.strip() if filter else filter
     if filter:
         if field:
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
-        filter = filter.strip()
         mtime = abspath.stat().st_mtime
-        container, _ = get_filtered_array(abspath, path, filter, sortby=None, mtime=mtime)
+        try:
+            container, _ = get_filtered_array(
+                abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+            )
+        except ValueError as exc:
+            srv_utils.raise_bad_request(str(exc))
+    elif inner_key is not None:
+        # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf).
+        # A leaf that is a whole frame inside the container can be served in
+        # ranges, by seeking to it -- what a stored dataset gets from
+        # FileResponse, and what lets a client read its blocks.  Not when a
+        # field is projected out of it: that is computed, not stored.
+        window = member_window(abspath, inner_key, abspath.stat().st_mtime)
+        container = srv_utils.open_container_member(abspath, inner_key)
+        if container is None:
+            srv_utils.raise_not_found()
     else:
         container = open_b2(abspath, path)
 
     if field:
         container = container[field]
 
-    if isinstance(container, blosc2.NDArray | blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField):
+    if isinstance(container, blosc2.DictStore):
+        # A container is a file of leaves rather than an array: its stored image
+        # is the file, which is what a client opening it as a store expects --
+        # and what the type ladder below used to die on, asking a TreeStore for
+        # a typesize it has not got (a 500 where the docstring promises the
+        # stored image).  Ranges come with FileResponse, so a leaf of it is
+        # reachable byte-wise too.
+        if slice_ is not None or indices is not None:
+            # Both narrow an answer, and a container has nothing to narrow: what
+            # is served here is the file itself.  Answering the whole of it to a
+            # caller who named two coordinates would be a widening, not a slice
+            srv_utils.raise_bad_request(
+                f"{path} is a container, so there is nothing to slice; ask for a dataset inside it"
+            )
+        return FileResponse(
+            abspath,
+            filename=abspath.name,
+            media_type="application/octet-stream",
+            headers=with_etag(abspath),
+        )
+
+    if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
+    elif isinstance(container, blosc2.CTable):
+        array = container
+        schunk = None
+        typesize = 1  # not used for CTable
+        shape = (array.nrows,)
     else:
         # SChunk
         array = None
@@ -554,7 +1028,7 @@ async def fetch_data(
             # TODO: make SChunk support integer as slice
             slice_ = slice(slice_, slice_ + 1)
 
-    whole = slice_ is None or slice_ == ()
+    whole = (slice_ is None or slice_ == ()) and indices is None
     if not whole and isinstance(slice_, tuple):
         whole = all(
             isinstance(sl, slice)
@@ -566,14 +1040,51 @@ async def fetch_data(
 
     if (
         whole
-        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField))
+        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
         and (not filter)
     ):
-        # Send the data in the file straight to the client,
-        # avoiding slicing and re-compression.
-        return FileResponse(abspath, filename=abspath.name, media_type="application/octet-stream")
+        if inner_key is None:
+            # Send the data in the file straight to the client,
+            # avoiding slicing and re-compression.  This is also the one branch that
+            # serves byte ranges: FileResponse seeks into the file and sends only
+            # what was asked for, which is what block-granular clients read.  The
+            # `ETag` is ours: Starlette's is a digest of the mtime and the size,
+            # and a chunk written as a run of zeros can leave both untouched
+            return FileResponse(
+                abspath,
+                filename=abspath.name,
+                media_type="application/octet-stream",
+                headers=with_etag(abspath),
+            )
+        if window is not None and not field:
+            # The same for a leaf, whose frame lies inside the container: its
+            # stored image is a window of that file, ranges included.  Not only
+            # cheaper than the rebuild below -- more faithful, since the rebuild
+            # re-partitions (it slices and recompresses), and so disagrees with
+            # the chunks and blocks api/info reports for the very same leaf.
+            return srv_utils.window_response(abspath, window, range_header, headers=with_etag(abspath))
 
-    if isinstance(array, hdf5.HDF5Proxy):
+    # Everything below builds its answer, so a range cannot be honoured: say so
+    # here, before computing a body that is not going to be sent
+    srv_utils.refuse_range(range_header, path)
+
+    if indices is not None:
+        if not isinstance(array, blosc2.NDArray):
+            srv_utils.raise_bad_request(f"{path} is not an array that can be indexed by coordinates")
+        try:
+            # `NDArray` reads scattered coordinates through its own sparse gather,
+            # so this touches the chunks the points land in and not the dataset.
+            # Off the event loop: bounded by `MAX_FETCH_COORDS` but not small, and
+            # a gather that ran here would stall every other request for its
+            # duration -- it reads, materializes and serializes, all blocking
+            data = await concurrency.run_in_threadpool(lambda: blosc2.asarray(array[indices]).to_cframe())
+        except (IndexError, ValueError) as exc:
+            srv_utils.raise_bad_request(str(exc))
+    elif isinstance(array, blosc2.CTable):
+        row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
+        view = array.slice(row_start, row_stop)
+        data = view.to_cframe()
+    elif isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyArray):
         data = array.compute(() if slice_ is None else slice_)
@@ -599,7 +1110,81 @@ async def fetch_data(
         data = schunk.to_cframe()
 
     downloader = srv_utils.iterchunk(data)
-    return responses.StreamingResponse(downloader, media_type="application/octet-stream")
+    return responses.StreamingResponse(
+        downloader, media_type="application/octet-stream", headers=srv_utils.NO_RANGES
+    )
+
+
+@app.post(
+    "/api/fetch/{path:path}",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": models.FetchPayload.model_json_schema()},
+            },
+        }
+    },
+)
+async def post_fetch_data(
+    path: pathlib.Path,
+    request: Request,
+    user: db.User = Depends(optional_user),
+):
+    """
+    Fetch a dataset, with the parameters in the body rather than the query.
+
+    The same fetch as `GET api/fetch` in every respect -- it is the same code,
+    called with what the body holds -- and it exists for the one thing a query
+    string cannot do: carry a key of more coordinates than a URL has room for.
+    A client small enough to fit its key in an URL has no reason to come here.
+
+    The body is read here rather than declared as a parameter, so that its
+    length is a bound and not a report: FastAPI reads a declared body whole
+    before anything of ours runs, so `MAX_INDICES_CHARS` would be checked
+    against a string the server had already been made to allocate.
+
+    Byte ranges are not offered.  A `Range` header pairs with a GET of a stored
+    frame, and nothing that would arrive by this route is one.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The path to the dataset.
+    request : Request
+        Carries `indices`, `slice_`, `filter` and `field` as JSON, by the names
+        the query takes them under (`models.FetchPayload`).
+
+    Returns
+    -------
+    FileResponse or StreamingResponse
+        Whatever the GET would have returned for the same parameters.
+    """
+    body = await srv_utils.read_bounded_body(request, MAX_FETCH_BODY)
+    try:
+        payload = models.FetchPayload.model_validate_json(body)
+    except pydantic.ValidationError as exc:
+        # 422, the status FastAPI answers a body it cannot read with, and
+        # reported the way FastAPI reports its own: without the input that
+        # failed (`fastapi.routing` builds this error with an empty `input`).
+        # Pydantic puts the *whole body* there for malformed JSON, so echoing
+        # its errors back hands a caller who sent MAX_FETCH_BODY bytes of
+        # nonsense every one of them again -- an amplifier on the one endpoint
+        # this bound exists to keep small
+        detail = [
+            {"type": err["type"], "loc": err["loc"], "msg": err["msg"]}
+            for err in exc.errors(include_url=False)
+        ]
+        raise fastapi.HTTPException(status_code=422, detail=detail) from exc
+    return await fetch_data(
+        path=path,
+        slice_=payload.slice_,
+        user=user,
+        filter=payload.filter,
+        field=payload.field,
+        indices=payload.indices,
+        range_header=None,
+    )
 
 
 @app.get("/api/download/{path:path}")
@@ -607,14 +1192,45 @@ async def download_data(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
     accept_encoding: str | None = fastapi.Header(None),
+    range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
+    # This one always streams, decompressing on the way out more often than not,
+    # so it never serves ranges; api/fetch on a stored dataset is what does.  The
+    # refusal comes after the path is resolved, so a path that does not exist is
+    # still a 404 rather than a 416 about a file nobody has.
+    provider = providers.provider_for(path.parts[0])
+    if provider is not None:
+        try:
+            body, media_type, headers = await provider.download(
+                path.parts[0], "/".join(path.parts[1:]), accept_encoding
+            )
+        except providers.ProviderError as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        srv_utils.refuse_range(range_header, path)
+        # Case-insensitive once, for everything added below, rather than per
+        # header at each addition: these came off an httpx response and httpx
+        # hands back lowercased names, so a plain dict sees no match, adds a
+        # second entry, and the answer goes out carrying the header twice -- the
+        # peer's `Content-Disposition` and ours, for a client to choose between.
+        # `download` is a provider interface that answers with headers of its
+        # own choosing, so this holds for whatever else it comes back with and
+        # not only for the two names spelled out here
+        headers = MutableHeaders(headers)
+        headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
+        headers.update(srv_utils.NO_RANGES)
+        return responses.StreamingResponse(body, media_type=media_type, headers=headers)
+
     decompress = accept_encoding != "blosc2"
+    # Read before creating the response: a bad path must 404 up front, not
+    # abort the stream after the 200 headers already went out.
+    content = await get_file_content(path, user, decompress=decompress)
+    srv_utils.refuse_range(range_header, path)
 
     async def downloader():
-        yield await get_file_content(path, user, decompress=decompress)
+        yield content
 
     mimetype = guess_type(path)
-    headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
+    headers = {"Content-Disposition": f'attachment; filename="{path.name}"', **srv_utils.NO_RANGES}
     if accept_encoding == "blosc2":
         abspath = get_abspath(path, user)
         suffix = abspath.suffix
@@ -661,13 +1277,47 @@ async def get_chunk(
     nchunk: int,
     user: db.User = Depends(optional_user),
 ):
-    abspath = get_abspath(path, user)
-    lock = locks.setdefault(path, asyncio.Lock())
+    """One compressed chunk of a dataset, as it is stored.
+
+    This is how a client caches a remote array a chunk at a time, so it serves
+    what is *stored* in Blosc2 chunks and nothing else.  A container leaf counts:
+    a TreeStore keeps its leaves as ordinary Blosc2 arrays, and the chunk is
+    handed over as it lies in the ``.b2z``.  An HDF5 dataset and a CTable do not,
+    and say so rather than being taken apart and recompressed once per request --
+    ``api/fetch`` with a ``slice_`` computes exactly the region wanted for those,
+    which is both less work here and fewer bytes over the wire.
+    """
+    if providers.provider_for(path.parts[0]) is not None:
+        # Non-transitivity guard: peer roots are never re-exposed chunk-wise.
+        raise fastapi.HTTPException(status_code=404, detail="external roots are non-transitive")
+
+    # Resolve the way api/fetch does, so a leaf inside a container is reachable:
+    # get_abspath alone drops the inner key and 404s on the container's own path
+    abspath, inner_key = split_and_resolve(path, user)
+    if abspath.suffix in srv_utils.HDF5_SUFFIXES:
+        srv_utils.raise_bad_request(
+            f"{path} is HDF5, whose chunks are HDF5-compressed rather than Blosc2 chunks; "
+            "fetch it with the slice_ parameter instead"
+        )
+    # One lock per container, so the leaves of a .b2z serialize with each other
+    # over the file they share; a plain dataset is its own container, as before.
+    # `abspath` *is* the container (`split_and_resolve` splits the inner key off
+    # it), and it is where the file lives rather than what it was asked for --
+    # so two users' `@personal` arrays of one name do not wait on each other
+    lock = dataset_lock(abspath)
     async with lock:
         root = path.parts[0]
         get_rootdir_or_error(root, user)
 
-        container = open_b2(abspath, path)
+        if inner_key is None:
+            container = open_b2(abspath, path)
+        else:
+            container = open_member(abspath, inner_key, abspath.stat().st_mtime)
+        if isinstance(container, blosc2.CTable):
+            srv_utils.raise_bad_request(
+                f"{path} is a CTable, which is a set of columns rather than one chunked array; "
+                "fetch it with the slice_ parameter instead"
+            )
         if isinstance(container, blosc2.LazyArray):
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
@@ -677,6 +1327,439 @@ async def get_chunk(
 
     downloader = srv_utils.iterchunk(chunk)
     return responses.StreamingResponse(downloader)
+
+
+# Where the frame's generation counter lives in its lock sidecar: past the byte
+# range Windows locks, as c-blosc2 puts it
+LOCK_SEQ_OFFSET = 8
+
+
+def frame_generation(abspath: pathlib.Path) -> int | None:
+    """The frame's own count of how many times it has been written to.
+
+    Blosc2 bumps it in the `.b2lock` sidecar every time a handle takes the
+    exclusive lock, which is what makes it a validator where the file's length is
+    not one: a chunk written as a run of zeros stores no payload, so the frame can
+    come out of a write exactly as long as it went in, with different content.
+
+    None where nothing has ever written the frame under locking, which is every
+    dataset that was only ever uploaded whole.
+    """
+    sidecar = abspath.with_name(abspath.name + ".b2lock")
+    try:
+        with open(sidecar, "rb") as counter:
+            counter.seek(LOCK_SEQ_OFFSET)
+            raw = counter.read(8)
+    except OSError:
+        return None
+    return int.from_bytes(raw, "little") if len(raw) == 8 else None
+
+
+def dataset_etag(abspath: pathlib.Path) -> str | None:
+    """A validator that changes whenever the bytes behind *abspath* do.
+
+    The generation counter and the file's own size and mtime together, because
+    neither half is enough alone: the counter does not move when a dataset is
+    replaced wholesale by an upload (which may leave the old sidecar behind), and
+    the size and mtime do not reliably move when a chunk is written as a run of
+    zeros.  Either changing is enough to change this.
+
+    What it is for: a client reads a frame's header in one request and its
+    offsets in another, and the second is only meaningful if the frame did not
+    move in between -- a chunk written by someone else lands exactly where the
+    old offsets block was.  With this the client can tell, rather than decoding
+    the bytes of a chunk as though they were an index.
+    """
+    try:
+        stat = abspath.stat()
+    except OSError:
+        return None
+    generation = frame_generation(abspath)
+    generation = "u" if generation is None else f"{generation:x}"
+    return f'"{generation}-{stat.st_size:x}-{stat.st_mtime_ns:x}"'
+
+
+def with_etag(abspath: pathlib.Path) -> dict:
+    """`ETag` for a file response, where the file has one to give."""
+    etag = dataset_etag(abspath)
+    return {"etag": etag} if etag else {}
+
+
+# What a frame codes in the top nibble of a chunk's flags byte: an uninitialized
+# chunk is one nothing was ever written to, which is what `blosc2.uninit` lays an
+# array out with and what a fill claims one slot at a time.  The value is
+# blosc2's own, so a rename or a renumbering of it travels; the offset and the
+# nibble are the header's layout, which is what reading one byte instead of
+# walking the array costs (see `chunk_is_unwritten`)
+CHUNK_FLAGS_BYTE = 31
+SPECIAL_UNINIT = blosc2.SpecialValue.UNINIT.value
+
+
+# Where a chunk says what its filters ran on.  Byte 3 of the Blosc header, which
+# every chunk carries and `get_cbuffer_sizes` does not report
+CHUNK_TYPESIZE_BYTE = 3
+MAX_HEADER_TYPESIZE = 255
+
+
+def chunk_typesize(chunk: bytes) -> int:
+    """The typesize a chunk's filters were run on, off its own header."""
+    return chunk[CHUNK_TYPESIZE_BYTE]
+
+
+def filter_typesize(typesize: int) -> int:
+    """What a chunk of an array of this typesize carries in its header.
+
+    Itself, up to what one byte holds.  Past that a chunk records 1 instead:
+    shuffling on a stride that wide buys nothing, so the filters run bytewise and
+    the header says so.  Which makes this check weaker for such an array -- every
+    typesize past 255 looks alike -- and no weaker than not making it.
+    """
+    return typesize if typesize <= MAX_HEADER_TYPESIZE else 1
+
+
+def chunk_is_unwritten(schunk, nchunk: int) -> bool:
+    """Whether a slot of a frame still holds no content at all.
+
+    Read from the chunk's own header, not from a scan of the array: a lazy chunk
+    is the header alone, so this is one small read whatever the array's size,
+    where walking every chunk would make a fill cost the square of its length.
+    Which is why `iterchunks_info()` -- the way this question is asked where a
+    whole array is checked at once -- is not the way it is asked here: that one
+    reads every chunk to answer about one, and this runs once per write.
+
+    A run of zeros is *not* unwritten -- a writer that stored an all-zero chunk
+    stored something, and the frame tags it as zeros rather than as
+    uninitialized.  That distinction is the whole reason an array to be filled is
+    laid out with `blosc2.uninit` rather than `blosc2.zeros`.
+    """
+    lazychunk = schunk.get_lazychunk(nchunk)
+    return (lazychunk[CHUNK_FLAGS_BYTE] >> 4) & 0x7 == SPECIAL_UNINIT
+
+
+def count_written(abspath: pathlib.Path) -> tuple[int, int]:
+    """How many chunks of a frame hold content, and how many there are.
+
+    Read from the frame's offsets in one go, which is a couple of reads and a
+    decompress: the alternative walks the chunks and costs a read apiece, some
+    50x more on an array of a few thousand chunks.  The offsets are also where
+    the answer really lives -- a fill records itself there and nowhere else, so
+    there is no count for this to fall out of step with.
+    """
+    source = blosc2.FsspecNDSource(str(abspath))
+    written = source.written_chunks()
+    return int(written.sum()), int(written.size)
+
+
+# Where a fill records itself for the server's own use.  Not a second record of
+# which chunks are written -- that is the frame's offsets and only them -- but of
+# what is to happen once they all are
+FILL_STATE = "fill_state"
+PUBLISHED_URL = "published_url"
+FILL_NONCE = "fill_nonce"
+FILLING, COMPLETE, PUBLISHING, PUBLISHED = "filling", "complete", "publishing", "published"
+
+
+def publish_key(path: pathlib.Path, user: db.User) -> pathlib.Path:
+    """The key an array is published under, which separates users as the store does.
+
+    `@personal` is a name every user spells the same way and no two of them share:
+    on disk it is `personal/<user id>/...`, and a key taken from the request path
+    alone would drop that id.  Two users filling `@personal/run.b2nd` would then
+    publish to one destination, where the second overwrites the first's data --
+    and reads it back, by publishing and then fetching what is there.
+
+    `@shared` and `@public` are shared by design, and keep the name they are asked
+    for: what several users write to one place there they meant to.
+    """
+    root, *subpath = path.parts
+    if root == "@personal":
+        return pathlib.Path(root, str(user.id), *subpath)
+    return path
+
+
+def publish_destination(path: pathlib.Path) -> str:
+    """Where a finished array is published, under the root the server configures.
+
+    *path* is a publish key (see `publish_key`), not the request path: the two
+    differ where a root means a different place to each user.
+
+    The client says which key it wants below that root and nothing above it: a
+    destination taken from the request would let a caller point the server at a
+    bucket they control and have it write someone else's data into it.
+
+    "Below that root" is checked here and not only where the path was resolved on
+    disk.  What comes back is an URL, and `fsspec.url_to_fs` normalizes a `..` in
+    one just as a filesystem does: a segment that survived this far would move
+    the write out of the publish root, or to another prefix of the same bucket.
+    """
+    if not settings.publish_root:
+        srv_utils.raise_bad_request("this server publishes nowhere: set publish_root in its configuration")
+    if ".." in path.parts:
+        srv_utils.raise_bad_request(f"{path} climbs out of the root this server publishes to")
+    return f"{str(settings.publish_root).rstrip('/')}/{path}"
+
+
+def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
+    """Copy a finished frame out to the publish root, and record where it went.
+
+    *path* is a publish key (see `publish_key`), which is what names the array at
+    the destination -- not the path the request spelled.
+
+    Blocking, and run off the event loop and outside the per-dataset lock: it is
+    a whole-file upload, and holding either for its duration would stall every
+    writer of every other array on the server.
+
+    Nothing here has to lock the frame for the copy.  A complete array is one
+    nothing can write to any more -- every slot is claimed, so every write is
+    refused -- so what is being read cannot change under the read.
+    """
+    try:
+        import fsspec
+    except ImportError:
+        srv_utils.raise_bad_request("publishing needs fsspec, which is not installed here")
+    destination = publish_destination(path)
+    fs, target = fsspec.url_to_fs(destination)
+    # Published under a name of its own and moved into place, so that what
+    # appears at the destination is a whole frame or nothing.  A reader that
+    # polls for the array would otherwise open it mid-copy: the file exists from
+    # the first byte written, and a frame is not readable until its last.
+    # (An object store makes a write visible only once it completes, so the move
+    # is redundant there and costs a server-side copy.  Kept all the same: which
+    # backends stream a partial file into view is not something to guess at.)
+    # Named for this copy and not for the array: two publishes of one array can
+    # overlap -- the background task the last chunk starts, and a client that
+    # calls the endpoint to finish an interrupted one -- and neither holds the
+    # per-dataset lock across the upload.  On one staging name they would
+    # interleave their bytes into a single file and move the wreck into place;
+    # on names of their own they write the same thing twice and the second move
+    # wins, which is the same file either way
+    staging = f"{target}.{uuid.uuid4().hex}.partial"
+    parent = target.rsplit("/", 1)[0]
+    if parent != target:
+        fs.makedirs(parent, exist_ok=True)
+    try:
+        with open(abspath, "rb") as source, fs.open(staging, "wb") as target_file:
+            shutil.copyfileobj(source, target_file)
+        fs.mv(staging, target)
+    except BaseException:
+        # A staging file nothing will ever move is litter, and one per attempt
+        # accumulates where one per array overwrote itself
+        with contextlib.suppress(Exception):
+            fs.rm(staging)
+        raise
+    array = blosc2.open(abspath, mode="a", locking=True)
+    with array.schunk.holding_lock():
+        array.schunk.vlmeta[PUBLISHED_URL] = destination
+        array.schunk.vlmeta[FILL_STATE] = PUBLISHED
+    return destination
+
+
+def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
+    """Write one chunk into a slot that holds none, and say where the fill is.
+
+    Blocking, and meant to be run off the event loop: it compresses nothing, but
+    it locks the frame, writes to it and reads its offsets back.
+
+    The exclusive lock covers the check and the write together, which is what
+    makes the refusal a compare-and-swap rather than a race: two writers that
+    both find the slot free would otherwise both write it, and the second would
+    move every chunk that came after the first.
+    """
+    try:
+        array = blosc2.open(abspath, mode="a", locking=True)
+    except Exception as exc:
+        srv_utils.raise_bad_request(f"{abspath.name} cannot be opened for writing: {exc}")
+    if not isinstance(array, blosc2.NDArray):
+        srv_utils.raise_bad_request(
+            f"{abspath.name} is not an NDArray, so it has no chunks of a shape to write into"
+        )
+    schunk = array.schunk
+    if not 0 <= nchunk < schunk.nchunks:
+        srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
+    try:
+        nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
+        typesize = chunk_typesize(chunk)
+    except Exception:
+        srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
+    # A chunk of another geometry would be stored and then read as nonsense, so
+    # it is refused here rather than left for whoever reads the array next
+    if nbytes != schunk.chunksize:
+        srv_utils.raise_bad_request(
+            f"the chunk holds {nbytes} bytes where this array's chunks hold {schunk.chunksize}"
+        )
+    if blocksize != schunk.blocksize:
+        srv_utils.raise_bad_request(
+            f"the chunk is split into blocks of {blocksize} bytes where this array's are "
+            f"{schunk.blocksize}; compress it against the array's blocks"
+        )
+    # The one part of the geometry the sizes do not carry, and the one whose
+    # mismatch is silent: the shuffle filters read and write on a stride of it,
+    # so a chunk compressed against another typesize decompresses to the right
+    # number of bytes with every one of them in the wrong place -- no error
+    # anywhere, just an array of scrambled values
+    if typesize != filter_typesize(schunk.typesize):
+        srv_utils.raise_bad_request(
+            f"the chunk was compressed with a typesize of {typesize} where this array's is "
+            f"{schunk.typesize}; compress it against the array's dtype"
+        )
+    complete = False
+    with schunk.holding_lock():
+        if not chunk_is_unwritten(schunk, nchunk):
+            raise fastapi.HTTPException(
+                status_code=409, detail=f"chunk {nchunk} of {abspath.name} was already written"
+            )
+        schunk.update_chunk(nchunk, chunk)
+        if FILL_NONCE not in schunk.vlmeta:
+            # What names *this* array, as against another one that came to sit at
+            # the same path with the same size.  A client caching the array reads
+            # it from api/info and can tell the two apart, which a size and an
+            # mtime cannot always do.  Written once, by whichever writer arrived
+            # first, and never again
+            schunk.vlmeta[FILL_NONCE] = uuid.uuid4().hex
+            # Said out loud rather than left to be inferred from the absence of
+            # it, and free here: the same locked region, the same trailer
+            schunk.vlmeta[FILL_STATE] = FILLING
+        written, nchunks = count_written(abspath)
+        state = schunk.vlmeta.get(FILL_STATE, FILLING)
+        if written == nchunks and state == FILLING:
+            # Exactly once, whichever writer got here: the lock is held, so of two
+            # writers that both see the array complete only one makes this move,
+            # and that one owns the publishing.  Recorded even where there is
+            # nowhere to publish to, because "every slot is claimed" is worth
+            # saying on its own: it is what tells a reader the array can no
+            # longer change under a cache of it
+            complete = bool(settings.publish_root)
+            state = PUBLISHING if complete else COMPLETE
+            schunk.vlmeta[FILL_STATE] = state
+    # Drop the handle before anything reads the file again: a handle left open
+    # over a frame another one writes is the stale-handle hazard, and it is silent
+    del array, schunk
+    return {
+        "nchunk": nchunk,
+        "written": written,
+        "nchunks": nchunks,
+        "state": state,
+        "publish": complete,
+    }
+
+
+@app.post("/api/chunk/{path:path}")
+async def write_chunk(
+    path: pathlib.Path,
+    nchunk: int,
+    request: Request,
+    background: fastapi.BackgroundTasks,
+    user: db.User = Depends(current_active_user),
+):
+    """Write one compressed chunk into a slot of a stored array.
+
+    How several writers fill one array at once: each takes the chunks it owns and
+    posts them, and the slot itself is the coordination.  A slot nothing was
+    written to is free, and a write claims it; a second write to it is refused
+    with a 409, so two writers that both believe they own a chunk are resolved by
+    the array rather than by anything either of them holds.
+
+    The array has to be laid out already -- `blosc2.uninit` and an upload is what
+    makes one, and costs a couple of hundred bytes whatever the array's size --
+    and it is never resized here: the geometry a writer compresses against is the
+    geometry it was created with.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The dataset to write into, in a root the user may write to.
+    nchunk : int
+        Which chunk of the array to write.
+    request : Request
+        Carries the compressed chunk as its body.
+
+    Returns
+    -------
+    dict
+        ``nchunk``, and the ``written`` count out of ``nchunks``, so a writer
+        sees a fill finish without asking again.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Writing chunks requires authentication")
+    if providers.provider_for(path.parts[0]) is not None:
+        # As the read side does: a peer's dataset is not ours to write to
+        raise fastapi.HTTPException(status_code=404, detail="external roots are non-transitive")
+
+    abspath = get_writable_path(path, user)
+    if abspath.suffix != ".b2nd":
+        srv_utils.raise_bad_request(
+            f"{path} is not a .b2nd array; chunks can only be written to a stored NDArray"
+        )
+    if not abspath.is_file():
+        srv_utils.raise_not_found(f"{path} does not exist; create it before filling it")
+
+    chunk = await request.body()
+    if not chunk:
+        srv_utils.raise_bad_request("no chunk was sent")
+    if settings.quota:
+        # The array was laid out empty, so its slots were never charged for: what
+        # a fill costs arrives a chunk at a time, and is checked the same way --
+        # off a kept walk of the state directory rather than a fresh one, since
+        # this runs once per chunk (see `get_disk_usage_written`)
+        total_size = get_disk_usage_written(len(chunk))
+        if total_size > settings.quota:
+            srv_utils.raise_bad_request("Write failed because quota limit has been exceeded.")
+
+    # One lock per dataset in this process, and the frame's own lock across
+    # processes: the write below blocks, so it cannot hold the event loop
+    lock = dataset_lock(abspath)
+    async with lock:
+        answer = await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
+    if settings.quota:
+        # Counted only where it is checked, so the two stay paired
+        account_chunk_written(len(chunk))
+    if answer.pop("publish"):
+        # After the response, and outside the lock: the writer that finished the
+        # fill should not wait for the upload, and no other writer should either
+        background.add_task(publish_dataset, abspath, publish_key(path, user))
+    return answer
+
+
+@app.post("/api/publish/{path:path}")
+async def publish(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """Copy a filled array out to the server's publish root.
+
+    What a fill is for: the array is written here a chunk at a time, by as many
+    writers as there are chunks, and what leaves is one finished frame -- which
+    is exactly what a byte-range reader over an object store wants, and none of
+    what writing chunks to one would need.
+
+    Runs by itself when the last chunk of an array lands, where a publish root is
+    configured.  It is an endpoint of its own as well, because that automatic run
+    can be interrupted: a server that dies mid-upload leaves the array saying
+    ``publishing``, and this is what finishes it.
+
+    Returns
+    -------
+    dict
+        Where the array was published to.
+    """
+    if not user:
+        raise srv_utils.raise_unauthorized("Publishing requires authentication")
+    abspath = get_writable_path(path, user)
+    if not abspath.is_file():
+        srv_utils.raise_not_found(f"{path} does not exist")
+    key = publish_key(path, user)
+    publish_destination(key)  # refuses here if this server publishes nowhere
+
+    lock = dataset_lock(abspath)
+    async with lock:
+        written, nchunks = await concurrency.run_in_threadpool(count_written, abspath)
+        if written != nchunks:
+            srv_utils.raise_bad_request(
+                f"{path} has {nchunks - written} of its {nchunks} chunks still unwritten; "
+                "it is published once it is filled"
+            )
+    destination = await concurrency.run_in_threadpool(publish_dataset, abspath, key)
+    return {"published": destination}
 
 
 def make_expr(
@@ -971,10 +2054,18 @@ def get_writable_path(path: pathlib.Path, user: db.User) -> pathlib.Path:
     Raises
     ------
     fastapi.HTTPException
-        If the path is not in a writable root
+        If the path is not in a writable root, or leaves it
     """
     root, *subpath = path.parts
     rootdir = get_rootdir_or_error(root, user)
+    # The root is the whole of the authorization: `@personal` is this user's
+    # directory and nobody else's, and a path that climbs out of it is asking for
+    # a place the root said nothing about.  Refused on the way in, before a
+    # `..` becomes a real directory that exists and passes every later check --
+    # `Path.joinpath` keeps the segment, and everything downstream (`is_file`,
+    # `fsspec.url_to_fs`) resolves it away without ever asking whether it should
+    if ".." in subpath:
+        srv_utils.raise_bad_request(f"{path} climbs out of {root}, which is where it may write")
     return rootdir / pathlib.Path(*subpath)
 
 
@@ -1012,7 +2103,7 @@ async def upload_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
     else:
@@ -1031,7 +2122,7 @@ async def upload_file(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1081,7 +2172,7 @@ async def load_from_url(
         response.raise_for_status()
     data = response.content
 
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         newsize = schunk.nbytes
     else:
@@ -1100,7 +2191,7 @@ async def load_from_url(
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in {".b2", ".b2frame", ".b2nd", ".h5", ".hdf5"}:
+    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
         data = schunk.to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
@@ -1276,15 +2367,16 @@ async def remove(
     if abspath.is_dir():
         shutil.rmtree(abspath)
     else:
-        # Try to unlink the file
+        # Try to unlink the file. NotADirectoryError: a path descending into a
+        # container file (e.g. foo.h5/g) names no real file of its own.
         try:
             abspath.unlink()
-        except FileNotFoundError:
+        except (FileNotFoundError, NotADirectoryError):
             # Try adding a .b2 extension
             abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
                 abspath.unlink()
-            except FileNotFoundError as exc:
+            except (FileNotFoundError, NotADirectoryError) as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
                     detail="The specified path does not exist",
@@ -1522,7 +2614,10 @@ async def html_home(
     user: db.User = Depends(optional_user),
 ):
     if not user:
-        roots = ["@public"]
+        # Anonymous users see @public plus provider roots (peers are
+        # public-only), not @personal/@shared.
+        provider_roots = {r for p in providers.active for r in p.roots()}
+        roots = [r for r in roots if r == "@public" or r in provider_roots] or ["@public"]
 
     # Disk usage
     size = get_disk_usage()
@@ -1559,11 +2654,27 @@ async def htmx_root_list(
     request: Request,
     # Query
     roots: list[str] = fastapi.Query([]),
+    mounted: list[str] = fastapi.Query([]),
     # Depends
     user: db.User = Depends(optional_user),
 ):
+    seen = set()
+    mounted_ok = []
+    for path in mounted:
+        prefix = path.split("/", 1)[0]
+        # A mounted container may live under a classic root or a provider
+        # root (peer mount). Stale/bad entries aren't validated here; the
+        # path-list expansion skips them silently, same as local ones.
+        known = get_rootdir_or_none(prefix, user) is not None or providers.provider_for(prefix) is not None
+        if known and path not in seen:
+            seen.add(path)
+            mounted_ok.append(path)
+
     context = {
         "checked": roots,
+        "mounted": mounted_ok,
+        "provider_roots": [r for p in providers.active for r in p.roots()],
+        "provider_widgets": [w for p in providers.active for w in p.widgets()],
         "user": user,
     }
     return templates.TemplateResponse(request, "root_list.html", context)
@@ -1628,14 +2739,15 @@ async def htmx_path_list(
     datasets = []
     query = {"roots": roots, "search": search}
 
-    def add_dataset(path, abspath):
+    def add_dataset(path, abspath, mountable=False, size=None):
         datasets.append(
             {
                 "name": "_",
                 "path": path,
-                "size": abspath.stat().st_size,
+                "size": abspath.stat().st_size if size is None else size,
                 "url": make_url(request, "html_home", path=path, query=query),
                 "label": truncate_path(path),
+                "mountable": mountable,
             }
         )
 
@@ -1644,8 +2756,81 @@ async def htmx_path_list(
             if relpath.suffix == ".b2":
                 relpath = relpath.with_suffix("")
             path = f"{root}/{relpath}"
+            # A .b2z/.h5 holding a browsable container shows as a single
+            # mountable row; its leaves are browsed once it's mounted as a
+            # virtual root. A corrupt or non-container file (uploads aren't
+            # validated) falls through to a plain row instead of crashing the
+            # whole listing.
+            if relpath.suffix in srv_utils.BLOSC2_CONTAINER_SUFFIXES and srv_utils.is_container_file(
+                abspath
+            ):
+                if search in path:
+                    add_dataset(path, abspath, mountable=True)
+                continue
             if search in path:
                 add_dataset(path, abspath)
+
+    # Virtual roots: mounted .b2z/.h5 containers, expanded into leaves.
+    for root in roots:
+        proot = pathlib.PurePosixPath(root)
+        if proot.suffix not in srv_utils.BLOSC2_CONTAINER_SUFFIXES:
+            continue  # classic roots handled by filter_roots above
+        provider = providers.provider_for(proot.parts[0])
+        if provider is not None:
+            # A mounted peer container: expand via the peer's own deep
+            # listing. Stale/offline mounts skip silently, same rule as the
+            # local-container comment below.
+            try:
+                member_rows = await provider.rows(proot.parts[0], "/".join(proot.parts[1:]))
+            except providers.ProviderError:
+                continue
+            for name, size, _kind in member_rows:
+                leaf_path = f"{root}/{name}"
+                if search in leaf_path:
+                    add_dataset(leaf_path, None, size=size or 0)
+            continue
+        rootdir = get_rootdir_or_none(proot.parts[0], user)
+        if rootdir is None:
+            continue
+        abspath = (rootdir / pathlib.Path(*proot.parts[1:])).resolve()
+        if rootdir.resolve() not in abspath.parents:
+            continue
+        # `root` is untrusted (client localStorage): a stale, non-container, or
+        # corrupt path must skip silently, not 500 the whole listing.
+        # open_container() swallows the underlying open errors itself.
+        container = srv_utils.open_container(abspath)
+        if container is None:
+            continue
+        try:
+            for key in container.leaves():
+                leaf_path = f"{root}{key}"
+                if search in leaf_path:
+                    add_dataset(leaf_path, abspath, size=container.leaf_size(key))
+        finally:
+            container.close()
+
+    # Provider roots (external/virtual roots, e.g. peer mounts): @<name>
+    # browsed via the provider's cached catalog.
+    for root in roots:
+        provider = providers.provider_for(root)
+        if provider is None:
+            continue
+
+        for key, size, kind in await provider.rows(root):
+            path = f"{root}/{key}"
+            if search in path:
+                datasets.append(
+                    {
+                        "name": "_",
+                        "path": path,
+                        "size": size,
+                        "url": make_url(request, "html_home", path=path, query=query),
+                        "label": truncate_path(path),
+                        # Bare TreeStore .b2z rows are mountable, mirroring
+                        # the local rule; CTable .b2z rows open directly.
+                        "mountable": key.endswith(".b2z") and kind == "container",
+                    }
+                )
 
     # Add current path if not already in the list
     current_path = hx_current_url.path
@@ -1657,15 +2842,42 @@ async def htmx_path_list(
                 break
         else:
             root = segments[1]
-            rootdir = get_rootdir_or_none(root, user)
+            provider = providers.provider_for(root)
+            if provider is not None:
+                # Peer leaf: size from its (memoized) api/info; failures skip
+                # silently like the local suppress below.
+                with contextlib.suppress(Exception):
+                    info = await provider.info(root, "/".join(segments[2:]))
+                    size = (
+                        (info.get("schunk") or {}).get("cbytes")
+                        or info.get("cbytes")
+                        or info.get("size")
+                        or 0
+                    )
+                    add_dataset(path, None, size=size)
+                rootdir = None
+            else:
+                rootdir = get_rootdir_or_none(root, user)
             if rootdir is not None:
-                relpath = pathlib.Path(*segments[2:])
-                abspath = rootdir / relpath
-                if abspath.suffix not in {".b2", ".b2nd", ".b2frame"}:
-                    abspath = pathlib.Path(f"{abspath}.b2")
+                # Path may descend into a container (e.g. an unmounted TreeStore
+                # leaf); stat comes from the container file, but size is the
+                # leaf's own (not the whole container's).
+                container_path, inner_key = srv_utils.split_container_path(path)
+                leaf_size = None
+                if inner_key is not None:
+                    abspath = rootdir / pathlib.Path(*container_path.parts[1:])
+                    container = srv_utils.open_container(abspath)
+                    if container is not None:
+                        leaf_size = container.leaf_size(inner_key)
+                        container.close()
+                else:
+                    relpath = pathlib.Path(*segments[2:])
+                    abspath = rootdir / relpath
+                    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                        abspath = pathlib.Path(f"{abspath}.b2")
 
-                with contextlib.suppress(FileNotFoundError):
-                    add_dataset(path, abspath)
+                with contextlib.suppress(FileNotFoundError, NotADirectoryError):
+                    add_dataset(path, abspath, size=leaf_size)
 
     # Assign names to datasets
     datasets = sorted(datasets, key=lambda x: x["path"])
@@ -1691,6 +2903,28 @@ async def htmx_path_list(
         response.headers["HX-Push-Url"] = push_url
 
     return response
+
+
+def _model_from_info(info):
+    # B serves the JSON of the same pydantic models we build locally;
+    # round-trip it into the right one so the attribute access in the
+    # templates below works unchanged.
+    # `kind` first, where the peer says it: a CTable's metadata has neither a
+    # shape nor a size, so anything reading it off the fields alone falls
+    # through to `File` and raises on the `size` it does not carry.  Asked for
+    # rather than read off `info` directly, because `RootProvider.info` is not
+    # promised to be a dict (`get_info` guards its own use of it the same way)
+    # and a `.get` on something else would 500 the panel this renders
+    if isinstance(info, dict) and info.get("kind") == "ctable":
+        return srv_utils.get_model_from_obj(info, models.CTableMetadata)
+    if "shape" in info:
+        return srv_utils.get_model_from_obj(info, models.Metadata)
+    elif "cparams" in info:
+        return srv_utils.get_model_from_obj(info, models.SChunk)
+    elif "nfiles" in info:
+        return srv_utils.get_model_from_obj(info, models.Directory)
+    else:
+        return srv_utils.get_model_from_obj(info, models.File)
 
 
 @app.get("/htmx/path-info/{path:path}", response_class=HTMLResponse)
@@ -1725,9 +2959,27 @@ async def htmx_path_info(
     else:
         push_url = None
 
-    # Read metadata
-    abspath = get_abspath(path, user)
-    meta = srv_utils.read_metadata(abspath)
+    # Read metadata (a path may descend into a container, e.g. a TreeStore
+    # .b2z or .h5 leaf)
+    provider = providers.provider_for(path.parts[0])
+    if provider is not None:
+        try:
+            info = await provider.info(path.parts[0], "/".join(path.parts[1:]))
+        except providers.ProviderError as exc:
+            raise fastapi.HTTPException(status_code=exc.status_code, detail=exc.detail or None) from exc
+        meta = _model_from_info(info)
+    else:
+        abspath, inner_key = split_and_resolve(path, user)
+        try:
+            if inner_key is not None:
+                meta = srv_utils.container_member_info(abspath, inner_key)
+                if meta is None:
+                    srv_utils.raise_not_found()
+            else:
+                meta = srv_utils.read_metadata(abspath)
+        except FileNotFoundError:
+            # e.g. a bare root (@personal) or another directory with no dataset of its own
+            raise fastapi.HTTPException(status_code=404) from None  # NotFound
 
     # Context
     current_url = push_url or hx_current_url
@@ -1755,10 +3007,11 @@ async def htmx_path_info(
                 }
             )
 
-    # Tabs: Display (b2nd)
-    if hasattr(meta, "shape"):
+    # Tabs: Display (b2nd, b2z)
+    is_ctable = getattr(meta, "kind", None) == "ctable"
+    if hasattr(meta, "shape") or is_ctable:
         context["data_url"] = make_url(request, "htmx_path_view", path=path)
-        context["shape"] = meta.shape
+        context["shape"] = meta.shape if hasattr(meta, "shape") else (meta.nrows,)
         tabs.append(
             {
                 "name": "data",
@@ -1800,13 +3053,52 @@ async def htmx_path_info(
 
 
 # Added mtime to implicitly check when underlying files are changed, and so can't use cache (see issue #207)
-@functools.lru_cache(maxsize=16)
-def get_filtered_array(abspath, path, filter, sortby, mtime):
-    arr = open_b2(abspath, path)
-    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
-    assert has_ndfields
-    idx = None
+def get_filtered_array(abspath, path, filter, sortby, mtime, inner_key=None):
+    """One entry per distinct question, however the caller spells the call.
+
+    `lru_cache` keys on the shape of the call as well as on its values: a
+    keyword argument and the same argument positionally are two keys, and so are
+    `sortby=None` and `sortby=""`, which name the same order.  `api/fetch` and
+    the web view ask this the same question in both of those two ways, so a
+    dataset used from both used to be computed and held twice -- and to take
+    two of the sixteen entries there are.
+    """
     sortby = sortby.strip() if sortby else None
+    return _filtered_array(abspath, path, filter, sortby or None, mtime, inner_key)
+
+
+@functools.lru_cache(maxsize=16)
+def _filtered_array(abspath, path, filter, sortby, mtime, inner_key):
+    # Always sorts ascending (so "col asc" and "col desc" share one cache entry);
+    # descending is rendered by reading a tail window of this order in reverse.
+    if inner_key is not None:
+        arr = srv_utils.open_container_member(abspath, inner_key)
+        if arr is None:
+            raise ValueError("Cannot open container member")
+        if filter and isinstance(arr, blosc2.NDArray):
+            # blosc2's where fastpath re-opens the operand's urlpath, which for
+            # a TreeStore leaf is the whole .b2z ("Key must be a string" error);
+            # detach with an in-memory copy (cache-bounded, like .compute() below).
+            arr = arr.copy()
+    else:
+        arr = open_b2(abspath, path)
+
+    if filter and isinstance(arr, hdf5.HDF5Proxy):
+        # HDF5Proxy supports slicing only; no string-indexed LazyExpr yet.
+        raise ValueError("Filtering is not supported for HDF5-backed datasets")
+
+    if isinstance(arr, blosc2.CTable):
+        # CTable has no .fields/.argsort; filtering isn't supported, only sort_by().
+        if filter:
+            raise ValueError("Filtering is not supported for this dataset type")
+        if sortby:
+            arr = arr.sort_by(sortby, view=True)
+        return arr, None
+
+    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
+    if not has_ndfields:
+        raise ValueError("Filtering/sorting is not supported for this dataset type")
+    idx = None
 
     # Filter rows only for NDArray with fields
     if filter:
@@ -1834,6 +3126,37 @@ def get_filtered_array(abspath, path, filter, sortby, mtime):
     return arr, idx
 
 
+def _desc_window(total, start, size):
+    """Map window [start, start+size) of a descending view onto the ascending order."""
+    return max(total - start - size, 0), total - start
+
+
+def _is_ctable_like(arr):
+    """True for real CTables and provider-backed views that render through
+    the CTable grid (ViewHandle.array is duck-typed by design)."""
+    return isinstance(arr, blosc2.CTable) or (
+        hasattr(arr, "nrows") and hasattr(arr, "schema_dict") and hasattr(arr, "slice")
+    )
+
+
+def _header_sort_links(displayed_fields, sortby, sortdir):
+    """Per-column htmx `hx-vals` payload cycling the sort: ascending -> descending -> unsorted.
+
+    Headers post with hx-include of the live form; these values override the
+    form's hidden sortby/sortdir inputs (htmx hx-vals take precedence).
+    """
+    links = {}
+    for col in displayed_fields:
+        if sortby != col:
+            nxt = {"sortby": col, "sortdir": "asc"}
+        elif sortdir != "desc":
+            nxt = {"sortby": col, "sortdir": "desc"}
+        else:
+            nxt = {"sortby": "", "sortdir": ""}
+        links[col] = json.dumps(nxt)
+    return links
+
+
 @app.post("/htmx/path-view/{path:path}", response_class=HTMLResponse)
 async def htmx_path_view(
     request: Request,
@@ -1845,127 +3168,262 @@ async def htmx_path_view(
     fields: typing.Annotated[list[str] | None, Form()] = None,
     filter: typing.Annotated[str, Form()] = "",
     sortby: typing.Annotated[str, Form()] = "",
+    sortdir: typing.Annotated[str, Form()] = "",
     # Depends
     user: db.User = Depends(optional_user),
 ):
-    abspath = get_abspath(path, user)
     filter = filter.strip()
-    if filter or sortby:
-        try:
-            mtime = abspath.stat().st_mtime
-            arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime)
-        except TypeError as exc:
-            return htmx_error(request, f"Error in filter: {exc}")
-        except NameError as exc:
-            return htmx_error(request, f"Unknown field: {exc}")
-        except ValueError as exc:
-            return htmx_error(request, f"ValueError: {exc}")
-        except SyntaxError as exc:
-            return htmx_error(request, f"SyntaxError: {exc}")
-        except IndexError as exc:
-            return htmx_error(request, f"IndexError: {exc}")
-        except AttributeError as exc:
-            return htmx_error(
-                request,
-                f"Invalid filter: {exc}." f" Only expressions can be used as filters, not field names.",
-            )
-    else:
-        try:
-            arr = open_b2(abspath, path)
-        except ValueError:
-            return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
-        idx = None
+    sortby = sortby.strip()
+    if sortby and fields and sortby not in fields:
+        # The sorted column was removed from the displayed fields; without a
+        # header to click, the sort would be stuck. Clear it instead.
+        sortby = sortdir = ""
+    sort_desc = bool(sortby) and sortdir == "desc"
 
-    # Local variables
-    shape = arr.shape
-    ndims = len(shape)
+    provider = providers.provider_for(path.parts[0])
+    async with contextlib.AsyncExitStack() as stack:
+        if provider is not None:
+            hdf5_member = False
+            idx = None
+            if filter or sortby:
+                # ponytail: same gap as api/fetch — no filter/sort plumbing
+                # for provider-backed proxies yet.
+                return htmx_error(request, "Filtering/sorting is not supported on external roots yet.")
+            try:
+                handle = await stack.enter_async_context(
+                    provider.open_view(path.parts[0], "/".join(path.parts[1:]))
+                )
+            except providers.ProviderError as exc:
+                return htmx_error(request, exc.detail or "provider error")
+            arr = handle.array
+        else:
+            abspath, inner_key = split_and_resolve(path, user)
+            hdf5_member = inner_key is not None and abspath.suffix in srv_utils.HDF5_SUFFIXES
+            # ponytail: HDF5 filter needs LazyExpr plumbing on HDF5Proxy; sort works via .indices()/.sort()
+            if hdf5_member and filter:
+                return htmx_error(request, "Filtering is not supported for HDF5 container members.")
 
-    # Set of dimensions that define the window
-    # TODO Allow the user to choose the window dimensions
-    has_ndfields = hasattr(arr, "fields") and arr.fields != {}
-    dims = list(range(ndims))
-    if ndims == 0:
-        view_dims = {}
-    elif ndims == 1 or has_ndfields:
-        view_dims = {dims[-1]}
-    else:
-        view_dims = {dims[-2], dims[-1]}
+        if provider is not None:
+            pass  # arr/idx already set by the provider branch above
+        elif inner_key is not None and not (filter or sortby):
+            arr = srv_utils.open_container_member(abspath, inner_key)
+            if arr is None:
+                return htmx_error(request, "Cannot open container member.")
+            idx = None
+        elif filter or sortby:
+            try:
+                mtime = abspath.stat().st_mtime
+                arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
+            except TypeError as exc:
+                return htmx_error(request, f"Error in filter: {exc}")
+            except NameError as exc:
+                return htmx_error(request, f"Unknown field: {exc}")
+            except KeyError as exc:
+                return htmx_error(request, f"Unknown field: {exc}")
+            except ValueError as exc:
+                return htmx_error(request, f"ValueError: {exc}")
+            except SyntaxError as exc:
+                return htmx_error(request, f"SyntaxError: {exc}")
+            except IndexError as exc:
+                return htmx_error(request, f"IndexError: {exc}")
+            except (RuntimeError, OSError) as exc:
+                # e.g. a corrupt member frame in a .b2z (blosc2 RuntimeError) or a
+                # truncated HDF5 dataset (h5py OSError).
+                return htmx_error(request, f"Error reading dataset: {exc}")
+            except AttributeError as exc:
+                return htmx_error(
+                    request,
+                    f"Invalid filter: {exc}. Only expressions can be used as filters, not field names.",
+                )
+        else:
+            try:
+                arr = open_b2(abspath, path)
+            except ValueError:
+                return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
+            idx = None
 
-    # Default values for input params
-    index = (0,) * ndims if index is None else tuple(index)
-    if sizes is None:
-        sizes = [min(dim, 10) if i in view_dims else 1 for i, dim in enumerate(shape)]
+        if _is_ctable_like(arr):
+            schema = arr.schema_dict()
+            cols = [c["name"] for c in schema.get("columns", [])]
+            fields = fields or cols[:5]
+            nrows = arr.nrows
+            size = sizes[0] if sizes else min(nrows, 10)
+            start = index[0] if index else 0
+            stop = min(start + size, nrows)
+            mod = nrows % size if size else 0
+            start_max = nrows - (mod or size) if size else 0
+            inputs = [
+                {
+                    "start": start,
+                    "start_max": max(start_max, 0),
+                    "size": size,
+                    "size_max": nrows,
+                    "with_size": True,
+                }
+            ]
+            tags = list(range(start, stop))
 
-    inputs = []
-    tags = []
-    for i, (start, size, size_max) in enumerate(zip(index, sizes, shape, strict=False)):
-        mod = size_max % size
-        start_max = size_max - (mod or size)
-        inputs.append(
-            {
-                "start": start,
-                "start_max": start_max,
-                "size": size,
-                "size_max": size_max,
-                "with_size": i in view_dims,
-            }
-        )
-        if inputs[-1]["with_size"]:
-            stop = min(start + size, size_max)
-            if idx is None:
-                tags.append(list(range(start, stop)))
+            def cell(value):
+                if isinstance(value, bytes):
+                    return value.decode(errors="replace")
+                if isinstance(value, np.generic):
+                    return value.item()
+                return value
+
+            if provider is not None:
+                # Materialize exactly this row window locally before the sync
+                # slice below (the NDArray branch's prefetch, CTable-shaped).
+                # sort_desc can't be true here: filter/sortby already errored
+                # for providers above.
+                try:
+                    await handle.prefetch((slice(start, stop),))
+                except providers.ProviderError as exc:
+                    return htmx_error(request, exc.detail or "provider error")
+
+            if sort_desc:
+                # arr is ascending-sorted; read its tail and reverse for descending order.
+                lo, hi = _desc_window(nrows, start, size)
+                window = list(arr.slice(lo, hi))[::-1]
             else:
-                tags.append(list(idx[start:stop]))
+                window = arr.slice(start, stop)
+            rows = [fields] + [[cell(row[f]) for f in fields] for row in window]
+            context = {
+                "view_url": make_url(request, "htmx_path_view", path=path),
+                "inputs": inputs,
+                "rows": rows,
+                "cols": cols,
+                "fields": fields,
+                "filter": "",
+                "sortby": sortby,
+                "sortdir": sortdir,
+                "shape": (nrows,),
+                "tags": tags,
+                "filterable": False,
+                "header_sort": _header_sort_links(fields, sortby, sortdir),
+            }
+            return templates.TemplateResponse(request, "info_view.html", context)
 
-    if has_ndfields:
-        cols = list(arr.fields.keys())
-        fields = fields or cols[:5]
-        idxs = [cols.index(f) for f in fields]
-        rows = [fields]
+        # Local variables
+        shape = arr.shape
+        ndims = len(shape)
 
-        # Get array view
-        if ndims >= 2:
-            arr = arr[index[:-1]]
-            i, isize = index[-1], sizes[-1]
-            arr = arr[i : i + isize]
-            arr = arr.tolist()
-        elif ndims == 1:
-            i, isize = index[0], sizes[0]
-            arr = arr[i : i + isize]
-            arr = arr.tolist()
+        # Set of dimensions that define the window
+        # TODO Allow the user to choose the window dimensions
+        has_ndfields = hasattr(arr, "fields") and arr.fields != {}
+        dims = list(range(ndims))
+        if ndims == 0:
+            view_dims = {}
+        elif ndims == 1 or has_ndfields:
+            view_dims = {dims[-1]}
         else:
-            arr = [arr[()].tolist()]
-        rows += [[row[i] for i in idxs] for row in arr]
-    else:
-        # Get array view
-        cols = None
-        if ndims >= 2:
-            arr = arr[index[:-2]]
-            i, isize = index[-2], sizes[-2]
-            j, jsize = index[-1], sizes[-1]
-            arr = arr[i : i + isize, j : j + jsize]
-            rows = [tags[-1]] + list(arr)
-        elif ndims == 1:
-            i, isize = index[0], sizes[0]
-            arr = [arr[i : i + isize]]
-            rows = [tags[-1]] + list(arr)
-        else:
-            arr = [[arr[()]]]
-            rows = list(arr)
+            view_dims = {dims[-2], dims[-1]}
 
-    # Render
-    context = {
-        "view_url": make_url(request, "htmx_path_view", path=path),
-        "inputs": inputs,
-        "rows": rows,
-        "cols": cols,
-        "fields": fields,
-        "filter": filter,
-        "sortby": sortby,
-        "shape": shape,
-        "tags": tags if len(tags) == 0 else tags[0],
-    }
-    return templates.TemplateResponse(request, "info_view.html", context)
+        # Default values for input params
+        index = (0,) * ndims if index is None else tuple(index)
+        if sizes is None:
+            sizes = [min(dim, 10) if i in view_dims else 1 for i, dim in enumerate(shape)]
+
+        inputs = []
+        tags = []
+        for i, (start, size, size_max) in enumerate(zip(index, sizes, shape, strict=False)):
+            mod = size_max % size
+            start_max = size_max - (mod or size)
+            inputs.append(
+                {
+                    "start": start,
+                    "start_max": start_max,
+                    "size": size,
+                    "size_max": size_max,
+                    "with_size": i in view_dims,
+                }
+            )
+            if inputs[-1]["with_size"]:
+                stop = min(start + size, size_max)
+                if idx is None:
+                    tags.append(list(range(start, stop)))
+                elif sort_desc:
+                    # idx is ascending-sorted; read its tail and reverse for descending order.
+                    lo, hi = _desc_window(size_max, start, size)
+                    tags.append(list(reversed(idx[lo:hi])))
+                else:
+                    tags.append(list(idx[start:stop]))
+
+        if provider is not None:
+            # Prefetch exactly the window into the local cache so the sync
+            # reads below are local cache hits, not blocking HTTP on the
+            # event loop.
+            window = tuple(
+                slice(st, min(st + sz, dim)) if i in view_dims else st
+                for i, (st, sz, dim) in enumerate(zip(index, sizes, shape, strict=False))
+            )
+            try:
+                await handle.prefetch(window)
+            except providers.ProviderError as exc:
+                return htmx_error(request, exc.detail or "provider error")
+
+        if has_ndfields:
+            cols = list(arr.fields.keys())
+            fields = fields or cols[:5]
+            idxs = [cols.index(f) for f in fields]
+            rows = [fields]
+
+            # Get array view
+            if ndims >= 2:
+                # One combined slice: on a provider-backed Proxy, arr[index[:-1]]
+                # alone would fetch that whole sub-array, not just the window.
+                i, isize = index[-1], sizes[-1]
+                arr = arr[(*index[:-1], slice(i, i + isize))]
+                arr = arr.tolist()
+            elif ndims == 1:
+                i, isize = index[0], sizes[0]
+                if idx is not None and sort_desc:
+                    # arr is ascending-sorted; read its tail and reverse for descending order.
+                    lo, hi = _desc_window(shape[0], i, isize)
+                    arr = list(reversed(arr[lo:hi].tolist()))
+                else:
+                    arr = arr[i : i + isize]
+                    arr = arr.tolist()
+            else:
+                arr = [arr[()].tolist()]
+            rows += [[row[i] for i in idxs] for row in arr]
+        else:
+            # Get array view
+            cols = None
+            if ndims >= 2:
+                # One combined slice (see the fields case above).
+                i, isize = index[-2], sizes[-2]
+                j, jsize = index[-1], sizes[-1]
+                arr = arr[(*index[:-2], slice(i, i + isize), slice(j, j + jsize))]
+                rows = [tags[-1]] + list(arr)
+            elif ndims == 1:
+                i, isize = index[0], sizes[0]
+                arr = [arr[i : i + isize]]
+                rows = [tags[-1]] + list(arr)
+            else:
+                val = arr[()]
+                # blosc2.NDArray[()] returns a 0-d ndarray, not a scalar
+                # (HDF5Proxy[()] already returns a scalar)
+                if isinstance(val, np.ndarray):
+                    val = val.item()
+                arr = [[val]]
+                rows = list(arr)
+
+        # Render
+        context = {
+            "view_url": make_url(request, "htmx_path_view", path=path),
+            "inputs": inputs,
+            "rows": rows,
+            "cols": cols,
+            "fields": fields,
+            "filter": filter,
+            "sortby": sortby,
+            "sortdir": sortdir,
+            "shape": shape,
+            "tags": tags if len(tags) == 0 else tags[0],
+            "filterable": not hdf5_member and provider is None,
+            "header_sort": _header_sort_links(fields, sortby, sortdir) if cols else {},
+        }
+        return templates.TemplateResponse(request, "info_view.html", context)
 
 
 class AddUserCmd:
@@ -2299,7 +3757,7 @@ async def htmx_upload(
         new_members = [
             member
             for member in members
-            if not (path / member).is_dir() and member.suffix not in {".b2", ".b2frame", ".b2nd"}
+            if not (path / member).is_dir() and member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES
         ]
         for member in new_members:
             srv_utils.compress_file(path / member)
@@ -2311,7 +3769,7 @@ async def htmx_upload(
 
     if suffix in [".h5", ".hdf5"]:
         pass
-    elif filename.suffix not in {".b2", ".b2frame", ".b2nd"}:
+    elif filename.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f"{filename}.b2"
@@ -2685,6 +4143,12 @@ def main():
     app.mount(f"/plugins/{image.name}", image.app)
     plugins[image.contenttype] = image
     image.init(settings.urlbase)
+
+    # Discover and mount root providers (external/virtual root sources)
+    providers.active[:] = providers.discover(settings)
+    for p in providers.active:
+        if p.router is not None:
+            app.include_router(p.router, prefix=f"/provider/{p.name}")
 
     # Mount media
     media = settings.statedir / "media"

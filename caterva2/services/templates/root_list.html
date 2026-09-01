@@ -8,7 +8,7 @@
       hx-include="#query-search"
       hx-indicator="#path-list-wrapper .htmx-indicator"
       hx-on:htmx:before-request="clearContent('#path-list');"
-      style="width: max-content"
+      style="width: max-content; max-width: 100%; min-width: 0;"
 >
 
     Roots:
@@ -29,7 +29,42 @@
         {% include 'includes/root.html' %}
     {% endwith %}
 
+    {% for name in provider_roots %}
+        {% with upload=False %}
+            {% include 'includes/root.html' %}
+        {% endwith %}
+    {% endfor %}
+
+    {% for name in mounted %}
+    <div class="position-relative" style="min-width: 0;">
+        <i class="fa-solid fa-xmark position-absolute" style="left: -1.1rem; top: 0.2rem;" role="button"
+           title="Unmount" data-name="{{ name }}" onclick="unmountRoot(this.dataset.name)"></i>
+        <div class="form-check text-truncate" style="min-width: 0;">
+            <input class="form-check-input" type="checkbox" name="roots"
+                   value="{{ name }}" {{ "checked" if name in checked }}
+                   onchange="return onMountedRootToggle(event, this.value)"
+                   id="id_root_mounted_{{ loop.index }}">
+            <label class="form-check-label" for="id_root_mounted_{{ loop.index }}"
+                   title="{{ name }}">{{ name.split('/')[-1] }}</label>
+        </div>
+    </div>
+    {% endfor %}
+
 </form>
+
+{% for w in provider_widgets %}
+<div class="dropdown mt-3">
+    <button class="btn btn-sm btn-outline-secondary" type="button" title="{{ w.label }}"
+            data-bs-toggle="dropdown" aria-expanded="false"
+            hx-get="{{ url(w.panel_url) }}" hx-target="#provider-dropdown-{{ loop.index }}"
+            hx-trigger="click">
+        <i class="{{ w.icon }}"></i> {{ w.label }}
+    </button>
+    <div class="dropdown-menu p-2" id="provider-dropdown-{{ loop.index }}">
+        <span class="text-muted small">Loading…</span>
+    </div>
+</div>
+{% endfor %}
 
 <script>
 function dropHandler(ev) {

@@ -109,7 +109,7 @@ def _add_conf_argument(default, parser):
         "--conf",
         default=default,
         type=pathlib.Path,
-        help=("path to alternative configuration file " "(may not exist)"),
+        help=("path to alternative configuration file (may not exist)"),
     )
 
 
