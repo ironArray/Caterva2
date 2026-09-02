@@ -48,7 +48,7 @@ The Caterva2 package provides a lightweight library for building custom clients.
 
   # 2. First-class CTable structured table queries
   table = client.get("@public/large/chicago-taxi-flat.b2z")
-  print(table[0:5])  # Slices rows as a blosc2.CTable
+  print(table[-5:])  # Instantly slices the last 5 rows of 24M records as a blosc2.CTable
   ```
 
 - **[Command-line client](https://ironarray.io/caterva2-doc/tutorials/cli.html)** - Terminal interface

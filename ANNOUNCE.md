@@ -1,5 +1,5 @@
-Announcing Caterva2 2026.09.02
-==============================
+Announcing Caterva2 2026.9.2
+===========================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 and HDF5 data repositories.
