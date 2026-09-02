@@ -41,6 +41,7 @@ classifiers = [
 dependencies = [
     "blosc2>=4.8.1",
     "httpx[http2]",
+    "numpy",
 ]
 
 [tool.hatch.version]
@@ -73,7 +74,9 @@ server = [
     "jinja2",
     "markdown",
     "nbconvert",
+    "nbformat",
     "pillow",
+    "pyarrow",
     "pygments",
     "python-dotenv",
     "python-multipart",
@@ -117,6 +120,7 @@ tools = [
 tests = [
     "caterva2[clients]",
     "caterva2[services]",
+    "numexpr",
     "pytest<8",
 ]
 blosc2-plugins = [
