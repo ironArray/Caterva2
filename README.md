@@ -2,15 +2,23 @@
 
 ## What is it?
 
-Caterva2 is a service for sharing [Blosc2][] and [HDF5][] datasets with authenticated users, work groups, or the public. It provides multiple interfaces: web GUI, REST API, Python API, and command-line client.
+Caterva2 is a high-performance service for sharing, computing on, and federating [Blosc2][] (NDArrays and CTables) and [HDF5][] datasets with authenticated users, work groups, or the public. It turns data repositories into an active computing platform with multiple interfaces: a modern Web GUI, embedded JupyterLite, a Python API, a CLI, and a REST API.
 
 <img src="./doc/_static/caterva2-block-diagram2.png" alt="Figure: Caterva2 block diagram" width="100%"/>
 
-Use it remotely or locally to access datasets in a directory hierarchy or share them across your network.
+### Key Capabilities
+
+* ⚡ **Server-Side Compute & Querying**: Fancy coordinate gathering (`indices`), SQL-like column filtering (`where`), and server-side sorting (`blosc2.sort_by()`)—compute runs next to the storage in a single network round-trip.
+* 📊 **First-Class Blosc2 CTable (`.b2z`) Support**: Rich structured tables with dedicated `Table` abstractions, column filtering, and ascending/descending sorting.
+* 📁 **Hierarchical Virtual Roots**: Browse inside `.b2z` containers (TreeStore, DictStore) and `.h5` (HDF5) files as mountable virtual roots without copying or converting files.
+* 🚀 **Concurrent Chunk-by-Chunk Ingestion**: Pre-allocate empty array frames (`Client.lay_out()`) and fill slots concurrently (`Client.fill_chunk()`) with HTTP 409 conflict resolution and atomic publishing.
+* 🌐 **Federated Peer Caching (`c2cache`)**: Dynamic peer mounts and transparent local caching with fine-grained per-cache locks and scoped quotas across cluster nodes.
+* 📓 **Embedded JupyterLite & Web UI**: Zero-install in-browser analysis with automatic bootstrap cell injection, standalone save-back, and keyboard/touch navigation.
+* 🔒 **Multi-Tenant Security & Quotas**: 3-tier access control (`@personal`, `@shared`, `@public`), token authentication, and per-user upload quotas.
 
 <img src="./doc/_static/caterva2-data-sharing.png" alt="Figure: How data can be shared" width="50%"/>
 
-The Python API is recommended for building custom clients, while the web GUI offers a user-friendly interface for browsing datasets.
+Use it remotely or locally to access datasets in a directory hierarchy or share them across your network. The Python API is recommended for building custom clients, while the Web GUI offers a user-friendly interface for browsing datasets and visualizing multidimensional data.
 
 <img src="./doc/_static/web-tomo-view.png" alt="Figure: web viewer for tomography" width="100%"/>
 
@@ -24,15 +32,23 @@ The Python API is recommended for building custom clients, while the web GUI off
 
 The Caterva2 package provides a lightweight library for building custom clients. Choose the interface that best fits your needs:
 
-- **[Web GUI](https://ironarray.io/caterva2-doc/tutorials/web-client.html)** - Browser-based interface
+- **[Web GUI](https://ironarray.io/caterva2-doc/tutorials/web-client.html)** - Browser-based interface for dataset exploration, sorting, and embedded JupyterLite
   <img src="./doc/_static/web-data-view.png" alt="Figure: web data browser and viewer" width="100%"/>
 
-- **[Python API](https://ironarray.io/caterva2-doc/tutorials/API.html)** - Programmatic access
+- **[Python API](https://ironarray.io/caterva2-doc/tutorials/API.html)** - Programmatic access for arrays, tables, and ingestion
   ```python
   import caterva2 as cat2
 
   client = cat2.Client("https://cat2.cloud/demo")
-  print(client.get("@public/examples/numbers_color.b2nd")[2])
+
+  # 1. NDArray slicing & server-side coordinate gathering
+  ds = client.get("@public/examples/numbers_color.b2nd")
+  print(ds[0:2, 0:2])
+  points = ds[[0, 1], [0, 1]]  # Gathered on server in a single round-trip!
+
+  # 2. Structured CTable querying
+  table = client.get("@public/examples/ds-2d-fields.b2nd")
+  print(table.slice(slice(0, 5)))
   ```
 
 - **[Command-line client](https://ironarray.io/caterva2-doc/tutorials/cli.html)** - Terminal interface
@@ -77,20 +93,16 @@ CATERVA2_SECRET=c2sikrit python -m pytest  # with authentication
 Append `[extra1,extra2,...]` to any install command:
 
 - `clients` - CLI and terminal tools
-- `server` - Server service
-- `tests` - Test suite (includes server and clients)
+- `server` - Server service (includes C2Cache, FastAPI, SQLite, PyArrow)
+- `hdf5` - HDF5 support (h5py, b2h5py, hdf5plugin)
+- `tests` - Test suite (includes server, clients, and test fixtures)
 - `blosc2-plugins` - JPEG 2000 support via blosc2-grok
 
 **Note:** Test runs create a `_caterva2_tests` directory with state files for inspection.
 
-### Optional peer caching
+### Federated Peer Caching (C2Cache)
 
-C2Cache is bundled as an internal Caterva2 provider; it requires no separate
-package or installation extra. It remains inactive unless the server
-configuration contains at least one `[[server.peer]]` entry. Each configured
-peer exposes that server's locally owned `@public` root under the configured
-local name and caches requested data on demand. See
-`caterva2-server.sample.toml` for the configuration fields and cache quotas.
+C2Cache is bundled directly as an internal Caterva2 provider; it requires no separate package or installation extra. It activates whenever the server configuration contains at least one `[[server.peer]]` entry. Each configured peer exposes that server's `@public` root under a configured local name and transparently caches requested chunks on demand with fine-grained per-cache locks and scoped LRU quotas. See `caterva2-server.sample.toml` for configuration options.
 
 ## Quick start
 
