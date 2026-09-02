@@ -647,3 +647,22 @@ def test_htmx_path_view_nested_struct_column(fill_nested_ctable_public, client):
     assert "trip.sec" in resp.text
     assert "10.0" in resp.text
     assert "20.0" in resp.text
+
+
+def test_ctable_where_filtering(fill_ctable_public, client):
+    """Test client.get_slice / Table.slice / Table.where with boolean string filter expressions."""
+    fname, root = fill_ctable_public
+    tbl = root[fname]
+    assert isinstance(tbl, cat2.Table)
+    assert tbl.nrows == 3
+
+    # Filter with where() and slice()
+    filtered = tbl.where("x > 0")
+    assert isinstance(filtered, blosc2.CTable)
+    assert len(filtered) == 2
+    assert [tuple(r) for r in filtered] == [(1, "v1"), (2, "v2")]
+
+    filtered2 = tbl.slice("x <= 0")
+    assert isinstance(filtered2, blosc2.CTable)
+    assert len(filtered2) == 1
+    assert [tuple(r) for r in filtered2] == [(0, "v0")]

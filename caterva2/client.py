@@ -843,6 +843,10 @@ class Table(Dataset):
         # (e.g. tree.b2z/dir/tbl) would be misread as an NDArray/SChunk.
         return self.client.get_slice(self, key, as_blosc2=True)
 
+    def where(self, expression):
+        """Return a filtered row view matching a boolean expression as a blosc2.CTable."""
+        return self.slice(expression)
+
     def __getitem__(self, key):
         """Shortcut: slice as a blosc2.CTable."""
         return self.slice(key)

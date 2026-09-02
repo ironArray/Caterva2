@@ -46,9 +46,9 @@ The Caterva2 package provides a lightweight library for building custom clients.
   print(ds[0:2, 0:2])
   points = ds[[0, 1], [0, 1]]  # Gathered on server in a single round-trip!
 
-  # 2. Structured CTable querying
-  table = client.get("@public/examples/ds-2d-fields.b2nd")
-  print(table.slice(slice(0, 5)))
+  # 2. First-class CTable structured table queries
+  table = client.get("@public/large/chicago-taxi-flat.b2z")
+  print(table[0:5])  # Slices rows as a blosc2.CTable
   ```
 
 - **[Command-line client](https://ironarray.io/caterva2-doc/tutorials/cli.html)** - Terminal interface

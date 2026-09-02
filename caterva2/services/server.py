@@ -3088,9 +3088,8 @@ def _filtered_array(abspath, path, filter, sortby, mtime, inner_key):
         raise ValueError("Filtering is not supported for HDF5-backed datasets")
 
     if isinstance(arr, blosc2.CTable):
-        # CTable has no .fields/.argsort; filtering isn't supported, only sort_by().
         if filter:
-            raise ValueError("Filtering is not supported for this dataset type")
+            arr = arr.where(filter)
         if sortby:
             arr = arr.sort_by(sortby, view=True)
         return arr, None
