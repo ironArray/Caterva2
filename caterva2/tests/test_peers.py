@@ -9,9 +9,11 @@ talking to each other.
 import asyncio
 import json
 import os
+import pathlib
 import shutil
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -1018,6 +1020,58 @@ def test_afetch_retry_once():
     with pytest.raises(httpx.ReadTimeout):
         asyncio.run(remote.afetch_retry_once(proxy, slice(0, 8)))
     assert len(proxy.calls) == 2
+
+
+def test_caddy_fixture_negotiates_http2(tmp_path):
+    """The optional local fixture is real TLS+h2, with direct Uvicorn as h1."""
+    caddy = shutil.which("caddy")
+    if caddy is None:
+        pytest.skip("Caddy is not installed")
+
+    upstream_port, h2_port = _unused_tcp_ports(2)
+    server_dir = tmp_path / "server"
+    (server_dir / "public").mkdir(parents=True)
+    server = _start(server_dir, upstream_port)
+    env = dict(
+        os.environ,
+        CATERVA2_UPSTREAM=f"127.0.0.1:{upstream_port}",
+        CATERVA2_H2_ADDRESS=f"localhost:{h2_port}",
+        XDG_DATA_HOME=str(tmp_path / "caddy-data"),
+        XDG_CONFIG_HOME=str(tmp_path / "caddy-config"),
+    )
+    caddyfile = pathlib.Path(__file__).parents[2] / "examples" / "benchmarks" / "http2" / "Caddyfile"
+    proxy = subprocess.Popen(
+        [caddy, "run", "--config", str(caddyfile)],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        root_ca = tmp_path / "caddy-data" / "caddy" / "pki" / "authorities" / "local" / "root.crt"
+        for _ in range(50):
+            if proxy.poll() is not None:
+                raise RuntimeError(f"Caddy exited during startup with status {proxy.returncode}")
+            if root_ca.exists():
+                try:
+                    ssl_context = ssl.create_default_context(cafile=str(root_ca))
+                    with httpx.Client(http2=True, verify=ssl_context, timeout=1) as client:
+                        response = client.get(f"https://localhost:{h2_port}/api/roots")
+                    if response.is_success:
+                        break
+                except httpx.TransportError:
+                    pass
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("Caddy HTTP/2 fixture did not start")
+
+        assert response.http_version == "HTTP/2"
+        direct = httpx.get(f"http://127.0.0.1:{upstream_port}/api/roots", timeout=1)
+        assert direct.http_version == "HTTP/1.1"
+    finally:
+        proxy.send_signal(signal.SIGTERM)
+        proxy.wait(timeout=10)
+        server.send_signal(signal.SIGTERM)
+        server.wait(timeout=10)
 
 
 def test_concurrent_fetches_of_different_datasets_dont_serialize(two_dataset_peers):
