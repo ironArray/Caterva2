@@ -33,7 +33,7 @@ Use it remotely or locally to access datasets in a directory hierarchy or share 
 The Caterva2 package provides a lightweight library for building custom clients. Choose the interface that best fits your needs:
 
 - **[Web GUI](https://ironarray.io/caterva2-doc/tutorials/web-client.html)** - Browser-based interface for dataset exploration, sorting, and embedded JupyterLite
-  <img src="./doc/_static/web-data-view.png" alt="Figure: web data browser and viewer" width="100%"/>
+  <img src="./doc/_static/web-table-view.png" alt="Figure: Web interface browsing a Blosc2 CTable with 24M rows" width="100%"/>
 
 - **[Python API](https://ironarray.io/caterva2-doc/tutorials/API.html)** - Programmatic access for arrays, tables, and ingestion
   ```python
