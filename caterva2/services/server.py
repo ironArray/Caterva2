@@ -966,8 +966,10 @@ async def fetch_data(
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         mtime = abspath.stat().st_mtime
         try:
-            container, _ = get_filtered_array(
-                abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+            container, _ = await concurrency.run_in_threadpool(
+                lambda: get_filtered_array(
+                    abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+                )
             )
         except ValueError as exc:
             srv_utils.raise_bad_request(str(exc))
@@ -1083,12 +1085,13 @@ async def fetch_data(
     elif isinstance(array, blosc2.CTable):
         row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
         view = array.slice(row_start, row_stop)
-        data = view.to_cframe()
+        data = await concurrency.run_in_threadpool(view.to_cframe)
     elif isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyArray):
-        data = array.compute(() if slice_ is None else slice_)
-        data = data.to_cframe()
+        data = await concurrency.run_in_threadpool(
+            lambda: array.compute(() if slice_ is None else slice_).to_cframe()
+        )
     elif isinstance(array, blosc2.NDField):
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
