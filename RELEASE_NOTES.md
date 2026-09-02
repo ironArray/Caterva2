@@ -1,6 +1,10 @@
 # Release notes
 
-## Changes from 2025.12.3 to 2026.09.02
+## Changes from 2026.9.2 to 2026.9.3.dev0
+
+#XXX version-specific blurb XXX#
+
+## Changes from 2025.12.3 to 2026.9.2
 
 This is a major release that bundles the internal C2Cache provider for remote peer mounts and transparent caching, adds first-class support for Blosc2 CTable (.b2z) tables and hierarchical container browsing (TreeStore, DictStore, HDF5) as virtual roots, introduces concurrent chunk-by-chunk array writes with atomic publication, adds server-side fancy coordinate indexing, enforces strict HTTP byte-range semantics, and modernizes Pyodide / JupyterLite support.
 
