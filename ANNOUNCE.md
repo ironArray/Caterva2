@@ -1,10 +1,10 @@
-Announcing Caterva2 2025.12.3
+Announcing Caterva2 2026.09.02
 ==============================
 
 Caterva2 is a high-performance storage and computation system for
 Blosc2 and HDF5 data repositories.
 
-This is a minor release, which introduces certain minor API breaking changes (``client.lazyexpr`` has disappeared, ``upload`` signature has changed slightly).
+This is a major release introducing the bundled C2Cache provider for remote peer caching and dynamic mounts, first-class support for Blosc2 CTable (.b2z) tables and hierarchical container browsing, incremental chunk-by-chunk array writes with atomic publishing, server-side fancy coordinate indexing, strict HTTP byte-range semantics, and modernized Pyodide / JupyterLite support.
 
 For more info, you can have a look at the release notes in:
 
@@ -34,4 +34,4 @@ You can contact us at: https://ironarray.io
 
 
 -- The ironArray Team
-   Make compression better
+   Compress Better, Compute Bigger

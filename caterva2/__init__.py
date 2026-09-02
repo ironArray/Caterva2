@@ -11,7 +11,7 @@
 
 from .client import Array, BasicAuth, Client, Dataset, File, Group, Root, Table
 
-__version__ = "2025.12.4.dev0"
+__version__ = "2026.09.02"
 """The version in use of the Caterva2 package."""
 
 __all__ = [

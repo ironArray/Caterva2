@@ -1,102 +1,29 @@
 # Release notes
 
-## Changes from 2025.12.3 to 2025.12.4.dev0
+## Changes from 2025.12.3 to 2026.09.02
 
-#XXX version-specific blurb XXX#
+This is a major release that bundles the internal C2Cache provider for remote peer mounts and transparent caching, adds first-class support for Blosc2 CTable (.b2z) tables and hierarchical container browsing (TreeStore, DictStore, HDF5) as virtual roots, introduces concurrent chunk-by-chunk array writes with atomic publication, adds server-side fancy coordinate indexing, enforces strict HTTP byte-range semantics, and modernizes Pyodide / JupyterLite support.
 
-* C2Cache is bundled and registered as the internal `caterva2.c2cache`
-  provider. It is part of the Caterva2 wheel and release lifecycle, needs no
-  separate package or installed entry-point metadata, and is inert unless at
-  least one `[[server.peer]]` entry activates it.
+* **C2Cache internal provider and remote peer mounts**:
+  C2Cache is now bundled directly inside Caterva2 as the internal `caterva2.c2cache` provider (shipped in standard wheels and container images, inert unless `[[server.peer]]` entries are configured). It allows Caterva2 servers to dynamically mount and browse roots from remote Caterva2/Caterva3 peer instances. Remote peer reads are accelerated via transparent local caching with fine-grained per-cache locks, scoped quota eviction (`cache_quota`), shared filtered-array cache entries across callers, retry logic for transient peer disconnects, and full relaying of whole-file `api/download` requests. An administrative Web UI peer panel (`/peers`) is also included.
 
-* Arrays can be filled a chunk at a time, by several writers at once. An array
-  is laid out empty first (`Client.lay_out()`, a couple of hundred bytes
-  whatever its shape) and each writer posts the chunks it owns with
-  `Client.fill_chunk()`, over the new `POST api/chunk/{path}`. Every chunk of a
-  laid-out array is a slot nothing has been written to; a writer claims one by
-  writing it, and a second write to the same slot is refused with a 409 -- so
-  two writers that both believe they own a chunk are resolved by the array
-  rather than by anything either of them holds. `Client.written_chunks()` says
-  how far a fill has got, read from the frame's own offsets, so there is no
-  bookkeeping to fall out of step with the array. A chunk is checked against the
-  whole of the array's geometry before it is stored -- its chunksize, its
-  blocksize and its typesize -- since one compressed against another typesize
-  decompresses to values in the wrong places and says nothing about it.
+* **First-class Blosc2 CTable (`.b2z`) support and hierarchical container virtual roots**:
+  Blosc2 `CTable` datasets (`.b2z` files) are now first-class citizens across the entire stack, featuring server-side sorting (`blosc2.sort_by()` with ascending/descending order), column filtering, web previews, CLI support, and a dedicated `caterva2.Table` client class. Furthermore, hierarchical TreeStore and DictStore `.b2z` containers as well as `.h5` (HDF5) files can now be browsed as mountable virtual roots, letting users navigate internal hierarchy and query individual dataset members with their own accurate sizes and metadata reported in directory listings.
 
-* A filled array is published as one finished frame. Set `publish_root` in the
-  server configuration -- an fsspec URL of a directory -- and an array is copied
-  there as soon as its last chunk lands, moved into place so that what appears
-  at the destination is a whole frame or nothing. `POST api/publish/{path}`
-  (`Client.publish()`) is the primitive underneath, for finishing a publish that
-  was interrupted. The destination is the server's own configuration and never
-  something a caller names.
+* **Concurrent chunk-by-chunk array writes and atomic publication**:
+  Arrays can now be laid out empty first (`Client.lay_out()`, a couple of hundred bytes whatever their shape) and filled chunk-by-chunk by multiple concurrent writers using `POST api/chunk/{path}` (`Client.fill_chunk()`). Every empty chunk is an unallocated slot; conflicts between writers claiming the same chunk are resolved with HTTP 409 responses. Chunk ingestion strictly validates the array's full geometry (chunksize, blocksize, typesize), while `Client.written_chunks()` tracks write progress directly from frame offsets without external bookkeeping. Once all chunks land, arrays can be atomically moved into a configured `publish_root` directory (`POST api/publish/{path}`).
 
-* `api/fetch` takes an `indices` parameter: a fancy key as JSON, one entry per
-  dimension -- a list of integers for a dimension indexed by coordinates, an
-  integer for one indexed by a scalar, a string for one indexed by a slice, null
-  for one taken whole. The server gathers the points and sends those, reading
-  only the chunks they land in. The alternative is a client fetching the blocks
-  the points live in and picking them out, and a block is nearly all waste for a
-  single coordinate: nine scattered points of a 900^3 array cost 271 bytes in one
-  request this way against 237 KB in nineteen. Not combinable with `slice_`,
-  `filter` or `field`, and refused -- rather than quietly dropped -- for
-  anything that cannot gather points: a container, or a dataset mounted from a
-  peer, which a provider fetches boxes of. A key may name at most a million
-  coordinates, since it travels in a body now and is no longer bounded by what a
-  URL holds. blosc2 4.11 sends it for `C2Array[[...]]`; earlier clients never do.
+* **Fancy coordinate indexing and extended fetch API**:
+  `POST api/fetch` now accepts a JSON `indices` payload (supporting up to 1 million coordinates) to gather arbitrary scattered points directly on the server, reading only the chunks where target coordinates land (e.g. 271 bytes vs 237 KB for scattered points in a 900^3 array). `Client.get_slice()` and `ds[key]` natively support coordinate lists, boolean masks, and `Ellipsis` expansion. The `POST api/fetch` endpoint shares query parameter logic with `GET api/fetch`, allowing large coordinate payloads beyond URL length limits while preserving standard GET requests.
 
-* `Client.get_slice()` and `ds[key]` take a fancy key -- a list or array of
-  coordinates, or a boolean mask -- and send it as `indices` for the server to
-  gather, changing verb to POST where it is too long for a URL. What comes back
-  is the points, not the chunks holding them. `slice_to_string()` now refuses an
-  index it cannot express instead of dropping it: a dropped index left an empty
-  slice string, which asks for the whole dataset and hands back all of it,
-  neither what was asked for nor smaller. An `Ellipsis` is expanded against the
-  dataset's shape rather than refused, since it names the dimensions the key
-  does not, and a bound of 0 is written out: `ds[0:0]` selects nothing, where it
-  used to be spelled `:` and select everything.
+* **Strict HTTP byte-range semantics and generation-aware ETags**:
+  `api/fetch` is now explicit about HTTP byte ranges, allowing clients to read single *blocks* of a dataset. Stored file-backed datasets and container leaf file windows advertise `Accept-Ranges: bytes` and support `multipart/byteranges` for block-level fetching. Dynamically computed slices, filters, lazy expressions, or whole downloads return `Accept-Ranges: none` and HTTP 416 on range attempts rather than downloading whole bodies. Additionally, `api/info` reports upfront `accept_ranges` metadata, and responses carry custom `ETag` headers built from frame generation counters, file size, and modification time.
 
-* `POST api/fetch` takes the same parameters in a body that the GET takes in a
-  query, and is the same code behind them. It exists for the one thing a query
-  string cannot do: carry a key of more coordinates than a URL has room for,
-  which is a few thousand and no encoding moves by much. 200,000 coordinates go
-  through it in one request. Nothing moves off GET -- blosc2 changes verb only
-  where a query could not have been made, so every deployment goes on serving
-  what it already served, and byte ranges stay with the GET they belong to.
+* **Pyodide and JupyterLite modernization**:
+  Upgraded Pyodide and JupyterLite support, requiring `python-blosc2 >= 4.8.1` (with matching wasm32 wheels). The JupyterLite save-back mechanism has been re-implemented as a clean, standalone labextension (`caterva2-save`). Automatic notebook bootstrap cell injection is now supported for importing `blosc2` and `caterva2` seamlessly in Pyodide notebooks, CORS is served as `*` to allow JupyterLite instances anywhere to communicate with the server, and internal code was modernized to use `arr.argsort` for Array API compliance.
 
-* `api/fetch` is explicit about byte ranges, which is what lets a client read
-  single *blocks* of a dataset instead of whole chunks. A stored dataset is
-  served from its file and honours a `Range` as it always did, and now says so
-  with `Accept-Ranges: bytes`; anything built per request -- a slice, a field, a
-  lazy expression, a download -- refuses with a 416 and `Accept-Ranges: none`,
-  where before it answered 200 with the whole body, which is the download such a
-  client was trying to avoid in the first place. A leaf inside a container (a
-  `.b2z` member, or an HDF5 leaf that is a whole frame) is served by seeking to
-  its window in the file, several spans in one `multipart/byteranges` answer if
-  that is what was asked for, so it is readable block-wise like any dataset of
-  its own. `caterva2/tests/test_ranges.py` pins all of it down: a refactor
-  turning that one `FileResponse` into a `StreamingResponse` would otherwise
-  silently cost every such client its block granularity.
-
-* `api/info` reports `accept_ranges` for a dataset: `"bytes"` for one served
-  from a file, `"none"` for one mounted from a peer and re-serialized here, and
-  absent where it is not settled by the description alone (a container leaf,
-  whose answer depends on its own window, or a `.b2nd` that proxies an HDF5
-  dataset, which reads as a stored array here but is rebuilt when fetched).
-  A field an older peer does not send is simply absent, not an error. It says of `api/fetch` what that
-  endpoint would answer, a request earlier: a client reading blocks over byte
-  ranges asks `api/info` anyway, and can now tell a dataset it may range-read
-  from one it may not without spending a request to find out. A field rather
-  than an `Accept-Ranges` header, which would be claiming that `api/info` itself
-  served ranges. Clients that do not know the field are unaffected.
-
-* `api/info` and the ranged file responses carry an `ETag` of our own, built
-  from the frame's generation counter as well as its size and mtime. Starlette's
-  default is a digest of the mtime and the size, which a chunk written as a run
-  of zeros can leave untouched -- such a write stores no payload, so the frame
-  can come out of it exactly as long as it went in. A container leaf carries the
-  container's, on `api/info` and on its ranged reads alike: a leaf is a window of
-  that file, so what says the file did not change says the window did not move.
+* **Web UI navigation, server lifecycle, and infrastructure**:
+  Enhanced the Web UI with click-to-select dataset rows, Up/Down arrow key navigation, Enter to load datasets, and smooth mouse/touch scrolling across dataset lists and display panels. Fixed sidebar layout and absolute gutter positioning for container unmount icons. Fixed server shutdown cleanup by properly disposing of SQLAlchemy's async engine (#285), cleaned up CLI error messages for invalid commands, and pinned Ruff at 0.16.5 with CI test workflows enabled across all branches.
 
 ## Changes from 2025.11.17.1 to 2025.12.3
 
