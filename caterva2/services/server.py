@@ -23,6 +23,7 @@ import pathlib
 import shutil
 import string
 import tarfile
+import threading
 import time
 import traceback
 import types
@@ -98,6 +99,29 @@ def dataset_lock(abspath) -> asyncio.Lock:
         lock = asyncio.Lock()
         lock = _locks.setdefault(key, lock)
     return lock
+
+
+_thread_locks: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
+_thread_locks_guard = threading.Lock()
+
+
+def dataset_thread_lock(abspath) -> threading.Lock:
+    """Serialize threadpool writes on one array within this process.
+
+    Python-Blosc2's file locking (`locking=True`) executes in C without releasing
+    the GIL during open/lock. If two threads in the same process attempt to
+    open/lock the same file concurrently, one can block on the OS file lock
+    while holding Python's GIL, deadlocking the process. Guarding operations on
+    the same array with a threading.Lock ensures the waiting thread yields the
+    GIL cleanly.
+    """
+    key = str(abspath)
+    with _thread_locks_guard:
+        lock = _thread_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _thread_locks[key] = lock
+        return lock
 
 
 mimetypes.add_type("text/markdown", ".md")  # Because in macOS this is not by default
@@ -1550,10 +1574,12 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         with contextlib.suppress(Exception):
             fs.rm(staging)
         raise
-    array = blosc2.open(abspath, mode="a", locking=True)
-    with array.schunk.holding_lock():
-        array.schunk.vlmeta[PUBLISHED_URL] = destination
-        array.schunk.vlmeta[FILL_STATE] = PUBLISHED
+    with dataset_thread_lock(abspath):
+        array = blosc2.open(abspath, mode="a", locking=True)
+        with array.schunk.holding_lock():
+            array.schunk.vlmeta[PUBLISHED_URL] = destination
+            array.schunk.vlmeta[FILL_STATE] = PUBLISHED
+        del array
     return destination
 
 
@@ -1568,82 +1594,83 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
     both find the slot free would otherwise both write it, and the second would
     move every chunk that came after the first.
     """
-    try:
-        array = blosc2.open(abspath, mode="a", locking=True)
-    except Exception as exc:
-        srv_utils.raise_bad_request(f"{abspath.name} cannot be opened for writing: {exc}")
-    if not isinstance(array, blosc2.NDArray):
-        srv_utils.raise_bad_request(
-            f"{abspath.name} is not an NDArray, so it has no chunks of a shape to write into"
-        )
-    schunk = array.schunk
-    if not 0 <= nchunk < schunk.nchunks:
-        srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
-    try:
-        nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
-        typesize = chunk_typesize(chunk)
-    except Exception:
-        srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
-    # A chunk of another geometry would be stored and then read as nonsense, so
-    # it is refused here rather than left for whoever reads the array next
-    if nbytes != schunk.chunksize:
-        srv_utils.raise_bad_request(
-            f"the chunk holds {nbytes} bytes where this array's chunks hold {schunk.chunksize}"
-        )
-    if blocksize != schunk.blocksize:
-        srv_utils.raise_bad_request(
-            f"the chunk is split into blocks of {blocksize} bytes where this array's are "
-            f"{schunk.blocksize}; compress it against the array's blocks"
-        )
-    # The one part of the geometry the sizes do not carry, and the one whose
-    # mismatch is silent: the shuffle filters read and write on a stride of it,
-    # so a chunk compressed against another typesize decompresses to the right
-    # number of bytes with every one of them in the wrong place -- no error
-    # anywhere, just an array of scrambled values
-    if typesize != filter_typesize(schunk.typesize):
-        srv_utils.raise_bad_request(
-            f"the chunk was compressed with a typesize of {typesize} where this array's is "
-            f"{schunk.typesize}; compress it against the array's dtype"
-        )
-    complete = False
-    with schunk.holding_lock():
-        if not chunk_is_unwritten(schunk, nchunk):
-            raise fastapi.HTTPException(
-                status_code=409, detail=f"chunk {nchunk} of {abspath.name} was already written"
+    with dataset_thread_lock(abspath):
+        try:
+            array = blosc2.open(abspath, mode="a", locking=True)
+        except Exception as exc:
+            srv_utils.raise_bad_request(f"{abspath.name} cannot be opened for writing: {exc}")
+        if not isinstance(array, blosc2.NDArray):
+            srv_utils.raise_bad_request(
+                f"{abspath.name} is not an NDArray, so it has no chunks of a shape to write into"
             )
-        schunk.update_chunk(nchunk, chunk)
-        if FILL_NONCE not in schunk.vlmeta:
-            # What names *this* array, as against another one that came to sit at
-            # the same path with the same size.  A client caching the array reads
-            # it from api/info and can tell the two apart, which a size and an
-            # mtime cannot always do.  Written once, by whichever writer arrived
-            # first, and never again
-            schunk.vlmeta[FILL_NONCE] = uuid.uuid4().hex
-            # Said out loud rather than left to be inferred from the absence of
-            # it, and free here: the same locked region, the same trailer
-            schunk.vlmeta[FILL_STATE] = FILLING
-        written, nchunks = count_written(abspath)
-        state = schunk.vlmeta.get(FILL_STATE, FILLING)
-        if written == nchunks and state == FILLING:
-            # Exactly once, whichever writer got here: the lock is held, so of two
-            # writers that both see the array complete only one makes this move,
-            # and that one owns the publishing.  Recorded even where there is
-            # nowhere to publish to, because "every slot is claimed" is worth
-            # saying on its own: it is what tells a reader the array can no
-            # longer change under a cache of it
-            complete = bool(settings.publish_root)
-            state = PUBLISHING if complete else COMPLETE
-            schunk.vlmeta[FILL_STATE] = state
-    # Drop the handle before anything reads the file again: a handle left open
-    # over a frame another one writes is the stale-handle hazard, and it is silent
-    del array, schunk
-    return {
-        "nchunk": nchunk,
-        "written": written,
-        "nchunks": nchunks,
-        "state": state,
-        "publish": complete,
-    }
+        schunk = array.schunk
+        if not 0 <= nchunk < schunk.nchunks:
+            srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
+        try:
+            nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
+            typesize = chunk_typesize(chunk)
+        except Exception:
+            srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
+        # A chunk of another geometry would be stored and then read as nonsense, so
+        # it is refused here rather than left for whoever reads the array next
+        if nbytes != schunk.chunksize:
+            srv_utils.raise_bad_request(
+                f"the chunk holds {nbytes} bytes where this array's chunks hold {schunk.chunksize}"
+            )
+        if blocksize != schunk.blocksize:
+            srv_utils.raise_bad_request(
+                f"the chunk is split into blocks of {blocksize} bytes where this array's are "
+                f"{schunk.blocksize}; compress it against the array's blocks"
+            )
+        # The one part of the geometry the sizes do not carry, and the one whose
+        # mismatch is silent: the shuffle filters read and write on a stride of it,
+        # so a chunk compressed against another typesize decompresses to the right
+        # number of bytes with every one of them in the wrong place -- no error
+        # anywhere, just an array of scrambled values
+        if typesize != filter_typesize(schunk.typesize):
+            srv_utils.raise_bad_request(
+                f"the chunk was compressed with a typesize of {typesize} where this array's is "
+                f"{schunk.typesize}; compress it against the array's dtype"
+            )
+        complete = False
+        with schunk.holding_lock():
+            if not chunk_is_unwritten(schunk, nchunk):
+                raise fastapi.HTTPException(
+                    status_code=409, detail=f"chunk {nchunk} of {abspath.name} was already written"
+                )
+            schunk.update_chunk(nchunk, chunk)
+            if FILL_NONCE not in schunk.vlmeta:
+                # What names *this* array, as against another one that came to sit at
+                # the same path with the same size.  A client caching the array reads
+                # it from api/info and can tell the two apart, which a size and an
+                # mtime cannot always do.  Written once, by whichever writer arrived
+                # first, and never again
+                schunk.vlmeta[FILL_NONCE] = uuid.uuid4().hex
+                # Said out loud rather than left to be inferred from the absence of
+                # it, and free here: the same locked region, the same trailer
+                schunk.vlmeta[FILL_STATE] = FILLING
+            written, nchunks = count_written(abspath)
+            state = schunk.vlmeta.get(FILL_STATE, FILLING)
+            if written == nchunks and state == FILLING:
+                # Exactly once, whichever writer got here: the lock is held, so of two
+                # writers that both see the array complete only one makes this move,
+                # and that one owns the publishing.  Recorded even where there is
+                # nowhere to publish to, because "every slot is claimed" is worth
+                # saying on its own: it is what tells a reader the array can no
+                # longer change under a cache of it
+                complete = bool(settings.publish_root)
+                state = PUBLISHING if complete else COMPLETE
+                schunk.vlmeta[FILL_STATE] = state
+        # Drop the handle before anything reads the file again: a handle left open
+        # over a frame another one writes is the stale-handle hazard, and it is silent
+        del array, schunk
+        return {
+            "nchunk": nchunk,
+            "written": written,
+            "nchunks": nchunks,
+            "state": state,
+            "publish": complete,
+        }
 
 
 @app.post("/api/chunk/{path:path}")

@@ -1,0 +1,9 @@
+{
+	# The local CA is deliberate: this fixture tests real TLS ALPN, not h2c.
+	local_certs
+}
+
+{$CATERVA2_H2_ADDRESS:localhost:8443} {
+	tls internal
+	reverse_proxy {$CATERVA2_UPSTREAM:127.0.0.1:8000}
+}
