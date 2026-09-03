@@ -44,7 +44,9 @@ def fill_h5_public(client):
     dest_dir = pathlib.Path(TEST_STATE_DIR) / "server/public"
     dest_dir.mkdir(parents=True, exist_ok=True)
     fname = "test_tree.h5"
-    _make_h5(dest_dir / fname)
+    target = dest_dir / fname
+    if not target.exists():
+        _make_h5(target)
     return fname, client.get(TEST_CATERVA2_ROOT)
 
 
