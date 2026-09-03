@@ -38,12 +38,35 @@ async def assert_protocol(urlbase: str, expected: str, *, http2: bool) -> None:
         )
 
 
-async def cold_read(urlbase: str, path: str, concurrency: int, cache: pathlib.Path, *, http2: bool) -> float:
+def parse_slice_tuple(slice_str: str | None) -> tuple[slice, ...] | None:
+    if not slice_str:
+        return None
+    parts = []
+    for s in slice_str.split(","):
+        s = s.strip()
+        if ":" in s:
+            start, stop = (int(x.strip()) if x.strip() else None for x in s.split(":", 1))
+            parts.append(slice(start, stop))
+        else:
+            v = int(s)
+            parts.append(slice(v, v + 1))
+    return tuple(parts)
+
+
+async def cold_read(
+    urlbase: str,
+    path: str,
+    concurrency: int,
+    cache: pathlib.Path,
+    *,
+    http2: bool,
+    slice_: tuple[slice, ...] | None = None,
+) -> float:
     source = BenchmarkRemoteSource(path, urlbase=urlbase, http2=http2)
     proxy = blosc2.Proxy(source, urlpath=str(cache), mode="w")
     try:
         started = time.perf_counter()
-        await proxy.afetch(None, max_concurrency=concurrency)
+        await proxy.afetch(slice_, max_concurrency=concurrency)
         return time.perf_counter() - started
     finally:
         # Proxy does not own the remote source's HTTP client.
@@ -70,6 +93,7 @@ async def main(args: argparse.Namespace) -> None:
         "http1": (args.http1_url, False),
         "http2": (args.http2_url, True),
     }
+    slice_tuple = parse_slice_tuple(args.slice)
     with tempfile.TemporaryDirectory(prefix="caterva2-http-benchmark-") as tmp:
         tmpdir = pathlib.Path(tmp)
         for trial in range(args.repeat):
@@ -82,6 +106,7 @@ async def main(args: argparse.Namespace) -> None:
                     args.concurrency,
                     tmpdir / f"{label}-trial-{trial}.b2nd",
                     http2=use_http2,
+                    slice_=slice_tuple,
                 )
                 samples[label].append(sample)
                 print(f"{label} trial={trial + 1} seconds={sample:.6f}")
@@ -96,6 +121,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--http1-url", required=True)
     parser.add_argument("--http2-url", required=True)
     parser.add_argument("--path", required=True, help="remote dataset path, e.g. @public/example.b2nd")
+    parser.add_argument(
+        "--slice", default=None, help="optional slice string, e.g. '9500:10500, 9500:10500, 9500:10500'"
+    )
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--repeat", type=int, default=5)
     args = parser.parse_args()
