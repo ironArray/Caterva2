@@ -434,3 +434,98 @@ Three classes of experiment were performed:
 * Resume performance work only when controlled real remote Caterva2 servers are
   available. At that point HTTP/2 should remain a measured per-path choice rather
   than a project-wide assumption.
+
+---
+
+## 11. Remote Server Audit and Definitive Findings (2026-09-03)
+
+### 11.1 Local Simulation vs. Production Network Ground Truth
+
+Further evaluation confirmed that local loopback simulation (Caddy + Toxiproxy) is not
+suitable for choosing production transport defaults:
+* User-space latency injection (Toxiproxy) buffers and delays bytes in Go user-space,
+  distorting real kernel TCP congestion control (CWND ramp-up, BDP, ACK pacing, packet loss).
+* Loopback bandwidth is effectively infinite, which disproportionately amplifies
+  client-side pure-Python CPU overhead (`httpx` / `h2` frame parsing) and misrepresents
+  WAN network bottlenecks.
+* Production validation against the live remote server (`https://cat2.cloud/demo`) was
+  selected as the authoritative environment for performance decisions.
+
+### 11.2 Root Cause of the 2026-09-02 Single-Slice Anomaly
+
+On 2026-09-02, HTTP/1.1 appeared ~4.3x slower than HTTP/2 on `cat2.cloud` for single
+large `api/fetch` responses (1.361 s vs 0.318 s). An audit of the production Nginx
+reverse proxy revealed two major configuration bottlenecks:
+
+1. **Missing Upstream Keepalives:** Nginx defaulted to HTTP/1.0 with `Connection: close`
+   toward Uvicorn, tearing down and recreating the Unix domain socket on every request.
+2. **Buffer Overflow and Disk Spooling:** Nginx default proxy buffers were only 32 KB
+   total (`proxy_buffers 8 4k`). When Uvicorn returned the 2.68 MB compressed slice,
+   the tiny RAM buffer filled in microseconds and Nginx spooled the response to temporary
+   files on disk (`/var/lib/nginx/proxy/...`), introducing disk I/O latency and locks.
+
+The Nginx deployment was updated with:
+* **Upstream keepalive pool:**
+  ```nginx
+  upstream demo {
+      server unix:/home/demo/caterva2-deploy/_caterva2/state/uvicorn.socket;
+      keepalive 32;
+  }
+  ```
+* **Streaming RAM buffers (2 MB pool, zero disk spooling):**
+  ```nginx
+  proxy_http_version 1.1;
+  proxy_set_header Connection "";
+  proxy_buffering on;
+  proxy_buffer_size 128k;
+  proxy_buffers 16 128k;
+  proxy_busy_buffers_size 256k;
+  ```
+* **TCP stack optimizations:** `tcp_nopush on;` and `tcp_nodelay on;`.
+
+**Result:** Single-slice HTTP/1.1 network response time dropped from **1.361 s to 0.226 s**
+(a 6x improvement), completely eliminating the previous gap and tying with HTTP/2 (0.242 s).
+Both protocols transfer single slices at the physical bandwidth limit of the WAN/Wi-Fi link.
+
+### 11.3 Multi-Chunk Peer-Read Benchmark on `gaia-3d.b2nd`
+
+To test concurrent chunk retrieval on a representative large-scale dataset,
+`examples/benchmarks/http2/peer_read.py` was extended to support arbitrary `--slice`
+ranges. Slicing `@public/large/gaia-3d.b2nd` at `(9500:10500, 9500:10500, 9500:10500)`
+retrieved 64 independent chunks (~20–50 KiB compressed each).
+
+Measurements across concurrency levels against the tuned `cat2.cloud` server (median of
+alternating trials):
+
+| Max Concurrency | HTTP/1.1 Median | HTTP/2 Median | Ratio (H1 / H2) | Winner |
+|---:|---:|---:|---:|---|
+| **1 (serial)** | 4.652 s | 4.647 s | 1.001 | Dead tie |
+| **4** | 1.367 s | 1.433 s | 0.954 | HTTP/1.1 (~5% faster) |
+| **8** | 0.838 s | 0.970 s | 0.863 | **HTTP/1.1 (~15% faster)** |
+| **16** | 0.612 s | 0.818 s | 0.748 | **HTTP/1.1 (~30% faster)** |
+
+#### Physical Mechanisms:
+* **Multiple TCP Congestion Windows:** At concurrency 16, pooled HTTP/1.1 opens 16
+  independent TCP connections, each with its own kernel TCP congestion window,
+  saturating WAN bandwidth in parallel. HTTP/2 forces all 16 streams through a single
+  TCP connection and a single congestion window.
+* **Resilience to Packet Loss:** Packet drops on real WANs cause TCP Head-of-Line
+  blocking across all HTTP/2 multiplexed streams on that connection, whereas pooled
+  HTTP/1.1 connections continue uninterrupted.
+* **Client CPU Overhead:** Demultiplexing binary chunk frames across 16 active streams
+  in pure Python (`h2`) incurs noticeable CPU overhead compared to streaming raw socket
+  bytes in HTTP/1.1.
+
+### 11.4 Final Transport Architecture Decision
+
+1. **`caterva2.Client`:** Retain `http2=True`. For interactive users and notebook
+   sessions issuing single queries/slices, HTTP/2 matches HTTP/1.1 throughput (~0.22 s)
+   while protecting public servers from TCP socket exhaustion and supporting `RST_STREAM`
+   stream cancellation.
+2. **`caterva2.c2cache` & `python-blosc2` (`C2Array.aget_chunk`):** Retain pooled HTTP/1.1
+   (`http2=False`). For bulk concurrent chunk downloads, connection pooling consistently
+   outperforms HTTP/2 multiplexing by 15% to 30%. No code changes are required in either
+   repository.
+3. **Production Reverse-Proxy Profile:** Document the Nginx upstream keepalive (`keepalive 32;`)
+   and in-memory streaming buffer directives (`proxy_buffers 16 128k;`) as standard
+   operational requirements for Caterva2 reverse-proxy deployments.
