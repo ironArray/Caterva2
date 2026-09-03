@@ -1,4 +1,4 @@
-# This workflow will run on an external ubicloud arm64 runner on latest ubuntu (ubicloud standard)
+# This workflow will run on a GitHub-hosted arm64 runner on Ubuntu 24.04
 
 name: Python application (ubuntu, arm64)
 
@@ -13,15 +13,15 @@ on:
 permissions:
   contents: read
 
-# One run per branch: pushing again supersedes the run already going, which
-# matters most on the paid arm64 runner.  A run for `main` is never cancelled.
+# One run per branch: pushing again supersedes the run already going.
+# A run for `main` is never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
-    runs-on: ubicloud-standard-2-arm
+    runs-on: ubuntu-24.04-arm
 
     steps:
     - uses: actions/checkout@v5
