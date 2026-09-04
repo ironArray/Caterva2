@@ -31,3 +31,41 @@ listen = "0.0.0.0:8080"
 ```
 
 And then simply run `cat2-server` to start it on all network interfaces on port 8080.
+
+## Remote reference policy
+
+A persisted `blosc2.RemoteProxy` is a small B2ND carrier that asks Caterva2 to
+read another dataset. Caterva2 can inspect and report the carrier's stored
+shape, dtype, chunk, and block metadata without contacting that source.
+Outbound resolution is disabled by default.
+
+The initial opt-in backend supports public, credential-free HTTPS sources:
+
+```toml
+[server.remote_proxy]
+enabled = true
+allowed_hosts = ["datasets.example.org", "objects.example.org:8443"]
+timeout = 30
+max_nbytes = 1073741824
+max_rank = 16
+max_chunks = 10000000
+max_concurrency = 8
+```
+
+The allowlist is mandatory and matches normalized host names and explicit
+non-default ports exactly. Before connecting, Caterva2 resolves every address,
+rejects loopback, private, link-local, multicast, and other non-public results,
+and pins the accepted addresses into the HTTP connector. Redirects are disabled.
+Source URLs containing user information, query parameters, or fragments are
+also rejected. These checks are applied by the server even when the carrier was
+created by a client that performed its own validation.
+
+The limits bound each upstream request's time, source rank, logical
+uncompressed size, chunk count, and concurrent range fetches. Set them for the
+capacity of the installation; they are not inferred from untrusted carrier
+metadata.
+
+S3, private-source credential selection, and remote references embedded inside
+persisted expressions are not enabled yet. Server credentials must eventually
+be selected from an administrator-controlled destination mapping and must never
+be accepted from a carrier.

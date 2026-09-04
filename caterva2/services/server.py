@@ -61,7 +61,7 @@ from starlette.datastructures import MutableHeaders
 
 # Project
 from caterva2 import hdf5, models, utils
-from caterva2.services import db, providers, schemas, settings, srv_utils, users
+from caterva2.services import db, providers, remote_proxy, schemas, settings, srv_utils, users
 from caterva2.services.notebook import inject_pyodide_bootstrap_cell
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -215,6 +215,18 @@ def open_b2(abspath, path):
     if root not in {"@personal", "@shared", "@public"}:
         raise ValueError(f"Unexpected root={root}")
 
+    reference = remote_proxy.inspect(abspath)
+    if reference is not None:
+        carrier, payload = reference
+        try:
+            return remote_proxy.resolve(carrier, payload)
+        except remote_proxy.RemoteProxyDenied as exc:
+            raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
+
+    try:
+        remote_proxy.guard_embedded(abspath)
+    except remote_proxy.RemoteProxyDenied as exc:
+        raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
     container = blosc2.open(abspath)
     # CTable has its own storage and no table-level cparams/dparams; return early.
     if isinstance(container, blosc2.CTable):
@@ -584,7 +596,10 @@ async def get_info(
     etag = dataset_etag(abspath)
     if etag:
         response.headers["ETag"] = etag
-    meta = srv_utils.read_metadata(abspath)
+    try:
+        meta = srv_utils.read_metadata(abspath)
+    except remote_proxy.RemoteProxyDenied as exc:
+        raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
     # A dataset with a file of its own is served by `FileResponse`, which honours
     # a range.  Only said where it is certain: a directory or a lazy expression
     # is not a stored frame, and a container member depends on whether its leaf
@@ -597,8 +612,11 @@ async def get_info(
     # the file on disk is a proxy's chunks, not the array's.  It 416s a range,
     # and a client that took "bytes" on trust would find that out on its first
     # block read rather than on a probe it could have made
-    if isinstance(meta, models.Metadata) and not srv_utils.is_hdf5_proxy_meta(meta):
-        meta.accept_ranges = "bytes"
+    if isinstance(meta, models.Metadata):
+        if remote_proxy.is_metadata(meta):
+            meta.accept_ranges = "none"
+        elif not srv_utils.is_hdf5_proxy_meta(meta):
+            meta.accept_ranges = "bytes"
     return meta
 
 
@@ -1034,7 +1052,10 @@ async def fetch_data(
             headers=with_etag(abspath),
         )
 
-    if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
+    if isinstance(
+        container,
+        (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField, remote_proxy.ServerRemoteProxy),
+    ):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
@@ -1066,7 +1087,16 @@ async def fetch_data(
 
     if (
         whole
-        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
+        and (
+            not isinstance(
+                array,
+                blosc2.LazyArray
+                | hdf5.HDF5Proxy
+                | blosc2.NDField
+                | blosc2.CTable
+                | remote_proxy.ServerRemoteProxy,
+            )
+        )
         and (not filter)
     ):
         if inner_key is None:
@@ -1095,7 +1125,7 @@ async def fetch_data(
     srv_utils.refuse_range(range_header, path)
 
     if indices is not None:
-        if not isinstance(array, blosc2.NDArray):
+        if not isinstance(array, blosc2.NDArray | remote_proxy.ServerRemoteProxy):
             srv_utils.raise_bad_request(f"{path} is not an array that can be indexed by coordinates")
         try:
             # `NDArray` reads scattered coordinates through its own sparse gather,
@@ -1120,6 +1150,10 @@ async def fetch_data(
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()
+    elif isinstance(array, remote_proxy.ServerRemoteProxy):
+        data = await concurrency.run_in_threadpool(
+            lambda: blosc2.asarray(array[() if slice_ is None else slice_]).to_cframe()
+        )
     elif isinstance(array, blosc2.NDArray):
         # Using NDArray.slice() allows a fast path when it is aligned with the chunks
         # As we are going to serialize the slice right away, it is not clear in which
@@ -4139,6 +4173,7 @@ def main():
     args = parser.parse_args()
     conf = utils.get_server_conf(args.conf)
     utils.config_log(args, conf)
+    remote_proxy.configure(conf)
 
     # Directories
     statedir = args.statedir or pathlib.Path(conf.get(".statedir", "_caterva2/state"))

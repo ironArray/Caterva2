@@ -30,6 +30,20 @@ register = true  # allow users to register
 # publish_root = "s3://a-bucket/published"
 # peer_cache_quota = "1G"
 
+# Persisted RemoteProxy objects are discoverable but cannot make outbound
+# requests by default. The first opt-in backend is credential-free HTTPS.
+# Every destination must be listed exactly; redirects, URL queries, private or
+# otherwise non-public destination addresses, and embedded expression
+# references are refused.
+# [server.remote_proxy]
+# enabled = true
+# allowed_hosts = ["datasets.example.org", "objects.example.org:8443"]
+# timeout = 30
+# max_nbytes = 1073741824
+# max_rank = 16
+# max_chunks = 10000000
+# max_concurrency = 8
+
 # Mount a remote Caterva2 server's locally owned @public root as @labb.  This
 # activates the bundled C2Cache provider.  Repeat the table to mount more peers.
 # An optional per-peer cache_quota further bounds this peer within the pool.

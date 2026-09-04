@@ -12,6 +12,7 @@ import os
 import pathlib
 
 import blosc2
+import fsspec
 import httpx
 import numexpr as ne
 import numpy as np
@@ -130,6 +131,47 @@ def test_dataset_info(client, fill_public):
             assert data.shape == tuple(info["shape"])
             assert data.blocks == tuple(info["blocks"])
             assert data.chunks == tuple(info["chunks"])
+
+
+def test_remote_proxy_is_discovered_but_resolution_is_disabled(client):
+    source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    fsspec.filesystem("memory").pipe_file("caterva2-disabled-reference.b2nd", source.to_cframe())
+    reference = blosc2.RemoteProxy("memory://caterva2-disabled-reference.b2nd")
+    path = pathlib.Path(TEST_STATE_DIR) / "server/public/disabled-reference.b2nd"
+    reference.save(path)
+    before = path.read_bytes()
+
+    try:
+        response = httpx.get(f"{client.urlbase}/api/info/@public/{path.name}")
+        response.raise_for_status()
+        info = response.json()
+        assert info["shape"] == [20]
+        assert info["chunks"] == [10]
+        assert info["blocks"] == [5]
+        assert info["accept_ranges"] == "none"
+
+        response = httpx.get(f"{client.urlbase}/api/fetch/@public/{path.name}", params={"slice_": "0:2"})
+        assert response.status_code == 403
+        assert response.json()["detail"] == "RemoteProxy resolution is disabled by server policy"
+        assert path.read_bytes() == before
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_remote_proxy_hidden_in_expression_is_denied_before_open(client):
+    source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    fsspec.filesystem("memory").pipe_file("caterva2-embedded-reference.b2nd", source.to_cframe())
+    reference = blosc2.RemoteProxy("memory://caterva2-embedded-reference.b2nd")
+    expression = blosc2.lazyexpr("a + 1", operands={"a": reference})
+    path = pathlib.Path(TEST_STATE_DIR) / "server/public/embedded-reference.b2nd"
+    expression.save(path)
+
+    try:
+        response = httpx.get(f"{client.urlbase}/api/info/@public/{path.name}")
+        assert response.status_code == 403
+        assert "embedded" in response.json()["detail"]
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @pytest.mark.parametrize("dirpath", [None, "dir1", "dir2", "dir2/dir3/dir4"])

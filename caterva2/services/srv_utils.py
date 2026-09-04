@@ -30,7 +30,7 @@ from sqlalchemy.future import select
 
 # Project
 from caterva2 import hdf5, models
-from caterva2.services import db, schemas, settings, users
+from caterva2.services import db, remote_proxy, schemas, settings, users
 
 # Shared suffix constants
 BLOSC2_ARRAY_SUFFIXES = {".b2nd", ".b2frame"}
@@ -476,7 +476,12 @@ def read_metadata(obj, mtime=None):
 
         assert path.suffix in BLOSC2_NATIVE_SUFFIXES
         try:
-            obj = blosc2.open(path)
+            reference = remote_proxy.inspect(path)
+            if reference is not None:
+                obj = reference[0]
+            else:
+                remote_proxy.guard_embedded(path)
+                obj = blosc2.open(path)
         except blosc2.exceptions.MissingOperands as exc:
             error = "Lazy expression with missing operands"
             missing_ops = {k: get_relpath(v) for k, v in exc.missing_ops.items()}

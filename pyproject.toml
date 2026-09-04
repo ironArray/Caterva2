@@ -59,6 +59,7 @@ base-services = [
     "uvicorn",
 ]
 server = [
+    "aiohttp",
     "aiosqlite",
     "caterva2[base-services]",
     "caterva2[hdf5]",
