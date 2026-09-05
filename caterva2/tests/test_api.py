@@ -158,6 +158,41 @@ def test_remote_proxy_is_discovered_but_resolution_is_disabled(client):
         path.unlink(missing_ok=True)
 
 
+def test_remote_proxy_download_can_omit_cache(client, tmp_path):
+    source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    fsspec.filesystem("memory").pipe_file("caterva2-download-reference.b2nd", source.to_cframe())
+    reference = blosc2.RemoteProxy(
+        "memory://caterva2-download-reference.b2nd",
+        cache_policy=blosc2.CachePolicy.DISK,
+        cache_path=tmp_path / "warm-reference.b2nd",
+        max_cache_bytes=1_000_000,
+    )
+    np.testing.assert_array_equal(reference[:10], np.arange(10, dtype=np.int32))
+    path = pathlib.Path(TEST_STATE_DIR) / "server/public/download-reference.b2nd"
+    reference.save(path)
+
+    try:
+        dataset = client.get(f"@public/{path.name}")
+        warm_url = dataset.get_download_url()
+        cold_url = dataset.get_download_url(include_cache=False)
+        assert warm_url == f"{client.urlbase}/api/download/@public/{path.name}"
+        assert cold_url == f"{warm_url}?include_cache=false"
+
+        warm_response = httpx.get(warm_url)
+        cold_response = httpx.get(cold_url)
+        warm_response.raise_for_status()
+        cold_response.raise_for_status()
+        warm = blosc2.ndarray_from_cframe(warm_response.content)
+        cold = blosc2.ndarray_from_cframe(cold_response.content)
+        assert warm.schunk.vlmeta.get("proxy-cache-sizes")
+        assert not cold.schunk.vlmeta.get("proxy-cache-sizes", {})
+        assert cold.schunk.vlmeta["b2o"] == warm.schunk.vlmeta["b2o"]
+        assert len(cold_response.content) < len(warm_response.content)
+        assert not any(name.endswith(".b2lock") for name in client.get_list("@public"))
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def test_remote_proxy_hidden_in_expression_is_denied_before_open(client):
     source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
     fsspec.filesystem("memory").pipe_file("caterva2-embedded-reference.b2nd", source.to_cframe())

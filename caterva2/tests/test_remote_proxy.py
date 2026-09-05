@@ -8,9 +8,11 @@
 ###############################################################################
 
 import asyncio
+import concurrent.futures
 import socket
 
 import blosc2
+import fsspec
 import numpy as np
 import pytest
 
@@ -25,12 +27,13 @@ class _Conf:
         return self.values.get(key, default)
 
 
-def _payload(url):
+def _payload(url, *, cache_policy="none", max_cache_bytes=None):
     return {
         "kind": "remote_proxy",
         "version": 1,
         "source": {"kind": "fsspec", "version": 1, "urlpath": url},
-        "cache_policy": "none",
+        "cache_policy": cache_policy,
+        "max_cache_bytes": max_cache_bytes,
     }
 
 
@@ -76,6 +79,27 @@ def test_configured_https_destination_is_accepted():
     assert remote_proxy._validated_source(_payload("https://data.example:8443/array.b2nd"))
 
 
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (_payload("https://data.example/a.b2nd", cache_policy="memory"), "only cache policies"),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="none", max_cache_bytes=1),
+            "cannot have max_cache_bytes",
+        ),
+        (_payload("https://data.example/a.b2nd", cache_policy="disk"), "requires positive"),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes=True),
+            "requires positive",
+        ),
+    ],
+)
+def test_cache_specification_is_strict(payload, match):
+    remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
+    with pytest.raises(remote_proxy.RemoteProxyDenied, match=match):
+        remote_proxy._validated_source(payload)
+
+
 def test_private_resolution_is_rejected(monkeypatch):
     monkeypatch.setattr(
         socket,
@@ -107,6 +131,9 @@ def test_allowed_source_is_resolved_with_the_secure_filesystem(monkeypatch):
         chunks = (5,)
         blocks = (5,)
 
+        class schunk:
+            urlpath = "/tmp/reference.b2nd"
+
     class Source:
         shape = Carrier.shape
         dtype = Carrier.dtype
@@ -137,6 +164,111 @@ def test_allowed_source_is_resolved_with_the_secure_filesystem(monkeypatch):
         "max_concurrency": 3,
         "filesystem": filesystem,
     }
+
+
+def test_cold_cframe_preserves_specification_but_not_cached_chunks(tmp_path):
+    source = blosc2.asarray(np.arange(20), chunks=(10,), blocks=(5,))
+    source_url = "memory://cold-cframe-source.b2nd"
+    fsspec.filesystem("memory").pipe_file("cold-cframe-source.b2nd", source.to_cframe())
+    carrier_path = tmp_path / "proxy.b2nd"
+    proxy = blosc2.RemoteProxy(
+        source_url,
+        cache_policy=blosc2.CachePolicy.DISK,
+        cache_path=carrier_path,
+        max_cache_bytes=1_000_000,
+    )
+    np.testing.assert_array_equal(proxy[:10], np.arange(10))
+
+    carrier, payload = remote_proxy.inspect(carrier_path)
+    assert carrier.schunk.vlmeta.get("proxy-cache-sizes")
+    cold = blosc2.ndarray_from_cframe(remote_proxy.cold_cframe(carrier, payload))
+
+    assert cold.schunk.vlmeta["b2o"] == payload
+    assert not cold.schunk.vlmeta.get("proxy-cache-sizes", {})
+    assert cold.to_cframe() != carrier.to_cframe()
+
+
+def _server_proxy(tmp_path, name="server-cache"):
+    data = np.arange(40, dtype=np.int32)
+    source = blosc2.asarray(data, chunks=(10,), blocks=(5,))
+    source_url = f"memory://{name}-source.b2nd"
+    fsspec.filesystem("memory").pipe_file(f"{name}-source.b2nd", source.to_cframe())
+    carrier_path = tmp_path / f"{name}.b2nd"
+    creator = blosc2.RemoteProxy(
+        source_url,
+        cache_policy=blosc2.CachePolicy.DISK,
+        cache_path=carrier_path,
+        max_cache_bytes=1_000_000,
+    )
+    carrier, payload = remote_proxy.inspect(carrier_path)
+    geometry = (creator.shape, creator.dtype, creator.chunks, creator.blocks)
+    return remote_proxy.ServerRemoteProxy(creator.src, geometry, carrier, payload), data, carrier_path
+
+
+def test_server_proxy_reuses_its_carrier_cache(tmp_path):
+    proxy, data, carrier_path = _server_proxy(tmp_path)
+    proxy.src.traffic.reset()
+    np.testing.assert_array_equal(proxy.read(slice(0, 10)), data[:10])
+    assert proxy.src.traffic.requests > 0
+
+    carrier, payload = remote_proxy.inspect(carrier_path)
+    fresh_source = blosc2.FsspecNDSource(payload["source"]["urlpath"])
+    reopened = remote_proxy.ServerRemoteProxy(
+        fresh_source,
+        (proxy.shape, proxy.dtype, proxy.chunks, proxy.blocks),
+        carrier,
+        payload,
+    )
+    fresh_source.traffic.reset()
+    np.testing.assert_array_equal(reopened.read(slice(0, 10)), data[:10])
+    assert fresh_source.traffic.requests == 0
+
+
+def test_zero_effective_quota_reads_without_retaining(tmp_path):
+    proxy, data, carrier_path = _server_proxy(tmp_path, "zero-quota")
+    before = carrier_path.read_bytes()
+    np.testing.assert_array_equal(proxy.read(slice(0, 10), cache_limit=0), data[:10])
+    assert carrier_path.read_bytes() == before
+
+
+def test_customer_quota_reduces_the_proxy_cache_limit(monkeypatch):
+    monkeypatch.setenv("CATERVA2_SECRET", "remote-proxy-test-secret")
+    from caterva2.services import server
+
+    class Proxy:
+        cache_policy = "disk"
+        max_cache_bytes = 500
+
+        @staticmethod
+        def current_cache_bytes():
+            return 200
+
+    monkeypatch.setattr(server.settings, "quota", 1_000)
+    monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 900)
+    assert server.remote_proxy_cache_limit(Proxy()) == 300
+
+    monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 1_000)
+    assert server.remote_proxy_cache_limit(Proxy()) == 200
+
+
+def test_concurrent_server_proxy_fills_do_not_corrupt_carrier(tmp_path):
+    first, data, carrier_path = _server_proxy(tmp_path, "concurrent")
+    carrier, payload = remote_proxy.inspect(carrier_path)
+    second_source = blosc2.FsspecNDSource(payload["source"]["urlpath"])
+    second = remote_proxy.ServerRemoteProxy(
+        second_source,
+        (first.shape, first.dtype, first.chunks, first.blocks),
+        carrier,
+        payload,
+    )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        left = pool.submit(first.read, slice(0, 20))
+        right = pool.submit(second.read, slice(20, 40))
+        np.testing.assert_array_equal(left.result(timeout=10), data[:20])
+        np.testing.assert_array_equal(right.result(timeout=10), data[20:])
+
+    reopened = blosc2.open(carrier_path, mode="r")
+    np.testing.assert_array_equal(reopened[:], data)
 
 
 def test_https_filesystem_disables_redirects_and_pins_resolution():

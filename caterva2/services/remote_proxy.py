@@ -19,11 +19,15 @@ from __future__ import annotations
 import ipaddress
 import math
 import socket
+import threading
+import weakref
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import aiohttp
 import blosc2
+import numpy as np
+from blosc2.b2objects import make_b2object_carrier, write_b2object_payload
 from fsspec.implementations.http import HTTPFileSystem
 
 
@@ -43,6 +47,20 @@ class Policy:
 
 
 policy = Policy()
+
+_carrier_locks: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
+_carrier_locks_guard = threading.Lock()
+
+
+def carrier_thread_lock(path) -> threading.Lock:
+    """Return the process-local guard paired with the carrier's file lock."""
+    key = str(path)
+    with _carrier_locks_guard:
+        lock = _carrier_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _carrier_locks[key] = lock
+        return lock
 
 
 def configure(conf) -> None:
@@ -99,28 +117,37 @@ def _normalize_allowed_host(value: str) -> str:
     return f"{host}:{port}" if port is not None else host
 
 
-def raw_carrier(path):
+def raw_carrier(path, mode="r", *, locking=False):
     """Open a local Blosc2 carrier without dispatching its B2 object."""
-    kwargs = {"dparams": blosc2.DParams(nthreads=1)}
-    return blosc2.blosc2_ext.open(str(path), "r", 0, **kwargs)
+    kwargs = {"dparams": blosc2.DParams(nthreads=1), "locking": locking}
+    return blosc2.blosc2_ext.open(str(path), mode, 0, **kwargs)
 
 
 def inspect(path):
     """Return ``(raw carrier, payload)`` for a RemoteProxy, otherwise ``None``."""
     if not hasattr(blosc2, "RemoteProxy"):
         return None
-    try:
-        carrier = raw_carrier(path)
-    except (RuntimeError, ValueError):
-        return None
-    schunk = getattr(carrier, "schunk", carrier)
-    marker = schunk.meta.get("b2o")
-    if not isinstance(marker, dict) or marker.get("kind") != "remote_proxy":
-        return None
-    payload = schunk.vlmeta.get("b2o")
-    if not isinstance(payload, dict):
-        raise RemoteProxyDenied("RemoteProxy carrier has no valid payload")
-    return carrier, payload
+    with carrier_thread_lock(path):
+        try:
+            carrier = raw_carrier(path)
+        except (RuntimeError, ValueError):
+            return None
+        schunk = getattr(carrier, "schunk", carrier)
+        marker = schunk.meta.get("b2o")
+        if not isinstance(marker, dict) or marker.get("kind") != "remote_proxy":
+            return None
+        # Only RemoteProxy carriers need a sidecar lock. Reopen after
+        # discrimination so inspecting ordinary datasets has no filesystem
+        # side effect, then re-read the marker and payload under that lock.
+        carrier = raw_carrier(path, locking=True)
+        schunk = getattr(carrier, "schunk", carrier)
+        marker = schunk.meta.get("b2o")
+        if not isinstance(marker, dict) or marker.get("kind") != "remote_proxy":
+            return None
+        payload = schunk.vlmeta.get("b2o")
+        if not isinstance(payload, dict):
+            raise RemoteProxyDenied("RemoteProxy carrier has no valid payload")
+        return carrier, payload
 
 
 def guard_embedded(path) -> None:
@@ -159,7 +186,7 @@ def _contains_remote_reference(value) -> bool:
 
 
 def is_metadata(meta) -> bool:
-    """Whether an api/info model describes a reference-only carrier."""
+    """Whether an api/info model describes a RemoteProxy carrier."""
     vlmeta = getattr(getattr(meta, "schunk", None), "vlmeta", None) or {}
     payload = vlmeta.get("b2o")
     return isinstance(payload, dict) and payload.get("kind") == "remote_proxy"
@@ -168,12 +195,20 @@ def is_metadata(meta) -> bool:
 def _validated_source(payload: dict) -> str:
     if not policy.enabled:
         raise RemoteProxyDenied("RemoteProxy resolution is disabled by server policy")
-    if set(payload) != {"kind", "version", "source", "cache_policy"}:
+    if set(payload) != {"kind", "version", "source", "cache_policy", "max_cache_bytes"}:
         raise RemoteProxyDenied("RemoteProxy payload contains unsupported fields")
     if payload.get("kind") != "remote_proxy" or payload.get("version") != 1:
         raise RemoteProxyDenied("unsupported RemoteProxy payload")
-    if payload.get("cache_policy") != "none":
-        raise RemoteProxyDenied("server RemoteProxy carriers must use cache policy 'none'")
+    cache_policy = payload.get("cache_policy")
+    max_cache_bytes = payload.get("max_cache_bytes")
+    if cache_policy == "none":
+        if max_cache_bytes is not None:
+            raise RemoteProxyDenied("RemoteProxy cache policy 'none' cannot have max_cache_bytes")
+    elif cache_policy == "disk":
+        if isinstance(max_cache_bytes, bool) or not isinstance(max_cache_bytes, int) or max_cache_bytes <= 0:
+            raise RemoteProxyDenied("RemoteProxy cache policy 'disk' requires positive max_cache_bytes")
+    else:
+        raise RemoteProxyDenied("server RemoteProxy supports only cache policies 'none' and 'disk'")
     source = payload.get("source")
     if not isinstance(source, dict) or set(source) != {"kind", "version", "urlpath"}:
         raise RemoteProxyDenied("server RemoteProxy supports only a versioned fsspec URL source")
@@ -260,7 +295,7 @@ def _https_filesystem(host: str, addresses: tuple[str, ...]):
 
 
 def resolve(carrier, payload):
-    """Resolve one allowed carrier as a no-retention remote array."""
+    """Resolve one allowed carrier as a policy-limited remote array."""
     url = _validated_source(payload)
     parsed = urlsplit(url)
     host = parsed.hostname.encode("idna").decode("ascii").lower()
@@ -292,19 +327,100 @@ def resolve(carrier, payload):
         raise RemoteProxyDenied(
             f"RemoteProxy chunk count exceeds the configured limit of {policy.max_chunks}"
         )
-    return ServerRemoteProxy(source, expected)
+    return ServerRemoteProxy(source, expected, carrier, payload)
 
 
 class ServerRemoteProxy:
-    """Operation-scoped assembly over a server-authorized remote source."""
+    """Authorized remote source backed by its own carrier cache."""
 
-    def __init__(self, source, geometry):
+    def __init__(self, source, geometry, carrier, payload):
         self.src = source
         self.shape, self.dtype, self.chunks, self.blocks = geometry
         self.cparams = source.cparams
+        self.path = carrier.schunk.urlpath
+        self.cache_policy = payload["cache_policy"]
+        self.max_cache_bytes = payload["max_cache_bytes"]
+
+    def current_cache_bytes(self) -> int:
+        if self.cache_policy != "disk":
+            return 0
+        with carrier_thread_lock(self.path):
+            carrier = raw_carrier(self.path, locking=True)
+            with carrier.schunk.holding_lock():
+                sizes = carrier.schunk.vlmeta.get("proxy-cache-sizes", {})
+        if not isinstance(sizes, dict):
+            return 0
+        return sum(size for size in sizes.values() if isinstance(size, int) and size >= 0)
+
+    def _backend(self, cache_limit=None, *, carrier=None):
+        if self.cache_policy != "disk" or cache_limit == 0:
+            return blosc2.Proxy(self.src, _refresh_source=False)
+        carrier = raw_carrier(self.path, mode="a", locking=True) if carrier is None else carrier
+        limit = self.max_cache_bytes if cache_limit is None else min(self.max_cache_bytes, cache_limit)
+        return blosc2.Proxy(
+            self.src,
+            _cache=carrier,
+            _refresh_source=False,
+            _max_cache_bytes=limit,
+        )
+
+    def read(self, item, *, cache_limit=None):
+        if self.cache_policy != "disk" or cache_limit == 0:
+            return self._backend(cache_limit)[item]
+        with carrier_thread_lock(self.path):
+            carrier = raw_carrier(self.path, mode="a", locking=True)
+            with carrier.schunk.holding_lock():
+                backend = self._backend(cache_limit, carrier=carrier)
+                return backend[item]
 
     def __getitem__(self, item):
-        return blosc2.Proxy(self.src, _refresh_source=False)[item]
+        return self.read(item)
 
-    def get_chunk(self, nchunk):
-        return self.src.get_chunk(nchunk)
+    def get_chunk(self, nchunk, *, cache_limit=None):
+        if self.cache_policy != "disk" or cache_limit == 0:
+            return self.src.get_chunk(nchunk)
+        item = tuple(
+            slice(coord * chunk, min((coord + 1) * chunk, size))
+            for coord, chunk, size in zip(
+                np.unravel_index(
+                    nchunk,
+                    tuple(
+                        math.ceil(size / chunk) for size, chunk in zip(self.shape, self.chunks, strict=True)
+                    ),
+                ),
+                self.chunks,
+                self.shape,
+                strict=True,
+            )
+        )
+        with carrier_thread_lock(self.path):
+            carrier = raw_carrier(self.path, mode="a", locking=True)
+            with carrier.schunk.holding_lock():
+                backend = self._backend(cache_limit, carrier=carrier)
+                backend.fetch(item)
+                chunk = backend.schunk.get_chunk(nchunk)
+                backend._enforce_cache_limit(item)
+        return chunk
+
+
+def cold_cframe(carrier, payload) -> bytes:
+    """Return a cache-free carrier without resolving or mutating its source."""
+    cold = make_b2object_carrier(
+        "remote_proxy",
+        carrier.shape,
+        carrier.dtype,
+        chunks=carrier.chunks,
+        blocks=carrier.blocks,
+        cparams=carrier.cparams,
+    )
+    write_b2object_payload(cold, payload)
+    return cold.to_cframe()
+
+
+def export_cframe(carrier, payload, *, include_cache: bool) -> bytes:
+    """Snapshot a warm or cold carrier while excluding concurrent mutations."""
+    path = carrier.schunk.urlpath
+    with carrier_thread_lock(path), carrier.schunk.holding_lock():
+        if include_cache:
+            return carrier.to_cframe()
+        return cold_cframe(carrier, payload)

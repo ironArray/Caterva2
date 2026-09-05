@@ -137,7 +137,10 @@ def guess_type(path):
 
 def get_disk_usage():
     exclude = {"db.json", "db.sqlite"}
-    return sum(path.stat().st_size for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude))
+    return sum(
+        path.stat().st_size
+        for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude, include_internal=True)
+    )
 
 
 DISK_USAGE_TTL = 10.0
@@ -170,6 +173,33 @@ def get_disk_usage_written(pending: int) -> int:
 def account_chunk_written(nbytes: int) -> None:
     """Count a chunk just written against the kept walk; see `get_disk_usage_written`."""
     _disk_usage["written"] += nbytes
+
+
+def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteProxy) -> int | None:
+    """Return the per-carrier cache bound after applying remaining customer quota."""
+    if proxy.cache_policy != "disk":
+        return 0
+    if not settings.quota:
+        return proxy.max_cache_bytes
+    retained = proxy.current_cache_bytes()
+    available = max(0, settings.quota - get_disk_usage_written(0))
+    return min(proxy.max_cache_bytes, retained + available)
+
+
+async def read_remote_proxy(proxy, item, abspath):
+    """Read one remote selection while serializing and accounting cache mutation."""
+    lock = dataset_lock(abspath)
+    async with lock:
+        before = abspath.stat().st_size
+        cache_limit = remote_proxy_cache_limit(proxy)
+        data = await concurrency.run_in_threadpool(
+            lambda: blosc2.asarray(proxy.read(item, cache_limit=cache_limit)).to_cframe()
+        )
+        if settings.quota:
+            growth = max(0, abspath.stat().st_size - before)
+            if growth:
+                account_chunk_written(growth)
+        return data
 
 
 def truncate_path(path, size=35):
@@ -615,6 +645,10 @@ async def get_info(
     if isinstance(meta, models.Metadata):
         if remote_proxy.is_metadata(meta):
             meta.accept_ranges = "none"
+            # Cache bookkeeping contains binary bitmaps and source stamps that
+            # are neither JSON metadata nor part of the public proxy contract.
+            # Expose only the portable descriptor through api/info.
+            meta.schunk.vlmeta = {"b2o": meta.schunk.vlmeta["b2o"]}
         elif not srv_utils.is_hdf5_proxy_meta(meta):
             meta.accept_ranges = "bytes"
     return meta
@@ -1133,7 +1167,12 @@ async def fetch_data(
             # Off the event loop: bounded by `MAX_FETCH_COORDS` but not small, and
             # a gather that ran here would stall every other request for its
             # duration -- it reads, materializes and serializes, all blocking
-            data = await concurrency.run_in_threadpool(lambda: blosc2.asarray(array[indices]).to_cframe())
+            if isinstance(array, remote_proxy.ServerRemoteProxy):
+                data = await read_remote_proxy(array, indices, abspath)
+            else:
+                data = await concurrency.run_in_threadpool(
+                    lambda: blosc2.asarray(array[indices]).to_cframe()
+                )
         except (IndexError, ValueError) as exc:
             srv_utils.raise_bad_request(str(exc))
     elif isinstance(array, blosc2.CTable):
@@ -1151,9 +1190,7 @@ async def fetch_data(
         data = blosc2.asarray(data)
         data = data.to_cframe()
     elif isinstance(array, remote_proxy.ServerRemoteProxy):
-        data = await concurrency.run_in_threadpool(
-            lambda: blosc2.asarray(array[() if slice_ is None else slice_]).to_cframe()
-        )
+        data = await read_remote_proxy(array, () if slice_ is None else slice_, abspath)
     elif isinstance(array, blosc2.NDArray):
         # Using NDArray.slice() allows a fast path when it is aligned with the chunks
         # As we are going to serialize the slice right away, it is not clear in which
@@ -1252,6 +1289,7 @@ async def post_fetch_data(
 async def download_data(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
+    include_cache: bool = True,
     accept_encoding: str | None = fastapi.Header(None),
     range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
@@ -1284,7 +1322,7 @@ async def download_data(
     decompress = accept_encoding != "blosc2"
     # Read before creating the response: a bad path must 404 up front, not
     # abort the stream after the 200 headers already went out.
-    content = await get_file_content(path, user, decompress=decompress)
+    content = await get_file_content(path, user, decompress=decompress, include_cache=include_cache)
     srv_utils.refuse_range(range_header, path)
 
     async def downloader():
@@ -1382,6 +1420,16 @@ async def get_chunk(
         if isinstance(container, blosc2.LazyArray):
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
+        elif isinstance(container, remote_proxy.ServerRemoteProxy):
+            before = abspath.stat().st_size
+            cache_limit = remote_proxy_cache_limit(container)
+            chunk = await concurrency.run_in_threadpool(
+                lambda: container.get_chunk(nchunk, cache_limit=cache_limit)
+            )
+            if settings.quota:
+                growth = max(0, abspath.stat().st_size - before)
+                if growth:
+                    account_chunk_written(growth)
         else:
             schunk = getattr(container, "schunk", container)
             chunk = schunk.get_chunk(nchunk)
@@ -2434,12 +2482,12 @@ async def remove(
         # Try to unlink the file. NotADirectoryError: a path descending into a
         # container file (e.g. foo.h5/g) names no real file of its own.
         try:
-            abspath.unlink()
+            srv_utils.unlink_with_b2lock(abspath)
         except (FileNotFoundError, NotADirectoryError):
             # Try adding a .b2 extension
             abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
-                abspath.unlink()
+                srv_utils.unlink_with_b2lock(abspath)
             except (FileNotFoundError, NotADirectoryError) as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
@@ -3884,7 +3932,7 @@ async def htmx_delete(
         if not abspath.exists():
             return fastapi.HTTPException(status_code=404)
 
-    abspath.unlink()
+    srv_utils.unlink_with_b2lock(abspath)
 
     # Redirect to home
     url = make_url(request, "html_home")
@@ -3896,7 +3944,7 @@ async def get_container(path, user):
     return open_b2(abspath, path)
 
 
-async def get_file_content(path, user, decompress=True):
+async def get_file_content(path, user, decompress=True, include_cache=True):
     """
     This helper function returns the contents of the file at the given path, as a byte
     string (if the given user has acces to it).
@@ -3915,6 +3963,16 @@ async def get_file_content(path, user, decompress=True):
     """
     abspath = get_abspath(path, user)
     suffix = abspath.suffix
+
+    if suffix in {".b2frame", ".b2nd"}:
+        reference = remote_proxy.inspect(abspath)
+        if reference is not None:
+            lock = dataset_lock(abspath)
+            async with lock:
+                carrier, payload = remote_proxy.inspect(abspath)
+                return await concurrency.run_in_threadpool(
+                    lambda: remote_proxy.export_cframe(carrier, payload, include_cache=include_cache)
+                )
 
     if suffix == ".b2":
         # Blosc2 compressed files are decompressed

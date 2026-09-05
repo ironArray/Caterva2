@@ -34,10 +34,12 @@ And then simply run `cat2-server` to start it on all network interfaces on port 
 
 ## Remote reference policy
 
-A persisted `blosc2.RemoteProxy` is a small B2ND carrier that asks Caterva2 to
-read another dataset. Caterva2 can inspect and report the carrier's stored
-shape, dtype, chunk, and block metadata without contacting that source.
-Outbound resolution is disabled by default.
+A persisted `blosc2.RemoteProxy` is a B2ND carrier that asks Caterva2 to read
+another dataset. With its disk cache enabled, fetched compressed chunks are
+retained inside that same carrier up to the proxy's finite `max_cache_bytes`.
+Caterva2 can inspect and report its stored shape, dtype, chunk, block, and proxy
+metadata without contacting the source. Outbound resolution is disabled by
+default.
 
 The initial opt-in backend supports public, credential-free HTTPS sources:
 
@@ -60,12 +62,17 @@ Source URLs containing user information, query parameters, or fragments are
 also rejected. These checks are applied by the server even when the carrier was
 created by a client that performed its own validation.
 
-The limits bound each upstream request's time, source rank, logical
-uncompressed size, chunk count, and concurrent range fetches. Set them for the
-capacity of the installation; they are not inferred from untrusted carrier
-metadata.
+The limits validate the remote array's structure and bound connection time and
+concurrent range fetches. They do not impose a network-work budget on each API
+request. The proxy's own cache limit bounds its retained compressed payload,
+while automatic carrier growth is also charged to the virtual server's existing
+shared `quota`. If no quota remains, reads still succeed but misses are not
+retained.
 
-S3, private-source credential selection, and remote references embedded inside
-persisted expressions are not enabled yet. Server credentials must eventually
-be selected from an administrator-controlled destination mapping and must never
-be accepted from a carrier.
+Public S3 objects are supported through credential-free HTTPS object URLs.
+Native `s3://` resolution, private-source credentials, and remote references
+embedded inside persisted expressions are not enabled.
+
+Physical downloads include valid warm proxy chunks by default. Clients can pass
+`include_cache=false` to download a cold carrier without mutating the hosted
+proxy. Logical `api/fetch` requests continue to return array data.

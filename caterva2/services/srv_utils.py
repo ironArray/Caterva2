@@ -630,7 +630,7 @@ def iterdir(root):
         yield path, relpath
 
 
-def walk_files(root, exclude=None):
+def walk_files(root, exclude=None, *, include_internal=False):
     if exclude is None:
         exclude = set()
 
@@ -638,8 +638,16 @@ def walk_files(root, exclude=None):
         for path in root.glob("**/*"):
             if path.is_file():
                 relpath = path.relative_to(root)
+                if not include_internal and path.name.endswith(".b2lock"):
+                    continue
                 if str(relpath) not in exclude:
                     yield path, relpath
+
+
+def unlink_with_b2lock(path):
+    """Remove a file and the advisory lock sidecar belonging to it."""
+    path.unlink()
+    path.with_name(path.name + ".b2lock").unlink(missing_ok=True)
 
 
 #

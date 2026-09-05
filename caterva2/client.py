@@ -300,7 +300,7 @@ class _FileOpsMixin:
             raise ValueError(f"Not supported for a member inside a container file: {self.path}")
         return self.path
 
-    def download(self, localpath=None):
+    def download(self, localpath=None, *, include_cache=True):
         """
         Downloads the file to storage.
 
@@ -309,6 +309,9 @@ class _FileOpsMixin:
         localpath : Path, optional
             The destination path for the downloaded file.  If not specified, the file will
             be downloaded to the current working directory.
+        include_cache : bool, optional
+            For a RemoteProxy carrier, include its valid warm cache data.
+            Pass false to download a cold proxy without changing the server copy.
 
         Returns
         -------
@@ -329,6 +332,7 @@ class _FileOpsMixin:
         return self.client.download(
             self._toplevel_path(),
             localpath=localpath,
+            include_cache=include_cache,
         )
 
     def unfold(self):
@@ -528,9 +532,12 @@ class File(_FileOpsMixin):
         schunk_meta = self.meta.get("schunk", self.meta)
         return schunk_meta.get("vlmeta", {})
 
-    def get_download_url(self):
+    def get_download_url(self, *, include_cache=True):
         """
         Retrieves the download URL for the file.
+
+        ``include_cache=False`` requests a cold RemoteProxy carrier. It has no
+        effect on other file types.
 
         Returns
         -------
@@ -546,7 +553,7 @@ class File(_FileOpsMixin):
         >>> file.get_download_url()
         'https://cat2.cloud/demo/api/fetch/example/ds-1d.b2nd'
         """
-        return api_utils.get_download_url(self.path, self.urlbase)
+        return api_utils.get_download_url(self.path, self.urlbase, include_cache=include_cache)
 
     def __getitem__(self, item):
         """
@@ -1489,7 +1496,7 @@ class Client:
 
         return localpath
 
-    def download(self, dataset, localpath=None):
+    def download(self, dataset, localpath=None, *, include_cache=True):
         """
         Downloads a dataset to local storage.
 
@@ -1504,6 +1511,9 @@ class Client:
         localpath : Path, optional
             Local path to save the downloaded dataset. Defaults to the current
             working directory if not specified.
+        include_cache : bool, optional
+            For a RemoteProxy carrier, include its valid warm cache data.
+            Pass false to download a cold proxy without changing the server copy.
 
         Returns
         -------
@@ -1519,7 +1529,7 @@ class Client:
         PosixPath('example/ds-2d-fields.b2nd')
         """
         urlbase, dataset = _format_paths(self.urlbase, dataset)
-        url = api_utils.get_download_url(dataset, urlbase)
+        url = api_utils.get_download_url(dataset, urlbase, include_cache=include_cache)
         localpath = pathlib.Path(localpath) if localpath else None
         if localpath is None:
             path = "." / pathlib.Path(dataset)

@@ -152,8 +152,9 @@ def key_to_indices(key, ndim=None):
     return json.dumps(out, separators=(",", ":"))
 
 
-def get_download_url(path, urlbase):
-    return f"{urlbase}/api/download/{path}"
+def get_download_url(path, urlbase, *, include_cache=True):
+    url = f"{urlbase}/api/download/{path}"
+    return url if include_cache else f"{url}?include_cache=false"
 
 
 def get_handle_url(path, urlbase):
