@@ -390,15 +390,18 @@ class ServerRemoteProxy:
         with carrier_thread_lock(self.path):
             carrier = raw_carrier(self.path, locking=True)
             with carrier.schunk.holding_lock():
-                sizes = carrier.schunk.vlmeta.get("proxy-cache-sizes")
-                if isinstance(sizes, dict):
-                    return sum(size for size in sizes.values() if isinstance(size, int) and size >= 0)
+                # The physical payload is authoritative. Uploaded size tables
+                # can be stale after older unbounded writers (or user supplied).
                 return carrier.schunk.cbytes
 
     def _backend(self, cache_limit=None, *, carrier=None):
-        if self.cache_policy != "disk" or cache_limit == 0:
+        if self.cache_policy != "disk":
             return blosc2.Proxy(self.src, _refresh_source=False)
-        carrier = raw_carrier(self.path, mode="a", locking=True) if carrier is None else carrier
+        mode = "r" if cache_limit == 0 else "a"
+        carrier = raw_carrier(self.path, mode=mode, locking=True) if carrier is None else carrier
+        if cache_limit == 0:
+            # Consume warm data without writing metadata or retaining misses.
+            return blosc2.Proxy(self.src, _cache=carrier, _refresh_source=False)
         if cache_limit is None:
             limit = self.max_cache_bytes
         elif self.max_cache_bytes is None:
@@ -413,10 +416,10 @@ class ServerRemoteProxy:
         )
 
     def read(self, item, *, cache_limit=None):
-        if self.cache_policy != "disk" or cache_limit == 0:
+        if self.cache_policy != "disk":
             return self._backend(cache_limit)[item]
         with carrier_thread_lock(self.path):
-            carrier = raw_carrier(self.path, mode="a", locking=True)
+            carrier = raw_carrier(self.path, mode="r" if cache_limit == 0 else "a", locking=True)
             with carrier.schunk.holding_lock():
                 backend = self._backend(cache_limit, carrier=carrier)
                 return backend[item]
@@ -425,7 +428,7 @@ class ServerRemoteProxy:
         return self.read(item)
 
     def get_chunk(self, nchunk, *, cache_limit=None):
-        if self.cache_policy != "disk" or cache_limit == 0:
+        if self.cache_policy != "disk":
             return self.src.get_chunk(nchunk)
         item = tuple(
             slice(coord * chunk, min((coord + 1) * chunk, size))
@@ -442,10 +445,15 @@ class ServerRemoteProxy:
             )
         )
         with carrier_thread_lock(self.path):
-            carrier = raw_carrier(self.path, mode="a", locking=True)
+            carrier = raw_carrier(self.path, mode="r" if cache_limit == 0 else "a", locking=True)
             with carrier.schunk.holding_lock():
                 backend = self._backend(cache_limit, carrier=carrier)
-                backend.fetch(item)
+                try:
+                    backend.fetch(item)
+                except ValueError as exc:
+                    if cache_limit != 0 or "reading mode" not in str(exc):
+                        raise
+                    return self.src.get_chunk(nchunk)
                 chunk = backend.schunk.get_chunk(nchunk)
                 backend._enforce_cache_limit(item)
         return chunk

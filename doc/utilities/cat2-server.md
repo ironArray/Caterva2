@@ -40,8 +40,9 @@ policy but execute without retained caching (using the same no-retention executi
 path as `NONE`), avoiding unmanaged memory use on the server while preserving
 the requested client limit for download. With a `DISK` cache, fetched compressed
 chunks are retained inside the carrier up to the proxy's `max_cache_bytes` (or
-unbounded when `max_cache_bytes` is `None`, still subject to customer quota if
-configured). Caterva2 can inspect and report its stored shape, dtype, chunk, block, and proxy
+unbounded when `max_cache_bytes` is `None`) when no customer quota is configured.
+With a quota, existing warm disk chunks are reused but misses are not retained.
+Caterva2 can inspect and report its stored shape, dtype, chunk, block, and proxy
 metadata without contacting the source. Outbound resolution is disabled by
 default.
 
@@ -69,9 +70,13 @@ created by a client that performed its own validation.
 The limits validate the remote array's structure and bound connection time and
 concurrent range fetches. They do not impose a network-work budget on each API
 request. The proxy's own cache limit bounds its retained compressed payload,
-while automatic carrier growth is also charged to the virtual server's existing
-shared `quota`. If no quota remains, reads still succeed but misses are not
-retained.
+while a configured customer `quota` makes all DISK proxy caches read-only.
+Valid warm chunks are reused, but misses are served without retention, even when
+quota space remains. This conservative restriction prevents cache fills from
+overspending physical storage through metadata growth or concurrent workers.
+Automatic fills under quota require a future storage reservation mechanism shared
+with uploads and other writers. Without a quota, normal bounded or unbounded
+DISK caching applies.
 
 Public S3 objects are supported through credential-free HTTPS object URLs.
 Native `s3://` resolution, private-source credentials, and remote references

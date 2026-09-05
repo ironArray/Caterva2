@@ -36,7 +36,8 @@ register = true  # allow users to register
 # otherwise non-public destination addresses, and embedded expression
 # references are refused. MEMORY carriers are accepted under the same source
 # policy but execute without retained caching (same as NONE). DISK proxies cache
-# chunks inside their carrier up to persisted max_cache_bytes (or unbounded if None), subject to server quota.
+# chunks inside their carrier up to persisted max_cache_bytes (or unbounded if None).
+# With a customer quota configured, warm DISK chunks are reused but misses are not retained.
 # [server.remote_proxy]
 # enabled = true
 # allowed_hosts = ["datasets.example.org", "objects.example.org:8443"]

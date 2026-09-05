@@ -176,17 +176,18 @@ def account_chunk_written(nbytes: int) -> None:
 
 
 def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteProxy) -> int | None:
-    """Return the per-carrier cache bound after applying remaining customer quota."""
+    """Return the cache allowance; quota-enabled servers consume caches read-only.
+
+    Payload limits cannot reserve physical metadata growth, and per-dataset locks
+    do not coordinate other carriers, uploads, or workers. Until all writers share
+    a physical-storage reservation mechanism, automatic fills must not grow disk
+    usage under a customer quota. Zero still permits reuse of warm carrier data.
+    """
     if proxy.cache_policy != "disk":
         return 0
     if not settings.quota:
         return proxy.max_cache_bytes
-    retained = proxy.current_cache_bytes()
-    available = max(0, settings.quota - get_disk_usage_written(0))
-    quota_bound = retained + available
-    if proxy.max_cache_bytes is None:
-        return quota_bound
-    return min(proxy.max_cache_bytes, quota_bound)
+    return 0
 
 
 async def read_remote_proxy(proxy, item, abspath):

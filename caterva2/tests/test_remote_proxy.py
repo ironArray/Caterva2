@@ -553,7 +553,51 @@ def test_zero_effective_quota_reads_without_retaining(tmp_path):
     assert carrier_path.read_bytes() == before
 
 
-def test_customer_quota_reduces_the_proxy_cache_limit(monkeypatch):
+@pytest.mark.parametrize("limit", [None, 1_000_000])
+def test_read_only_cache_reuses_warm_chunks_and_does_not_retain_misses(tmp_path, limit):
+    proxy, data, path = _server_proxy(tmp_path, "readonly-cache", max_cache_bytes=limit)
+    proxy.get_chunk(0)
+    before = path.read_bytes()
+    mtime = path.stat().st_mtime_ns
+    proxy.src.traffic.reset()
+    np.testing.assert_array_equal(proxy.read(slice(0, 10), cache_limit=0), data[:10])
+    proxy.get_chunk(0, cache_limit=0)
+    assert proxy.src.traffic.requests == 0
+    np.testing.assert_array_equal(proxy.read(slice(10, 20), cache_limit=0), data[10:20])
+    assert proxy.src.traffic.requests > 0
+    proxy.src.traffic.reset()
+    proxy.get_chunk(1, cache_limit=0)
+    assert proxy.src.traffic.requests > 0
+    assert path.read_bytes() == before
+    assert path.stat().st_mtime_ns == mtime
+
+
+def test_concurrent_quota_reads_do_not_grow_distinct_carriers(tmp_path, monkeypatch):
+    monkeypatch.setenv("CATERVA2_SECRET", "remote-proxy-test-secret")
+    from caterva2.services import server
+
+    monkeypatch.setattr(server.settings, "quota", 1)
+    entries = [_server_proxy(tmp_path, name, max_cache_bytes=None) for name in ("left", "right")]
+    before = [path.read_bytes() for _, _, path in entries]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(proxy.read, (), cache_limit=server.remote_proxy_cache_limit(proxy))
+            for proxy, _, _ in entries
+        ]
+        for future, (_, data, _) in zip(futures, entries, strict=True):
+            np.testing.assert_array_equal(future.result(timeout=10), data)
+    assert [path.read_bytes() for _, _, path in entries] == before
+
+
+def test_cache_accounting_ignores_stale_size_table(tmp_path):
+    proxy, _, path = _server_proxy(tmp_path, "stale-table", max_cache_bytes=None)
+    proxy.read(())
+    carrier = remote_proxy.raw_carrier(path, mode="a")
+    carrier.schunk.vlmeta["proxy-cache-sizes"] = {"0": 1}
+    assert proxy.current_cache_bytes() == carrier.schunk.cbytes
+
+
+def test_customer_quota_disables_cache_growth(monkeypatch):
     monkeypatch.setenv("CATERVA2_SECRET", "remote-proxy-test-secret")
     from caterva2.services import server
 
@@ -567,10 +611,10 @@ def test_customer_quota_reduces_the_proxy_cache_limit(monkeypatch):
 
     monkeypatch.setattr(server.settings, "quota", 1_000)
     monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 900)
-    assert server.remote_proxy_cache_limit(Proxy()) == 300
+    assert server.remote_proxy_cache_limit(Proxy()) == 0
 
     monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 1_000)
-    assert server.remote_proxy_cache_limit(Proxy()) == 200
+    assert server.remote_proxy_cache_limit(Proxy()) == 0
 
     class UnlimitedProxy:
         cache_policy = "disk"
@@ -580,13 +624,13 @@ def test_customer_quota_reduces_the_proxy_cache_limit(monkeypatch):
         def current_cache_bytes():
             return 200
 
-    # Under quota, unlimited disk cache is bounded by available quota (200 + 100 = 300)
+    # Any configured quota disables automatic growth, regardless of remaining space.
     monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 900)
-    assert server.remote_proxy_cache_limit(UnlimitedProxy()) == 300
+    assert server.remote_proxy_cache_limit(UnlimitedProxy()) == 0
 
-    # When quota is exhausted, bounded by retained bytes (200 + 0 = 200)
+    # Exhausted quota also leaves the carrier read-only.
     monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 1_000)
-    assert server.remote_proxy_cache_limit(UnlimitedProxy()) == 200
+    assert server.remote_proxy_cache_limit(UnlimitedProxy()) == 0
 
     # Without quota, unlimited disk cache returns None
     monkeypatch.setattr(server.settings, "quota", 0)

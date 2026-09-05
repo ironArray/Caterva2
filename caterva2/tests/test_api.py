@@ -246,8 +246,8 @@ async def test_remote_proxy_memory_enabled_resolution_fetch_and_chunk(tmp_path, 
         def get(self, key, default=None):
             return self.values.get(key, default)
 
-    server.settings.statedir = tmp_path / "statedir"
-    server.settings.public = server.settings.statedir / "public"
+    monkeypatch.setattr(server.settings, "statedir", tmp_path / "statedir")
+    monkeypatch.setattr(server.settings, "public", server.settings.statedir / "public")
     server.settings.public.mkdir(parents=True, exist_ok=True)
 
     data = np.arange(40, dtype=np.int32)
@@ -271,6 +271,7 @@ async def test_remote_proxy_memory_enabled_resolution_fetch_and_chunk(tmp_path, 
     payload["source"]["urlpath"] = url
     carrier.schunk.vlmeta["b2o"] = payload
 
+    monkeypatch.setattr(remote_proxy, "policy", remote_proxy.policy)
     remote_proxy.configure(
         _Conf(
             {
@@ -292,7 +293,7 @@ async def test_remote_proxy_memory_enabled_resolution_fetch_and_chunk(tmp_path, 
         upstream_reads.append(path)
         return orig_cat_file(path, *args, **kwargs)
 
-    mem_fs.cat_file = traced_cat_file
+    monkeypatch.setattr(mem_fs, "cat_file", traced_cat_file)
 
     monkeypatch.setattr(remote_proxy, "_public_addresses", lambda host, port: ("93.184.216.34",))
     monkeypatch.setattr(remote_proxy, "_https_filesystem", lambda host, addr: mem_fs)
