@@ -19,6 +19,7 @@ from __future__ import annotations
 import ipaddress
 import math
 import socket
+import sqlite3
 import threading
 import weakref
 from dataclasses import dataclass
@@ -29,6 +30,8 @@ import blosc2
 import numpy as np
 from blosc2.b2objects import make_b2object_carrier, write_b2object_payload
 from fsspec.implementations.http import HTTPFileSystem
+
+from caterva2.services import storage_quota
 
 
 class RemoteProxyDenied(ValueError):
@@ -375,6 +378,7 @@ class ServerRemoteProxy:
         self.cparams = source.cparams
         self.path = carrier.schunk.urlpath
         self.requested_cache_policy = payload["cache_policy"]
+        self.requested_payload = dict(payload)
         self.requested_max_cache_bytes = payload["max_cache_bytes"]
         self.cache_policy = _effective_cache_policy(self.requested_cache_policy)
         self.max_cache_bytes = self.requested_max_cache_bytes if self.cache_policy == "disk" else None
@@ -393,6 +397,60 @@ class ServerRemoteProxy:
                 # The physical payload is authoritative. Uploaded size tables
                 # can be stale after older unbounded writers (or user supplied).
                 return carrier.schunk.cbytes
+
+    def quota_read(self, quota, item=(), *, nchunk=None):
+        """Assemble on an immutable candidate and admit its exact physical size."""
+        if self.cache_policy != "disk" or getattr(self.src, "stamp", None) is None:
+            return (
+                self.get_chunk(nchunk, cache_limit=0)
+                if nchunk is not None
+                else self.read(item, cache_limit=0)
+            )
+        try:
+            frame, generation = quota.snapshot(self.path)
+        except (OSError, RuntimeError, ValueError, sqlite3.Error):
+            return (
+                self.get_chunk(nchunk, cache_limit=0)
+                if nchunk is not None
+                else self.read(item, cache_limit=0)
+            )
+        if frame is None or len(frame) > quota.work_bytes:
+            return (
+                self.get_chunk(nchunk, cache_limit=0)
+                if nchunk is not None
+                else self.read(item, cache_limit=0)
+            )
+        carrier = blosc2.ndarray_from_cframe(frame, copy=True)
+        if carrier.schunk.vlmeta.get("b2o") != self.requested_payload:
+            return (
+                self.src.get_chunk(nchunk)
+                if nchunk is not None
+                else blosc2.Proxy(self.src, _refresh_source=False)[item]
+            )
+        backend = blosc2.Proxy(
+            self.src, _cache=carrier, _refresh_source=False, _max_cache_bytes=self.max_cache_bytes
+        )
+        if nchunk is None:
+            result = backend[item]
+        else:
+            grid = tuple(math.ceil(s / c) for s, c in zip(self.shape, self.chunks, strict=True))
+            item = tuple(
+                slice(int(i) * c, min((int(i) + 1) * c, s))
+                for i, c, s in zip(np.unravel_index(nchunk, grid), self.chunks, self.shape, strict=True)
+            )
+            backend.fetch(item)
+            result = backend.schunk.get_chunk(nchunk)
+            backend._enforce_cache_limit(item)
+        candidate = carrier.to_cframe()
+        try:
+            if candidate != frame:
+                quota.publish(self.path, candidate, expected=generation, cache=True)
+            else:
+                quota.touch(self.path)
+        except (storage_quota.QuotaExceeded, storage_quota.StorageBusy, OSError, sqlite3.Error):
+            # The logical result already exists. Retention is strictly optional.
+            pass
+        return result
 
     def _backend(self, cache_limit=None, *, carrier=None):
         if self.cache_policy != "disk":

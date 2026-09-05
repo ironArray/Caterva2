@@ -373,7 +373,7 @@ class HDF5Proxy(blosc2.Operand):
         self.b2arr = blosc2.empty(self.dset.shape or (), dtype=self.dset.dtype, **b2args)
         return self
 
-    def __init__(self, b2arr, h5file=None, dsetname=None):
+    def __init__(self, b2arr, h5file=None, dsetname=None, *, writer=None):
         if b2arr is not None:
             # The file has been opened already, so we just need to set the filename and dataset name
             self.dsetname = b2arr.vlmeta["_dsetname"]
@@ -426,7 +426,7 @@ class HDF5Proxy(blosc2.Operand):
             self.b2arr = blosc2.empty(
                 shape=shape,
                 dtype=dtype,
-                urlpath=urlpath,
+                urlpath=urlpath if writer is None else None,
                 mode="w",
                 **b2args,
             )
@@ -436,7 +436,7 @@ class HDF5Proxy(blosc2.Operand):
             del self.dset
             del self.fname
             del self.dsetname
-            if os.path.exists(urlpath):
+            if writer is None and os.path.exists(urlpath):
                 os.remove(urlpath)
             return
 
@@ -717,7 +717,7 @@ def serialize_h5_attrs_to_json(h5_attrs, indent=2):
     return json_str
 
 
-def create_hdf5_proxies(path: str | os.PathLike) -> Iterator[HDF5Proxy]:
+def create_hdf5_proxies(path: str | os.PathLike, *, writer=None) -> Iterator[HDF5Proxy]:
     """Create a generator of HDF5 proxies from the given HDF5 file."""
     attrs_dsetname = "!_attrs_.json.b2"  # the Blosc2 dataset name for the Group attributes in HDF5
     h5file = h5py.File(path, "r")
@@ -727,7 +727,10 @@ def create_hdf5_proxies(path: str | os.PathLike) -> Iterator[HDF5Proxy]:
     os.makedirs(dirname, exist_ok=True)
     jsonpath = os.path.join(dirname, attrs_dsetname)
     data = serialize_h5_attrs_to_json(h5file.attrs)
-    blosc2.SChunk(data=data.encode("utf-8"), urlpath=jsonpath, mode="w")
+    if writer is None:
+        blosc2.SChunk(data=data.encode("utf-8"), urlpath=jsonpath, mode="w")
+    else:
+        writer(jsonpath, blosc2.SChunk(data=data.encode("utf-8")).to_cframe())
 
     # Recursive function to visit all groups and datasets
     def visit_group(group):
@@ -735,14 +738,20 @@ def create_hdf5_proxies(path: str | os.PathLike) -> Iterator[HDF5Proxy]:
             full_path = f"{group.name}/{name}".lstrip("/")
 
             if isinstance(obj, h5py.Dataset):
-                yield HDF5Proxy(None, h5file, full_path)
+                proxy = HDF5Proxy(None, h5file, full_path, writer=writer)
+                if writer is not None and hasattr(proxy, "b2arr"):
+                    writer(os.path.join(dirname, full_path + ".b2nd"), proxy.b2arr.to_cframe())
+                yield proxy
             if isinstance(obj, h5py.Group):
                 # Store HDF5 group attributes as JSON
                 groupname = dirname + "/" + full_path
                 os.makedirs(groupname, exist_ok=True)
                 jsonpath = os.path.join(groupname, attrs_dsetname)
                 data = serialize_h5_attrs_to_json(obj.attrs)
-                blosc2.SChunk(data=data.encode("utf-8"), urlpath=jsonpath, mode="w")
+                if writer is None:
+                    blosc2.SChunk(data=data.encode("utf-8"), urlpath=jsonpath, mode="w")
+                else:
+                    writer(jsonpath, blosc2.SChunk(data=data.encode("utf-8")).to_cframe())
 
                 # Recursively visit subgroups
                 yield from visit_group(obj)

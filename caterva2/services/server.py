@@ -21,6 +21,7 @@ import mimetypes
 import os
 import pathlib
 import shutil
+import sqlite3
 import string
 import tarfile
 import threading
@@ -50,6 +51,7 @@ import pydantic
 import pygments
 import uvicorn
 from blosc2 import linalg_funcs_list as linalg_funcs
+from blosc2.lazyexpr import LazyArrayEnum
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, Response, UploadFile, concurrency, responses
@@ -61,7 +63,7 @@ from starlette.datastructures import MutableHeaders
 
 # Project
 from caterva2 import hdf5, models, utils
-from caterva2.services import db, providers, remote_proxy, schemas, settings, srv_utils, users
+from caterva2.services import db, providers, remote_proxy, schemas, settings, srv_utils, storage_quota, users
 from caterva2.services.notebook import inject_pyodide_bootstrap_cell
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -136,6 +138,8 @@ def guess_type(path):
 
 
 def get_disk_usage():
+    if settings.quota:
+        return quota_coordinator().usage()["used"]
     exclude = {"db.json", "db.sqlite"}
     return sum(
         path.stat().st_size
@@ -175,13 +179,114 @@ def account_chunk_written(nbytes: int) -> None:
     _disk_usage["written"] += nbytes
 
 
+_quota_instances = {}
+
+
+def quota_coordinator():
+    """Independent of authentication; one connection is opened per DB operation."""
+    if not settings.quota:
+        return None
+    work_bytes = settings.parse_size(settings.conf.get(".quota_work_bytes", "1G"))
+    key = (str(settings.statedir), settings.quota, work_bytes)
+    coordinator = _quota_instances.get(key)
+    if coordinator is None:
+        coordinator = storage_quota.StorageQuota(settings.statedir, settings.quota, work_bytes=work_bytes)
+        _quota_instances[key] = coordinator
+    return coordinator
+
+
+def write_dataset(path, data, *, expected=None, compare=False):
+    """Store final encoded bytes through shared admission when quota is enabled."""
+    path = pathlib.Path(path)
+    quota = quota_coordinator()
+    if quota is not None:
+        if not compare:
+            _, expected = quota.snapshot(path)
+        quota.publish(path, data, expected=expected)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
+def remove_dataset(path):
+    """Account deletions file-by-file; directory removal is not an atomic batch."""
+    path = pathlib.Path(path)
+    quota = quota_coordinator()
+    if quota is None:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            srv_utils.unlink_with_b2lock(path)
+        return
+    if path.is_dir():
+        for entry in list(path.iterdir()):
+            remove_dataset(entry)
+        with contextlib.suppress(OSError):
+            path.rmdir()
+    elif path.name.endswith(".b2lock"):
+        return  # Stable locks are operational storage, not deletable dataset bytes.
+    else:
+        _, generation = quota.snapshot(path)
+        if generation is None:
+            raise FileNotFoundError(path)
+        quota.publish(path, None, expected=generation, prune=False)
+
+
+def copy_dataset(source, destination):
+    source, destination = pathlib.Path(source), pathlib.Path(destination)
+    if source.resolve() == destination.resolve():
+        return
+    if source.is_dir() and source.resolve() in destination.resolve().parents:
+        raise ValueError("cannot copy a directory into itself")
+    if source.is_dir():
+        destination.mkdir(parents=True, exist_ok=True)
+        for entry in source.iterdir():
+            if not entry.name.endswith(".b2lock"):
+                copy_dataset(entry, destination / entry.name)
+    else:
+        write_dataset(destination, source.read_bytes())
+
+
+def move_dataset(source, destination):
+    """Copy then delete only the source generation that was actually copied."""
+    source, destination = pathlib.Path(source), pathlib.Path(destination)
+    if source.resolve() == destination.resolve():
+        return
+    if source.is_dir():
+        if source.resolve() in destination.resolve().parents:
+            raise ValueError("cannot move a directory into itself")
+        destination.mkdir(parents=True, exist_ok=True)
+        for entry in list(source.iterdir()):
+            if not entry.name.endswith(".b2lock"):
+                move_dataset(entry, destination / entry.name)
+        with contextlib.suppress(OSError):
+            source.rmdir()
+    else:
+        quota = quota_coordinator()
+        data, generation = quota.snapshot(source)
+        if generation is None:
+            raise storage_quota.StorageBusy("move source was removed")
+        write_dataset(destination, data)
+        quota.publish(source, None, expected=generation, prune=False)
+
+
+def quota_proxy_operation(proxy, item=(), *, nchunk=None):
+    try:
+        quota = quota_coordinator()
+    except (OSError, sqlite3.Error):
+        quota = None
+    if quota is None:
+        return proxy.read(item, cache_limit=0) if nchunk is None else proxy.get_chunk(nchunk, cache_limit=0)
+    return proxy.quota_read(quota, item, nchunk=nchunk)
+
+
 def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteProxy) -> int | None:
-    """Return the cache allowance; quota-enabled servers consume caches read-only.
+    """Return the allowance for the legacy, in-place cache path.
 
     Payload limits cannot reserve physical metadata growth, and per-dataset locks
-    do not coordinate other carriers, uploads, or workers. Until all writers share
-    a physical-storage reservation mechanism, automatic fills must not grow disk
-    usage under a customer quota. Zero still permits reuse of warm carrier data.
+    do not coordinate other carriers, uploads, or workers. Quota-enabled requests
+    use quota_proxy_operation instead; the in-place fallback must remain read-only.
+    Zero still permits reuse of warm carrier data.
     """
     if proxy.cache_policy != "disk":
         return 0
@@ -194,16 +299,14 @@ async def read_remote_proxy(proxy, item, abspath):
     """Read one remote selection while serializing and accounting cache mutation."""
     lock = dataset_lock(abspath)
     async with lock:
-        before = abspath.stat().st_size
+        if settings.quota:
+            return await concurrency.run_in_threadpool(
+                lambda: blosc2.asarray(quota_proxy_operation(proxy, item)).to_cframe()
+            )
         cache_limit = remote_proxy_cache_limit(proxy)
-        data = await concurrency.run_in_threadpool(
+        return await concurrency.run_in_threadpool(
             lambda: blosc2.asarray(proxy.read(item, cache_limit=cache_limit)).to_cframe()
         )
-        if settings.quota:
-            growth = max(0, abspath.stat().st_size - before)
-            if growth:
-                account_chunk_written(growth)
-        return data
 
 
 def truncate_path(path, size=35):
@@ -368,6 +471,8 @@ _setup_plugin_globals()
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.quota:
+        await concurrency.run_in_threadpool(quota_coordinator)
     # Initialize the (users) database
     if user_login_enabled():
         await db.create_db_and_tables(settings.statedir)
@@ -403,6 +508,23 @@ def custom_filesizeformat(value):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(storage_quota.QuotaExceeded)
+async def quota_exceeded(request, exc):
+    return responses.JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(storage_quota.StorageBusy)
+async def storage_busy(request, exc):
+    return responses.JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(sqlite3.Error)
+async def storage_unavailable(request, exc):
+    return responses.JSONResponse(status_code=503, content={"detail": "storage admission is unavailable"})
+
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # TODO: Support user verification
@@ -1425,15 +1547,12 @@ async def get_chunk(
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
         elif isinstance(container, remote_proxy.ServerRemoteProxy):
-            before = abspath.stat().st_size
-            cache_limit = remote_proxy_cache_limit(container)
-            chunk = await concurrency.run_in_threadpool(
-                lambda: container.get_chunk(nchunk, cache_limit=cache_limit)
-            )
             if settings.quota:
-                growth = max(0, abspath.stat().st_size - before)
-                if growth:
-                    account_chunk_written(growth)
+                chunk = await concurrency.run_in_threadpool(
+                    lambda: quota_proxy_operation(container, nchunk=nchunk)
+                )
+            else:
+                chunk = await concurrency.run_in_threadpool(container.get_chunk, nchunk)
         else:
             schunk = getattr(container, "schunk", container)
             chunk = schunk.get_chunk(nchunk)
@@ -1632,6 +1751,16 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         srv_utils.raise_bad_request("publishing needs fsspec, which is not installed here")
     destination = publish_destination(path)
     fs, target = fsspec.url_to_fs(destination)
+    if settings.quota and isinstance(fs, fsspec.implementations.local.LocalFileSystem):
+        target_path = pathlib.Path(target).resolve()
+        state = pathlib.Path(settings.statedir).resolve()
+        if target_path == state or state in target_path.parents:
+            srv_utils.raise_bad_request("local publish_root must be outside the server state directory")
+    if settings.quota:
+        quota = quota_coordinator()
+        frame, generation = quota.snapshot(abspath)
+        if generation is None:
+            raise storage_quota.StorageBusy("publish source was removed")
     # Published under a name of its own and moved into place, so that what
     # appears at the destination is a whole frame or nothing.  A reader that
     # polls for the array would otherwise open it mid-copy: the file exists from
@@ -1651,7 +1780,10 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
     if parent != target:
         fs.makedirs(parent, exist_ok=True)
     try:
-        with open(abspath, "rb") as source, fs.open(staging, "wb") as target_file:
+        with (
+            io.BytesIO(frame) if settings.quota else open(abspath, "rb") as source,
+            fs.open(staging, "wb") as target_file,
+        ):
             shutil.copyfileobj(source, target_file)
         fs.mv(staging, target)
     except BaseException:
@@ -1660,6 +1792,20 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         with contextlib.suppress(Exception):
             fs.rm(staging)
         raise
+    if settings.quota:
+        array = blosc2.ndarray_from_cframe(frame, copy=True)
+        array.schunk.vlmeta[PUBLISHED_URL] = destination
+        array.schunk.vlmeta[FILL_STATE] = PUBLISHED
+        published_frame = array.to_cframe()
+        try:
+            quota.publish(abspath, published_frame, expected=generation)
+        except storage_quota.StorageBusy:
+            # Concurrent publishers of the identical snapshot are idempotent.
+            # Do not bless another upload/fill merely because its URL matches.
+            current, _ = quota.snapshot(abspath)
+            if current != published_frame:
+                raise
+        return destination
     with dataset_thread_lock(abspath):
         array = blosc2.open(abspath, mode="a", locking=True)
         with array.schunk.holding_lock():
@@ -1680,6 +1826,49 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
     both find the slot free would otherwise both write it, and the second would
     move every chunk that came after the first.
     """
+    if settings.quota:
+        quota = quota_coordinator()
+        frame, generation = quota.snapshot(abspath)
+        try:
+            array = blosc2.ndarray_from_cframe(frame, copy=True)
+        except (TypeError, ValueError, RuntimeError) as exc:
+            srv_utils.raise_bad_request(f"{abspath.name} is not a stored NDArray: {exc}")
+        schunk = array.schunk
+        if "b2o" in schunk.meta or "proxy-source" in schunk.meta:
+            srv_utils.raise_bad_request("chunk writes require an ordinary stored NDArray")
+        if not 0 <= nchunk < schunk.nchunks:
+            srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
+        try:
+            nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
+            typesize = chunk_typesize(chunk)
+        except Exception:
+            srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
+        if (nbytes, blocksize, typesize) != (
+            schunk.chunksize,
+            schunk.blocksize,
+            filter_typesize(schunk.typesize),
+        ):
+            srv_utils.raise_bad_request("the chunk geometry does not match the array")
+        if not chunk_is_unwritten(schunk, nchunk):
+            raise fastapi.HTTPException(status_code=409, detail=f"chunk {nchunk} was already written")
+        schunk.update_chunk(nchunk, chunk)
+        if FILL_NONCE not in schunk.vlmeta:
+            schunk.vlmeta[FILL_NONCE] = uuid.uuid4().hex
+            schunk.vlmeta[FILL_STATE] = FILLING
+        written = sum(not chunk_is_unwritten(schunk, i) for i in range(schunk.nchunks))
+        state = schunk.vlmeta.get(FILL_STATE, FILLING)
+        publish = written == schunk.nchunks and state == FILLING and bool(settings.publish_root)
+        if written == schunk.nchunks and state == FILLING:
+            state = PUBLISHING if publish else COMPLETE
+            schunk.vlmeta[FILL_STATE] = state
+        quota.publish(abspath, array.to_cframe(), expected=generation)
+        return {
+            "nchunk": nchunk,
+            "written": written,
+            "nchunks": schunk.nchunks,
+            "state": state,
+            "publish": publish,
+        }
     with dataset_thread_lock(abspath):
         try:
             array = blosc2.open(abspath, mode="a", locking=True)
@@ -1812,23 +2001,12 @@ async def write_chunk(
     chunk = await request.body()
     if not chunk:
         srv_utils.raise_bad_request("no chunk was sent")
-    if settings.quota:
-        # The array was laid out empty, so its slots were never charged for: what
-        # a fill costs arrives a chunk at a time, and is checked the same way --
-        # off a kept walk of the state directory rather than a fresh one, since
-        # this runs once per chunk (see `get_disk_usage_written`)
-        total_size = get_disk_usage_written(len(chunk))
-        if total_size > settings.quota:
-            srv_utils.raise_bad_request("Write failed because quota limit has been exceeded.")
 
     # One lock per dataset in this process, and the frame's own lock across
     # processes: the write below blocks, so it cannot hold the event loop
     lock = dataset_lock(abspath)
     async with lock:
         answer = await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
-    if settings.quota:
-        # Counted only where it is checked, so the two stay paired
-        account_chunk_written(len(chunk))
     if answer.pop("publish"):
         # After the response, and outside the lock: the writer that finished the
         # fill should not wait for the upload, and no other writer should either
@@ -1972,7 +2150,34 @@ def make_expr(
 
     abspath.mkdir(exist_ok=True, parents=True)
 
-    if compute:
+    if settings.quota:
+        # Serialize before admission: metadata and compression determine the charge.
+        result = arr.compute() if compute else arr
+        try:
+            frame = result.to_cframe()
+        except (TypeError, ValueError):
+            if compute or func is None:
+                raise
+            # LazyUDF.save supports legacy Python UDFs that to_cframe cannot
+            # encode as b2objects. Build that same metadata carrier in memory.
+            carrier = blosc2.empty(
+                result.shape,
+                dtype=result.dtype,
+                chunks=result.chunks,
+                blocks=result.blocks,
+                meta={"LazyArray": LazyArrayEnum.UDF.value},
+            )
+            carrier.schunk.vlmeta["_LazyArray"] = {
+                "UDF": func,
+                "operands": {
+                    f"o{i}": str(get_writable_path(pathlib.Path(vars[f"o{i}"]), user))
+                    for i in range(len(var_dict))
+                },
+                "name": result.func.__name__,
+            }
+            frame = carrier.to_cframe()
+        write_dataset(urlpath, frame)
+    elif compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
         arr.save(urlpath=urlpath, mode="w")
@@ -2089,7 +2294,12 @@ async def move(
 
     # Make sure the destination directory exists
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    abspath.rename(dest_abspath)
+    if settings.quota:
+        # Reserve the copy before removing the source. No fictitious free-space
+        # credit; directory operations retain their existing non-atomic semantics.
+        move_dataset(abspath, dest_abspath)
+    else:
+        abspath.rename(dest_abspath)
 
     return str(destpath)
 
@@ -2143,7 +2353,9 @@ async def copy(
     #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
 
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.is_dir():
+    if settings.quota:
+        copy_dataset(abspath, dest_abspath)
+    elif abspath.is_dir():
         shutil.copytree(abspath, dest_abspath)
     else:
         shutil.copy(abspath, dest_abspath)
@@ -2221,20 +2433,6 @@ async def upload_file(
     data = await file.read()
     if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
-        newsize = schunk.nbytes
-    else:
-        newsize = len(data)
-
-    if settings.quota:
-        try:
-            oldsize = abspath.stat().st_size
-        except FileNotFoundError:
-            oldsize = 0
-
-        total_size = get_disk_usage() - oldsize + newsize
-        if total_size > settings.quota:
-            detail = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
@@ -2243,8 +2441,7 @@ async def upload_file(
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
-    with open(abspath, "wb") as f:
-        f.write(data)
+    await concurrency.run_in_threadpool(write_dataset, abspath, data)
 
     # Return the urlpath
     return str(path)
@@ -2290,20 +2487,6 @@ async def load_from_url(
 
     if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
-        newsize = schunk.nbytes
-    else:
-        newsize = len(data)
-
-    if settings.quota:
-        try:
-            oldsize = abspath.stat().st_size
-        except FileNotFoundError:
-            oldsize = 0
-
-        total_size = get_disk_usage() - oldsize + newsize
-        if total_size > settings.quota:
-            detail = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
@@ -2312,8 +2495,7 @@ async def load_from_url(
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
-    with open(abspath, "wb") as f:
-        f.write(data)
+    await concurrency.run_in_threadpool(write_dataset, abspath, data)
 
     # Return the urlpath
     return str(path)
@@ -2358,19 +2540,16 @@ async def append_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    newsize = len(data)
-
-    if settings.quota:
-        oldsize = abspath.stat().st_size
-
-        total_size = get_disk_usage() + oldsize + newsize
-        if total_size > settings.quota:
-            detail = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Append the data
     # The original dataset (open in append mode so it can be resized/written)
-    orig = blosc2.open(abspath, mode="a")
+    if settings.quota:
+        frame, generation = quota_coordinator().snapshot(abspath)
+        orig = blosc2.ndarray_from_cframe(frame, copy=True)
+        if "b2o" in orig.schunk.meta or "proxy-source" in orig.schunk.meta:
+            srv_utils.raise_bad_request("append requires an ordinary stored NDArray")
+    else:
+        orig = blosc2.open(abspath, mode="a")
     # The data to append is a cframe
     new = blosc2.ndarray_from_cframe(data)
     # Check that the shapes are compatible
@@ -2386,6 +2565,8 @@ async def append_file(
     orig.resize(result_shape)
     # Append the new data to orig along the first axis
     orig[orig.shape[0] - new_len :] = new_data
+    if settings.quota:
+        quota_coordinator().publish(abspath, orig.to_cframe(), expected=generation)
 
     # Return the new shape
     return result_shape
@@ -2423,32 +2604,17 @@ async def unfold_file(
         raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Unfold the container
-    dirname = None
     if abspath.suffix in {".h5", ".hdf5"}:
         # Create proxies for each dataset in HDF5 file
-        all_dsets = list(hdf5.create_hdf5_proxies(abspath))
+        all_dsets = list(hdf5.create_hdf5_proxies(abspath, writer=write_dataset if settings.quota else None))
         if len(all_dsets) == 0:
             detail = "No arrays found in HDF5 file"
             raise fastapi.HTTPException(detail=detail, status_code=400)
-        dirname = abspath.with_suffix("")
     else:
         detail = "Target file must be a zip, tar or hdf5 container"
         raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Check quota
-    if settings.quota:
-        # Get the size of the datasets (proxies) in new directory
-        newsize = 0
-        if os.path.exists(dirname):
-            # Traverse the directory and get the size for all files
-            for abspath, _ in srv_utils.walk_files(dirname):
-                newsize += os.path.getsize(abspath)
-        total_size = get_disk_usage() + newsize
-        if total_size > settings.quota:
-            # Remove the directory if it exists
-            shutil.rmtree(dirname)
-            detail = "Unfold failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Return the new directory name
     return path.stem
@@ -2481,17 +2647,17 @@ async def remove(
 
     # If abspath is a directory, remove the contents of the directory
     if abspath.is_dir():
-        shutil.rmtree(abspath)
+        remove_dataset(abspath)
     else:
         # Try to unlink the file. NotADirectoryError: a path descending into a
         # container file (e.g. foo.h5/g) names no real file of its own.
         try:
-            srv_utils.unlink_with_b2lock(abspath)
+            remove_dataset(abspath)
         except (FileNotFoundError, NotADirectoryError):
             # Try adding a .b2 extension
             abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
-                srv_utils.unlink_with_b2lock(abspath)
+                remove_dataset(abspath)
             except (FileNotFoundError, NotADirectoryError) as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
@@ -2542,7 +2708,7 @@ async def add_notebook(
     file = io.StringIO()
     nbformat.write(nb, file)
     data = file.getvalue().encode()
-    srv_utils.compress(data, dst=abspath)
+    write_dataset(abspath, srv_utils.compress(data).to_cframe())
 
     return path
 
@@ -2665,7 +2831,8 @@ if user_login_enabled():
         # Remove the personal directory of the user
         userid = str(users[0]["id"])
         print(f"User {username} with id {userid} has been deleted")
-        shutil.rmtree(settings.personal / userid, ignore_errors=True)
+        if (settings.personal / userid).exists():
+            remove_dataset(settings.personal / userid)
         return f"User deleted: {username}"
 
     @app.get("/api/listusers/")
@@ -3825,11 +3992,6 @@ async def htmx_upload(
 
     # Read the file and check quota
     data = await file.read()
-    if settings.quota:
-        total_size = get_disk_usage() + len(data)
-        if total_size > settings.quota:
-            error = "Upload failed because quota limit has been exceeded."
-            return htmx_error(request, error)
 
     path.mkdir(exist_ok=True, parents=True)
     filename = pathlib.Path(file.filename)
@@ -3839,6 +4001,42 @@ async def htmx_upload(
     suffix = filename.suffix
     suffixes = filename.suffixes[-2:]
     if suffix in [".tar", ".tgz", ".zip"] or suffixes == [".tar", ".gz"]:
+        if settings.quota:
+            # Admit encoded members independently. Never extract an archive into
+            # managed storage before measuring its final serialized files.
+            first = None
+
+            def store_member(name, body):
+                nonlocal first
+                member = pathlib.Path(name)
+                if member.is_absolute() or ".." in member.parts:
+                    raise ValueError("archive member escapes its destination")
+                if any(p.startswith((".", "__MACOSX")) for p in member.parts):
+                    return
+                if member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                    body = blosc2.SChunk(data=body).to_cframe()
+                    member = member.with_suffix(member.suffix + ".b2")
+                write_dataset(path / member, body)
+                first = member if first is None else first
+
+            if suffix == ".zip":
+                with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                    for member in archive.infolist():
+                        if not member.is_dir():
+                            if member.file_size > quota_coordinator().work_bytes:
+                                raise storage_quota.QuotaExceeded("archive member exceeds staging budget")
+                            store_member(member.filename, archive.read(member))
+            else:
+                with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as archive:
+                    for member in archive:
+                        if member.isfile():
+                            if member.size > quota_coordinator().work_bytes:
+                                raise storage_quota.QuotaExceeded("archive member exceeds staging budget")
+                            store_member(member.name, archive.extractfile(member).read())
+                        elif not member.isdir():
+                            raise ValueError("archive links are not supported")
+            target = name if first is None else f"{name}/{first}"
+            return htmx_redirect(hx_current_url, make_url(request, "html_home", path=target), root=name)
         file.file.seek(0)  # Reset file pointer
         if suffix == ".zip":
             with zipfile.ZipFile(file.file, "r") as archive:
@@ -3890,8 +4088,7 @@ async def htmx_upload(
         filename = f"{filename}.b2"
 
     # Save file
-    with open(path / filename, "wb") as dst:
-        dst.write(data)
+    await concurrency.run_in_threadpool(write_dataset, path / filename, data)
 
     # Redirect to display new dataset
     path = f"{name}/{filename}"
@@ -3936,7 +4133,7 @@ async def htmx_delete(
         if not abspath.exists():
             return fastapi.HTTPException(status_code=404)
 
-    srv_utils.unlink_with_b2lock(abspath)
+    remove_dataset(abspath)
 
     # Redirect to home
     url = make_url(request, "html_home")

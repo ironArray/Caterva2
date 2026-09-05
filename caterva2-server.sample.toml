@@ -7,7 +7,8 @@
 #
 # - listen: where the server listens to (a unix socket or a host/port) (default: localhost:8000)
 # - urlbase: the base url users will use to reach the server (default: http://localhost:8000)
-# - quota: if defined, it will limit the disk usage (default: 0, no limit)
+# - quota: limits apparent dataset bytes in public/shared/personal (default: 0, no limit)
+# - quota_work_bytes: separate quota-coordinated disk staging budget (default: "1G")
 # - maxusers: if defined, it will limit the number of users (default: 0, no limit)
 # - login: if true, users will need to authenticate (default: true)
 # - register: if true, users will be able to register (default: false)
@@ -25,6 +26,7 @@
 listen = "localhost:8000"
 urlbase = "http://localhost:8000"
 quota = "10G"
+# quota_work_bytes = "1G"
 maxusers = 5
 register = true  # allow users to register
 # publish_root = "s3://a-bucket/published"
@@ -37,7 +39,9 @@ register = true  # allow users to register
 # references are refused. MEMORY carriers are accepted under the same source
 # policy but execute without retained caching (same as NONE). DISK proxies cache
 # chunks inside their carrier up to persisted max_cache_bytes (or unbounded if None).
-# With a customer quota configured, warm DISK chunks are reused but misses are not retained.
+# With a customer quota, shared SQLite admission permits DISK growth when capacity
+# is available; denied fills still return data without retention. See server docs
+# for accounting exclusions, operational headroom, and staged replacement costs.
 # [server.remote_proxy]
 # enabled = true
 # allowed_hosts = ["datasets.example.org", "objects.example.org:8443"]
