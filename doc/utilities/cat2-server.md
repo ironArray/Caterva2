@@ -35,9 +35,13 @@ And then simply run `cat2-server` to start it on all network interfaces on port 
 ## Remote reference policy
 
 A persisted `blosc2.RemoteProxy` is a B2ND carrier that asks Caterva2 to read
-another dataset. With its disk cache enabled, fetched compressed chunks are
-retained inside that same carrier up to the proxy's finite `max_cache_bytes`.
-Caterva2 can inspect and report its stored shape, dtype, chunk, block, and proxy
+another dataset. Persisted `MEMORY` carriers are accepted under the same source
+policy but execute without retained caching (using the same no-retention execution
+path as `NONE`), avoiding unmanaged memory use on the server while preserving
+the requested client limit for download. With a `DISK` cache, fetched compressed
+chunks are retained inside the carrier up to the proxy's `max_cache_bytes` (or
+unbounded when `max_cache_bytes` is `None`, still subject to customer quota if
+configured). Caterva2 can inspect and report its stored shape, dtype, chunk, block, and proxy
 metadata without contacting the source. Outbound resolution is disabled by
 default.
 

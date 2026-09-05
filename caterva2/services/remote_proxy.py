@@ -205,10 +205,21 @@ def _validated_source(payload: dict) -> str:
         if max_cache_bytes is not None:
             raise RemoteProxyDenied("RemoteProxy cache policy 'none' cannot have max_cache_bytes")
     elif cache_policy == "disk":
+        if max_cache_bytes is not None and (
+            isinstance(max_cache_bytes, bool) or not isinstance(max_cache_bytes, int) or max_cache_bytes <= 0
+        ):
+            raise RemoteProxyDenied(
+                "RemoteProxy cache policy 'disk' requires positive max_cache_bytes or None"
+            )
+    elif cache_policy == "memory":
         if isinstance(max_cache_bytes, bool) or not isinstance(max_cache_bytes, int) or max_cache_bytes <= 0:
-            raise RemoteProxyDenied("RemoteProxy cache policy 'disk' requires positive max_cache_bytes")
+            raise RemoteProxyDenied(
+                f"RemoteProxy cache policy {cache_policy!r} requires positive max_cache_bytes"
+            )
     else:
-        raise RemoteProxyDenied("server RemoteProxy supports only cache policies 'none' and 'disk'")
+        raise RemoteProxyDenied(
+            "server RemoteProxy supports only cache policies 'none', 'memory', and 'disk'"
+        )
     source = payload.get("source")
     if not isinstance(source, dict) or set(source) != {"kind", "version", "urlpath"}:
         raise RemoteProxyDenied("server RemoteProxy supports only a versioned fsspec URL source")
@@ -330,16 +341,48 @@ def resolve(carrier, payload):
     return ServerRemoteProxy(source, expected, carrier, payload)
 
 
+def _effective_cache_policy(requested: str) -> str:
+    """Return the runtime cache policy executed by Caterva2 ('none' or 'disk')."""
+    if requested in {"none", "memory"}:
+        return "none"
+    if requested == "disk":
+        return "disk"
+    raise ValueError(f"unknown cache policy: {requested!r}")
+
+
 class ServerRemoteProxy:
-    """Authorized remote source backed by its own carrier cache."""
+    """Authorized remote source backed by its own carrier cache.
+
+    Attributes
+    ----------
+    requested_cache_policy : str
+        The cache policy requested in the carrier payload ('none', 'memory', or 'disk').
+    requested_max_cache_bytes : int | None
+        The cache limit requested in the carrier payload.
+    cache_policy : str
+        The effective runtime cache policy executed by Caterva2 ('none' or 'disk').
+        Persisted 'memory' carriers are executed using the same no-retention path
+        as 'none', avoiding unmanaged server RAM caching across requests.
+    effective_cache_policy : str
+        Read-only alias for `cache_policy`.
+    max_cache_bytes : int | None
+        The effective runtime cache limit (positive integer for 'disk', None for 'none').
+    """
 
     def __init__(self, source, geometry, carrier, payload):
         self.src = source
         self.shape, self.dtype, self.chunks, self.blocks = geometry
         self.cparams = source.cparams
         self.path = carrier.schunk.urlpath
-        self.cache_policy = payload["cache_policy"]
-        self.max_cache_bytes = payload["max_cache_bytes"]
+        self.requested_cache_policy = payload["cache_policy"]
+        self.requested_max_cache_bytes = payload["max_cache_bytes"]
+        self.cache_policy = _effective_cache_policy(self.requested_cache_policy)
+        self.max_cache_bytes = self.requested_max_cache_bytes if self.cache_policy == "disk" else None
+
+    @property
+    def effective_cache_policy(self) -> str:
+        """Effective cache policy executed by the server runtime ('none' or 'disk')."""
+        return self.cache_policy
 
     def current_cache_bytes(self) -> int:
         if self.cache_policy != "disk":
@@ -347,16 +390,21 @@ class ServerRemoteProxy:
         with carrier_thread_lock(self.path):
             carrier = raw_carrier(self.path, locking=True)
             with carrier.schunk.holding_lock():
-                sizes = carrier.schunk.vlmeta.get("proxy-cache-sizes", {})
-        if not isinstance(sizes, dict):
-            return 0
-        return sum(size for size in sizes.values() if isinstance(size, int) and size >= 0)
+                sizes = carrier.schunk.vlmeta.get("proxy-cache-sizes")
+                if isinstance(sizes, dict):
+                    return sum(size for size in sizes.values() if isinstance(size, int) and size >= 0)
+                return carrier.schunk.cbytes
 
     def _backend(self, cache_limit=None, *, carrier=None):
         if self.cache_policy != "disk" or cache_limit == 0:
             return blosc2.Proxy(self.src, _refresh_source=False)
         carrier = raw_carrier(self.path, mode="a", locking=True) if carrier is None else carrier
-        limit = self.max_cache_bytes if cache_limit is None else min(self.max_cache_bytes, cache_limit)
+        if cache_limit is None:
+            limit = self.max_cache_bytes
+        elif self.max_cache_bytes is None:
+            limit = cache_limit
+        else:
+            limit = min(self.max_cache_bytes, cache_limit)
         return blosc2.Proxy(
             self.src,
             _cache=carrier,

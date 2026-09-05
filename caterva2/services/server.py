@@ -183,7 +183,10 @@ def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteProxy) -> int | Non
         return proxy.max_cache_bytes
     retained = proxy.current_cache_bytes()
     available = max(0, settings.quota - get_disk_usage_written(0))
-    return min(proxy.max_cache_bytes, retained + available)
+    quota_bound = retained + available
+    if proxy.max_cache_bytes is None:
+        return quota_bound
+    return min(proxy.max_cache_bytes, quota_bound)
 
 
 async def read_remote_proxy(proxy, item, abspath):

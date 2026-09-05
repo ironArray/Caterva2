@@ -44,10 +44,23 @@ def reset_policy():
     remote_proxy.policy = previous
 
 
-def test_resolution_is_default_deny():
+@pytest.mark.parametrize(
+    ("cache_policy", "max_cache_bytes"),
+    [
+        ("none", None),
+        ("memory", 268435456),
+        ("disk", 1_000_000),
+        ("disk", None),
+    ],
+)
+def test_resolution_is_default_deny(cache_policy, max_cache_bytes):
     remote_proxy.policy = remote_proxy.Policy()
     with pytest.raises(remote_proxy.RemoteProxyDenied, match="disabled"):
-        remote_proxy._validated_source(_payload("https://data.example/array.b2nd"))
+        remote_proxy._validated_source(
+            _payload(
+                "https://data.example/array.b2nd", cache_policy=cache_policy, max_cache_bytes=max_cache_bytes
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -60,13 +73,33 @@ def test_resolution_is_default_deny():
         "https://other.example/array.b2nd",
     ],
 )
-def test_enabled_policy_still_rejects_unsafe_destinations(url):
+@pytest.mark.parametrize(
+    ("cache_policy", "max_cache_bytes"),
+    [
+        ("none", None),
+        ("memory", 268435456),
+        ("disk", 1_000_000),
+    ],
+)
+def test_enabled_policy_still_rejects_unsafe_destinations(url, cache_policy, max_cache_bytes):
     remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
     with pytest.raises(remote_proxy.RemoteProxyDenied):
-        remote_proxy._validated_source(_payload(url))
+        remote_proxy._validated_source(
+            _payload(url, cache_policy=cache_policy, max_cache_bytes=max_cache_bytes)
+        )
 
 
-def test_configured_https_destination_is_accepted():
+@pytest.mark.parametrize(
+    ("cache_policy", "max_cache_bytes"),
+    [
+        ("none", None),
+        ("memory", 268435456),
+        ("memory", 500_000),
+        ("disk", 1_000_000),
+        ("disk", None),
+    ],
+)
+def test_configured_https_destination_is_accepted(cache_policy, max_cache_bytes):
     remote_proxy.configure(
         _Conf(
             {
@@ -75,21 +108,78 @@ def test_configured_https_destination_is_accepted():
             }
         )
     )
-    assert remote_proxy._validated_source(_payload("https://data.example/array.b2nd"))
-    assert remote_proxy._validated_source(_payload("https://data.example:8443/array.b2nd"))
+    assert remote_proxy._validated_source(
+        _payload(
+            "https://data.example/array.b2nd", cache_policy=cache_policy, max_cache_bytes=max_cache_bytes
+        )
+    )
+    assert remote_proxy._validated_source(
+        _payload(
+            "https://data.example:8443/array.b2nd",
+            cache_policy=cache_policy,
+            max_cache_bytes=max_cache_bytes,
+        )
+    )
 
 
 @pytest.mark.parametrize(
     ("payload", "match"),
     [
-        (_payload("https://data.example/a.b2nd", cache_policy="memory"), "only cache policies"),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="unknown", max_cache_bytes=1000),
+            "only cache policies",
+        ),
         (
             _payload("https://data.example/a.b2nd", cache_policy="none", max_cache_bytes=1),
             "cannot have max_cache_bytes",
         ),
-        (_payload("https://data.example/a.b2nd", cache_policy="disk"), "requires positive"),
         (
             _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes=True),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes=False),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes=0),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes=-10),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes=10.5),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="disk", max_cache_bytes="1000"),
+            "requires positive",
+        ),
+        (_payload("https://data.example/a.b2nd", cache_policy="memory"), "requires positive"),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="memory", max_cache_bytes=True),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="memory", max_cache_bytes=False),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="memory", max_cache_bytes=0),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="memory", max_cache_bytes=-10),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="memory", max_cache_bytes=10.5),
+            "requires positive",
+        ),
+        (
+            _payload("https://data.example/a.b2nd", cache_policy="memory", max_cache_bytes="1000"),
             "requires positive",
         ),
     ],
@@ -124,7 +214,19 @@ def test_embedded_fsspec_reference_is_recognized():
     assert remote_proxy._contains_remote_reference(payload)
 
 
-def test_allowed_source_is_resolved_with_the_secure_filesystem(monkeypatch):
+@pytest.mark.parametrize(
+    ("cache_policy", "max_cache_bytes", "expected_eff_policy", "expected_eff_limit"),
+    [
+        ("none", None, "none", None),
+        ("memory", 268435456, "none", None),
+        ("memory", 500_000, "none", None),
+        ("disk", 1_000_000, "disk", 1_000_000),
+        ("disk", None, "disk", None),
+    ],
+)
+def test_allowed_source_is_resolved_with_the_secure_filesystem(
+    monkeypatch, cache_policy, max_cache_bytes, expected_eff_policy, expected_eff_limit
+):
     class Carrier:
         shape = (10,)
         dtype = np.dtype(np.int32)
@@ -157,8 +259,18 @@ def test_allowed_source_is_resolved_with_the_secure_filesystem(monkeypatch):
     monkeypatch.setattr(remote_proxy, "_https_filesystem", lambda host, addresses: filesystem)
     monkeypatch.setattr(blosc2, "FsspecNDSource", fake_source)
 
-    resolved = remote_proxy.resolve(Carrier(), _payload("https://data.example/array.b2nd"))
+    payload = _payload(
+        "https://data.example/array.b2nd",
+        cache_policy=cache_policy,
+        max_cache_bytes=max_cache_bytes,
+    )
+    resolved = remote_proxy.resolve(Carrier(), payload)
     assert isinstance(resolved, remote_proxy.ServerRemoteProxy)
+    assert resolved.requested_cache_policy == cache_policy
+    assert resolved.requested_max_cache_bytes == max_cache_bytes
+    assert resolved.cache_policy == expected_eff_policy
+    assert resolved.effective_cache_policy == expected_eff_policy
+    assert resolved.max_cache_bytes == expected_eff_limit
     assert seen == {
         "url": "https://data.example/array.b2nd",
         "max_concurrency": 3,
@@ -188,18 +300,35 @@ def test_cold_cframe_preserves_specification_but_not_cached_chunks(tmp_path):
     assert cold.to_cframe() != carrier.to_cframe()
 
 
-def _server_proxy(tmp_path, name="server-cache"):
+def _server_proxy(tmp_path, name="server-cache", cache_policy="disk", max_cache_bytes=1_000_000):
     data = np.arange(40, dtype=np.int32)
     source = blosc2.asarray(data, chunks=(10,), blocks=(5,))
     source_url = f"memory://{name}-source.b2nd"
     fsspec.filesystem("memory").pipe_file(f"{name}-source.b2nd", source.to_cframe())
     carrier_path = tmp_path / f"{name}.b2nd"
-    creator = blosc2.RemoteProxy(
-        source_url,
-        cache_policy=blosc2.CachePolicy.DISK,
-        cache_path=carrier_path,
-        max_cache_bytes=1_000_000,
-    )
+    if cache_policy == "disk":
+        creator = blosc2.RemoteProxy(
+            source_url,
+            cache_policy=blosc2.CachePolicy.DISK,
+            cache_path=carrier_path,
+            max_cache_bytes=max_cache_bytes,
+        )
+    elif cache_policy == "memory":
+        creator = blosc2.RemoteProxy(
+            source_url,
+            cache_policy=blosc2.CachePolicy.MEMORY,
+            max_cache_bytes=max_cache_bytes,
+        )
+        creator.save(carrier_path)
+    elif cache_policy == "none":
+        creator = blosc2.RemoteProxy(
+            source_url,
+            cache_policy=blosc2.CachePolicy.NONE,
+        )
+        creator.save(carrier_path)
+    else:
+        raise ValueError(f"unknown cache_policy: {cache_policy}")
+
     carrier, payload = remote_proxy.inspect(carrier_path)
     geometry = (creator.shape, creator.dtype, creator.chunks, creator.blocks)
     return remote_proxy.ServerRemoteProxy(creator.src, geometry, carrier, payload), data, carrier_path
@@ -222,6 +351,199 @@ def test_server_proxy_reuses_its_carrier_cache(tmp_path):
     fresh_source.traffic.reset()
     np.testing.assert_array_equal(reopened.read(slice(0, 10)), data[:10])
     assert fresh_source.traffic.requests == 0
+
+
+def test_server_proxy_memory_retains_no_cache_and_repeats_upstream_fetches(tmp_path):
+    proxy, data, carrier_path = _server_proxy(
+        tmp_path, "memory-proxy", cache_policy="memory", max_cache_bytes=500_000
+    )
+    assert proxy.requested_cache_policy == "memory"
+    assert proxy.requested_max_cache_bytes == 500_000
+    assert proxy.cache_policy == "none"
+    assert proxy.effective_cache_policy == "none"
+    assert proxy.max_cache_bytes is None
+    assert proxy.current_cache_bytes() == 0
+
+    before_bytes = carrier_path.read_bytes()
+    before_size = carrier_path.stat().st_size
+    before_mtime = carrier_path.stat().st_mtime_ns
+
+    # Instrument data calls on proxy.src
+    chunk_calls = []
+    range_calls = []
+    orig_get_chunk = proxy.src.get_chunk
+    orig_read_range = proxy.src.read_range
+
+    def traced_get_chunk(n):
+        chunk_calls.append(n)
+        return orig_get_chunk(n)
+
+    def traced_read_range(*args, **kwargs):
+        range_calls.append(args)
+        return orig_read_range(*args, **kwargs)
+
+    proxy.src.get_chunk = traced_get_chunk
+    proxy.src.read_range = traced_read_range
+
+    # First slice read
+    slice_item = slice(0, 10)
+    np.testing.assert_array_equal(proxy.read(slice_item), data[:10])
+    first_chunk_count = len(chunk_calls)
+    first_range_count = len(range_calls)
+    assert first_chunk_count > 0 or first_range_count > 0
+
+    # Second slice read on the same runtime: no retained data, must fetch again
+    np.testing.assert_array_equal(proxy.read(slice_item), data[:10])
+    assert len(chunk_calls) > first_chunk_count or len(range_calls) > first_range_count
+
+    # Reconstruct the runtime and read slice again
+    carrier, payload = remote_proxy.inspect(carrier_path)
+    fresh_source = blosc2.FsspecNDSource(payload["source"]["urlpath"])
+    fresh_chunk_calls = []
+    fresh_orig_get_chunk = fresh_source.get_chunk
+
+    def fresh_traced_get_chunk(n):
+        fresh_chunk_calls.append(n)
+        return fresh_orig_get_chunk(n)
+
+    fresh_source.get_chunk = fresh_traced_get_chunk
+    reopened = remote_proxy.ServerRemoteProxy(
+        fresh_source,
+        (proxy.shape, proxy.dtype, proxy.chunks, proxy.blocks),
+        carrier,
+        payload,
+    )
+    np.testing.assert_array_equal(reopened.read(slice_item), data[:10])
+    assert len(fresh_chunk_calls) > 0 or fresh_source.traffic.requests > 0
+
+    # Repeat for get_chunk
+    chunk_calls.clear()
+    chunk0_first = proxy.get_chunk(0)
+    assert len(chunk_calls) == 1
+    assert chunk_calls[0] == 0
+    chunk0_second = proxy.get_chunk(0)
+    assert len(chunk_calls) == 2
+    assert chunk_calls[1] == 0
+    assert chunk0_first == chunk0_second
+
+    # Invariants on carrier file
+    assert carrier_path.read_bytes() == before_bytes
+    assert carrier_path.stat().st_size == before_size
+    assert carrier_path.stat().st_mtime_ns == before_mtime
+    assert proxy.current_cache_bytes() == 0
+
+
+def test_memory_carrier_ignores_synthetic_cached_chunks(tmp_path):
+    # Create DISK proxy and warm chunks 0 and 1
+    disk_proxy, data, carrier_path = _server_proxy(tmp_path, "synthetic", cache_policy="disk")
+    disk_proxy.read(slice(0, 20))
+    raw = remote_proxy.raw_carrier(carrier_path, mode="a", locking=True)
+    with raw.schunk.holding_lock():
+        assert raw.schunk.vlmeta.get("proxy-cache-sizes")
+        # Mutate carrier's payload to MEMORY
+        payload = dict(raw.schunk.vlmeta["b2o"])
+        payload["cache_policy"] = "memory"
+        payload["max_cache_bytes"] = 500_000
+        raw.schunk.vlmeta["b2o"] = payload
+
+    # Update upstream source with new data
+    new_data = data + 1000
+    fsspec.filesystem("memory").pipe_file(
+        "synthetic-source.b2nd",
+        blosc2.asarray(new_data, chunks=(10,), blocks=(5,)).to_cframe(),
+    )
+
+    carrier, payload = remote_proxy.inspect(carrier_path)
+    assert payload["cache_policy"] == "memory"
+    fresh_src = blosc2.FsspecNDSource("memory://synthetic-source.b2nd")
+    mem_proxy = remote_proxy.ServerRemoteProxy(
+        fresh_src,
+        (disk_proxy.shape, disk_proxy.dtype, disk_proxy.chunks, disk_proxy.blocks),
+        carrier,
+        payload,
+    )
+    assert mem_proxy.cache_policy == "none"
+    assert mem_proxy.effective_cache_policy == "none"
+    assert mem_proxy.current_cache_bytes() == 0
+
+    # Logical reads must return source data, ignoring the carrier's cached chunks
+    np.testing.assert_array_equal(mem_proxy.read(slice(0, 20)), new_data[:20])
+    chunk = mem_proxy.get_chunk(0)
+    assert chunk == fresh_src.get_chunk(0)
+
+
+def test_memory_carrier_exports_preserve_policy_and_reopen_with_client_cache(tmp_path):
+    _proxy, data, carrier_path = _server_proxy(
+        tmp_path, "export-mem", cache_policy="memory", max_cache_bytes=500_000
+    )
+    carrier, payload = remote_proxy.inspect(carrier_path)
+
+    warm_bytes = remote_proxy.export_cframe(carrier, payload, include_cache=True)
+    cold_bytes = remote_proxy.export_cframe(carrier, payload, include_cache=False)
+
+    for kind, b in [("warm", warm_bytes), ("cold", cold_bytes)]:
+        out_path = tmp_path / f"export_{kind}.b2nd"
+        out_path.write_bytes(b)
+        reopened = blosc2.open(str(out_path))
+        assert isinstance(reopened, blosc2.RemoteProxy)
+        assert reopened.cache_policy == blosc2.CachePolicy.MEMORY
+        assert reopened.max_cache_bytes == 500_000
+        np.testing.assert_array_equal(reopened[:10], data[:10])
+
+        # Client memory cache reuse: uncached slice fetches then hits cache
+        reopened.src.traffic.reset()
+        res1 = reopened[10:20]
+        assert reopened.src.traffic.requests > 0
+        np.testing.assert_array_equal(res1, data[10:20])
+        reopened.src.traffic.reset()
+        res2 = reopened[10:20]
+        assert reopened.src.traffic.requests == 0
+        np.testing.assert_array_equal(res2, data[10:20])
+
+
+def test_memory_carrier_detects_geometry_replacement_and_observes_data_replacement(tmp_path):
+    _proxy, data, carrier_path = _server_proxy(
+        tmp_path, "replacement", cache_policy="memory", max_cache_bytes=500_000
+    )
+    carrier, payload = remote_proxy.inspect(carrier_path)
+
+    remote_proxy.configure(
+        _Conf(
+            {
+                ".remote_proxy.enabled": True,
+                ".remote_proxy.allowed_hosts": ["data.example"],
+            }
+        )
+    )
+
+    url = "https://data.example/replacement-source.b2nd"
+    payload = dict(payload)
+    payload["source"] = dict(payload["source"])
+    payload["source"]["urlpath"] = url
+
+    mem_fs = fsspec.filesystem("memory")
+    mem_fs.pipe_file(url, blosc2.asarray(data, chunks=(10,), blocks=(5,)).to_cframe())
+
+    orig_public_addr = remote_proxy._public_addresses
+    orig_fs = remote_proxy._https_filesystem
+    remote_proxy._public_addresses = lambda host, port: ("93.184.216.34",)
+    remote_proxy._https_filesystem = lambda host, addr: mem_fs
+
+    try:
+        # Case A: Source geometry changed
+        mismatched_source = blosc2.asarray(np.arange(60, dtype=np.int32), chunks=(10,), blocks=(5,))
+        mem_fs.pipe_file(url, mismatched_source.to_cframe())
+        with pytest.raises(remote_proxy.RemoteProxyDenied, match="geometry does not match"):
+            remote_proxy.resolve(carrier, payload)
+
+        # Case B: Source data changed (geometry identical)
+        new_data = np.arange(100, 140, dtype=np.int32)
+        mem_fs.pipe_file(url, blosc2.asarray(new_data, chunks=(10,), blocks=(5,)).to_cframe())
+        resolved = remote_proxy.resolve(carrier, payload)
+        np.testing.assert_array_equal(resolved.read(slice(0, 10)), new_data[:10])
+    finally:
+        remote_proxy._public_addresses = orig_public_addr
+        remote_proxy._https_filesystem = orig_fs
 
 
 def test_zero_effective_quota_reads_without_retaining(tmp_path):
@@ -249,6 +571,51 @@ def test_customer_quota_reduces_the_proxy_cache_limit(monkeypatch):
 
     monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 1_000)
     assert server.remote_proxy_cache_limit(Proxy()) == 200
+
+    class UnlimitedProxy:
+        cache_policy = "disk"
+        max_cache_bytes = None
+
+        @staticmethod
+        def current_cache_bytes():
+            return 200
+
+    # Under quota, unlimited disk cache is bounded by available quota (200 + 100 = 300)
+    monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 900)
+    assert server.remote_proxy_cache_limit(UnlimitedProxy()) == 300
+
+    # When quota is exhausted, bounded by retained bytes (200 + 0 = 200)
+    monkeypatch.setattr(server, "get_disk_usage_written", lambda pending: 1_000)
+    assert server.remote_proxy_cache_limit(UnlimitedProxy()) == 200
+
+    # Without quota, unlimited disk cache returns None
+    monkeypatch.setattr(server.settings, "quota", 0)
+    assert server.remote_proxy_cache_limit(UnlimitedProxy()) is None
+
+    class MemoryProxy:
+        cache_policy = "none"
+        max_cache_bytes = None
+
+    assert server.remote_proxy_cache_limit(MemoryProxy()) == 0
+
+
+def test_unlimited_disk_server_proxy_caches_without_eviction(tmp_path):
+    proxy, data, carrier_path = _server_proxy(
+        tmp_path, "unlimited-server", cache_policy="disk", max_cache_bytes=None
+    )
+    assert proxy.requested_max_cache_bytes is None
+    assert proxy.max_cache_bytes is None
+    assert proxy.current_cache_bytes() == 0
+
+    # Read slices to trigger cache population
+    np.testing.assert_array_equal(proxy.read(slice(0, 20)), data[:20])
+    np.testing.assert_array_equal(proxy.read(slice(20, 40)), data[20:])
+    cached_bytes = proxy.current_cache_bytes()
+    assert cached_bytes > 0
+
+    # Reopening carrier shows data is valid
+    reopened = blosc2.open(carrier_path, mode="r")
+    np.testing.assert_array_equal(reopened[:], data)
 
 
 def test_concurrent_server_proxy_fills_do_not_corrupt_carrier(tmp_path):

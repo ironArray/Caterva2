@@ -34,8 +34,9 @@ register = true  # allow users to register
 # requests by default. The first opt-in backend is credential-free HTTPS.
 # Every destination must be listed exactly; redirects, URL queries, private or
 # otherwise non-public destination addresses, and embedded expression
-# references are refused. A proxy may cache chunks inside its own carrier up to
-# its persisted max_cache_bytes; that growth counts against this server's quota.
+# references are refused. MEMORY carriers are accepted under the same source
+# policy but execute without retained caching (same as NONE). DISK proxies cache
+# chunks inside their carrier up to persisted max_cache_bytes (or unbounded if None), subject to server quota.
 # [server.remote_proxy]
 # enabled = true
 # allowed_hosts = ["datasets.example.org", "objects.example.org:8443"]
