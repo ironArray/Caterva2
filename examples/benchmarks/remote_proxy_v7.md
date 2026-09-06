@@ -1,9 +1,10 @@
-# RemoteProxy v5 versus experimental sparse v7
+# RemoteProxy v5 versus sparse v7
 
 Measured through the real `/api/chunk` and `/api/fetch` ASGI routes, using the
 rebuilt Python-Blosc2 extension after `a77ac97b` (C-Blosc2 `a54e259`). V5 is the
-unmodified Caterva2 checkout at `a1de98c`; v7 is the opt-in implementation in this
-change. Both use the same Python-Blosc2 implementation and C library. The source
+unmodified Caterva2 checkout at `a1de98c`; v7 is the sparse-default implementation
+in the current checkout. Both use the same Python-Blosc2 implementation and C library.
+The source
 transport is an injected deterministic in-memory range source, so these measure
 server overhead rather than external HTTPS latency. Source policy resolution,
 array/chunk serialization, locking, SQLite admission, filesystem writes, and fsync
@@ -38,10 +39,11 @@ At the server boundary, sparse wins warm hits even for small caches because v5
 still snapshots and serializes the whole carrier on its read path. For a 1 MiB
 resident cache, sparse's per-operation locking, metadata, fsync, and accounting
 costs outweigh the saved copying during churn. At 32 MiB resident size, avoiding
-whole-carrier work wins all four workloads. These results support keeping sparse
-opt-in and profiling small-cache overhead before considering hybrid storage.
+whole-carrier work wins all four workloads. These results support sparse as the
+runtime default while retaining the contiguous path for explicit comparison and
+rollback testing.
 
-This is an experimental baseline, not the completion of every v7 acceptance
+This is a benchmark baseline, not the completion of every v7 acceptance
 criterion. It uses a full-generation measurement/fsync fallback after mutation;
 source authorization/transport is retained but external DNS/TLS/network time is
 not measured. Multiple workers and process death have correctness tests, not yet
@@ -51,6 +53,8 @@ convergence, peak RSS, and power-loss durability remain separate acceptance work
 Reproduce with the `blosc2` conda interpreter and `PYTHONPATH` selecting the
 appropriate checkout; run each command sequentially. Use `--backend contiguous`
 with the original v5 checkout, and `--backend sparse` with this implementation.
+The backend switch belongs to the benchmark harness; Caterva2 runtime configuration
+has no public backend selector and defaults to sparse.
 
 ```sh
 python examples/benchmarks/remote_proxy_v7.py --backend sparse --repeats 3 --output small.json

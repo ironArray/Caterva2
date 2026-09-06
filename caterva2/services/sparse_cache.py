@@ -329,7 +329,8 @@ class SparseCache:
                                 )
                             return result
                         # Admission is deliberately coarse; the full-generation stat
-                        # fallback is experimental until mutation reports are available.
+                        # Full-generation measurement is the safe fallback until mutation reports
+                        # are available.
                         estimate = (
                             min(
                                 proxy.dtype.itemsize * math.prod(proxy.chunks),
