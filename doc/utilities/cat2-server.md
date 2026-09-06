@@ -60,7 +60,12 @@ max_nbytes = 1073741824
 max_rank = 16
 max_chunks = 10000000
 max_concurrency = 8
+cache_maintenance_seconds = 60
 ```
+
+The maintenance task runs every 60 seconds by default. Increase this interval for
+large deployments to reduce background filesystem and SQLite scans; decrease it only
+when faster cleanup is needed.
 
 The allowlist is mandatory and matches normalized host names and explicit
 non-default ports exactly. Before connecting, Caterva2 resolves every address,

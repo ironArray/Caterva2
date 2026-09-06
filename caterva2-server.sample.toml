@@ -52,6 +52,7 @@ register = true  # allow users to register
 # max_rank = 16
 # max_chunks = 10000000
 # max_concurrency = 8
+# cache_maintenance_seconds = 60
 
 # Mount a remote Caterva2 server's locally owned @public root as @labb.  This
 # activates the bundled C2Cache provider.  Repeat the table to mount more peers.

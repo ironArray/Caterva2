@@ -50,6 +50,7 @@ class Policy:
     max_rank: int = 16
     max_chunks: int = 10_000_000
     max_concurrency: int = 8
+    cache_maintenance_seconds: float = 60.0
     cache_backend: str = "sparse"
 
 
@@ -81,6 +82,7 @@ def configure(conf) -> None:
     max_rank = conf.get(".remote_proxy.max_rank", 16)
     max_chunks = conf.get(".remote_proxy.max_chunks", 10_000_000)
     max_concurrency = conf.get(".remote_proxy.max_concurrency", 8)
+    cache_maintenance_seconds = conf.get(".remote_proxy.cache_maintenance_seconds", 60.0)
 
     if not isinstance(enabled, bool):
         raise ValueError("remote_proxy.enabled must be true or false")
@@ -90,6 +92,12 @@ def configure(conf) -> None:
         raise ValueError("remote_proxy.allowed_hosts must be a list of host names")
     if not isinstance(timeout, int | float) or isinstance(timeout, bool) or timeout <= 0:
         raise ValueError("remote_proxy.timeout must be positive")
+    if (
+        not isinstance(cache_maintenance_seconds, int | float)
+        or isinstance(cache_maintenance_seconds, bool)
+        or cache_maintenance_seconds <= 0
+    ):
+        raise ValueError("remote_proxy.cache_maintenance_seconds must be positive")
     for name, value in {
         "max_nbytes": max_nbytes,
         "max_rank": max_rank,
@@ -107,6 +115,7 @@ def configure(conf) -> None:
         max_rank=max_rank,
         max_chunks=max_chunks,
         max_concurrency=max_concurrency,
+        cache_maintenance_seconds=float(cache_maintenance_seconds),
     )
 
 

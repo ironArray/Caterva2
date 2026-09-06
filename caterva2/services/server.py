@@ -502,7 +502,7 @@ async def lifespan(app: FastAPI):
 
     async def cache_maintenance():
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(remote_proxy.policy.cache_maintenance_seconds)
             try:
                 await concurrency.run_in_threadpool(quota_coordinator().remote.maintain)
             except (OSError, sqlite3.Error, ValueError):

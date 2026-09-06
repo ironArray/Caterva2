@@ -105,9 +105,12 @@ def test_configured_https_destination_is_accepted(cache_policy, max_cache_bytes)
             {
                 ".remote_proxy.enabled": True,
                 ".remote_proxy.allowed_hosts": ["DATA.example", "data.example:8443"],
+                ".remote_proxy.cache_maintenance_seconds": 12.5,
             }
         )
     )
+    assert remote_proxy.policy.cache_maintenance_seconds == 12.5
+
     assert remote_proxy._validated_source(
         _payload(
             "https://data.example/array.b2nd", cache_policy=cache_policy, max_cache_bytes=max_cache_bytes
