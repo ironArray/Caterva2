@@ -1,0 +1,197 @@
+{
+  "backend": "contiguous",
+  "chunk_size": 262144,
+  "nchunks": 32,
+  "cache_chunks": 4,
+  "source": "in-memory range transport; real ASGI routes",
+  "results": {
+    "cold": {
+      "median_seconds": 0.35378579201642424,
+      "samples": [
+        {
+          "seconds": 0.37498900000355206,
+          "requests": 32,
+          "median_ms": 10.977479003486224,
+          "p95_ms": 15.769316554360556,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 0.35378579201642424,
+          "requests": 32,
+          "median_ms": 11.347187508363277,
+          "p95_ms": 15.2050251403125,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 0.33900570901460014,
+          "requests": 32,
+          "median_ms": 10.016374988481402,
+          "p95_ms": 15.487539400055537,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        }
+      ]
+    },
+    "warm": {
+      "median_seconds": 0.9158176670025568,
+      "samples": [
+        {
+          "seconds": 0.9222860420122743,
+          "requests": 96,
+          "median_ms": 9.433541490579955,
+          "p95_ms": 11.12018773710588,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 0.9154366670118179,
+          "requests": 96,
+          "median_ms": 9.241687497706152,
+          "p95_ms": 11.161926755448803,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 0.9158176670025568,
+          "requests": 96,
+          "median_ms": 9.394791501108557,
+          "p95_ms": 10.854114254470915,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        }
+      ]
+    },
+    "churn": {
+      "median_seconds": 0.7430978749762289,
+      "samples": [
+        {
+          "seconds": 0.7430978749762289,
+          "requests": 96,
+          "median_ms": 7.8778125025564805,
+          "p95_ms": 8.609040996816475,
+          "private_entries": 0,
+          "usage": {
+            "used": 1049903,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 0.7565104160166811,
+          "requests": 96,
+          "median_ms": 7.7562079968629405,
+          "p95_ms": 8.507520746206865,
+          "private_entries": 0,
+          "usage": {
+            "used": 1049903,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 0.7259852919960395,
+          "requests": 96,
+          "median_ms": 7.727145493845455,
+          "p95_ms": 8.505781006533653,
+          "private_entries": 0,
+          "usage": {
+            "used": 1049903,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        }
+      ]
+    },
+    "partial": {
+      "median_seconds": 2.5667394580086693,
+      "samples": [
+        {
+          "seconds": 2.5667394580086693,
+          "requests": 256,
+          "median_ms": 9.81610399321653,
+          "p95_ms": 11.68914601294091,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 2.623016583005665,
+          "requests": 256,
+          "median_ms": 10.106271001859568,
+          "p95_ms": 11.919927012058906,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        },
+        {
+          "seconds": 2.562559834012063,
+          "requests": 256,
+          "median_ms": 9.794270488782786,
+          "p95_ms": 11.966812737227883,
+          "private_entries": 0,
+          "usage": {
+            "used": 8390767,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824
+          }
+        }
+      ]
+    }
+  }
+}

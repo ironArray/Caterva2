@@ -138,7 +138,7 @@ def guess_type(path):
 
 
 def get_disk_usage():
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         return quota_coordinator().usage()["used"]
     exclude = {"db.json", "db.sqlite"}
     return sum(
@@ -184,13 +184,18 @@ _quota_instances = {}
 
 def quota_coordinator():
     """Independent of authentication; one connection is opened per DB operation."""
-    if not settings.quota:
+    if not settings.quota and remote_proxy.policy.cache_backend != "sparse":
         return None
     work_bytes = settings.parse_size(settings.conf.get(".quota_work_bytes", "1G"))
-    key = (str(settings.statedir), settings.quota, work_bytes)
+    key = (str(settings.statedir), settings.quota, work_bytes, remote_proxy.policy.cache_backend)
     coordinator = _quota_instances.get(key)
     if coordinator is None:
-        coordinator = storage_quota.StorageQuota(settings.statedir, settings.quota, work_bytes=work_bytes)
+        coordinator = storage_quota.StorageQuota(
+            settings.statedir,
+            settings.quota,
+            work_bytes=work_bytes,
+            cache_backend=remote_proxy.policy.cache_backend,
+        )
         _quota_instances[key] = coordinator
     return coordinator
 
@@ -244,7 +249,12 @@ def copy_dataset(source, destination):
             if not entry.name.endswith(".b2lock"):
                 copy_dataset(entry, destination / entry.name)
     else:
-        write_dataset(destination, source.read_bytes())
+        data = source.read_bytes()
+        if remote_proxy.policy.cache_backend == "sparse":
+            reference = remote_proxy.inspect(source)
+            if reference is not None:
+                data = remote_proxy.cold_cframe(*reference)
+        write_dataset(destination, data)
 
 
 def move_dataset(source, destination):
@@ -266,6 +276,10 @@ def move_dataset(source, destination):
         data, generation = quota.snapshot(source)
         if generation is None:
             raise storage_quota.StorageBusy("move source was removed")
+        if remote_proxy.policy.cache_backend == "sparse" and source.suffix in {".b2nd", ".b2frame"}:
+            carrier = blosc2.ndarray_from_cframe(data)
+            if carrier.schunk.vlmeta.get("b2o", {}).get("kind") == "remote_proxy":
+                data = remote_proxy.cold_cframe(carrier, carrier.schunk.vlmeta["b2o"])
         write_dataset(destination, data)
         quota.publish(source, None, expected=generation, prune=False)
 
@@ -299,7 +313,7 @@ async def read_remote_proxy(proxy, item, abspath):
     """Read one remote selection while serializing and accounting cache mutation."""
     lock = dataset_lock(abspath)
     async with lock:
-        if settings.quota:
+        if settings.quota or remote_proxy.policy.cache_backend == "sparse":
             return await concurrency.run_in_threadpool(
                 lambda: blosc2.asarray(quota_proxy_operation(proxy, item)).to_cframe()
             )
@@ -471,7 +485,7 @@ _setup_plugin_globals()
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         await concurrency.run_in_threadpool(quota_coordinator)
     # Initialize the (users) database
     if user_login_enabled():
@@ -486,7 +500,24 @@ async def lifespan(app: FastAPI):
     for p in providers.active:
         await p.startup()
 
-    yield
+    async def cache_maintenance():
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await concurrency.run_in_threadpool(quota_coordinator().remote.maintain)
+            except (OSError, sqlite3.Error, ValueError):
+                remote_proxy.log.exception("Sparse cache maintenance deferred")
+
+    maintenance = (
+        asyncio.create_task(cache_maintenance()) if remote_proxy.policy.cache_backend == "sparse" else None
+    )
+    try:
+        yield
+    finally:
+        if maintenance is not None:
+            maintenance.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await maintenance
 
     for p in providers.active:
         await p.shutdown()
@@ -1411,6 +1442,23 @@ async def post_fetch_data(
     )
 
 
+class RemoteCacheFileResponse(responses.FileResponse):
+    """Release artifact ownership even if streaming disconnects or fails."""
+
+    def __init__(self, path, *, cleanup, **kwargs):
+        super().__init__(path, **kwargs)
+        self.cleanup = cleanup
+
+    async def __call__(self, scope, receive, send):
+        try:
+            return await super().__call__(scope, receive, send)
+        finally:
+            import anyio
+
+            with anyio.CancelScope(shield=True):
+                await concurrency.run_in_threadpool(self.cleanup)
+
+
 @app.get("/api/download/{path:path}")
 async def download_data(
     path: pathlib.Path,
@@ -1444,6 +1492,19 @@ async def download_data(
         headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
         headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
+
+    if remote_proxy.policy.cache_backend == "sparse" and include_cache:
+        abspath = get_abspath(path, user)
+        reference = remote_proxy.inspect(abspath) if abspath.suffix in {".b2nd", ".b2frame"} else None
+        if reference is not None and reference[1]["cache_policy"] == "disk":
+            proxy = await concurrency.run_in_threadpool(lambda: remote_proxy.resolve(*reference))
+            if proxy.src.stamp is not None:
+                artifact, etag, cleanup = await concurrency.run_in_threadpool(
+                    lambda: quota_coordinator().remote.export(proxy)
+                )
+                return RemoteCacheFileResponse(
+                    artifact, cleanup=cleanup, filename=path.name, headers={"ETag": f'"{etag}"'}
+                )
 
     decompress = accept_encoding != "blosc2"
     # Read before creating the response: a bad path must 404 up front, not
@@ -1547,7 +1608,7 @@ async def get_chunk(
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
         elif isinstance(container, remote_proxy.ServerRemoteProxy):
-            if settings.quota:
+            if settings.quota or remote_proxy.policy.cache_backend == "sparse":
                 chunk = await concurrency.run_in_threadpool(
                     lambda: quota_proxy_operation(container, nchunk=nchunk)
                 )
@@ -1751,12 +1812,14 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         srv_utils.raise_bad_request("publishing needs fsspec, which is not installed here")
     destination = publish_destination(path)
     fs, target = fsspec.url_to_fs(destination)
-    if settings.quota and isinstance(fs, fsspec.implementations.local.LocalFileSystem):
+    if (settings.quota or remote_proxy.policy.cache_backend == "sparse") and isinstance(
+        fs, fsspec.implementations.local.LocalFileSystem
+    ):
         target_path = pathlib.Path(target).resolve()
         state = pathlib.Path(settings.statedir).resolve()
         if target_path == state or state in target_path.parents:
             srv_utils.raise_bad_request("local publish_root must be outside the server state directory")
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         quota = quota_coordinator()
         frame, generation = quota.snapshot(abspath)
         if generation is None:
@@ -1781,7 +1844,7 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         fs.makedirs(parent, exist_ok=True)
     try:
         with (
-            io.BytesIO(frame) if settings.quota else open(abspath, "rb") as source,
+            io.BytesIO(frame) if quota_coordinator() is not None else open(abspath, "rb") as source,
             fs.open(staging, "wb") as target_file,
         ):
             shutil.copyfileobj(source, target_file)
@@ -1792,7 +1855,7 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         with contextlib.suppress(Exception):
             fs.rm(staging)
         raise
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         array = blosc2.ndarray_from_cframe(frame, copy=True)
         array.schunk.vlmeta[PUBLISHED_URL] = destination
         array.schunk.vlmeta[FILL_STATE] = PUBLISHED
@@ -1826,7 +1889,7 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
     both find the slot free would otherwise both write it, and the second would
     move every chunk that came after the first.
     """
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         quota = quota_coordinator()
         frame, generation = quota.snapshot(abspath)
         try:
@@ -2150,7 +2213,7 @@ def make_expr(
 
     abspath.mkdir(exist_ok=True, parents=True)
 
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         # Serialize before admission: metadata and compression determine the charge.
         result = arr.compute() if compute else arr
         try:
@@ -2294,7 +2357,7 @@ async def move(
 
     # Make sure the destination directory exists
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         # Reserve the copy before removing the source. No fictitious free-space
         # credit; directory operations retain their existing non-atomic semantics.
         move_dataset(abspath, dest_abspath)
@@ -2353,7 +2416,7 @@ async def copy(
     #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
 
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         copy_dataset(abspath, dest_abspath)
     elif abspath.is_dir():
         shutil.copytree(abspath, dest_abspath)
@@ -2543,7 +2606,7 @@ async def append_file(
 
     # Append the data
     # The original dataset (open in append mode so it can be resized/written)
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         frame, generation = quota_coordinator().snapshot(abspath)
         orig = blosc2.ndarray_from_cframe(frame, copy=True)
         if "b2o" in orig.schunk.meta or "proxy-source" in orig.schunk.meta:
@@ -2565,7 +2628,7 @@ async def append_file(
     orig.resize(result_shape)
     # Append the new data to orig along the first axis
     orig[orig.shape[0] - new_len :] = new_data
-    if settings.quota:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
         quota_coordinator().publish(abspath, orig.to_cframe(), expected=generation)
 
     # Return the new shape
@@ -2606,7 +2669,11 @@ async def unfold_file(
     # Unfold the container
     if abspath.suffix in {".h5", ".hdf5"}:
         # Create proxies for each dataset in HDF5 file
-        all_dsets = list(hdf5.create_hdf5_proxies(abspath, writer=write_dataset if settings.quota else None))
+        all_dsets = list(
+            hdf5.create_hdf5_proxies(
+                abspath, writer=write_dataset if quota_coordinator() is not None else None
+            )
+        )
         if len(all_dsets) == 0:
             detail = "No arrays found in HDF5 file"
             raise fastapi.HTTPException(detail=detail, status_code=400)
@@ -4001,7 +4068,7 @@ async def htmx_upload(
     suffix = filename.suffix
     suffixes = filename.suffixes[-2:]
     if suffix in [".tar", ".tgz", ".zip"] or suffixes == [".tar", ".gz"]:
-        if settings.quota:
+        if settings.quota or remote_proxy.policy.cache_backend == "sparse":
             # Admit encoded members independently. Never extract an archive into
             # managed storage before measuring its final serialized files.
             first = None
@@ -4171,6 +4238,23 @@ async def get_file_content(path, user, decompress=True, include_cache=True):
             lock = dataset_lock(abspath)
             async with lock:
                 carrier, payload = remote_proxy.inspect(abspath)
+                if (
+                    remote_proxy.policy.cache_backend == "sparse"
+                    and include_cache
+                    and payload["cache_policy"] == "disk"
+                ):
+
+                    def snapshot_sparse():
+                        proxy = remote_proxy.resolve(carrier, payload)
+                        if proxy.src.stamp is None:
+                            return remote_proxy.cold_cframe(carrier, payload)
+                        artifact, _, cleanup = quota_coordinator().remote.export(proxy)
+                        try:
+                            return artifact.read_bytes()
+                        finally:
+                            cleanup()
+
+                    return await concurrency.run_in_threadpool(snapshot_sparse)
                 return await concurrency.run_in_threadpool(
                     lambda: remote_proxy.export_cframe(carrier, payload, include_cache=include_cache)
                 )

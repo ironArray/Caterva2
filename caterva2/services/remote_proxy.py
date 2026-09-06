@@ -17,6 +17,7 @@ publicly routable pinned addresses, and redirects disabled.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import math
 import socket
 import sqlite3
@@ -33,6 +34,8 @@ from fsspec.implementations.http import HTTPFileSystem
 
 from caterva2.services import storage_quota
 
+log = logging.getLogger(__name__)
+
 
 class RemoteProxyDenied(ValueError):
     """The server policy refuses a remote reference."""
@@ -47,6 +50,7 @@ class Policy:
     max_rank: int = 16
     max_chunks: int = 10_000_000
     max_concurrency: int = 8
+    cache_backend: str = "sparse"
 
 
 policy = Policy()
@@ -377,6 +381,7 @@ class ServerRemoteProxy:
         self.shape, self.dtype, self.chunks, self.blocks = geometry
         self.cparams = source.cparams
         self.path = carrier.schunk.urlpath
+        self.carrier_generation = storage_quota.signature(self.path)
         self.requested_cache_policy = payload["cache_policy"]
         self.requested_payload = dict(payload)
         self.requested_max_cache_bytes = payload["max_cache_bytes"]
@@ -400,6 +405,8 @@ class ServerRemoteProxy:
 
     def quota_read(self, quota, item=(), *, nchunk=None):
         """Assemble on an immutable candidate and admit its exact physical size."""
+        if quota.cache_backend == "sparse":
+            return quota.remote.read(self, item, nchunk=nchunk)
         if self.cache_policy != "disk" or getattr(self.src, "stamp", None) is None:
             return (
                 self.get_chunk(nchunk, cache_limit=0)
@@ -526,7 +533,17 @@ def cold_cframe(carrier, payload) -> bytes:
         chunks=carrier.chunks,
         blocks=carrier.blocks,
         cparams=carrier.cparams,
+        meta={
+            key: carrier.schunk.meta[key]
+            for key in carrier.schunk.meta
+            if key not in {"b2nd", "b2o", "proxy"}
+        },
     )
+    from blosc2.proxy import _RESERVED_VLMETA
+
+    for key in carrier.schunk.vlmeta:
+        if key not in _RESERVED_VLMETA and key != "b2o":
+            cold.schunk.vlmeta[key] = carrier.schunk.vlmeta[key]
     write_b2object_payload(cold, payload)
     return cold.to_cframe()
 

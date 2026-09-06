@@ -33,15 +33,17 @@ register = true  # allow users to register
 # peer_cache_quota = "1G"
 
 # Persisted RemoteProxy objects are discoverable but cannot make outbound
-# requests by default. The first opt-in backend is credential-free HTTPS.
+# requests by default. The runtime cache uses private sparse generations and
+# credential-free HTTPS is the supported source transport.
 # Every destination must be listed exactly; redirects, URL queries, private or
 # otherwise non-public destination addresses, and embedded expression
 # references are refused. MEMORY carriers are accepted under the same source
 # policy but execute without retained caching (same as NONE). DISK proxies cache
-# chunks inside their carrier up to persisted max_cache_bytes (or unbounded if None).
-# With a customer quota, shared SQLite admission permits DISK growth when capacity
-# is available; denied fills still return data without retention. See server docs
-# for accounting exclusions, operational headroom, and staged replacement costs.
+# chunks in private runtime generations up to persisted max_cache_bytes (256 MiB
+# by default, or unbounded if None). With a customer quota, shared SQLite admission
+# permits DISK growth when capacity is available; denied fills still return data
+# without retention. See server docs for accounting exclusions, operational
+# headroom, and sparse lifecycle behavior.
 # [server.remote_proxy]
 # enabled = true
 # allowed_hosts = ["datasets.example.org", "objects.example.org:8443"]

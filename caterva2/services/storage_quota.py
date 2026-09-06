@@ -83,11 +83,16 @@ def sync_directory(path):
 
 
 class StorageQuota:
-    def __init__(self, statedir, quota, *, work_bytes=WORK_BYTES):
+    def __init__(self, statedir, quota, *, work_bytes=WORK_BYTES, cache_backend="contiguous"):
+        self.cache_backend = cache_backend
+        if cache_backend not in {"contiguous", "sparse"}:
+            raise ValueError("unknown remote cache backend")
+        if quota is None:
+            quota = 0
         self.input_root = pathlib.Path(statedir).absolute()
         self.root = pathlib.Path(statedir).resolve()
-        if not isinstance(quota, int) or quota <= 0:
-            raise ValueError("quota must be a positive integer")
+        if not isinstance(quota, int) or quota < 0:
+            raise ValueError("quota must be a non-negative integer or None")
         if not isinstance(work_bytes, int) or work_bytes <= 0:
             raise ValueError("work_bytes must be a positive integer")
         self.quota, self.work_bytes = quota, work_bytes
@@ -96,11 +101,14 @@ class StorageQuota:
         self.dbpath = self.root / "storage.sqlite"
         with self.startup_guard() as reconcile:
             if not reconcile:
+                from caterva2.services.sparse_cache import SparseCache
+
+                self.remote = SparseCache(self, initialize=False)
                 return  # Active writers already protect a fully initialized ledger.
             with self.connect() as db:
                 db.execute("PRAGMA journal_mode=WAL")
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1):
+                if version not in (0, 1, 2):
                     raise RuntimeError("unsupported storage quota schema version")
                 db.executescript("""
                     CREATE TABLE IF NOT EXISTS objects (
@@ -123,13 +131,16 @@ class StorageQuota:
                     db.executemany(
                         "INSERT OR REPLACE INTO objects(path,size,generation) VALUES(?,?,?)", inventory
                     )
-                    db.execute("INSERT INTO account VALUES(1,?,?)", (quota, work_bytes))
+                    db.execute("INSERT INTO account(id,quota,work_bytes) VALUES(1,?,?)", (quota, work_bytes))
                     db.execute("PRAGMA user_version=1")
             elif initialized != (quota, work_bytes):
                 # A configuration change is shared by all workers. Admission
                 # reads the ledger value, never a stale worker-local quota.
                 with self.transaction() as db:
                     db.execute("UPDATE account SET quota=?, work_bytes=?", (quota, work_bytes))
+            from caterva2.services.sparse_cache import SparseCache
+
+            self.remote = SparseCache(self)
             # Startup reconciliation covers offline edits and quota re-enablement.
             # All publishes take this barrier shared; no scan runs in a DB txn.
             self.recover()
@@ -147,6 +158,8 @@ class StorageQuota:
                         (rel, size, generation),
                     )
                 db.executemany("DELETE FROM objects WHERE path=?", ((rel,) for rel in known - present))
+
+            self.remote.recover()
 
     @contextlib.contextmanager
     def startup_guard(self):
@@ -290,7 +303,18 @@ class StorageQuota:
                 "SELECT coalesce(sum(reserved),0),coalesce(sum(working),0) FROM operations"
             ).fetchone()
             quota, budget = db.execute("SELECT quota,work_bytes FROM account").fetchone()
-        return {"used": used, "reserved": reserved, "working": working, "quota": quota, "work_bytes": budget}
+            remote_used, remote_reserved, remote_work = self.remote.totals(db)
+            suspended = db.execute("SELECT cache_fill_suspended FROM account").fetchone()[0]
+        return {
+            "used": used + remote_used,
+            "dataset_used": used,
+            "remote_cache_used": remote_used,
+            "reserved": reserved + remote_reserved,
+            "working": working + remote_work,
+            "quota": quota,
+            "work_bytes": budget,
+            "cache_fill_suspended": bool(suspended),
+        }
 
     def publish(self, path, data, *, expected, cache=False, prune=True):
         """Publish exact bytes (None deletes). A stale generation is never overwritten."""
@@ -310,55 +334,65 @@ class StorageQuota:
         raise AssertionError("unreachable admission retry")
 
     def _publish(self, rel, data, expected, cache):
-        path = self.root / rel
         with file_lock(self.control / "initialize.lock", shared=True), self.lock(rel):
-            self.relative(path)  # Recheck parent symlinks after taking mutation guards.
-            self._recover_path(rel)
-            actual = signature(path)
-            if actual != expected:
-                raise StorageBusy("dataset changed while preparing its replacement")
-            oldsize = 0 if actual is None else actual[2]
-            size = 0 if data is None else len(data)
-            opid = uuid.uuid4().hex
-            with self.transaction() as db:
-                self._record(db, rel, actual, cache=cache)
-                used = db.execute("SELECT coalesce(sum(size),0) FROM objects").fetchone()[0]
-                reserved, working = db.execute(
-                    "SELECT coalesce(sum(reserved),0),coalesce(sum(working),0) FROM operations"
-                ).fetchone()
-                quota, budget = db.execute("SELECT quota,work_bytes FROM account").fetchone()
-                growth = max(0, size - oldsize)
-                if (growth and used + reserved + growth > quota) or working + size > budget:
-                    raise QuotaExceeded("customer quota or storage staging budget exceeded")
-                db.execute("INSERT INTO operations VALUES(?,?,?,?)", (opid, rel, growth, size))
-            candidate = self.control / f"{opid}.candidate"
-            # From this point, any failure leaves durable intent for recovery.
-            if data is None:
-                path.unlink(missing_ok=True)
-            else:
-                fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                with os.fdopen(fd, "wb") as file:
-                    file.write(data)
-                    file.flush()
-                    os.fsync(file.fileno())
-                # Persist each new directory entry before publishing into it.
-                missing = []
-                parent = path.parent
-                while not parent.exists():
-                    missing.append(parent)
-                    parent = parent.parent
-                for directory in reversed(missing):
-                    directory.mkdir(exist_ok=True)
-                    sync_directory(directory.parent)
-                sync_directory(self.control)
-                os.replace(candidate, path)
-            sync_directory(path.parent)
+            return self.publish_locked(rel, data, expected=expected, cache=cache)
+
+    def publish_locked(self, rel, data, *, expected, cache=False, preserve_remote=False):
+        """Publish with the initialization and path guards already held."""
+        path = self.root / rel
+        self.relative(path)  # Recheck parent symlinks after taking mutation guards.
+        self._recover_path(rel)
+        actual = signature(path)
+        if actual != expected:
+            raise StorageBusy("dataset changed while preparing its replacement")
+        oldsize = 0 if actual is None else actual[2]
+        size = 0 if data is None else len(data)
+        opid = uuid.uuid4().hex
+        with self.transaction() as db:
+            self._record(db, rel, actual, cache=cache)
+            used = db.execute("SELECT coalesce(sum(size),0) FROM objects").fetchone()[0]
+            reserved, working = db.execute(
+                "SELECT coalesce(sum(reserved),0),coalesce(sum(working),0) FROM operations"
+            ).fetchone()
+            quota, budget = db.execute("SELECT quota,work_bytes FROM account").fetchone()
+            remote_used, remote_reserved, remote_work = self.remote.totals(db)
+            used += remote_used
+            reserved += remote_reserved
+            working += remote_work
+            growth = max(0, size - oldsize)
+            if (quota and growth and used + reserved + growth > quota) or working + size > budget:
+                raise QuotaExceeded("customer quota or storage staging budget exceeded")
+            db.execute("INSERT INTO operations VALUES(?,?,?,?)", (opid, rel, growth, size))
+        candidate = self.control / f"{opid}.candidate"
+        # From this point, any failure leaves durable intent for recovery.
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as file:
+                file.write(data)
+                file.flush()
+                os.fsync(file.fileno())
+            # Persist each new directory entry before publishing into it.
+            missing = []
+            parent = path.parent
+            while not parent.exists():
+                missing.append(parent)
+                parent = parent.parent
+            for directory in reversed(missing):
+                directory.mkdir(exist_ok=True)
+                sync_directory(directory.parent)
             sync_directory(self.control)
-            sig = signature(path)
-            with self.transaction() as db:
-                self._record(db, rel, sig, cache=cache)
-                db.execute("DELETE FROM operations WHERE id=?", (opid,))
-            return sig
+            os.replace(candidate, path)
+        sync_directory(path.parent)
+        sync_directory(self.control)
+        sig = signature(path)
+        with self.transaction() as db:
+            self._record(db, rel, sig, cache=cache)
+            db.execute("DELETE FROM operations WHERE id=?", (opid,))
+        if not preserve_remote:
+            self.remote.retire_path(rel)
+        return sig
 
     def touch(self, path):
         rel = self.relative(path)
@@ -374,6 +408,10 @@ class StorageQuota:
         Pruning is whole-proxy batching initially. Descriptors and user metadata
         survive; space is credited only after atomic replacement is complete.
         """
+        if self.cache_backend == "sparse":
+            before = self.usage()["used"]
+            self.remote.prune(force=True)
+            return self.usage()["used"] < before
         import blosc2
 
         reclaimed = 0

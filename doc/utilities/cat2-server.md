@@ -38,16 +38,18 @@ A persisted `blosc2.RemoteProxy` is a B2ND carrier that asks Caterva2 to read
 another dataset. Persisted `MEMORY` carriers are accepted under the same source
 policy but execute without retained caching (using the same no-retention execution
 path as `NONE`), avoiding unmanaged memory use on the server while preserving
-the requested client limit for download. With a `DISK` cache, fetched compressed
-chunks are retained inside the carrier up to the proxy's `max_cache_bytes` (or
-unbounded when `max_cache_bytes` is `None`) when no customer quota is configured.
-With a quota, shared storage admission permits cache growth when capacity is
-available; otherwise misses are returned without retention.
+the requested client limit for download. With a `DISK` cache, Caterva2 stores
+fetched compressed chunks in a private sparse runtime generation. The public B2ND
+carrier remains portable and contains only the descriptor and user metadata. The
+default proxy limit is 256 MiB; `max_cache_bytes = None` remains unbounded per
+proxy. With or without a customer quota, sparse lifecycle accounting remains
+active; quota controls admission and pruning, while a denied fill falls back to a
+no-retention read.
 Caterva2 can inspect and report its stored shape, dtype, chunk, block, and proxy
 metadata without contacting the source. Outbound resolution is disabled by
 default.
 
-The initial opt-in backend supports public, credential-free HTTPS sources:
+The runtime supports public, credential-free HTTPS sources:
 
 ```toml
 [server.remote_proxy]
@@ -72,10 +74,9 @@ The limits validate the remote array's structure and bound connection time and
 concurrent range fetches. They do not impose a network-work budget on each API
 request. The proxy's own cache limit bounds its retained compressed payload,
 while a configured customer `quota` additionally bounds stored dataset bytes,
-including carrier metadata. A SQLite ledger shared with ordinary writers admits
-the exact serialized replacement size before disk publication. A denied fill
-does not fail a successfully fetched result. Without a quota, normal bounded or
-unbounded DISK caching applies.
+including private sparse generations. A SQLite ledger shared with ordinary
+writers admits ordinary publication work and sparse cache growth. A denied fill
+does not fail a successfully fetched result.
 
 Public S3 objects are supported through credential-free HTTPS object URLs.
 Native `s3://` resolution, private-source credentials, and remote references
@@ -103,18 +104,13 @@ directory. Administrators must provision operational headroom separately.
 
 Uploads, imports, expressions, append/chunk writes, HDF5 unfolding, notebooks,
 copies, moves, deletions, and remote DISK fills share admission. Under pressure,
-admission may cold-replace up to four previously validated DISK cache carriers,
-oldest first, preserving their descriptors and user metadata. Ordinary datasets
-are never automatically pruned. A proxy's own payload cap still applies.
+the server prunes least-recently-used sparse chunks in bounded batches. Ordinary
+datasets are never automatically pruned. A proxy's own payload cap still applies.
 
-The first implementation builds replacements in memory, reserves exact growth,
-writes a complete staging file, and atomically replaces the target. It is a
-correctness-oriented path with whole-file write amplification, not an in-place
-optimization. `[server] quota_work_bytes` (default `"1G"`) bounds the aggregate
-reserved disk staging bytes separately from customer quota. A candidate larger
-than this budget cannot be persisted, even if customer quota has room. This is
-not a hard RAM limit or a bound on HTTP upload spooling, SQLite/lock overhead,
-filesystem allocated blocks, or old inodes retained by open readers. Provision
+`[server] quota_work_bytes` (default `"1G"`) bounds aggregate reserved staging
+and export artifacts separately from customer quota. Sparse cache generations
+charge allocated filesystem blocks, including frame metadata and directory
+entries. This is not a hard RAM limit or a physical-volume guarantee; provision
 and monitor the underlying volume accordingly.
 
 Per-path OS locks and generation checks prevent stale candidates from replacing
@@ -132,3 +128,49 @@ generation conflicts return 409, and ledger errors return 503. Remote reads may
 instead fall back to no retention. `StorageQuota.usage()` exposes committed,
 reserved and disk working bytes for internal diagnostics; there is no new public
 administration endpoint.
+
+## Sparse remote cache lifecycle
+
+Caterva2 uses private sparse runtime generations for retained DISK caches. The
+implementation requires Python-Blosc2's authorized-source `with_sparse_cache`,
+atomic `read_cached`, and offline `trim_sparse_cache` APIs, plus the C-Blosc2
+sparse eviction improvements bundled after Python-Blosc2 `a77ac97b`.
+
+Mutable DISK chunks live under `.remote-cache/<object UUID>/<generation UUID>`
+outside dataset roots. The public file stays a portable carrier. First authorized
+access copies valid warm seed chunks and then replaces the public carrier with a
+cold copy preserving user metadata. Subsequent misses never reimport evicted seed
+chunks. MEMORY and NONE continue without retention. Upload itself makes no remote
+request.
+
+The schema-v2 registry exists even when customer quota is disabled. Sparse files,
+frame metadata, locks within generations, and generation/object directories count
+by allocated filesystem blocks, falling back to apparent length where allocation
+information is unavailable. Ordinary datasets retain their existing apparent-size
+accounting. Builds and fills reserve estimates in the same ledger used by uploads.
+Actual growth can overshoot customer quota; further fills are suspended until
+reclamation reaches a 90% low watermark. Ordinary datasets are never evicted.
+
+Removal/replacement retires the old generation; private bytes remain charged until
+cleanup actually removes them. Copy and move give the destination a cold carrier
+and independent identity. Maintenance wakes every 30 seconds, skips busy owners,
+and retries retirement, interrupted-operation recovery, and pruning. Cache misses
+still return source data if admission or local retention fails. Warm downloads use
+private, immutable export artifacts with ETags and support ranges; completion and
+cancellation release artifact ownership. `include_cache=false` stays cold and
+non-mutating. UI consumers that require bytes retain their existing in-memory
+response contract.
+
+The implementation intentionally uses conservative settings: full-generation
+measurement/fsync after writes, whole-generation discard after interrupted work,
+at most 64 chunks/four generations per prune batch, and 1 GiB operational free-space
+headroom for migration. One warm export reserves the full configured
+`quota_work_bytes` budget until its response finishes. These choices establish an
+endpoint benchmark baseline; incremental accounting, tighter staging estimates,
+bounded inventories, and configurable maintenance tuning remain follow-up work.
+Process-death recovery is covered; this does not claim power-loss atomicity or a
+hard filesystem/RAM bound.
+
+Schema v2 is the initial Caterva2 runtime schema. The previous contiguous-carrier
+implementation is retained only in the benchmark report and is not a supported
+runtime backend.
