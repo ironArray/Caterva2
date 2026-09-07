@@ -32,7 +32,7 @@ def runtime(tmp_path):
     payload = {
         "kind": "remote_proxy",
         "version": 1,
-        "source": {"kind": "fsspec", "version": 1, "urlpath": url},
+        "source": {"kind": "fsspec", "version": 1, "urlpath": url, "assume_immutable": True},
         "cache_policy": "disk",
         "max_cache_bytes": None,
     }

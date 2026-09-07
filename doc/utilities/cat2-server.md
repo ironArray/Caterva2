@@ -51,6 +51,11 @@ default.
 
 The runtime supports public, credential-free HTTPS sources:
 
+The source descriptor records `assume_immutable` as a boolean. Caterva2 resolves
+the HTTPS source and its fsspec identity for each request, so existing mutable
+`.b2nd` source behavior remains available when the descriptor contains
+`assume_immutable=false`.
+
 ```toml
 [server.remote_proxy]
 enabled = true

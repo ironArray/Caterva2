@@ -67,7 +67,12 @@ async def sample(backend, workload, chunk_size, nchunks, cache_chunks):
             {
                 "kind": "remote_proxy",
                 "version": 1,
-                "source": {"kind": "fsspec", "version": 1, "urlpath": url},
+                "source": {
+                    "kind": "fsspec",
+                    "version": 1,
+                    "urlpath": url,
+                    "assume_immutable": True,
+                },
                 "cache_policy": "disk",
                 "max_cache_bytes": limit,
             },

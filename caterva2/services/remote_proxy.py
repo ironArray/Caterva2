@@ -24,6 +24,7 @@ import sqlite3
 import threading
 import weakref
 from dataclasses import dataclass
+from inspect import signature
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -86,8 +87,11 @@ def configure(conf) -> None:
 
     if not isinstance(enabled, bool):
         raise ValueError("remote_proxy.enabled must be true or false")
-    if enabled and not hasattr(blosc2, "RemoteProxy"):
-        raise ValueError("remote_proxy.enabled requires a Python-Blosc2 version with RemoteProxy support")
+    if enabled and (
+        not hasattr(blosc2, "RemoteProxy")
+        or "assume_immutable" not in signature(blosc2.RemoteProxy).parameters
+    ):
+        raise ValueError("remote_proxy.enabled requires a compatible Python-Blosc2 RemoteProxy")
     if not isinstance(hosts, list | tuple) or any(not isinstance(host, str) for host in hosts):
         raise ValueError("remote_proxy.allowed_hosts must be a list of host names")
     if not isinstance(timeout, int | float) or isinstance(timeout, bool) or timeout <= 0:
@@ -237,10 +241,17 @@ def _validated_source(payload: dict) -> str:
             "server RemoteProxy supports only cache policies 'none', 'memory', and 'disk'"
         )
     source = payload.get("source")
-    if not isinstance(source, dict) or set(source) != {"kind", "version", "urlpath"}:
+    if not isinstance(source, dict) or set(source) != {
+        "kind",
+        "version",
+        "urlpath",
+        "assume_immutable",
+    }:
         raise RemoteProxyDenied("server RemoteProxy supports only a versioned fsspec URL source")
     if source.get("kind") != "fsspec" or source.get("version") != 1:
         raise RemoteProxyDenied("server RemoteProxy supports only fsspec source version 1")
+    if not isinstance(source.get("assume_immutable"), bool):
+        raise RemoteProxyDenied("RemoteProxy source assume_immutable must be true or false")
     url = source.get("urlpath")
     if not isinstance(url, str):
         raise RemoteProxyDenied("RemoteProxy source URL must be a string")

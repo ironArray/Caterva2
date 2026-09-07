@@ -195,7 +195,12 @@ async def test_disk_fetch_and_chunk_admit_growth_via_secure_source(quota_api, mo
     carrier = blosc2.ndarray_from_cframe(creator.to_cframe(cache_policy=blosc2.CachePolicy.DISK), copy=True)
     payload = dict(carrier.schunk.vlmeta["b2o"])
     url = "https://data.example/quota.b2nd"
-    payload["source"] = {"kind": "fsspec", "version": 1, "urlpath": url}
+    payload["source"] = {
+        "kind": "fsspec",
+        "version": 1,
+        "urlpath": url,
+        "assume_immutable": True,
+    }
     carrier.schunk.vlmeta["b2o"] = payload
     fs.pipe_file(url, array.to_cframe())
     monkeypatch.setattr(
@@ -251,7 +256,12 @@ async def test_sparse_boundary_lifecycle(quota_api, monkeypatch, quota_enabled):
         {
             "kind": "remote_proxy",
             "version": 1,
-            "source": {"kind": "fsspec", "version": 1, "urlpath": url},
+            "source": {
+                "kind": "fsspec",
+                "version": 1,
+                "urlpath": url,
+                "assume_immutable": True,
+            },
             "cache_policy": "disk",
             "max_cache_bytes": 15000,
         },

@@ -31,7 +31,7 @@ def _payload(url, *, cache_policy="none", max_cache_bytes=None):
     return {
         "kind": "remote_proxy",
         "version": 1,
-        "source": {"kind": "fsspec", "version": 1, "urlpath": url},
+        "source": {"kind": "fsspec", "version": 1, "urlpath": url, "assume_immutable": True},
         "cache_policy": cache_policy,
         "max_cache_bytes": max_cache_bytes,
     }
@@ -191,6 +191,24 @@ def test_cache_specification_is_strict(payload, match):
     remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
     with pytest.raises(remote_proxy.RemoteProxyDenied, match=match):
         remote_proxy._validated_source(payload)
+
+
+@pytest.mark.parametrize("value", [None, 1, "true"])
+def test_source_assume_immutable_must_be_boolean(value):
+    remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
+    payload = _payload("https://data.example/a.b2nd")
+    payload["source"]["assume_immutable"] = value
+
+    with pytest.raises(remote_proxy.RemoteProxyDenied, match="must be true or false"):
+        remote_proxy._validated_source(payload)
+
+
+def test_mutable_sources_are_accepted():
+    remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
+    payload = _payload("https://data.example/a.b2nd")
+    payload["source"]["assume_immutable"] = False
+
+    assert remote_proxy._validated_source(payload) == "https://data.example/a.b2nd"
 
 
 def test_private_resolution_is_rejected(monkeypatch):
