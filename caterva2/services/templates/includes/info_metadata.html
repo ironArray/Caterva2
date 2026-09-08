@@ -57,7 +57,7 @@
 
     {# All the next information is a bit too much for the main window #}
     {% set excluded_keys = [
-        'chunkshape', 'chunksize', 'vlmeta',
+        'chunkshape', 'chunksize', 'vlmeta', 'attrs',
         'contiguous', 'urlpath', 'blocksize'
         ] %}
     {% for key, value in meta %}
@@ -73,7 +73,7 @@
                 {% endif %}
             {% endfor %}
         {% else %}
-            {% if key != 'urlpath' and value is not none %}
+            {% if key not in excluded_keys and value is not none %}
             <tr>
                 <th scope="row" class="text-nowrap">{{ key }}</th>
                 <td style="white-space: pre-wrap; width: 100%">{{ value }}</td>
@@ -82,7 +82,9 @@
         {% endif %}
     {% endfor %}
 
-{% if meta.schunk %}
+{% if meta.attrs is defined and meta.attrs is not none %}
+    {% set vlmeta = meta.attrs %}
+{% elif meta.schunk %}
     {% set vlmeta = meta.schunk.vlmeta %}
 {% else %}
     {% set vlmeta = meta.vlmeta %}
@@ -90,7 +92,7 @@
 {% if vlmeta %}
     <tr>
         <th colspan="2">
-            <h4>VLmeta (user attributes)</h4>
+            <h4>Attributes</h4>
         </th>
     </tr>
     {% for key, value in vlmeta.items() %}

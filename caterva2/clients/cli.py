@@ -173,6 +173,12 @@ def cmd_info(client, args, url):
         return
 
     # Helpers
+    def _print_attrs():
+        attrs = data.get("attrs")
+        if attrs is None:
+            attrs = (data.get("schunk") or data).get("vlmeta", {})
+        print("attrs: " + json.dumps(attrs, indent=2, ensure_ascii=False))
+
     def _human_bytes(n):
         if n is None:
             return "N/A"
@@ -219,6 +225,7 @@ def cmd_info(client, args, url):
         print(f"cbytes : {_human_bytes(cbytes)}")
         print(f"ratio  : {nbytes / cbytes:.2f}x" if nbytes and cbytes else "ratio  : N/A")
         print(f"mtime  : {mtime}") if mtime is not None else print("mtime  : None")
+        _print_attrs()
         return
 
     # Extract fields
@@ -256,6 +263,7 @@ def cmd_info(client, args, url):
         print(f"  filters: [{', '.join(fnames)}]")
     else:
         print("  filters: None")
+    _print_attrs()
 
 
 def _json_default(o):

@@ -532,6 +532,15 @@ class File(_FileOpsMixin):
         schunk_meta = self.meta.get("schunk", self.meta)
         return schunk_meta.get("vlmeta", {})
 
+    @property
+    def attrs(self):
+        """User attributes from cached metadata; changing them does not update the server.
+
+        Older servers without an ``attrs`` field fall back to :attr:`vlmeta`.
+        """
+        attrs = self.meta.get("attrs")
+        return self.vlmeta if attrs is None else attrs
+
     def get_download_url(self, *, include_cache=True):
         """
         Retrieves the download URL for the file.

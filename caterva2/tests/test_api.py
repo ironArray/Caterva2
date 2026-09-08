@@ -147,6 +147,8 @@ def test_remote_proxy_is_discovered_but_resolution_is_disabled(
 ):
     tag = f"{cache_policy.value}-{'unlimited' if max_cache_bytes is None else 'bounded'}"
     source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    source.vlmeta["experiment"] = {"id": 42, "tags": ["optical", "v2"]}
+    source.vlmeta["b2o"] = "user attribute"
     name = f"caterva2-disabled-reference-{tag}.b2nd"
     fsspec.filesystem("memory").pipe_file(name, source.to_cframe())
     carrier_path = tmp_path / f"carrier-{tag}.b2nd" if cache_policy == blosc2.CachePolicy.DISK else None
@@ -175,6 +177,21 @@ def test_remote_proxy_is_discovered_but_resolution_is_disabled(
         assert info["accept_ranges"] == "none"
         assert info["schunk"]["vlmeta"]["b2o"]["cache_policy"] == cache_policy.value
         assert info["schunk"]["vlmeta"]["b2o"]["max_cache_bytes"] == max_cache_bytes
+        assert set(info["schunk"]["vlmeta"]) == {"b2o"}
+        assert info["attrs"] == dict(source.vlmeta)
+        dataset = client.get("@public")[path.name]
+        assert dataset.attrs == info["attrs"]
+        remote = blosc2.RemoteProxy(blosc2.URLPath(f"@public/{path.name}", urlbase=client.urlbase))
+        assert remote.attrs == info["attrs"]
+        assert remote.attrs is remote.vlmeta
+        panel = httpx.get(
+            f"{client.urlbase}/htmx/path-info/@public/{path.name}",
+            headers={"HX-Trigger": "meta", "HX-Current-URL": str(client.urlbase)},
+        )
+        panel.raise_for_status()
+        assert "optical" in panel.text
+        assert "_b2o_user_vlmeta" not in panel.text
+        assert "proxy-cache-sizes" not in panel.text
 
         response = httpx.get(f"{client.urlbase}/api/fetch/@public/{path.name}", params={"slice_": "0:2"})
         assert response.status_code == 403
@@ -1208,17 +1225,19 @@ def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path)
 
 
 @pytest.mark.parametrize("name", ["ds-1d.b2nd", "ds-hello.b2frame", "README.md"])
-def test_vlmeta(client, name):
+def test_vlmeta(client, name, fill_public):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
     schunk_meta = ds.meta.get("schunk", ds.meta)
     assert ds.vlmeta is schunk_meta["vlmeta"]
 
 
-def test_vlmeta_data(client):
+def test_vlmeta_data(client, fill_public):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-sc-attr.b2nd"]
     assert ds.vlmeta == {"a": 1, "b": "foo", "c": 123.456}
+    assert ds.attrs == ds.vlmeta
+    assert ds.attrs is ds.meta["attrs"]
 
 
 ### Lazy expressions

@@ -132,6 +132,7 @@ def test_read_metadata_vlmeta():
 
     meta = srv_utils.read_metadata(table_path)
     assert meta.vlmeta == {"author": "Alice"}
+    assert meta.attrs == meta.vlmeta
 
 
 def test_read_metadata_nonexistent():

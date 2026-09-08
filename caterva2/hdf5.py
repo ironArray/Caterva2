@@ -371,6 +371,8 @@ class HDF5Proxy(blosc2.Operand):
         self.dset = h5file[dsetname] if dsetname else h5file
         b2args = b2args_from_h5dset(self.dset)
         self.b2arr = blosc2.empty(self.dset.shape or (), dtype=self.dset.dtype, **b2args)
+        for name, value in b2attrs_from_h5dset(self.dset).items():
+            self.b2arr.schunk.vlmeta.set_vlmeta(name, value, typesize=1)
         return self
 
     def __init__(self, b2arr, h5file=None, dsetname=None, *, writer=None):

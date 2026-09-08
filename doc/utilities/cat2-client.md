@@ -38,6 +38,11 @@ cat2-client roots --help
 
 A common option for many commands is `--json`, which forces the output to be in JSON format, making it easier to parse with other programs.
 
+The `info` command prints an `attrs` section for arrays, frames, and tables,
+using indented JSON so nested attributes remain readable. It prefers the
+server's public `attrs` mapping and falls back to `vlmeta` for older servers.
+An empty public mapping is shown as `attrs: {}`.
+
 ## Configuration
 
 `cat2-client` can be configured using a TOML file, which is looked for as `caterva2.toml` in the current directory by default. The path can be overridden with the `--conf` generic option. Any command-line options provided will take precedence over settings from the configuration file.

@@ -52,11 +52,13 @@ class SChunk(pydantic.BaseModel, extra="allow"):
     nbytes: int
     urlpath: str | None
     vlmeta: dict = {}
+    attrs: dict | None = None
     nchunks: int
     mtime: datetime.datetime | None = None
 
 
 class Metadata(pydantic.BaseModel):
+    attrs: dict | None = None
     shape: tuple
     chunks: tuple
     blocks: tuple
@@ -83,6 +85,7 @@ class LazyArray(pydantic.BaseModel):
 
 
 class CTableMetadata(pydantic.BaseModel):
+    attrs: dict | None = None
     kind: str = "ctable"
     nrows: int
     ncols: int

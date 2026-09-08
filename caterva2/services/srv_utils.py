@@ -25,6 +25,7 @@ import blosc2
 import fastapi
 import h5py
 import safer
+from blosc2.b2objects import read_b2object_user_vlmeta
 from fastapi_users.exceptions import UserNotExists
 from sqlalchemy.future import select
 
@@ -450,6 +451,19 @@ def is_hdf5_proxy_meta(meta):
     return vlmeta.get("_ftype") == "hdf5"
 
 
+def user_attrs(obj):
+    """Read user attributes without resolving a saved remote source."""
+    schunk = getattr(obj, "schunk", obj)
+    marker = getattr(schunk, "meta", {}).get("b2o", {})
+    if isinstance(marker, dict) and marker.get("kind") == "remote_proxy":
+        return read_b2object_user_vlmeta(obj)
+    vlmeta = schunk.vlmeta
+    internal = {"fill_nonce", "fill_state", "published_url"}
+    if vlmeta.get("_ftype") == "hdf5":
+        internal.update({"_ftype", "_dsetname"})
+    return {key: vlmeta[key] for key in vlmeta if key not in internal}
+
+
 def read_metadata(obj, mtime=None):
     # `mtime` is used when `obj` is an already-opened object (e.g. a container
     # leaf) with no file of its own; callers pass the container's mtime.
@@ -515,7 +529,9 @@ def read_metadata(obj, mtime=None):
         schunk = get_model_from_obj(proxy.b2arr.schunk, models.SChunk, cparams=cparams)
         schunk.cratio = proxy.cratio
         schunk.cbytes = proxy.cbytes
-        return get_model_from_obj(proxy, models.Metadata, schunk=schunk, mtime=mtime)
+        return get_model_from_obj(
+            proxy, models.Metadata, schunk=schunk, mtime=mtime, attrs=user_attrs(proxy.b2arr)
+        )
     elif isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
@@ -525,12 +541,14 @@ def read_metadata(obj, mtime=None):
             array = hdf5.HDF5Proxy(array)
             schunk.cratio = array.cratio  # overwrite cratio (which will be 0) with HDF5Proxy value
             schunk.cbytes = array.cbytes
-        return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime)
+        return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime, attrs=user_attrs(obj))
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
-        return get_model_from_obj(schunk, models.SChunk, cparams=cparams, mtime=mtime)
+        return get_model_from_obj(
+            schunk, models.SChunk, cparams=cparams, mtime=mtime, attrs=user_attrs(schunk)
+        )
     elif isinstance(obj, blosc2.LazyArray):
         # overwrite operands and expression with _tosave versions for metadata display
         if isinstance(obj, blosc2.LazyExpr):
@@ -561,6 +579,7 @@ def read_metadata(obj, mtime=None):
             cbytes=obj.cbytes,
             cratio=obj.cratio,
             vlmeta=dict(obj.vlmeta[:]) if obj.vlmeta[:] else {},
+            attrs=user_attrs(obj),
             mtime=mtime,
         )
     else:

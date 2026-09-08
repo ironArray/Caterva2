@@ -14,7 +14,9 @@ from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR, needs_member_window
 
 def _make_tree(path):
     t = blosc2.TreeStore(str(path), mode="w")
-    t["/g/a"] = np.arange(6, dtype="i4").reshape(2, 3)
+    arr = blosc2.asarray(np.arange(6, dtype="i4").reshape(2, 3))
+    arr.vlmeta["experiment"] = {"id": 42, "tags": ["optical", "v2"]}
+    t["/g/a"] = arr
     t["/g/b"] = np.arange(4, dtype="i4")
     t["/h/c"] = np.arange(10, dtype="i4")
     # Structured leaf for filter/sort tests
@@ -77,6 +79,9 @@ def test_info_leaf(fill_tree_public, client):
     info = client.get_info(f"{root.name}/{fname}/g/a")
     assert tuple(info["shape"]) == (2, 3)
     assert info["dtype"] == "int32"
+    assert info["attrs"] == {"experiment": {"id": 42, "tags": ["optical", "v2"]}}
+    remote = blosc2.RemoteProxy(blosc2.URLPath(f"{root.name}/{fname}/g/a", urlbase=client.urlbase))
+    assert remote.attrs == info["attrs"]
     # A leaf has no file of its own; it inherits the container's mtime.
     assert info["mtime"] is not None
 
