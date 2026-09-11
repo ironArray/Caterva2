@@ -108,7 +108,7 @@ class StorageQuota:
             with self.connect() as db:
                 db.execute("PRAGMA journal_mode=WAL")
                 version = db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1, 2):
+                if version not in (0, 1, 2, 3):
                     raise RuntimeError("unsupported storage quota schema version")
                 db.executescript("""
                     CREATE TABLE IF NOT EXISTS objects (
@@ -169,7 +169,11 @@ class StorageQuota:
         except StorageBusy:
             try:
                 with self.connect() as db:
-                    ready = db.execute("SELECT quota,work_bytes FROM account").fetchone()
+                    ready = (
+                        db.execute("SELECT quota,work_bytes FROM account").fetchone()
+                        if db.execute("PRAGMA user_version").fetchone()[0] == 3
+                        else None
+                    )
             except sqlite3.Error:
                 ready = None
             if ready is not None:

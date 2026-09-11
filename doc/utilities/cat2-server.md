@@ -98,6 +98,44 @@ proxy. Logical `api/fetch` requests continue to return array data.
 
 ## Customer storage admission
 
+### RemoteStore references
+
+Caterva2 also accepts portable `blosc2.RemoteStore.save()` archives (`.b2z`)
+for B2Z, HDF5, and Zarr sources. They are browsable containers: for example,
+`@public/store.b2z/group/array` supports metadata, sliced fetches, and compressed
+chunk reads. Known names and attributes can be inspected without contacting the
+source; undiscovered metadata and array geometry require authorized discovery.
+The same `[server.remote_proxy]` HTTPS policy applies to discovery and leaf reads.
+`max_metadata_bytes` (default 16 MiB) and `max_nodes` (default 100,000) bound
+discovery in addition to the existing per-array geometry limits.
+
+DISK stores use private sparse RemoteArray leaf caches, one shared discovery
+manifest, and one aggregate compressed-payload allowance across all leaves.
+Multiple processes can use the same cache simultaneously; operations within one
+store serialize under OS locks. Independent stores can proceed concurrently.
+The SQLite ledger charges allocated storage, including manifests and directories.
+Requested MEMORY/NONE stores execute without retained payload. A denied cache
+fill falls back to a read without retention; existing warm hits remain usable.
+
+Uploaded warm leaves are imported once and the public archive is replaced with
+a cold descriptor. Downloads include private warm cache data by default;
+`include_cache=false` produces a cold archive without network access. Export
+staging is reserved until the response completes. Interrupted disposable
+generations are retired by maintenance without resolving their sources.
+
+Sources are immutable until a new reference is published. To refresh a hosted
+store, refresh it in python-blosc2, save a new archive, and upload that archive
+as a replacement. Replacement/deletion retires the previous private generation.
+Restart workers together when upgrading: storage schema version 3 adds store
+generation accounting and prevents workers from using a partly initialized ledger.
+
+This support requires the current Python-Blosc2 4.13 development APIs (and their
+forthcoming release). Use `RemoteStore.with_sparse_cache()` for standalone
+shared runtime access; the ordinary upstream `cache_dir` constructor retains
+its exclusive-owner semantics.
+
+### Admission and recovery
+
 With `[server] quota` enabled, `storage.sqlite` coordinates workers sharing one
 customer's local state directory. It uses Python's standard-library `sqlite3`,
 independently of authentication; no additional dependency is needed. Multi-host

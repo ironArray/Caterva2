@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import io
 import json
 import logging
 import math
@@ -69,8 +70,11 @@ def measure(path):
 
 def sync_tree(path):
     for entry in path.iterdir():
-        if entry.is_symlink() or entry.is_dir():
+        if entry.is_symlink():
             raise ValueError("unexpected entry in sparse frame")
+        if entry.is_dir():
+            sync_tree(entry)
+            continue
         with entry.open("rb") as stream:
             os.fsync(stream.fileno())
     sync_directory(path)
@@ -101,6 +105,11 @@ class SparseCache:
         if initialize:
             with quota.connect() as db:
                 db.executescript(SCHEMA)
+                generation_columns = {row[1] for row in db.execute("PRAGMA table_info(remote_generations)")}
+                if "kind" not in generation_columns:
+                    db.execute(
+                        "ALTER TABLE remote_generations ADD COLUMN kind TEXT NOT NULL DEFAULT 'array'"
+                    )
                 columns = {row[1] for row in db.execute("PRAGMA table_info(account)")}
                 if "cache_fill_suspended" not in columns:
                     db.execute(
@@ -109,10 +118,13 @@ class SparseCache:
                 if "cache_backend" not in columns:
                     db.execute("ALTER TABLE account ADD COLUMN cache_backend TEXT NOT NULL DEFAULT 'sparse'")
                 previous = db.execute("SELECT cache_backend FROM account").fetchone()[0]
-                if db.execute("PRAGMA user_version").fetchone()[0] == 2 and previous != quota.cache_backend:
+                if (
+                    db.execute("PRAGMA user_version").fetchone()[0] in (2, 3)
+                    and previous != quota.cache_backend
+                ):
                     raise StorageBusy("backend switch requires explicit offline configuration migration")
                 db.execute("UPDATE account SET cache_backend=?", (quota.cache_backend,))
-                db.execute("PRAGMA user_version=2")
+                db.execute("PRAGMA user_version=3")
         with quota.connect() as db:
             if db.execute("SELECT cache_backend FROM account").fetchone()[0] != quota.cache_backend:
                 raise StorageBusy("backend switch requires draining storage workers")
@@ -247,7 +259,7 @@ class SparseCache:
                 (oid, rel, json.dumps(sig), spec, stamp, None, 0, now),
             )
             db.execute(
-                "INSERT INTO remote_generations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO remote_generations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'array')",
                 (gid, oid, relative, "building", spec, stamp, proxy.max_cache_bytes, 0, 0, 0, now, now),
             )
         with self.guard(gid):
@@ -357,6 +369,141 @@ class SparseCache:
             log.debug("deferred cache maintenance", exc_info=True)
         return result
 
+    def store_operation(self, store, callback, *, cached=None):
+        """Serialize discovery and leaf fills through the existing generation ledger."""
+        from blosc2.msgpack_utils import msgpack_packb
+
+        from caterva2.services import remote_store
+
+        def execute(path=None, operation=callback):
+            with store.open(path) as runtime:
+                with runtime._owner.lock:
+                    result = operation(runtime)
+                    payload = runtime.cache_bytes if path is not None else 0
+                if path is not None:
+                    manifest = runtime._owner.disk.load()
+                    remote_store.validate_manifest(manifest)
+                else:
+                    nodes = {
+                        key: (kind, value if kind == "unsupported" else None)
+                        for key, (kind, value) in runtime._owner.nodes.items()
+                    }
+                    remote_store.validate_manifest(dict(store.manifest, nodes=nodes))
+                    payload = 0
+                return result, payload
+
+        if store.cache_policy != "disk":
+            return execute()[0]
+        rel = self.q.relative(store.path)
+        spec = hashlib.sha256(msgpack_packb(store.manifest)).hexdigest()
+        sig = store.carrier_generation
+        assembled = False
+        try:
+            with file_lock(self.q.control / "initialize.lock", shared=True), self.q.lock(rel):
+                if signature(store.path) != sig:
+                    raise StorageBusy("RemoteStore carrier changed after inspection")
+                if hashlib.sha256(msgpack_packb(remote_store.inspect(store.path))).hexdigest() != spec:
+                    raise StorageBusy("RemoteStore descriptor changed after inspection")
+                with self.q.connect() as db:
+                    row = db.execute(
+                        "SELECT o.active_generation,g.relpath,o.carrier_generation,o.spec_hash "
+                        "FROM remote_objects o JOIN remote_generations g ON g.generation_id=o.active_generation "
+                        "WHERE o.path=? AND g.state='active'",
+                        (rel,),
+                    ).fetchone()
+                if row and (row[2:] != (json.dumps(sig), spec) or not self.path(row[1]).exists()):
+                    self.retire_path(rel)
+                    row = None
+                if row:
+                    gid, private = row[:2]
+                    path = self.path(private)
+                else:
+                    oid, gid = uuid.uuid4().hex, uuid.uuid4().hex
+                    path = self.root / oid / gid
+                    now = time.time()
+                    with self.q.transaction() as db:
+                        db.execute(
+                            "INSERT INTO remote_objects VALUES(?,?,?,?,?,?,?,?)",
+                            (
+                                oid,
+                                rel,
+                                json.dumps(sig),
+                                spec,
+                                json.dumps(store.manifest["source"]),
+                                gid,
+                                0,
+                                now,
+                            ),
+                        )
+                        db.execute(
+                            "INSERT INTO remote_generations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (
+                                gid,
+                                oid,
+                                path.relative_to(self.q.root).as_posix(),
+                                "active",
+                                spec,
+                                json.dumps(store.manifest["source"]),
+                                store.max_cache_bytes,
+                                0,
+                                0,
+                                0,
+                                now,
+                                now,
+                                "store",
+                            ),
+                        )
+                with self.guard(gid):
+                    with self.q.connect() as db:
+                        if db.execute(
+                            "SELECT 1 FROM remote_operations WHERE generation_id=?", (gid,)
+                        ).fetchone():
+                            raise StorageBusy("Store generation needs recovery")
+                    if row and cached is not None:
+                        self._intent(gid, "probe")
+                        (hit, value), payload = execute(path, cached)
+                        sync_tree(path)
+                        self._finish(gid, path, payload)
+                        if hit:
+                            return value
+                    # ponytail: coarse soft admission, as for array fills; exact mutation reports can refine it.
+                    if not self._admit(gid, min(store.max_cache_bytes or (1 << 20), 1 << 20) + 65536):
+                        raise QuotaExceeded("store cache retention refused")
+                    path.mkdir(parents=True, exist_ok=True)
+                    result, payload = execute(path)
+                    assembled = True
+                    sync_tree(path)
+                    self._finish(gid, path, payload)
+                    if store.manifest["caches"]:
+                        self._intent(gid, "coldify")
+                        cold = io.BytesIO()
+                        remote_store.cold_export(store.manifest, cold)
+                        new_sig = self.q.publish_locked(
+                            rel, cold.getvalue(), expected=sig, preserve_remote=True
+                        )
+                        store.manifest = dict(store.manifest, caches=[])
+                        store.carrier_generation = new_sig
+                        spec = hashlib.sha256(msgpack_packb(store.manifest)).hexdigest()
+                        with self.q.transaction() as db:
+                            db.execute(
+                                "UPDATE remote_objects SET carrier_generation=?,spec_hash=? WHERE active_generation=?",
+                                (json.dumps(new_sig), spec, gid),
+                            )
+                            db.execute(
+                                "UPDATE remote_generations SET spec_hash=? WHERE generation_id=?",
+                                (spec, gid),
+                            )
+                            db.execute("DELETE FROM remote_operations WHERE generation_id=?", (gid,))
+        except (OSError, sqlite3.Error, QuotaExceeded):
+            log.debug("store retention unavailable", exc_info=True)
+        if not assembled:
+            result = execute()[0]
+        try:
+            self.prune(force=not assembled)
+        except (OSError, sqlite3.Error, ValueError):
+            log.debug("deferred store maintenance", exc_info=True)
+        return result
+
     def export(self, proxy):
         """Return an immutable warm artifact and its response-lifetime cleanup."""
         from caterva2.services import remote_proxy
@@ -437,6 +584,60 @@ class SparseCache:
             cleanup()
             raise
 
+    def export_store(self, store, *, include_cache=True):
+        """Reserve response-lifetime staging for a portable store snapshot."""
+        from caterva2.services import remote_store
+
+        opid = uuid.uuid4().hex
+        folder = self.q.control / "exports"
+        if folder.is_symlink():
+            raise ValueError("export directory cannot be a symlink")
+        folder.mkdir(mode=0o700, exist_ok=True)
+        destination = folder / f"{opid}.b2z"
+        owner = file_lock(self.q.control / f"export-{opid}.lock")
+        owner.__enter__()
+
+        def cleanup():
+            try:
+                destination.unlink(missing_ok=True)
+                sync_directory(folder)
+                with self.q.transaction() as db:
+                    db.execute("DELETE FROM remote_work WHERE id=?", (opid,))
+            finally:
+                owner.__exit__(None, None, None)
+
+        try:
+            with self.q.transaction() as db:
+                busy = db.execute("SELECT coalesce(sum(working),0) FROM operations").fetchone()[0]
+                _, _, work = self.totals(db)
+                budget = db.execute("SELECT work_bytes FROM account").fetchone()[0]
+                if busy + work:
+                    raise QuotaExceeded("export staging budget is in use")
+                if shutil.disk_usage(folder).free < budget:
+                    raise QuotaExceeded("insufficient store export headroom")
+                db.execute(
+                    "INSERT INTO remote_work VALUES(?,?,?,?,?)",
+                    (opid, "export", budget, destination.relative_to(self.q.root).as_posix(), time.time()),
+                )
+            if include_cache:
+                self.store_operation(
+                    store,
+                    lambda runtime: runtime.save(destination, mutable=store.manifest.get("mutable", False)),
+                )
+            else:
+                remote_store.cold_export(store.manifest, destination)
+            if destination.stat().st_size > budget:
+                raise QuotaExceeded("store export exceeded its staging budget")
+            digest = hashlib.sha256()
+            with destination.open("rb") as stream:
+                os.fsync(stream.fileno())
+                for block in iter(lambda: stream.read(1 << 20), b""):
+                    digest.update(block)
+            return destination, digest.hexdigest(), cleanup
+        except BaseException:
+            cleanup()
+            raise
+
     def prune(self, *, force=False):
         """Bounded whole-generation cleanup plus authorized-free chunk eviction."""
         try:
@@ -452,13 +653,13 @@ class SparseCache:
                     return
                 with self.q.connect() as db:
                     rows = db.execute(
-                        "SELECT g.generation_id,g.relpath,g.payload_bytes,o.path "
+                        "SELECT g.generation_id,g.relpath,g.payload_bytes,o.path,g.kind,g.source_stamp "
                         "FROM remote_generations g JOIN remote_objects o ON o.object_id=g.object_id "
                         "WHERE g.state='active' AND NOT EXISTS (SELECT 1 FROM remote_operations p "
                         "WHERE p.generation_id=g.generation_id) ORDER BY touched LIMIT 4"
                     ).fetchall()
                 remaining = 64
-                for gid, private, payload, rel in rows:
+                for gid, private, payload, rel, kind, source in rows:
                     try:
                         with self.q.lock(rel, blocking=False), self.guard(gid, blocking=False):
                             with self.q.connect() as db:
@@ -474,10 +675,20 @@ class SparseCache:
                             if not needed or not remaining:
                                 break
                             path = self.path(private)
+                            if not path.exists():
+                                continue
                             self._intent(gid, "prune")
-                            evicted, payload = blosc2.RemoteArray.trim_sparse_cache(
-                                path, max(0, payload - needed), max_chunks=remaining
-                            )
+                            if kind == "store":
+                                evicted, payload = blosc2.RemoteStore.trim_sparse_cache(
+                                    path,
+                                    json.loads(source),
+                                    max(0, payload - needed),
+                                    max_chunks=remaining,
+                                )
+                            else:
+                                evicted, payload = blosc2.RemoteArray.trim_sparse_cache(
+                                    path, max(0, payload - needed), max_chunks=remaining
+                                )
                             remaining -= len(evicted)
                             sync_tree(path)
                             self._finish(gid, path, payload)
@@ -613,7 +824,10 @@ class SparseCache:
         with self.q.connect() as db:
             rows = db.execute("SELECT id,relpath FROM remote_work").fetchall()
         for opid, rel in rows:
-            if not re.fullmatch("[0-9a-f]{32}", opid) or rel != f".storage/exports/{opid}.b2nd":
+            if not re.fullmatch("[0-9a-f]{32}", opid) or rel not in {
+                f".storage/exports/{opid}.b2nd",
+                f".storage/exports/{opid}.b2z",
+            }:
                 raise ValueError("invalid export registry path")
             try:
                 with file_lock(self.q.control / f"export-{opid}.lock", blocking=False):

@@ -304,6 +304,11 @@ def open_container(abspath):
     is not one (single-array .b2z, corrupt/non-container file, wrong suffix)."""
     suffix = abspath.suffix
     if suffix == ".b2z":
+        from caterva2.services import remote_store
+
+        manifest = remote_store.inspect(abspath)
+        if manifest is not None:
+            return remote_store.ServerRemoteStore(abspath, manifest)
         try:
             store = blosc2.open(abspath)
         except Exception:
@@ -468,6 +473,24 @@ def read_metadata(obj, mtime=None):
     # `mtime` is used when `obj` is an already-opened object (e.g. a container
     # leaf) with no file of its own; callers pass the container's mtime.
     # Open dataset
+    from caterva2.services import remote_store
+
+    if isinstance(obj, remote_store.ServerStoreArray):
+        empty = blosc2.empty(obj.shape, obj.dtype, chunks=obj.chunks, blocks=obj.blocks, cparams=obj.cparams)
+        result = read_metadata(empty, mtime=mtime)
+        result.attrs = result.schunk.attrs = obj.attrs
+        result.schunk.vlmeta = obj.attrs
+        result.accept_ranges = "none"
+        return result
+    if isinstance(obj, str | pathlib.Path):
+        manifest = remote_store.inspect(obj)
+        if manifest is not None:
+            path = pathlib.Path(obj)
+            return models.Directory(
+                mtime=path.stat().st_mtime,
+                size=path.stat().st_size,
+                nfiles=sum(kind == "ndarray" for kind, _ in manifest["nodes"].values()),
+            )
     if isinstance(obj, pathlib.Path):
         path = obj
         if not path.is_file():

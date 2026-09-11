@@ -53,6 +53,8 @@ class Policy:
     max_concurrency: int = 8
     cache_maintenance_seconds: float = 60.0
     cache_backend: str = "sparse"
+    max_metadata_bytes: int = 16 << 20
+    max_nodes: int = 100_000
 
 
 policy = Policy()
@@ -83,6 +85,8 @@ def configure(conf) -> None:
     max_rank = conf.get(".remote_proxy.max_rank", 16)
     max_chunks = conf.get(".remote_proxy.max_chunks", 10_000_000)
     max_concurrency = conf.get(".remote_proxy.max_concurrency", 8)
+    max_metadata_bytes = conf.get(".remote_proxy.max_metadata_bytes", 16 << 20)
+    max_nodes = conf.get(".remote_proxy.max_nodes", 100_000)
     cache_maintenance_seconds = conf.get(".remote_proxy.cache_maintenance_seconds", 60.0)
 
     if not isinstance(enabled, bool):
@@ -107,6 +111,8 @@ def configure(conf) -> None:
         "max_rank": max_rank,
         "max_chunks": max_chunks,
         "max_concurrency": max_concurrency,
+        "max_metadata_bytes": max_metadata_bytes,
+        "max_nodes": max_nodes,
     }.items():
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ValueError(f"remote_proxy.{name} must be a positive integer")
@@ -119,6 +125,8 @@ def configure(conf) -> None:
         max_rank=max_rank,
         max_chunks=max_chunks,
         max_concurrency=max_concurrency,
+        max_metadata_bytes=max_metadata_bytes,
+        max_nodes=max_nodes,
         cache_maintenance_seconds=float(cache_maintenance_seconds),
     )
 
@@ -197,7 +205,7 @@ def guard_embedded(path) -> None:
 
 def _contains_remote_reference(value) -> bool:
     if isinstance(value, dict):
-        if value.get("kind") in {"fsspec", "remote_array"}:
+        if value.get("kind") in {"fsspec", "remote_array", "remote_store", "hdf5", "zarr", "b2z"}:
             return True
         return any(_contains_remote_reference(item) for item in value.values())
     if isinstance(value, list | tuple):

@@ -366,6 +366,11 @@ def open_b2(abspath, path):
     if root not in {"@personal", "@shared", "@public"}:
         raise ValueError(f"Unexpected root={root}")
 
+    from caterva2.services import remote_store
+
+    manifest = remote_store.inspect(abspath)
+    if manifest is not None:
+        return remote_store.ServerRemoteStore(abspath, manifest)
     reference = remote_proxy.inspect(abspath)
     if reference is not None:
         carrier, payload = reference
@@ -539,6 +544,11 @@ def custom_filesizeformat(value):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(remote_proxy.RemoteArrayDenied)
+async def remote_reference_denied(request, exc):
+    return responses.JSONResponse(status_code=403, content={"detail": str(exc)})
 
 
 @app.exception_handler(storage_quota.QuotaExceeded)
@@ -853,6 +863,10 @@ def member_window(abspath, inner_key, mtime):
     window handed out that would decode to nonsense.
     """
     if abspath.suffix != ".b2z":
+        return None
+    from caterva2.services import remote_store
+
+    if remote_store.inspect(abspath) is not None:
         return None
     try:
         store = blosc2.open(abspath)
@@ -1222,7 +1236,9 @@ async def fetch_data(
     if field:
         container = container[field]
 
-    if isinstance(container, blosc2.DictStore):
+    from caterva2.services.remote_store import ServerRemoteStore
+
+    if isinstance(container, blosc2.DictStore | ServerRemoteStore):
         # A container is a file of leaves rather than an array: its stored image
         # is the file, which is what a client opening it as a store expects --
         # and what the type ladder below used to die on, asking a TreeStore for
@@ -1492,6 +1508,24 @@ async def download_data(
         headers.setdefault("Content-Disposition", f'attachment; filename="{path.name}"')
         headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
+
+    from caterva2.services import remote_store
+
+    abspath = get_abspath(path, user)
+    manifest = remote_store.inspect(abspath)
+    if manifest is not None and (remote_proxy.policy.enabled or not include_cache):
+        artifact, etag, cleanup = await concurrency.run_in_threadpool(
+            lambda: quota_coordinator().remote.export_store(
+                remote_store.ServerRemoteStore(abspath, manifest),
+                include_cache=include_cache,
+            )
+        )
+        return RemoteCacheFileResponse(
+            artifact,
+            cleanup=cleanup,
+            filename=path.name,
+            headers={"ETag": f'"{etag}"'},
+        )
 
     if remote_proxy.policy.enabled and remote_proxy.policy.cache_backend == "sparse" and include_cache:
         abspath = get_abspath(path, user)
@@ -4231,6 +4265,23 @@ async def get_file_content(path, user, decompress=True, include_cache=True):
     """
     abspath = get_abspath(path, user)
     suffix = abspath.suffix
+
+    from caterva2.services import remote_store
+
+    manifest = remote_store.inspect(abspath)
+    if manifest is not None and (remote_proxy.policy.enabled or not include_cache):
+
+        def snapshot_store():
+            artifact, _, cleanup = quota_coordinator().remote.export_store(
+                remote_store.ServerRemoteStore(abspath, manifest),
+                include_cache=include_cache,
+            )
+            try:
+                return artifact.read_bytes()
+            finally:
+                cleanup()
+
+        return await concurrency.run_in_threadpool(snapshot_store)
 
     if suffix in {".b2frame", ".b2nd"}:
         reference = remote_proxy.inspect(abspath)
