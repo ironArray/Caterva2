@@ -433,11 +433,17 @@ class StorageQuota:
                 carrier = blosc2.ndarray_from_cframe(frame, copy=True)
                 payload = carrier.schunk.vlmeta.get("b2o")
                 marker = carrier.schunk.meta.get("b2o")
-                if marker != {"kind": "remote_proxy", "version": 1}:
+                if marker != {"kind": "remote_array", "version": 1}:
                     continue
-                if not isinstance(payload, dict) or payload.get("kind") != "remote_proxy":
+                if not isinstance(payload, dict) or payload.get("kind") != "remote_array":
                     continue
-                if set(payload) != {"kind", "version", "source", "cache_policy", "max_cache_bytes"}:
+                if set(payload) - {"mutable"} != {
+                    "kind",
+                    "version",
+                    "source",
+                    "cache_policy",
+                    "max_cache_bytes",
+                }:
                     continue
                 if payload.get("cache_policy") != "disk":
                     continue

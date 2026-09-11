@@ -80,7 +80,7 @@ def test_info_leaf(fill_tree_public, client):
     assert tuple(info["shape"]) == (2, 3)
     assert info["dtype"] == "int32"
     assert info["attrs"] == {"experiment": {"id": 42, "tags": ["optical", "v2"]}}
-    remote = blosc2.RemoteProxy(blosc2.URLPath(f"{root.name}/{fname}/g/a", urlbase=client.urlbase))
+    remote = blosc2.RemoteArray(blosc2.URLPath(f"{root.name}/{fname}/g/a", urlbase=client.urlbase))
     assert remote.attrs == info["attrs"]
     # A leaf has no file of its own; it inherits the container's mtime.
     assert info["mtime"] is not None

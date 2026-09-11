@@ -21,7 +21,7 @@ def runtime(tmp_path):
     fs = fsspec.filesystem("memory")
     fs.pipe_file(url, array.to_cframe())
     carrier = make_b2object_carrier(
-        "remote_proxy",
+        "remote_array",
         array.shape,
         array.dtype,
         chunks=array.chunks,
@@ -30,7 +30,7 @@ def runtime(tmp_path):
     )
     carrier.schunk.vlmeta["user-variable"] = {"sample": 42}
     payload = {
-        "kind": "remote_proxy",
+        "kind": "remote_array",
         "version": 1,
         "source": {"kind": "fsspec", "version": 1, "urlpath": url, "assume_immutable": True},
         "cache_policy": "disk",
@@ -44,7 +44,7 @@ def runtime(tmp_path):
     def resolve():
         source = blosc2.FsspecNDSource(url, _filesystem=fs)
         c = remote_proxy.raw_carrier(path)
-        return remote_proxy.ServerRemoteProxy(
+        return remote_proxy.ServerRemoteArray(
             source, (array.shape, array.dtype, array.chunks, array.blocks), c, payload
         )
 
@@ -70,14 +70,14 @@ def test_offline_pruning_and_hysteresis(runtime, monkeypatch):
 
 def test_failed_mutation_is_charged_and_recovered_without_network(runtime, monkeypatch):
     q, resolve, data, _ = runtime
-    read = blosc2.RemoteProxy.__getitem__
+    read = blosc2.RemoteArray.__getitem__
 
     def fail_after_write(self, item):
         read(self, item)
         raise OSError("injected interrupted cache publication")
 
     with monkeypatch.context() as patch:
-        patch.setattr(blosc2.RemoteProxy, "__getitem__", fail_after_write)
+        patch.setattr(blosc2.RemoteArray, "__getitem__", fail_after_write)
         np.testing.assert_array_equal(q.remote.read(resolve()), data)
     with q.connect() as db:
         assert db.execute("SELECT count(*) FROM remote_operations").fetchone()[0] == 1
@@ -169,7 +169,7 @@ def _worker_read(statedir, ready, errors):
             carrier = remote_proxy.raw_carrier(q.root / "public/proxy.b2nd")
             source = blosc2.FsspecNDSource(url, _filesystem=fs)
             source.stamp = "immutable-multiprocess-test-source"
-            proxy = remote_proxy.ServerRemoteProxy(
+            proxy = remote_proxy.ServerRemoteArray(
                 source,
                 (array.shape, array.dtype, array.chunks, array.blocks),
                 carrier,
@@ -234,7 +234,7 @@ def _worker_die(statedir):
     fs.pipe_file(url, array.to_cframe())
     carrier = remote_proxy.raw_carrier(q.root / "public/proxy.b2nd")
     source = blosc2.FsspecNDSource(url, _filesystem=fs)
-    proxy = remote_proxy.ServerRemoteProxy(
+    proxy = remote_proxy.ServerRemoteArray(
         source, (array.shape, array.dtype, array.chunks, array.blocks), carrier, carrier.schunk.vlmeta["b2o"]
     )
     original = blosc2.Proxy._store_chunk

@@ -191,7 +191,7 @@ async def test_disk_fetch_and_chunk_admit_growth_via_secure_source(quota_api, mo
     array = blosc2.asarray(data, chunks=(10000,), blocks=(10000,))
     fs = fsspec.filesystem("memory")
     fs.pipe_file("quota-api-source.b2nd", array.to_cframe())
-    creator = blosc2.RemoteProxy("memory://quota-api-source.b2nd", cache_policy=blosc2.CachePolicy.MEMORY)
+    creator = blosc2.RemoteArray("memory://quota-api-source.b2nd", cache_policy=blosc2.CachePolicy.MEMORY)
     carrier = blosc2.ndarray_from_cframe(creator.to_cframe(cache_policy=blosc2.CachePolicy.DISK), copy=True)
     payload = dict(carrier.schunk.vlmeta["b2o"])
     url = "https://data.example/quota.b2nd"
@@ -249,12 +249,12 @@ async def test_sparse_boundary_lifecycle(quota_api, monkeypatch, quota_enabled):
     from blosc2.b2objects import make_b2object_carrier, write_b2object_payload
 
     carrier = make_b2object_carrier(
-        "remote_proxy", array.shape, array.dtype, chunks=array.chunks, blocks=array.blocks
+        "remote_array", array.shape, array.dtype, chunks=array.chunks, blocks=array.blocks
     )
     write_b2object_payload(
         carrier,
         {
-            "kind": "remote_proxy",
+            "kind": "remote_array",
             "version": 1,
             "source": {
                 "kind": "fsspec",

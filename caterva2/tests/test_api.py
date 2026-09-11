@@ -157,7 +157,7 @@ def test_remote_proxy_is_discovered_but_resolution_is_disabled(
         kwargs["max_cache_bytes"] = max_cache_bytes
     elif cache_policy is blosc2.CachePolicy.DISK and max_cache_bytes is None:
         kwargs["max_cache_bytes"] = None
-    reference = blosc2.RemoteProxy(
+    reference = blosc2.RemoteArray(
         f"memory://{name}",
         cache_policy=cache_policy,
         cache_path=carrier_path,
@@ -181,7 +181,7 @@ def test_remote_proxy_is_discovered_but_resolution_is_disabled(
         assert info["attrs"] == dict(source.vlmeta)
         dataset = client.get("@public")[path.name]
         assert dataset.attrs == info["attrs"]
-        remote = blosc2.RemoteProxy(blosc2.URLPath(f"@public/{path.name}", urlbase=client.urlbase))
+        remote = blosc2.RemoteArray(blosc2.URLPath(f"@public/{path.name}", urlbase=client.urlbase))
         assert remote.attrs == info["attrs"]
         assert remote.attrs is remote.vlmeta
         panel = httpx.get(
@@ -195,7 +195,7 @@ def test_remote_proxy_is_discovered_but_resolution_is_disabled(
 
         response = httpx.get(f"{client.urlbase}/api/fetch/@public/{path.name}", params={"slice_": "0:2"})
         assert response.status_code == 403
-        assert response.json()["detail"] == "RemoteProxy resolution is disabled by server policy"
+        assert response.json()["detail"] == "RemoteArray resolution is disabled by server policy"
         assert path.read_bytes() == before
     finally:
         path.unlink(missing_ok=True)
@@ -211,7 +211,7 @@ def test_remote_proxy_download_can_omit_cache(client, tmp_path, cache_policy):
         if cache_policy == blosc2.CachePolicy.DISK
         else None
     )
-    reference = blosc2.RemoteProxy(
+    reference = blosc2.RemoteArray(
         f"memory://{name}",
         cache_policy=cache_policy,
         cache_path=carrier_path,
@@ -274,7 +274,7 @@ async def test_remote_proxy_memory_enabled_resolution_fetch_and_chunk(tmp_path, 
     mem_fs.pipe_file(url, source.to_cframe())
     mem_fs.pipe_file("dummy.b2nd", source.to_cframe())
 
-    dummy_proxy = blosc2.RemoteProxy(
+    dummy_proxy = blosc2.RemoteArray(
         "memory://dummy.b2nd",
         cache_policy=blosc2.CachePolicy.MEMORY,
         max_cache_bytes=500_000,
@@ -367,7 +367,7 @@ async def test_remote_proxy_memory_enabled_resolution_fetch_and_chunk(tmp_path, 
 def test_remote_proxy_hidden_in_expression_is_denied_before_open(client):
     source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
     fsspec.filesystem("memory").pipe_file("caterva2-embedded-reference.b2nd", source.to_cframe())
-    reference = blosc2.RemoteProxy("memory://caterva2-embedded-reference.b2nd")
+    reference = blosc2.RemoteArray("memory://caterva2-embedded-reference.b2nd")
     expression = blosc2.lazyexpr("a + 1", operands={"a": reference})
     path = pathlib.Path(TEST_STATE_DIR) / "server/public/embedded-reference.b2nd"
     expression.save(path)

@@ -310,7 +310,7 @@ class _FileOpsMixin:
             The destination path for the downloaded file.  If not specified, the file will
             be downloaded to the current working directory.
         include_cache : bool, optional
-            For a RemoteProxy carrier, include its valid warm cache data.
+            For a RemoteArray carrier, include its valid warm cache data.
             Pass false to download a cold proxy without changing the server copy.
 
         Returns
@@ -545,7 +545,7 @@ class File(_FileOpsMixin):
         """
         Retrieves the download URL for the file.
 
-        ``include_cache=False`` requests a cold RemoteProxy carrier. It has no
+        ``include_cache=False`` requests a cold RemoteArray carrier. It has no
         effect on other file types.
 
         Returns
@@ -1521,7 +1521,7 @@ class Client:
             Local path to save the downloaded dataset. Defaults to the current
             working directory if not specified.
         include_cache : bool, optional
-            For a RemoteProxy carrier, include its valid warm cache data.
+            For a RemoteArray carrier, include its valid warm cache data.
             Pass false to download a cold proxy without changing the server copy.
 
         Returns

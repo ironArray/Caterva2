@@ -1,4 +1,4 @@
-# RemoteProxy v5 versus sparse v7
+# RemoteArray v5 versus sparse v7
 
 Measured through the real `/api/chunk` and `/api/fetch` ASGI routes, using the
 rebuilt Python-Blosc2 extension after `a77ac97b` (C-Blosc2 `a54e259`). V5 is the

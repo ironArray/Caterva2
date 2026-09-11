@@ -34,7 +34,7 @@ And then simply run `cat2-server` to start it on all network interfaces on port 
 
 ## Remote reference policy
 
-A persisted `blosc2.RemoteProxy` is a B2ND carrier that asks Caterva2 to read
+A persisted `blosc2.RemoteArray` is a B2ND carrier that asks Caterva2 to read
 another dataset. Persisted `MEMORY` carriers are accepted under the same source
 policy but execute without retained caching (using the same no-retention execution
 path as `NONE`), avoiding unmanaged memory use on the server while preserving

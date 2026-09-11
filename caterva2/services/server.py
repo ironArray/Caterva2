@@ -278,7 +278,7 @@ def move_dataset(source, destination):
             raise storage_quota.StorageBusy("move source was removed")
         if remote_proxy.policy.cache_backend == "sparse" and source.suffix in {".b2nd", ".b2frame"}:
             carrier = blosc2.ndarray_from_cframe(data)
-            if carrier.schunk.vlmeta.get("b2o", {}).get("kind") == "remote_proxy":
+            if carrier.schunk.vlmeta.get("b2o", {}).get("kind") == "remote_array":
                 data = remote_proxy.cold_cframe(carrier, carrier.schunk.vlmeta["b2o"])
         write_dataset(destination, data)
         quota.publish(source, None, expected=generation, prune=False)
@@ -294,7 +294,7 @@ def quota_proxy_operation(proxy, item=(), *, nchunk=None):
     return proxy.quota_read(quota, item, nchunk=nchunk)
 
 
-def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteProxy) -> int | None:
+def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteArray) -> int | None:
     """Return the allowance for the legacy, in-place cache path.
 
     Payload limits cannot reserve physical metadata growth, and per-dataset locks
@@ -371,12 +371,12 @@ def open_b2(abspath, path):
         carrier, payload = reference
         try:
             return remote_proxy.resolve(carrier, payload)
-        except remote_proxy.RemoteProxyDenied as exc:
+        except remote_proxy.RemoteArrayDenied as exc:
             raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
 
     try:
         remote_proxy.guard_embedded(abspath)
-    except remote_proxy.RemoteProxyDenied as exc:
+    except remote_proxy.RemoteArrayDenied as exc:
         raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
     container = blosc2.open(abspath)
     # CTable has its own storage and no table-level cparams/dparams; return early.
@@ -785,7 +785,7 @@ async def get_info(
         response.headers["ETag"] = etag
     try:
         meta = srv_utils.read_metadata(abspath)
-    except remote_proxy.RemoteProxyDenied as exc:
+    except remote_proxy.RemoteArrayDenied as exc:
         raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
     # A dataset with a file of its own is served by `FileResponse`, which honours
     # a range.  Only said where it is certain: a directory or a lazy expression
@@ -1245,7 +1245,7 @@ async def fetch_data(
 
     if isinstance(
         container,
-        (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField, remote_proxy.ServerRemoteProxy),
+        (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField, remote_proxy.ServerRemoteArray),
     ):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
@@ -1285,7 +1285,7 @@ async def fetch_data(
                 | hdf5.HDF5Proxy
                 | blosc2.NDField
                 | blosc2.CTable
-                | remote_proxy.ServerRemoteProxy,
+                | remote_proxy.ServerRemoteArray,
             )
         )
         and (not filter)
@@ -1316,7 +1316,7 @@ async def fetch_data(
     srv_utils.refuse_range(range_header, path)
 
     if indices is not None:
-        if not isinstance(array, blosc2.NDArray | remote_proxy.ServerRemoteProxy):
+        if not isinstance(array, blosc2.NDArray | remote_proxy.ServerRemoteArray):
             srv_utils.raise_bad_request(f"{path} is not an array that can be indexed by coordinates")
         try:
             # `NDArray` reads scattered coordinates through its own sparse gather,
@@ -1324,7 +1324,7 @@ async def fetch_data(
             # Off the event loop: bounded by `MAX_FETCH_COORDS` but not small, and
             # a gather that ran here would stall every other request for its
             # duration -- it reads, materializes and serializes, all blocking
-            if isinstance(array, remote_proxy.ServerRemoteProxy):
+            if isinstance(array, remote_proxy.ServerRemoteArray):
                 data = await read_remote_proxy(array, indices, abspath)
             else:
                 data = await concurrency.run_in_threadpool(
@@ -1346,7 +1346,7 @@ async def fetch_data(
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()
-    elif isinstance(array, remote_proxy.ServerRemoteProxy):
+    elif isinstance(array, remote_proxy.ServerRemoteArray):
         data = await read_remote_proxy(array, () if slice_ is None else slice_, abspath)
     elif isinstance(array, blosc2.NDArray):
         # Using NDArray.slice() allows a fast path when it is aligned with the chunks
@@ -1493,7 +1493,7 @@ async def download_data(
         headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 
-    if remote_proxy.policy.cache_backend == "sparse" and include_cache:
+    if remote_proxy.policy.enabled and remote_proxy.policy.cache_backend == "sparse" and include_cache:
         abspath = get_abspath(path, user)
         reference = remote_proxy.inspect(abspath) if abspath.suffix in {".b2nd", ".b2frame"} else None
         if reference is not None and reference[1]["cache_policy"] == "disk":
@@ -1607,7 +1607,7 @@ async def get_chunk(
         if isinstance(container, blosc2.LazyArray):
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
-        elif isinstance(container, remote_proxy.ServerRemoteProxy):
+        elif isinstance(container, remote_proxy.ServerRemoteArray):
             if settings.quota or remote_proxy.policy.cache_backend == "sparse":
                 chunk = await concurrency.run_in_threadpool(
                     lambda: quota_proxy_operation(container, nchunk=nchunk)
@@ -4240,6 +4240,7 @@ async def get_file_content(path, user, decompress=True, include_cache=True):
                 carrier, payload = remote_proxy.inspect(abspath)
                 if (
                     remote_proxy.policy.cache_backend == "sparse"
+                    and remote_proxy.policy.enabled
                     and include_cache
                     and payload["cache_policy"] == "disk"
                 ):

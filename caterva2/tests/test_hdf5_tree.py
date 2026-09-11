@@ -68,7 +68,7 @@ def test_info_leaf(fill_h5_public, client):
     assert info["dtype"] == "int32"
     assert info["attrs"] == {"author": "researcher", "_user_key": 42}
     assert info["schunk"]["vlmeta"]["author"] == "researcher"
-    remote = blosc2.RemoteProxy(blosc2.URLPath(f"{root.name}/{fname}/g/a", urlbase=client.urlbase))
+    remote = blosc2.RemoteArray(blosc2.URLPath(f"{root.name}/{fname}/g/a", urlbase=client.urlbase))
     assert remote.attrs == info["attrs"]
     # A leaf has no file of its own; it inherits the container's mtime.
     assert info["mtime"] is not None

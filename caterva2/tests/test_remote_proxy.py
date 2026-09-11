@@ -29,7 +29,7 @@ class _Conf:
 
 def _payload(url, *, cache_policy="none", max_cache_bytes=None):
     return {
-        "kind": "remote_proxy",
+        "kind": "remote_array",
         "version": 1,
         "source": {"kind": "fsspec", "version": 1, "urlpath": url, "assume_immutable": True},
         "cache_policy": cache_policy,
@@ -55,7 +55,7 @@ def reset_policy():
 )
 def test_resolution_is_default_deny(cache_policy, max_cache_bytes):
     remote_proxy.policy = remote_proxy.Policy()
-    with pytest.raises(remote_proxy.RemoteProxyDenied, match="disabled"):
+    with pytest.raises(remote_proxy.RemoteArrayDenied, match="disabled"):
         remote_proxy._validated_source(
             _payload(
                 "https://data.example/array.b2nd", cache_policy=cache_policy, max_cache_bytes=max_cache_bytes
@@ -83,7 +83,7 @@ def test_resolution_is_default_deny(cache_policy, max_cache_bytes):
 )
 def test_enabled_policy_still_rejects_unsafe_destinations(url, cache_policy, max_cache_bytes):
     remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
-    with pytest.raises(remote_proxy.RemoteProxyDenied):
+    with pytest.raises(remote_proxy.RemoteArrayDenied):
         remote_proxy._validated_source(
             _payload(url, cache_policy=cache_policy, max_cache_bytes=max_cache_bytes)
         )
@@ -189,7 +189,7 @@ def test_configured_https_destination_is_accepted(cache_policy, max_cache_bytes)
 )
 def test_cache_specification_is_strict(payload, match):
     remote_proxy.policy = remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
-    with pytest.raises(remote_proxy.RemoteProxyDenied, match=match):
+    with pytest.raises(remote_proxy.RemoteArrayDenied, match=match):
         remote_proxy._validated_source(payload)
 
 
@@ -199,7 +199,7 @@ def test_source_assume_immutable_must_be_boolean(value):
     payload = _payload("https://data.example/a.b2nd")
     payload["source"]["assume_immutable"] = value
 
-    with pytest.raises(remote_proxy.RemoteProxyDenied, match="must be true or false"):
+    with pytest.raises(remote_proxy.RemoteArrayDenied, match="must be true or false"):
         remote_proxy._validated_source(payload)
 
 
@@ -217,7 +217,7 @@ def test_private_resolution_is_rejected(monkeypatch):
         "getaddrinfo",
         lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))],
     )
-    with pytest.raises(remote_proxy.RemoteProxyDenied, match="non-public"):
+    with pytest.raises(remote_proxy.RemoteArrayDenied, match="non-public"):
         remote_proxy._public_addresses("data.example", 443)
 
 
@@ -286,7 +286,7 @@ def test_allowed_source_is_resolved_with_the_secure_filesystem(
         max_cache_bytes=max_cache_bytes,
     )
     resolved = remote_proxy.resolve(Carrier(), payload)
-    assert isinstance(resolved, remote_proxy.ServerRemoteProxy)
+    assert isinstance(resolved, remote_proxy.ServerRemoteArray)
     assert resolved.requested_cache_policy == cache_policy
     assert resolved.requested_max_cache_bytes == max_cache_bytes
     assert resolved.cache_policy == expected_eff_policy
@@ -304,7 +304,7 @@ def test_cold_cframe_preserves_specification_but_not_cached_chunks(tmp_path):
     source_url = "memory://cold-cframe-source.b2nd"
     fsspec.filesystem("memory").pipe_file("cold-cframe-source.b2nd", source.to_cframe())
     carrier_path = tmp_path / "proxy.b2nd"
-    proxy = blosc2.RemoteProxy(
+    proxy = blosc2.RemoteArray(
         source_url,
         cache_policy=blosc2.CachePolicy.DISK,
         cache_path=carrier_path,
@@ -328,21 +328,21 @@ def _server_proxy(tmp_path, name="server-cache", cache_policy="disk", max_cache_
     fsspec.filesystem("memory").pipe_file(f"{name}-source.b2nd", source.to_cframe())
     carrier_path = tmp_path / f"{name}.b2nd"
     if cache_policy == "disk":
-        creator = blosc2.RemoteProxy(
+        creator = blosc2.RemoteArray(
             source_url,
             cache_policy=blosc2.CachePolicy.DISK,
             cache_path=carrier_path,
             max_cache_bytes=max_cache_bytes,
         )
     elif cache_policy == "memory":
-        creator = blosc2.RemoteProxy(
+        creator = blosc2.RemoteArray(
             source_url,
             cache_policy=blosc2.CachePolicy.MEMORY,
             max_cache_bytes=max_cache_bytes,
         )
-        creator.save(carrier_path)
+        creator.save(carrier_path, mutable=True)
     elif cache_policy == "none":
-        creator = blosc2.RemoteProxy(
+        creator = blosc2.RemoteArray(
             source_url,
             cache_policy=blosc2.CachePolicy.NONE,
         )
@@ -352,7 +352,7 @@ def _server_proxy(tmp_path, name="server-cache", cache_policy="disk", max_cache_
 
     carrier, payload = remote_proxy.inspect(carrier_path)
     geometry = (creator.shape, creator.dtype, creator.chunks, creator.blocks)
-    return remote_proxy.ServerRemoteProxy(creator.src, geometry, carrier, payload), data, carrier_path
+    return remote_proxy.ServerRemoteArray(creator.src, geometry, carrier, payload), data, carrier_path
 
 
 def test_server_proxy_reuses_its_carrier_cache(tmp_path):
@@ -363,7 +363,7 @@ def test_server_proxy_reuses_its_carrier_cache(tmp_path):
 
     carrier, payload = remote_proxy.inspect(carrier_path)
     fresh_source = blosc2.FsspecNDSource(payload["source"]["urlpath"])
-    reopened = remote_proxy.ServerRemoteProxy(
+    reopened = remote_proxy.ServerRemoteArray(
         fresh_source,
         (proxy.shape, proxy.dtype, proxy.chunks, proxy.blocks),
         carrier,
@@ -428,7 +428,7 @@ def test_server_proxy_memory_retains_no_cache_and_repeats_upstream_fetches(tmp_p
         return fresh_orig_get_chunk(n)
 
     fresh_source.get_chunk = fresh_traced_get_chunk
-    reopened = remote_proxy.ServerRemoteProxy(
+    reopened = remote_proxy.ServerRemoteArray(
         fresh_source,
         (proxy.shape, proxy.dtype, proxy.chunks, proxy.blocks),
         carrier,
@@ -477,7 +477,7 @@ def test_memory_carrier_ignores_synthetic_cached_chunks(tmp_path):
     carrier, payload = remote_proxy.inspect(carrier_path)
     assert payload["cache_policy"] == "memory"
     fresh_src = blosc2.FsspecNDSource("memory://synthetic-source.b2nd")
-    mem_proxy = remote_proxy.ServerRemoteProxy(
+    mem_proxy = remote_proxy.ServerRemoteArray(
         fresh_src,
         (disk_proxy.shape, disk_proxy.dtype, disk_proxy.chunks, disk_proxy.blocks),
         carrier,
@@ -505,8 +505,8 @@ def test_memory_carrier_exports_preserve_policy_and_reopen_with_client_cache(tmp
     for kind, b in [("warm", warm_bytes), ("cold", cold_bytes)]:
         out_path = tmp_path / f"export_{kind}.b2nd"
         out_path.write_bytes(b)
-        reopened = blosc2.open(str(out_path))
-        assert isinstance(reopened, blosc2.RemoteProxy)
+        reopened = blosc2.open(str(out_path), mode="a")
+        assert isinstance(reopened, blosc2.RemoteArray)
         assert reopened.cache_policy == blosc2.CachePolicy.MEMORY
         assert reopened.max_cache_bytes == 500_000
         np.testing.assert_array_equal(reopened[:10], data[:10])
@@ -554,7 +554,7 @@ def test_memory_carrier_detects_geometry_replacement_and_observes_data_replaceme
         # Case A: Source geometry changed
         mismatched_source = blosc2.asarray(np.arange(60, dtype=np.int32), chunks=(10,), blocks=(5,))
         mem_fs.pipe_file(url, mismatched_source.to_cframe())
-        with pytest.raises(remote_proxy.RemoteProxyDenied, match="geometry does not match"):
+        with pytest.raises(remote_proxy.RemoteArrayDenied, match="geometry does not match"):
             remote_proxy.resolve(carrier, payload)
 
         # Case B: Source data changed (geometry identical)
@@ -687,7 +687,7 @@ def test_concurrent_server_proxy_fills_do_not_corrupt_carrier(tmp_path):
     first, data, carrier_path = _server_proxy(tmp_path, "concurrent")
     carrier, payload = remote_proxy.inspect(carrier_path)
     second_source = blosc2.FsspecNDSource(payload["source"]["urlpath"])
-    second = remote_proxy.ServerRemoteProxy(
+    second = remote_proxy.ServerRemoteArray(
         second_source,
         (first.shape, first.dtype, first.chunks, first.blocks),
         carrier,

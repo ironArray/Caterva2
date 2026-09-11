@@ -1,4 +1,4 @@
-"""Experimental private RemoteProxy generations with shared soft admission.
+"""Experimental private RemoteArray generations with shared soft admission.
 
 All request mutations hold the existing path lock and a generation lock. Startup
 recovery discards interrupted disposable generations without resolving sources.
@@ -85,9 +85,9 @@ class SparseCache:
 
             required = ("with_sparse_cache", "read_cached", "trim_sparse_cache")
             if (
-                any(not hasattr(blosc2.RemoteProxy, name) for name in required)
+                any(not hasattr(blosc2.RemoteArray, name) for name in required)
                 or "source_descriptor"
-                not in inspect.signature(blosc2.RemoteProxy.with_sparse_cache).parameters
+                not in inspect.signature(blosc2.RemoteArray.with_sparse_cache).parameters
             ):
                 raise RuntimeError("sparse backend requires the Python-Blosc2 v7 cache APIs")
         self.root = quota.root / ".remote-cache"
@@ -202,7 +202,7 @@ class SparseCache:
         return True
 
     def _attach(self, proxy, path, carrier=None):
-        return blosc2.RemoteProxy.with_sparse_cache(
+        return blosc2.RemoteArray.with_sparse_cache(
             proxy.src,
             path,
             source_descriptor=proxy.requested_payload["source"],
@@ -475,7 +475,7 @@ class SparseCache:
                                 break
                             path = self.path(private)
                             self._intent(gid, "prune")
-                            evicted, payload = blosc2.RemoteProxy.trim_sparse_cache(
+                            evicted, payload = blosc2.RemoteArray.trim_sparse_cache(
                                 path, max(0, payload - needed), max_chunks=remaining
                             )
                             remaining -= len(evicted)

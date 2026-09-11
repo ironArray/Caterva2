@@ -38,7 +38,7 @@ from caterva2.services import storage_quota
 log = logging.getLogger(__name__)
 
 
-class RemoteProxyDenied(ValueError):
+class RemoteArrayDenied(ValueError):
     """The server policy refuses a remote reference."""
 
 
@@ -88,10 +88,10 @@ def configure(conf) -> None:
     if not isinstance(enabled, bool):
         raise ValueError("remote_proxy.enabled must be true or false")
     if enabled and (
-        not hasattr(blosc2, "RemoteProxy")
-        or "assume_immutable" not in signature(blosc2.RemoteProxy).parameters
+        not hasattr(blosc2, "RemoteArray")
+        or "assume_immutable" not in signature(blosc2.RemoteArray).parameters
     ):
-        raise ValueError("remote_proxy.enabled requires a compatible Python-Blosc2 RemoteProxy")
+        raise ValueError("remote_proxy.enabled requires a compatible Python-Blosc2 RemoteArray")
     if not isinstance(hosts, list | tuple) or any(not isinstance(host, str) for host in hosts):
         raise ValueError("remote_proxy.allowed_hosts must be a list of host names")
     if not isinstance(timeout, int | float) or isinstance(timeout, bool) or timeout <= 0:
@@ -144,8 +144,8 @@ def raw_carrier(path, mode="r", *, locking=False):
 
 
 def inspect(path):
-    """Return ``(raw carrier, payload)`` for a RemoteProxy, otherwise ``None``."""
-    if not hasattr(blosc2, "RemoteProxy"):
+    """Return ``(raw carrier, payload)`` for a RemoteArray, otherwise ``None``."""
+    if not hasattr(blosc2, "RemoteArray"):
         return None
     with carrier_thread_lock(path):
         try:
@@ -154,19 +154,19 @@ def inspect(path):
             return None
         schunk = getattr(carrier, "schunk", carrier)
         marker = schunk.meta.get("b2o")
-        if not isinstance(marker, dict) or marker.get("kind") != "remote_proxy":
+        if not isinstance(marker, dict) or marker.get("kind") != "remote_array":
             return None
-        # Only RemoteProxy carriers need a sidecar lock. Reopen after
+        # Only RemoteArray carriers need a sidecar lock. Reopen after
         # discrimination so inspecting ordinary datasets has no filesystem
         # side effect, then re-read the marker and payload under that lock.
         carrier = raw_carrier(path, locking=True)
         schunk = getattr(carrier, "schunk", carrier)
         marker = schunk.meta.get("b2o")
-        if not isinstance(marker, dict) or marker.get("kind") != "remote_proxy":
+        if not isinstance(marker, dict) or marker.get("kind") != "remote_array":
             return None
         payload = schunk.vlmeta.get("b2o")
         if not isinstance(payload, dict):
-            raise RemoteProxyDenied("RemoteProxy carrier has no valid payload")
+            raise RemoteArrayDenied("RemoteArray carrier has no valid payload")
         return carrier, payload
 
 
@@ -178,7 +178,7 @@ def guard_embedded(path) -> None:
     factory into that decoder, refusing those operands closes an otherwise
     easy way around the direct-carrier policy check.
     """
-    if not hasattr(blosc2, "RemoteProxy"):
+    if not hasattr(blosc2, "RemoteArray"):
         return
     try:
         carrier = raw_carrier(path)
@@ -190,14 +190,14 @@ def guard_embedded(path) -> None:
         return
     payload = schunk.vlmeta.get("b2o")
     if _contains_remote_reference(payload):
-        raise RemoteProxyDenied(
+        raise RemoteArrayDenied(
             "remote references embedded in persisted expressions are disabled by server policy"
         )
 
 
 def _contains_remote_reference(value) -> bool:
     if isinstance(value, dict):
-        if value.get("kind") in {"fsspec", "remote_proxy"}:
+        if value.get("kind") in {"fsspec", "remote_array"}:
             return True
         return any(_contains_remote_reference(item) for item in value.values())
     if isinstance(value, list | tuple):
@@ -206,39 +206,41 @@ def _contains_remote_reference(value) -> bool:
 
 
 def is_metadata(meta) -> bool:
-    """Whether an api/info model describes a RemoteProxy carrier."""
+    """Whether an api/info model describes a RemoteArray carrier."""
     vlmeta = getattr(getattr(meta, "schunk", None), "vlmeta", None) or {}
     payload = vlmeta.get("b2o")
-    return isinstance(payload, dict) and payload.get("kind") == "remote_proxy"
+    return isinstance(payload, dict) and payload.get("kind") == "remote_array"
 
 
 def _validated_source(payload: dict) -> str:
     if not policy.enabled:
-        raise RemoteProxyDenied("RemoteProxy resolution is disabled by server policy")
-    if set(payload) != {"kind", "version", "source", "cache_policy", "max_cache_bytes"}:
-        raise RemoteProxyDenied("RemoteProxy payload contains unsupported fields")
-    if payload.get("kind") != "remote_proxy" or payload.get("version") != 1:
-        raise RemoteProxyDenied("unsupported RemoteProxy payload")
+        raise RemoteArrayDenied("RemoteArray resolution is disabled by server policy")
+    if set(payload) - {"mutable"} != {"kind", "version", "source", "cache_policy", "max_cache_bytes"}:
+        raise RemoteArrayDenied("RemoteArray payload contains unsupported fields")
+    if not isinstance(payload.get("mutable", False), bool):
+        raise RemoteArrayDenied("RemoteArray mutable must be true or false")
+    if payload.get("kind") != "remote_array" or payload.get("version") != 1:
+        raise RemoteArrayDenied("unsupported RemoteArray payload")
     cache_policy = payload.get("cache_policy")
     max_cache_bytes = payload.get("max_cache_bytes")
     if cache_policy == "none":
         if max_cache_bytes is not None:
-            raise RemoteProxyDenied("RemoteProxy cache policy 'none' cannot have max_cache_bytes")
+            raise RemoteArrayDenied("RemoteArray cache policy 'none' cannot have max_cache_bytes")
     elif cache_policy == "disk":
         if max_cache_bytes is not None and (
             isinstance(max_cache_bytes, bool) or not isinstance(max_cache_bytes, int) or max_cache_bytes <= 0
         ):
-            raise RemoteProxyDenied(
-                "RemoteProxy cache policy 'disk' requires positive max_cache_bytes or None"
+            raise RemoteArrayDenied(
+                "RemoteArray cache policy 'disk' requires positive max_cache_bytes or None"
             )
     elif cache_policy == "memory":
         if isinstance(max_cache_bytes, bool) or not isinstance(max_cache_bytes, int) or max_cache_bytes <= 0:
-            raise RemoteProxyDenied(
-                f"RemoteProxy cache policy {cache_policy!r} requires positive max_cache_bytes"
+            raise RemoteArrayDenied(
+                f"RemoteArray cache policy {cache_policy!r} requires positive max_cache_bytes"
             )
     else:
-        raise RemoteProxyDenied(
-            "server RemoteProxy supports only cache policies 'none', 'memory', and 'disk'"
+        raise RemoteArrayDenied(
+            "server RemoteArray supports only cache policies 'none', 'memory', and 'disk'"
         )
     source = payload.get("source")
     if not isinstance(source, dict) or set(source) != {
@@ -247,32 +249,32 @@ def _validated_source(payload: dict) -> str:
         "urlpath",
         "assume_immutable",
     }:
-        raise RemoteProxyDenied("server RemoteProxy supports only a versioned fsspec URL source")
+        raise RemoteArrayDenied("server RemoteArray supports only a versioned fsspec URL source")
     if source.get("kind") != "fsspec" or source.get("version") != 1:
-        raise RemoteProxyDenied("server RemoteProxy supports only fsspec source version 1")
+        raise RemoteArrayDenied("server RemoteArray supports only fsspec source version 1")
     if not isinstance(source.get("assume_immutable"), bool):
-        raise RemoteProxyDenied("RemoteProxy source assume_immutable must be true or false")
+        raise RemoteArrayDenied("RemoteArray source assume_immutable must be true or false")
     url = source.get("urlpath")
     if not isinstance(url, str):
-        raise RemoteProxyDenied("RemoteProxy source URL must be a string")
+        raise RemoteArrayDenied("RemoteArray source URL must be a string")
 
     parsed = urlsplit(url)
     if parsed.scheme.lower() != "https":
-        raise RemoteProxyDenied("server RemoteProxy currently permits only HTTPS sources")
+        raise RemoteArrayDenied("server RemoteArray currently permits only HTTPS sources")
     if parsed.username is not None or parsed.password is not None:
-        raise RemoteProxyDenied("RemoteProxy source URLs cannot contain user information")
+        raise RemoteArrayDenied("RemoteArray source URLs cannot contain user information")
     if parsed.query or parsed.fragment:
-        raise RemoteProxyDenied("RemoteProxy source URLs cannot contain a query or fragment")
+        raise RemoteArrayDenied("RemoteArray source URLs cannot contain a query or fragment")
     if parsed.hostname is None:
-        raise RemoteProxyDenied("RemoteProxy source URL has no host")
+        raise RemoteArrayDenied("RemoteArray source URL has no host")
     try:
         host = parsed.hostname.encode("idna").decode("ascii").lower()
         port = parsed.port or 443
     except (UnicodeError, ValueError) as exc:
-        raise RemoteProxyDenied("RemoteProxy source URL has an invalid host or port") from exc
+        raise RemoteArrayDenied("RemoteArray source URL has an invalid host or port") from exc
     authority = host if port == 443 else f"{host}:{port}"
     if authority not in policy.allowed_hosts:
-        raise RemoteProxyDenied(f"RemoteProxy destination {authority!r} is not allowed")
+        raise RemoteArrayDenied(f"RemoteArray destination {authority!r} is not allowed")
     return url
 
 
@@ -280,13 +282,13 @@ def _public_addresses(host: str, port: int) -> tuple[str, ...]:
     try:
         answers = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise RemoteProxyDenied(f"RemoteProxy destination {host!r} cannot be resolved") from exc
+        raise RemoteArrayDenied(f"RemoteArray destination {host!r} cannot be resolved") from exc
     addresses = tuple(dict.fromkeys(answer[4][0] for answer in answers))
     if not addresses:
-        raise RemoteProxyDenied(f"RemoteProxy destination {host!r} has no addresses")
+        raise RemoteArrayDenied(f"RemoteArray destination {host!r} has no addresses")
     denied = [address for address in addresses if not ipaddress.ip_address(address).is_global]
     if denied:
-        raise RemoteProxyDenied(f"RemoteProxy destination {host!r} resolves to a non-public address")
+        raise RemoteArrayDenied(f"RemoteArray destination {host!r} resolves to a non-public address")
     return addresses
 
 
@@ -297,7 +299,7 @@ class _PinnedResolver(aiohttp.abc.AbstractResolver):
 
     async def resolve(self, host, port=0, family=socket.AF_UNSPEC):
         if host.encode("idna").decode("ascii").lower() != self.host:
-            raise OSError("redirected hosts are not allowed for RemoteProxy sources")
+            raise OSError("redirected hosts are not allowed for RemoteArray sources")
         records = []
         for address in self.addresses:
             address_family = socket.AF_INET6 if ":" in address else socket.AF_INET
@@ -348,24 +350,24 @@ def resolve(carrier, payload):
     expected = (tuple(carrier.shape), carrier.dtype, tuple(carrier.chunks), tuple(carrier.blocks))
     actual = (tuple(source.shape), source.dtype, tuple(source.chunks), tuple(source.blocks))
     if actual != expected:
-        raise RemoteProxyDenied(
-            f"RemoteProxy source geometry does not match its carrier: carrier={expected}, source={actual}"
+        raise RemoteArrayDenied(
+            f"RemoteArray source geometry does not match its carrier: carrier={expected}, source={actual}"
         )
     if len(source.shape) > policy.max_rank:
-        raise RemoteProxyDenied(f"RemoteProxy rank exceeds the configured limit of {policy.max_rank}")
+        raise RemoteArrayDenied(f"RemoteArray rank exceeds the configured limit of {policy.max_rank}")
     nbytes = math.prod(source.shape) * source.dtype.itemsize
     if nbytes > policy.max_nbytes:
-        raise RemoteProxyDenied(
-            f"RemoteProxy logical size exceeds the configured limit of {policy.max_nbytes}"
+        raise RemoteArrayDenied(
+            f"RemoteArray logical size exceeds the configured limit of {policy.max_nbytes}"
         )
     chunks = math.prod(
         math.ceil(size / chunk) for size, chunk in zip(source.shape, source.chunks, strict=True)
     )
     if chunks > policy.max_chunks:
-        raise RemoteProxyDenied(
-            f"RemoteProxy chunk count exceeds the configured limit of {policy.max_chunks}"
+        raise RemoteArrayDenied(
+            f"RemoteArray chunk count exceeds the configured limit of {policy.max_chunks}"
         )
-    return ServerRemoteProxy(source, expected, carrier, payload)
+    return ServerRemoteArray(source, expected, carrier, payload)
 
 
 def _effective_cache_policy(requested: str) -> str:
@@ -377,7 +379,7 @@ def _effective_cache_policy(requested: str) -> str:
     raise ValueError(f"unknown cache policy: {requested!r}")
 
 
-class ServerRemoteProxy:
+class ServerRemoteArray:
     """Authorized remote source backed by its own carrier cache.
 
     Attributes
@@ -547,7 +549,7 @@ class ServerRemoteProxy:
 def cold_cframe(carrier, payload) -> bytes:
     """Return a cache-free carrier without resolving or mutating its source."""
     cold = make_b2object_carrier(
-        "remote_proxy",
+        "remote_array",
         carrier.shape,
         carrier.dtype,
         chunks=carrier.chunks,

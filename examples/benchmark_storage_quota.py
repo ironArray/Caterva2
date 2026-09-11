@@ -22,11 +22,11 @@ def benchmark(root, data, chunk, staged):
     fsspec.filesystem("memory").pipe_file("quota-benchmark.b2nd", source.to_cframe())
     path = root / "public" / "proxy.b2nd"
     path.parent.mkdir(parents=True)
-    creator = blosc2.RemoteProxy(
+    creator = blosc2.RemoteArray(
         url, cache_policy=blosc2.CachePolicy.DISK, cache_path=path, max_cache_bytes=None
     )
     carrier, payload = remote_proxy.inspect(path)
-    proxy = remote_proxy.ServerRemoteProxy(
+    proxy = remote_proxy.ServerRemoteArray(
         creator.src, (source.shape, source.dtype, source.chunks, source.blocks), carrier, payload
     )
     quota = storage_quota.StorageQuota(root, data.nbytes * 4) if staged else None

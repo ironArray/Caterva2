@@ -32,7 +32,7 @@ register = true  # allow users to register
 # publish_root = "s3://a-bucket/published"
 # peer_cache_quota = "1G"
 
-# Persisted RemoteProxy objects are discoverable but cannot make outbound
+# Persisted RemoteArray objects are discoverable but cannot make outbound
 # requests by default. The runtime cache uses private sparse generations and
 # credential-free HTTPS is the supported source transport.
 # Every destination must be listed exactly; redirects, URL queries, private or

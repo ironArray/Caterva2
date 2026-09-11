@@ -211,12 +211,12 @@ def remote_fixture(tmp_path, name="proxy", *, limit=None, block=10000):
     fsspec.filesystem("memory").pipe_file(f"quota-{name}.b2nd", array.to_cframe())
     path = tmp_path / "public" / f"{name}.b2nd"
     path.parent.mkdir(exist_ok=True)
-    creator = blosc2.RemoteProxy(
+    creator = blosc2.RemoteArray(
         url, cache_policy=blosc2.CachePolicy.DISK, cache_path=path, max_cache_bytes=limit
     )
     creator.schunk.vlmeta["user-note"] = "preserve me"
     carrier, payload = remote_proxy.inspect(path)
-    proxy = remote_proxy.ServerRemoteProxy(
+    proxy = remote_proxy.ServerRemoteArray(
         creator.src, (array.shape, array.dtype, array.chunks, array.blocks), carrier, payload
     )
     return proxy, path, data

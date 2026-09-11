@@ -455,7 +455,7 @@ def user_attrs(obj):
     """Read user attributes without resolving a saved remote source."""
     schunk = getattr(obj, "schunk", obj)
     marker = getattr(schunk, "meta", {}).get("b2o", {})
-    if isinstance(marker, dict) and marker.get("kind") == "remote_proxy":
+    if isinstance(marker, dict) and marker.get("kind") == "remote_array":
         return read_b2object_user_vlmeta(obj)
     vlmeta = schunk.vlmeta
     internal = {"fill_nonce", "fill_state", "published_url"}
@@ -537,6 +537,13 @@ def read_metadata(obj, mtime=None):
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
+        if array.schunk.meta.get("b2o", {}).get("kind") == "remote_array":
+            from blosc2.proxy import _RESERVED_VLMETA
+
+            schunk.attrs = user_attrs(array)
+            schunk.vlmeta = {
+                key: value for key, value in schunk.vlmeta.items() if key not in _RESERVED_VLMETA
+            }
         if "_ftype" in schunk.vlmeta and schunk.vlmeta["_ftype"] == "hdf5":
             array = hdf5.HDF5Proxy(array)
             schunk.cratio = array.cratio  # overwrite cratio (which will be 0) with HDF5Proxy value

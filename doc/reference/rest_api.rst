@@ -24,7 +24,7 @@ serving them does not resolve the remote source or refresh its metadata.
 
 The Python client's ``File.attrs`` and ``Dataset.attrs`` use this mapping from
 cached metadata. Python-Blosc2 exposes it through ``C2Array.attrs`` and
-``RemoteProxy.attrs`` (also available as ``RemoteProxy.vlmeta``). These properties
+``RemoteArray.attrs`` (also available as ``RemoteArray.vlmeta``). These properties
 provide read access, not server-side attribute writes. Clients fall back to
 legacy variable metadata when ``attrs`` is absent or null; an empty mapping
 means the dataset has no public attributes.
