@@ -29,7 +29,8 @@ BLOSC2_HDF5_FID = 32026
 # Losing the reference to the array may result in a segmentation fault.
 def b2_from_h5chunk(h5_dset: h5py.Dataset, chunk_index: int) -> blosc2.NDArray | blosc2.SChunk:
     h5chunk_info = h5_dset.id.get_chunk_info(chunk_index)
-    return blosc2.open(h5_dset.file.filename, mode="r", offset=h5chunk_info.byte_offset)
+    # Open the embedded frame directly; public open dispatches .h5 to an HDF5 source.
+    return blosc2.blosc2_ext.open(h5_dset.file.filename, "r", h5chunk_info.byte_offset)
 
 
 def h5dset_is_compatible(h5_dset: h5py.Dataset) -> bool:

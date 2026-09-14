@@ -164,7 +164,10 @@ class ServerRemoteStore:
 
     def leaves(self, prefix="/"):
         root = self.manifest["source"].get("dataset", "")
-        full = self._key(prefix).rstrip("/")
+        try:
+            full = self._key(prefix).rstrip("/")
+        except ValueError:
+            return []
         listed = self.manifest["listed"]
         if self.manifest["source"]["kind"] in {"b2z", "hdf5"} or full in listed:
             # Use known discovery offline only when all descendant groups are listed.
@@ -202,13 +205,15 @@ class ServerRemoteStore:
 
         try:
             known = self.manifest["nodes"].get(self._key(key))
+            if known is None and self.manifest["source"]["kind"] in {"b2z", "hdf5"}:
+                return None
             kind = known[0] if known else self.operation(lambda store: store.kind(key.strip("/")))
             if kind == "group":
                 return GROUP
             if kind != "ndarray":
                 return None
             return ServerStoreArray(self, key.strip("/"))
-        except KeyError:
+        except (KeyError, ValueError):
             return None
 
     def is_group(self, node):
@@ -217,7 +222,10 @@ class ServerRemoteStore:
         return node is GROUP
 
     def is_leaf(self, key):
-        known = self.manifest["nodes"].get(self._key(key))
+        try:
+            known = self.manifest["nodes"].get(self._key(key))
+        except ValueError:
+            return False
         if known is not None:
             return known[0] == "ndarray"
         node = self.get(key)

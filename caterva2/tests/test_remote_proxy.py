@@ -235,6 +235,28 @@ def test_embedded_fsspec_reference_is_recognized():
     assert remote_proxy._contains_remote_reference(payload)
 
 
+def test_expression_cannot_resolve_remote_carrier_through_local_references(tmp_path):
+    from blosc2.b2objects import make_b2object_carrier, write_b2object_payload
+
+    remote = make_b2object_carrier("remote_array", (10,), np.dtype("i4"))
+    write_b2object_payload(remote, _payload("https://data.example/array.b2nd"))
+    (tmp_path / "remote.b2nd").write_bytes(remote.to_cframe())
+    for name, operand in (("inner", "remote"), ("outer", "inner")):
+        expression = make_b2object_carrier("lazyexpr", (10,), np.dtype("i4"))
+        write_b2object_payload(
+            expression,
+            {
+                "kind": "lazyexpr",
+                "version": 1,
+                "expression": "a + 1",
+                "operands": {"a": {"kind": "urlpath", "version": 1, "urlpath": f"{operand}.b2nd"}},
+            },
+        )
+        (tmp_path / f"{name}.b2nd").write_bytes(expression.to_cframe())
+    with pytest.raises(remote_proxy.RemoteArrayDenied):
+        remote_proxy.guard_embedded(tmp_path / "outer.b2nd")
+
+
 @pytest.mark.parametrize(
     ("cache_policy", "max_cache_bytes", "expected_eff_policy", "expected_eff_limit"),
     [

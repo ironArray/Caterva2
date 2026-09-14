@@ -166,6 +166,18 @@ async def test_local_publish_cannot_bypass_managed_storage(quota_api, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_overwrite_and_remove_do_not_read_old_payload(quota_api, monkeypatch):
+    server, _, _ = quota_api
+    path = server.settings.public / "data.b2nd"
+    server.write_dataset(path, b"original")
+    monkeypatch.setattr(pathlib.Path, "read_bytes", lambda self: pytest.fail("read old dataset payload"))
+    server.write_dataset(path, b"replacement")
+    server.remove_dataset(path)
+    assert not path.exists()
+    assert_usage(server)
+
+
+@pytest.mark.asyncio
 async def test_move_does_not_delete_a_concurrent_source_replacement(quota_api, monkeypatch):
     server, _, _ = quota_api
     source, destination = server.settings.public / "source", server.settings.shared / "dest"

@@ -101,6 +101,16 @@ def test_store_quota_denial_does_not_retain(store_runtime):
     assert q.usage()["remote_cache_used"] == 0
 
 
+@pytest.mark.parametrize("key", ["missing", "g/missing", "g//a", "g/../a", "g/\0a"])
+def test_store_missing_and_malformed_members_are_offline(store_runtime, monkeypatch, key):
+    _, path, _ = store_runtime
+    adapter = srv_utils.open_container(path)
+    monkeypatch.setattr(remote_proxy, "policy", remote_proxy.Policy())
+    assert adapter.get(key) is None
+    assert not adapter.is_leaf(key)
+    assert adapter.leaves(key) == []
+
+
 def test_store_warm_seed_is_migrated_once(store_runtime, tmp_path, monkeypatch):
     q, path, data = store_runtime
     manifest = remote_store.inspect(path)

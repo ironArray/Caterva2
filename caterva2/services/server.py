@@ -206,7 +206,7 @@ def write_dataset(path, data, *, expected=None, compare=False):
     quota = quota_coordinator()
     if quota is not None:
         if not compare:
-            _, expected = quota.snapshot(path)
+            expected = storage_quota.signature(path)
         quota.publish(path, data, expected=expected)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,7 +231,7 @@ def remove_dataset(path):
     elif path.name.endswith(".b2lock"):
         return  # Stable locks are operational storage, not deletable dataset bytes.
     else:
-        _, generation = quota.snapshot(path)
+        generation = storage_quota.signature(path)
         if generation is None:
             raise FileNotFoundError(path)
         quota.publish(path, None, expected=generation, prune=False)
@@ -277,8 +277,9 @@ def move_dataset(source, destination):
         if generation is None:
             raise storage_quota.StorageBusy("move source was removed")
         if remote_proxy.policy.cache_backend == "sparse" and source.suffix in {".b2nd", ".b2frame"}:
-            carrier = blosc2.ndarray_from_cframe(data)
-            if carrier.schunk.vlmeta.get("b2o", {}).get("kind") == "remote_array":
+            schunk = blosc2.schunk_from_cframe(data)
+            if schunk.meta.get("b2o", {}).get("kind") == "remote_array":
+                carrier = blosc2.ndarray_from_cframe(data)
                 data = remote_proxy.cold_cframe(carrier, carrier.schunk.vlmeta["b2o"])
         write_dataset(destination, data)
         quota.publish(source, None, expected=generation, prune=False)

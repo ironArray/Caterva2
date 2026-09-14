@@ -25,6 +25,7 @@ import threading
 import weakref
 from dataclasses import dataclass
 from inspect import signature
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -178,7 +179,7 @@ def inspect(path):
         return carrier, payload
 
 
-def guard_embedded(path) -> None:
+def guard_embedded(path, *, _seen=None) -> None:
     """Reject remote references hidden in another persisted B2 object.
 
     Structured LazyExpr/LazyUDF decoding resolves operand references while the
@@ -188,28 +189,46 @@ def guard_embedded(path) -> None:
     """
     if not hasattr(blosc2, "RemoteArray"):
         return
+    path = Path(path).resolve()
+    seen = set() if _seen is None else _seen
+    if path in seen:
+        return
+    seen.add(path)
+    if path.suffix == ".b2z":
+        from caterva2.services import remote_store
+
+        if remote_store.inspect(path) is not None:
+            raise RemoteArrayDenied("remote stores embedded in persisted expressions are disabled")
     try:
         carrier = raw_carrier(path)
     except (RuntimeError, ValueError):
         return
     schunk = getattr(carrier, "schunk", carrier)
     marker = schunk.meta.get("b2o")
+    if isinstance(marker, dict) and marker.get("kind") == "remote_array":
+        raise RemoteArrayDenied("remote arrays embedded in persisted expressions are disabled")
     if not isinstance(marker, dict) or marker.get("kind") not in {"lazyexpr", "lazyudf"}:
         return
     payload = schunk.vlmeta.get("b2o")
-    if _contains_remote_reference(payload):
+    if _contains_remote_reference(payload, base_path=path.parent, seen=seen):
         raise RemoteArrayDenied(
             "remote references embedded in persisted expressions are disabled by server policy"
         )
 
 
-def _contains_remote_reference(value) -> bool:
+def _contains_remote_reference(value, *, base_path=None, seen=None) -> bool:
     if isinstance(value, dict):
         if value.get("kind") in {"fsspec", "remote_array", "remote_store", "hdf5", "zarr", "b2z"}:
             return True
-        return any(_contains_remote_reference(item) for item in value.values())
+        if base_path is not None and value.get("kind") in {"urlpath", "dictstore_key"}:
+            local = value.get("urlpath")
+            if isinstance(local, str):
+                guard_embedded(base_path / local, _seen=seen)
+        return any(
+            _contains_remote_reference(item, base_path=base_path, seen=seen) for item in value.values()
+        )
     if isinstance(value, list | tuple):
-        return any(_contains_remote_reference(item) for item in value)
+        return any(_contains_remote_reference(item, base_path=base_path, seen=seen) for item in value)
     return False
 
 

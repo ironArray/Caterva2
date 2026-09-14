@@ -191,7 +191,7 @@ cold copy preserving user metadata. Subsequent misses never reimport evicted see
 chunks. MEMORY and NONE continue without retention. Upload itself makes no remote
 request.
 
-The schema-v2 registry exists even when customer quota is disabled. Sparse files,
+The schema-v3 registry exists even when customer quota is disabled. Sparse files,
 frame metadata, locks within generations, and generation/object directories count
 by allocated filesystem blocks, falling back to apparent length where allocation
 information is unavailable. Ordinary datasets retain their existing apparent-size
@@ -201,7 +201,7 @@ reclamation reaches a 90% low watermark. Ordinary datasets are never evicted.
 
 Removal/replacement retires the old generation; private bytes remain charged until
 cleanup actually removes them. Copy and move give the destination a cold carrier
-and independent identity. Maintenance wakes every 30 seconds, skips busy owners,
+and independent identity. Maintenance wakes every 60 seconds by default, skips busy owners,
 and retries retirement, interrupted-operation recovery, and pruning. Cache misses
 still return source data if admission or local retention fails. Warm downloads use
 private, immutable export artifacts with ETags and support ranges; completion and
@@ -215,7 +215,7 @@ at most 64 chunks/four generations per prune batch, and 1 GiB operational free-s
 headroom for migration. One warm export reserves the full configured
 `quota_work_bytes` budget until its response finishes. These choices establish an
 endpoint benchmark baseline; incremental accounting, tighter staging estimates,
-bounded inventories, and configurable maintenance tuning remain follow-up work.
+and bounded inventories remain follow-up work.
 Process-death recovery is covered; this does not claim power-loss atomicity or a
 hard filesystem/RAM bound.
 
