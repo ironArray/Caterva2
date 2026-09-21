@@ -180,7 +180,7 @@ class ServerRemoteStore:
                 return sorted(
                     "/" + (key[len(root) + 1 :] if root else key)
                     for key, (kind, _) in self.manifest["nodes"].items()
-                    if kind == "ndarray" and (not full or key.startswith(full + "/"))
+                    if kind in {"ndarray", "ctable"} and (not full or key.startswith(full + "/"))
                 )
 
         def discover(store):
@@ -210,9 +210,11 @@ class ServerRemoteStore:
             kind = known[0] if known else self.operation(lambda store: store.kind(key.strip("/")))
             if kind == "group":
                 return GROUP
-            if kind != "ndarray":
-                return None
-            return ServerStoreArray(self, key.strip("/"))
+            if kind == "ndarray":
+                return ServerStoreArray(self, key.strip("/"))
+            if kind == "ctable":
+                return ServerStoreTable(self, key.strip("/"))
+            return None
         except (KeyError, ValueError):
             return None
 
@@ -227,7 +229,7 @@ class ServerRemoteStore:
         except ValueError:
             return False
         if known is not None:
-            return known[0] == "ndarray"
+            return known[0] in {"ndarray", "ctable"}
         node = self.get(key)
         return node is not None and not self.is_group(node)
 
@@ -277,6 +279,47 @@ class ServerStoreArray(remote_proxy.ServerRemoteArray):
         return self.store.operation(
             read, cached=lambda runtime: runtime.read_cached(self.key, item, nchunk=nchunk)
         )
+
+
+class ServerStoreTable:
+    """Operation-scoped view of a CTable inside a portable RemoteStore."""
+
+    def __init__(self, store, key):
+        self.store, self.key, self.path = store, key, store.path
+
+        def metadata(runtime):
+            with runtime[key] as table:
+                schema = table.schema_dict()
+                nbytes, cbytes = table.nbytes, table.cbytes
+                return {
+                    "nrows": table.nrows,
+                    "ncols": table.ncols,
+                    "chunks": table.chunks,
+                    "blocks": table.blocks,
+                    "schema_dict": schema,
+                    "columns": [column["name"] for column in schema.get("columns", [])],
+                    "nbytes": nbytes,
+                    "cbytes": cbytes,
+                    "cratio": nbytes / cbytes if cbytes else 0,
+                    "vlmeta": dict(table.vlmeta[:]) if table.vlmeta[:] else {},
+                    "attrs": dict(table.attrs),
+                }
+
+        self.metadata = store.operation(metadata)
+        self.nrows = self.metadata["nrows"]
+
+    def fetch(self, slice_=None, *, filter=None, field=None):
+        from caterva2.services.srv_utils import ctable_row_range
+
+        def read(runtime):
+            with runtime[self.key] as table:
+                view = table.where(filter) if filter else table
+                start, stop = ctable_row_range(slice_, view.nrows)
+                if field is not None:
+                    return blosc2.asarray(view[field][start:stop]).to_cframe()
+                return view.slice(start, stop).to_cframe()
+
+        return self.store.operation(read)
 
 
 def validate_array(array):

@@ -1209,16 +1209,29 @@ async def fetch_data(
 
     window = None  # where a container leaf's frame lies, when it has one
     filter = filter.strip() if filter else filter
+    store_table_filter = None
     if filter:
         if field:
             srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         mtime = abspath.stat().st_mtime
         try:
-            container, _ = await concurrency.run_in_threadpool(
-                lambda: get_filtered_array(
-                    abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+            from caterva2.services.remote_store import ServerStoreTable
+
+            container = (
+                await concurrency.run_in_threadpool(
+                    lambda: srv_utils.open_container_member(abspath, inner_key)
                 )
+                if inner_key is not None
+                else None
             )
+            if isinstance(container, ServerStoreTable):
+                store_table_filter = filter
+            else:
+                container, _ = await concurrency.run_in_threadpool(
+                    lambda: get_filtered_array(
+                        abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+                    )
+                )
         except ValueError as exc:
             srv_utils.raise_bad_request(str(exc))
     elif inner_key is not None:
@@ -1234,7 +1247,10 @@ async def fetch_data(
     else:
         container = open_b2(abspath, path)
 
-    if field:
+    from caterva2.services.remote_store import ServerStoreTable
+
+    store_table_field = field if isinstance(container, ServerStoreTable) else None
+    if field and store_table_field is None:
         container = container[field]
 
     from caterva2.services.remote_store import ServerRemoteStore
@@ -1268,7 +1284,7 @@ async def fetch_data(
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
-    elif isinstance(container, blosc2.CTable):
+    elif isinstance(container, blosc2.CTable | ServerStoreTable):
         array = container
         schunk = None
         typesize = 1  # not used for CTable
@@ -1302,6 +1318,7 @@ async def fetch_data(
                 | hdf5.HDF5Proxy
                 | blosc2.NDField
                 | blosc2.CTable
+                | ServerStoreTable
                 | remote_proxy.ServerRemoteArray,
             )
         )
@@ -1349,6 +1366,10 @@ async def fetch_data(
                 )
         except (IndexError, ValueError) as exc:
             srv_utils.raise_bad_request(str(exc))
+    elif isinstance(array, ServerStoreTable):
+        data = await concurrency.run_in_threadpool(
+            lambda: array.fetch(slice_, filter=store_table_filter, field=store_table_field)
+        )
     elif isinstance(array, blosc2.CTable):
         row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
         view = array.slice(row_start, row_stop)

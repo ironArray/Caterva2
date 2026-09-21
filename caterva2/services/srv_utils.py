@@ -475,6 +475,8 @@ def read_metadata(obj, mtime=None):
     # Open dataset
     from caterva2.services import remote_store
 
+    if isinstance(obj, remote_store.ServerStoreTable):
+        return models.CTableMetadata(mtime=mtime, **obj.metadata)
     if isinstance(obj, remote_store.ServerStoreArray):
         empty = blosc2.empty(obj.shape, obj.dtype, chunks=obj.chunks, blocks=obj.blocks, cparams=obj.cparams)
         result = read_metadata(empty, mtime=mtime)

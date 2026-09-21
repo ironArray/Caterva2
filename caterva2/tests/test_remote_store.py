@@ -1,7 +1,10 @@
 """Remote-store policy, sparse retention, and existing container API integration."""
 
+import io
+
 import blosc2
 import fsspec
+import h5py
 import numpy as np
 import pytest
 
@@ -24,6 +27,52 @@ def store_runtime(tmp_path, monkeypatch):
     root = tmp_path / "state"
     (root / "public").mkdir(parents=True)
     path = root / "public/store.b2z"
+    with blosc2.RemoteStore(
+        url, cache_policy=blosc2.CachePolicy.DISK, cache_dir=tmp_path / "creator", _filesystem=fs
+    ) as store:
+        store.save(path, include_cache=False)
+    q = storage_quota.StorageQuota(root, 0, cache_backend="sparse")
+    monkeypatch.setattr(server, "quota_coordinator", lambda: q)
+    monkeypatch.setattr(
+        remote_proxy, "policy", remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
+    )
+    monkeypatch.setattr(remote_proxy, "_public_addresses", lambda *args: ("93.184.216.34",))
+    monkeypatch.setattr(remote_proxy, "_https_filesystem", lambda *args: fs)
+    return q, path, data
+
+
+@pytest.fixture
+def hdf5_table_runtime(tmp_path, monkeypatch):
+    monkeypatch.setenv("CATERVA2_SECRET", "test-secret")
+    from caterva2.services import server
+
+    data = np.array(
+        [(value, f"v{value}".encode()) for value in np.random.default_rng(4).permutation(21)],
+        dtype=[("id", "<i4"), ("label", "S8")],
+    )
+    stream = io.BytesIO()
+    with h5py.File(stream, "w") as h5file:
+        table = h5file.create_dataset("table", data=data, chunks=(8,))
+        table.attrs["CLASS"] = np.bytes_(b"TABLE")
+        group = h5file.create_group("_i_table/id")
+        group.attrs["DIRTY"] = np.int32(0)
+        group.attrs["slicesize"] = np.uint32(16)
+        group.attrs["optlevel"] = np.int32(6)
+        group.attrs["is_csi"] = np.uint8(0)
+        order = np.argsort(data["id"][:16], kind="stable")
+        tail_order = np.argsort(data["id"][16:], kind="stable")
+        group.create_dataset("sorted", data=data["id"][:16][order].reshape(1, 16))
+        group.create_dataset("indices", data=order.astype("u8").reshape(1, 16))
+        sorted_lr = group.create_dataset("sortedLR", data=data["id"][16:][tail_order])
+        indices_lr = group.create_dataset("indicesLR", data=(tail_order + 16).astype("u8"))
+        sorted_lr.attrs["nelements"] = indices_lr.attrs["nelements"] = np.int32(5)
+
+    fs = fsspec.filesystem("memory")
+    url = "https://data.example/table.h5"
+    fs.pipe_file(url, stream.getvalue())
+    root = tmp_path / "state"
+    (root / "public").mkdir(parents=True)
+    path = root / "public/table-store.b2z"
     with blosc2.RemoteStore(
         url, cache_policy=blosc2.CachePolicy.DISK, cache_dir=tmp_path / "creator", _filesystem=fs
     ) as store:
@@ -221,6 +270,53 @@ async def test_store_http_routes_and_exports(store_runtime, monkeypatch, tmp_pat
             assert response.status_code == 403
             response = await client.get("/api/download/@public/store.b2z", params={"include_cache": "false"})
             assert response.status_code == 200
+    finally:
+        server.app.dependency_overrides.clear()
+        server.app.dependency_overrides.update(overrides)
+
+
+@pytest.mark.asyncio
+async def test_hdf5_table_uses_remote_ctable_and_reuses_native_index(hdf5_table_runtime, monkeypatch):
+    import httpx
+
+    from caterva2.services import server
+
+    q, path, data = hdf5_table_runtime
+    monkeypatch.setattr(server.settings, "statedir", q.root)
+    monkeypatch.setattr(server.settings, "public", path.parent)
+    monkeypatch.setattr(server.settings, "shared", q.root / "shared")
+    monkeypatch.setattr(server.settings, "personal", q.root / "personal")
+    overrides = dict(server.app.dependency_overrides)
+    server.app.dependency_overrides[server.optional_user] = lambda: None
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+        ) as client:
+            response = await client.get("/api/info/@public/table-store.b2z/table")
+            assert response.status_code == 200, response.text
+            assert response.json()["kind"] == "ctable"
+
+            params = {"filter": "id < 3"}
+            get_chunk = blosc2.HDF5NDSource.get_chunk
+            requests = 0
+
+            def count_chunk(*args, **kwargs):
+                nonlocal requests
+                requests += 1
+                return get_chunk(*args, **kwargs)
+
+            monkeypatch.setattr(blosc2.HDF5NDSource, "get_chunk", count_chunk)
+            response = await client.get("/api/fetch/@public/table-store.b2z/table", params=params)
+            assert response.status_code == 200, response.text
+            result = blosc2.ctable_from_cframe(response.content)
+            np.testing.assert_array_equal(result.id[:], data["id"][data["id"] < 3])
+            assert list(q.root.rglob("complete.json"))
+            cold_requests = requests
+            assert cold_requests > 0
+
+            response = await client.get("/api/fetch/@public/table-store.b2z/table", params=params)
+            assert response.status_code == 200, response.text
+            assert requests == cold_requests
     finally:
         server.app.dependency_overrides.clear()
         server.app.dependency_overrides.update(overrides)
