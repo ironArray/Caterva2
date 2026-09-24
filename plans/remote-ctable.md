@@ -1,5 +1,38 @@
 # Full RemoteCTable integration
 
+## API consistency follow-up (2026-09-24)
+
+The follow-up implementation now rejects anonymous refresh, snapshots the
+reference and its expected generation together, and returns 409 if a competing
+replacement wins. Quota-free refresh also stages an atomic replacement and
+compares the expected generation. Missing references return 404; RemoteArray targets receive
+an explicit unsupported-target error. `Client.refresh()` requires the owning
+`.b2z` carrier and returns a newly loaded object, so callers can replace stale
+metadata after a successful refresh.
+
+Local and remote table field requests now return one-column CTable cframes.
+The Python client chooses the decoder from dataset metadata, including for
+strings naming tables inside stores, and retains slices or filters when a field
+is requested. Both GET and POST fetch support filter plus field for tables.
+The shared row-range helper rejects strides and extra dimensions; upstream
+source I/O failures become 502. The internal remote-table adapter retains
+chained filters and explicitly supports only view sorting. Ordinary remote
+container opens in fetch now run in the thread pool.
+
+Regression coverage includes client projection and nested-path decoding,
+GET/POST projection, local/remote table errors, unavailable sources, refresh
+authorization, and a competing replacement. The client returns a new object;
+existing `Table`/`Group` instances are not updated in place.
+The full Caterva2 suite passed with 443 passed and 173 skipped, and pre-commit
+passed for the changed files.
+
+Release validation still needs the broader P2 work below: public upstream
+inspection and lifecycle APIs in python-blosc2, the table-level concurrency
+audit, the indexed HDF5 cached-only reproduction, and the remaining process,
+peer, interrupted-operation, and traffic measurements. Fix any upstream gaps
+in python-blosc2 before 4.14.0 instead of adding Caterva2 workarounds. The
+API consistency regressions do not establish these remaining acceptance items.
+
 ## Implementation status and API consistency review (2026-09-24)
 
 The first implementation is committed in Caterva2 as `dfd5528` and `4be107c`,
@@ -15,9 +48,9 @@ They establish a useful integration baseline, but do not establish every item
 in the original acceptance matrix. The implementation needs the following
 follow-up work before claiming complete API parity or release readiness.
 
-The findings below come from current source inspection and small local probes.
-The original sections below remain the implementation specification; the
-decisions here supersede conflicting field-response guidance there.
+The findings below record the review that led to the follow-up above. The
+original sections below remain the implementation specification; the decisions
+here supersede conflicting field-response guidance there.
 
 ### P0: Make refresh authorization and replacement consistent with other writers
 
@@ -135,10 +168,8 @@ to 502 in refresh but not consistently in table fetch.
   and warm paging/query traffic and retained storage with competing workers
   before considering changes to lock granularity.
 
-Implement P0 first, then projection/decoding and validation together, followed
-by client conveniences and the remaining upstream/acceptance work. Extend the
-existing tests; keep fixes in the repository that owns the behavior. This
-review updates the plan only and does not implement these follow-up changes.
+Implement the remaining upstream and acceptance work in the repository that
+owns each behavior. Keep the client and server regressions above in Caterva2.
 
 ## Scope and baseline
 

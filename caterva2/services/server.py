@@ -24,6 +24,7 @@ import shutil
 import sqlite3
 import string
 import tarfile
+import tempfile
 import threading
 import time
 import traceback
@@ -201,7 +202,7 @@ def quota_coordinator():
 
 
 def write_dataset(path, data, *, expected=None, compare=False):
-    """Store final encoded bytes through shared admission when quota is enabled."""
+    """Store final encoded bytes, comparing the expected generation when requested."""
     path = pathlib.Path(path)
     quota = quota_coordinator()
     if quota is not None:
@@ -210,7 +211,26 @@ def write_dataset(path, data, *, expected=None, compare=False):
         quota.publish(path, data, expected=expected)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        if not compare:
+            path.write_bytes(data)
+        else:
+            with dataset_thread_lock(path):
+                if storage_quota.signature(path) != expected:
+                    raise storage_quota.StorageBusy("dataset changed while preparing its replacement")
+                candidate = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        dir=path.parent, prefix=f".{path.name}.", delete=False
+                    ) as file:
+                        candidate = pathlib.Path(file.name)
+                        file.write(data)
+                        file.flush()
+                        os.fsync(file.fileno())
+                    os.replace(candidate, path)
+                    storage_quota.sync_directory(path.parent)
+                finally:
+                    if candidate is not None:
+                        candidate.unlink(missing_ok=True)
 
 
 def remove_dataset(path):
@@ -1120,8 +1140,8 @@ async def fetch_data(
     field : str
         The desired field of dataset.
 
-    The field and filter parameters are incompatible, if both are giving the API will
-    return a "400 Bad Request" error response.
+    For CTables, filtering is applied before a row slice and field projection.
+    Other dataset types may reject a combination of field and filter.
 
     Returns
     -------
@@ -1212,8 +1232,6 @@ async def fetch_data(
     filter = filter.strip() if filter else filter
     store_table_filter = None
     if filter:
-        if field:
-            srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         mtime = abspath.stat().st_mtime
         try:
             from caterva2.services.remote_store import ServerStoreTable
@@ -1235,23 +1253,29 @@ async def fetch_data(
                 )
         except ValueError as exc:
             srv_utils.raise_bad_request(str(exc))
+        if field and not isinstance(container, blosc2.CTable | ServerStoreTable):
+            srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
     elif inner_key is not None:
         # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf).
         # A leaf that is a whole frame inside the container can be served in
         # ranges, by seeking to it -- what a stored dataset gets from
         # FileResponse, and what lets a client read its blocks.  Not when a
         # field is projected out of it: that is computed, not stored.
-        window = member_window(abspath, inner_key, abspath.stat().st_mtime)
-        container = srv_utils.open_container_member(abspath, inner_key)
+        window, container = await concurrency.run_in_threadpool(
+            lambda: (
+                member_window(abspath, inner_key, abspath.stat().st_mtime),
+                srv_utils.open_container_member(abspath, inner_key),
+            )
+        )
         if container is None:
             srv_utils.raise_not_found()
     else:
-        container = open_b2(abspath, path)
+        container = await concurrency.run_in_threadpool(lambda: open_b2(abspath, path))
 
     from caterva2.services.remote_store import ServerStoreTable
 
     store_table_field = field if isinstance(container, ServerStoreTable) else None
-    if field and store_table_field is None:
+    if field and not isinstance(container, blosc2.CTable | ServerStoreTable):
         container = container[field]
 
     from caterva2.services.remote_store import ServerRemoteStore
@@ -1372,9 +1396,20 @@ async def fetch_data(
             lambda: array.fetch(slice_, filter=store_table_filter, field=store_table_field)
         )
     elif isinstance(array, blosc2.CTable):
-        row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
-        view = array.slice(row_start, row_stop)
-        data = await concurrency.run_in_threadpool(view.to_cframe)
+
+        def fetch_table():
+            if field is not None and field not in {
+                column["name"] for column in array.schema_dict()["columns"]
+            }:
+                raise ValueError(f"Unknown table field: {field}")
+            row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
+            view = array.select([field]) if field is not None else array
+            return view.slice(row_start, row_stop).to_cframe()
+
+        try:
+            data = await concurrency.run_in_threadpool(fetch_table)
+        except (ValueError, NameError, SyntaxError) as exc:
+            srv_utils.raise_bad_request(str(exc))
     elif isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyArray):
@@ -2577,14 +2612,29 @@ async def refresh_remote_reference(
     """Replace a RemoteStore or RemoteCTable reference with fresh source discovery."""
     from caterva2.services import remote_store
 
+    if not user:
+        raise srv_utils.raise_unauthorized("Refreshing files requires authentication")
     abspath = get_writable_path(path, user)
-    manifest = remote_store.inspect(abspath)
-    if manifest is None:
-        srv_utils.raise_bad_request("The path is not a RemoteStore reference")
-    store = remote_store.ServerRemoteStore(abspath, manifest)
 
     def replace():
-        expected = storage_quota.signature(abspath)
+        quota = quota_coordinator()
+        if quota is not None:
+            snapshot, expected = quota.snapshot(abspath)
+        else:
+            with dataset_thread_lock(abspath):
+                expected = storage_quota.signature(abspath)
+                snapshot = abspath.read_bytes() if expected is not None else None
+        if snapshot is None:
+            srv_utils.raise_not_found()
+        with tempfile.TemporaryDirectory() as directory:
+            carrier = pathlib.Path(directory) / "reference.b2z"
+            carrier.write_bytes(snapshot)
+            manifest = remote_store.inspect(carrier)
+        if manifest is None:
+            if remote_proxy.inspect(abspath) is not None:
+                srv_utils.raise_bad_request("RemoteArray refresh is not supported")
+            srv_utils.raise_bad_request("The path is not a RemoteStore reference")
+        store = remote_store.ServerRemoteStore(abspath, manifest)
         try:
             data = store.refreshed_bytes()
         except remote_proxy.RemoteArrayDenied as exc:

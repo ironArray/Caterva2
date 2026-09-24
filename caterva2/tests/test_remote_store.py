@@ -55,6 +55,53 @@ def test_standalone_remote_ctable_dispatch(table_runtime):
     assert list(result.text[:]) == ["one", "two"]
 
 
+def test_standalone_remote_ctable_view_methods(table_runtime):
+    from caterva2.services import server
+
+    table = server.open_b2(table_runtime, "@public/table-reference.b2z")
+    narrowed = table.where("x > 0").where("x < 2")
+    assert list(blosc2.ctable_from_cframe(narrowed.fetch()).x[:]) == [1]
+    with pytest.raises(NotImplementedError, match="view=True"):
+        table.sort_by("x")
+
+
+def test_standalone_remote_ctable_unavailable_source(table_runtime):
+    import fastapi
+
+    from caterva2.services import server
+
+    table = server.open_b2(table_runtime, "@public/table-reference.b2z")
+    source = remote_store.inspect(table_runtime)["source"]["urlpath"]
+    fsspec.filesystem("memory").rm(source)
+    with pytest.raises(fastapi.HTTPException) as exc:
+        table.fetch()
+    assert exc.value.status_code == 502
+
+
+def test_refresh_no_quota_replacement_is_atomic(tmp_path, monkeypatch):
+    from caterva2.services import server
+
+    path = tmp_path / "reference.b2z"
+    path.write_bytes(b"old")
+    expected = storage_quota.signature(path)
+    monkeypatch.setattr(server, "quota_coordinator", lambda: None)
+
+    def fail_replace(*args):
+        raise OSError("interrupted replacement")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(server.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="interrupted"):
+            server.write_dataset(path, b"new", expected=expected, compare=True)
+    assert path.read_bytes() == b"old"
+    assert sorted(tmp_path.iterdir()) == [path]
+
+    path.write_bytes(b"winner")
+    with pytest.raises(storage_quota.StorageBusy):
+        server.write_dataset(path, b"new", expected=expected, compare=True)
+    assert path.read_bytes() == b"winner"
+
+
 def test_standalone_remote_ctable_disk_cache(table_runtime, monkeypatch):
     from caterva2.services import server
 
@@ -183,6 +230,37 @@ async def test_standalone_remote_ctable_api(table_runtime, monkeypatch):
             assert response.status_code == 200, response.text
             assert list(blosc2.ctable_from_cframe(response.content).text[:]) == ["one", "two"]
             response = await client.get(
+                "/api/fetch/@public/table-reference.b2z", params={"field": "text", "slice_": "1:2"}
+            )
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).text[:]) == ["two"]
+            response = await client.get(
+                "/api/fetch/@public/table-reference.b2z", params={"field": "text", "filter": "x > 1"}
+            )
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).text[:]) == ["two"]
+            response = await client.post(
+                "/api/fetch/@public/table-reference.b2z",
+                json={"field": "text", "filter": "x > 1", "slice_": "0:1"},
+            )
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).text[:]) == ["two"]
+            for selection in ("0:2:2", "0:2:0", "0:1,0:1"):
+                response = await client.get(
+                    "/api/fetch/@public/table-reference.b2z", params={"slice_": selection}
+                )
+                assert response.status_code == 400, response.text
+            local = path.with_name("local-table.b2z")
+            local.write_bytes((path.parents[2] / "table.b2z").read_bytes())
+            response = await client.get(
+                "/api/fetch/@public/local-table.b2z",
+                params={"filter": "x > 1", "field": "text", "slice_": "0:1"},
+            )
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).text[:]) == ["two"]
+            response = await client.get("/api/fetch/@public/local-table.b2z", params={"field": "missing"})
+            assert response.status_code == 400, response.text
+            response = await client.get(
                 "/api/fetch/@public/table-reference.b2z", params={"field": "missing"}
             )
             assert response.status_code == 400, response.text
@@ -230,6 +308,8 @@ async def test_standalone_remote_ctable_refresh(table_runtime, monkeypatch):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=server.app), base_url="http://test"
         ) as client:
+            response = await client.post("/api/refresh/@public/missing.b2z")
+            assert response.status_code == 404, response.text
             response = await client.get(endpoint)
             assert response.status_code == 200, response.text
             assert list(blosc2.ctable_from_cframe(response.content).x[:]) == [1, 2]
@@ -265,6 +345,30 @@ async def test_standalone_remote_ctable_refresh(table_runtime, monkeypatch):
             response = await client.post("/api/refresh/@public/refreshable-table.b2z")
             assert response.status_code in {400, 502}, response.text
             assert path.read_bytes() == before
+            server.app.dependency_overrides[server.current_active_user] = lambda: None
+            response = await client.post("/api/refresh/@public/refreshable-table.b2z")
+            assert response.status_code == 401, response.text
+            assert path.read_bytes() == before
+            with server.quota_coordinator().connect() as db:
+                assert (
+                    db.execute(
+                        "SELECT generation_id FROM remote_generations WHERE state='active'"
+                    ).fetchone()[0]
+                    == current
+                )
+            server.app.dependency_overrides[server.current_active_user] = lambda: object()
+
+            def racing_refresh(store):
+                server.quota_coordinator().publish(
+                    path, before + b"replacement", expected=storage_quota.signature(path)
+                )
+                return before
+
+            with monkeypatch.context() as patch:
+                patch.setattr(remote_store.ServerRemoteStore, "refreshed_bytes", racing_refresh)
+                response = await client.post("/api/refresh/@public/refreshable-table.b2z")
+            assert response.status_code == 409, response.text
+            assert path.read_bytes() == before + b"replacement"
     finally:
         server.app.dependency_overrides.clear()
         server.app.dependency_overrides.update(overrides)

@@ -194,6 +194,8 @@ class ServerRemoteStore:
             raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
         except ValueError as exc:
             raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise fastapi.HTTPException(status_code=502, detail=str(exc)) from exc
 
     def refreshed_bytes(self):
         """Build a fresh cold descriptor before replacing the hosted reference."""
@@ -398,9 +400,12 @@ class ServerStoreTable:
         return self.metadata["schema_dict"]
 
     def where(self, expression):
-        return type(self)(self.store, self.key, filter=expression, sortby=self.sortby)
+        filter = f"({self.filter}) & ({expression})" if self.filter else expression
+        return type(self)(self.store, self.key, filter=filter, sortby=self.sortby)
 
     def sort_by(self, column, *, view=False):
+        if not view:
+            raise NotImplementedError("ServerStoreTable supports only sort_by(..., view=True)")
         return type(self)(self.store, self.key, filter=self.filter, sortby=column)
 
     def slice(self, start, stop):

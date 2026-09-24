@@ -345,6 +345,63 @@ def test_client_table_class(fill_ctable_public):
     assert len(part) == 2
 
 
+def test_client_table_projection(fill_ctable_public, client):
+    fname, root = fill_ctable_public
+    path = f"{root.name}/{fname}"
+    for target in (path, root[fname]):
+        part = client.get_slice(target, slice(1, 3), field="y")
+        assert isinstance(part, blosc2.CTable)
+        assert [column["name"] for column in part.schema_dict()["columns"]] == ["y"]
+        assert list(part.y[:]) == ["v1", "v2"]
+
+        filtered = client.get_slice(target, "x > 0", field="y")
+        assert isinstance(filtered, blosc2.CTable)
+        assert list(filtered.y[:]) == ["v1", "v2"]
+        assert client.get_slice(target, slice(1, 3), field="y", as_blosc2=False) == [("v1",), ("v2",)]
+
+    empty = client.get_slice(path, slice(0, 0), field="y")
+    assert isinstance(empty, blosc2.CTable)
+    assert [column["name"] for column in empty.schema_dict()["columns"]] == ["y"]
+    assert len(empty) == 0
+
+
+def test_client_refresh_uses_carrier(monkeypatch):
+    client = cat2.Client("http://localhost:8000")
+    calls = []
+    monkeypatch.setattr(client, "_post", lambda url, **kwargs: calls.append(url))
+    monkeypatch.setattr(client, "get", lambda path: ("fresh", path))
+
+    assert client.refresh("@public/store.b2z") == ("fresh", "@public/store.b2z")
+    assert calls == ["http://localhost:8000/api/refresh/@public/store.b2z"]
+    with pytest.raises(ValueError, match="carrier"):
+        client.refresh("@public/store.b2z/table")
+
+
+def test_client_nested_table_string_uses_metadata(tmp_path, monkeypatch):
+    path = tmp_path / "table.b2z"
+    _make_table(path, n=3)
+    with blosc2.open(path) as table:
+        cframe = table.slice(1, 3).to_cframe()
+    client = cat2.Client("http://localhost:8000")
+    nested = "@public/store.b2z/table"
+    looked_up = []
+    requested = []
+    monkeypatch.setattr(client, "get_info", lambda path: looked_up.append(path) or {"kind": "ctable"})
+    monkeypatch.setattr(
+        client,
+        "_xget",
+        lambda url, **kwargs: (
+            requested.append((url, kwargs["params"])) or httpx.Response(200, content=cframe)
+        ),
+    )
+
+    result = client.get_slice(nested, slice(1, 3), field="y")
+    assert isinstance(result, blosc2.CTable)
+    assert list(result.y[:]) == ["v1", "v2"]
+    assert looked_up == [nested]
+    assert requested == [(f"http://localhost:8000/api/fetch/{nested}", {"slice_": "1:3", "field": "y"})]
+
+
 # ---------------------------------------------------------------------------
 # CLI: info / show for .b2z
 # ---------------------------------------------------------------------------
