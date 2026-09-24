@@ -2569,6 +2569,36 @@ async def upload_file(
     return str(path)
 
 
+@app.post("/api/refresh/{path:path}")
+async def refresh_remote_reference(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """Replace a RemoteStore or RemoteCTable reference with fresh source discovery."""
+    from caterva2.services import remote_store
+
+    abspath = get_writable_path(path, user)
+    manifest = remote_store.inspect(abspath)
+    if manifest is None:
+        srv_utils.raise_bad_request("The path is not a RemoteStore reference")
+    store = remote_store.ServerRemoteStore(abspath, manifest)
+
+    def replace():
+        expected = storage_quota.signature(abspath)
+        try:
+            data = store.refreshed_bytes()
+        except remote_proxy.RemoteArrayDenied as exc:
+            raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            srv_utils.raise_bad_request(str(exc))
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise fastapi.HTTPException(status_code=502, detail=str(exc)) from exc
+        write_dataset(abspath, data, expected=expected, compare=True)
+
+    await concurrency.run_in_threadpool(replace)
+    return str(path)
+
+
 @app.post("/api/load_from_url/{path:path}")
 async def load_from_url(
     path: pathlib.Path,

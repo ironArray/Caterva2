@@ -130,7 +130,9 @@ generations are retired by maintenance without resolving their sources.
 
 Sources are immutable until a new reference is published. To refresh a hosted
 store, refresh it in python-blosc2, save a new archive, and upload that archive
-as a replacement. Replacement/deletion retires the previous private generation.
+as a replacement. `POST /api/refresh/{path}` performs fresh discovery for an
+authenticated writer and atomically replaces the cold reference; a failed refresh
+leaves the old reference usable. Replacement/deletion retires the previous private generation.
 Restart workers together when upgrading: storage schema version 3 adds store
 generation accounting and prevents workers from using a partly initialized ledger.
 

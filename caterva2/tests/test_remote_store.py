@@ -208,6 +208,68 @@ async def test_standalone_remote_ctable_api(table_runtime, monkeypatch):
         server.app.dependency_overrides.update(overrides)
 
 
+@pytest.mark.asyncio
+async def test_standalone_remote_ctable_refresh(table_runtime, monkeypatch):
+    import httpx
+
+    from caterva2.services import server
+
+    path = table_runtime.with_name("refreshable-table.b2z")
+    manifest = dict(remote_store.inspect(table_runtime), cache_policy="disk", max_cache_bytes=1 << 20)
+    remote_store.cold_export(manifest, path)
+    root = path.parents[1]
+    monkeypatch.setattr(server.settings, "statedir", root)
+    monkeypatch.setattr(server.settings, "public", path.parent)
+    monkeypatch.setattr(server.settings, "shared", root / "shared")
+    monkeypatch.setattr(server.settings, "personal", root / "personal")
+    overrides = dict(server.app.dependency_overrides)
+    server.app.dependency_overrides[server.current_active_user] = lambda: object()
+    server.app.dependency_overrides[server.optional_user] = lambda: None
+    endpoint = "/api/fetch/@public/refreshable-table.b2z"
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+        ) as client:
+            response = await client.get(endpoint)
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).x[:]) == [1, 2]
+            with server.quota_coordinator().connect() as db:
+                previous = db.execute(
+                    "SELECT generation_id FROM remote_generations WHERE state='active'"
+                ).fetchone()[0]
+
+            @dataclasses.dataclass
+            class Row:
+                x: int = blosc2.field(blosc2.int64())
+                text: str = blosc2.field(blosc2.vlstring(batch_rows=2))
+
+            source = table_runtime.parents[2] / "table.b2z"
+            blosc2.CTable(Row, [(3, "three")], create_summary_index=False).to_b2z(source, overwrite=True)
+            fsspec.filesystem("memory").pipe_file(manifest["source"]["urlpath"], source.read_bytes())
+            response = await client.post("/api/refresh/@public/refreshable-table.b2z")
+            assert response.status_code == 200, response.text
+            response = await client.get(endpoint)
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).x[:]) == [3]
+            with server.quota_coordinator().connect() as db:
+                current = db.execute(
+                    "SELECT generation_id FROM remote_generations WHERE state='active'"
+                ).fetchone()[0]
+                old_state = db.execute(
+                    "SELECT state FROM remote_generations WHERE generation_id=?", (previous,)
+                ).fetchone()
+            assert current != previous
+            assert old_state is None or old_state[0] == "retired"
+            before = path.read_bytes()
+            fsspec.filesystem("memory").pipe_file(manifest["source"]["urlpath"], b"invalid B2Z")
+            response = await client.post("/api/refresh/@public/refreshable-table.b2z")
+            assert response.status_code in {400, 502}, response.text
+            assert path.read_bytes() == before
+    finally:
+        server.app.dependency_overrides.clear()
+        server.app.dependency_overrides.update(overrides)
+
+
 @pytest.fixture
 def store_runtime(tmp_path, monkeypatch):
     monkeypatch.setenv("CATERVA2_SECRET", "test-secret")

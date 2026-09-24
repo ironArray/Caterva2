@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import io
 import math
+import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -192,6 +194,23 @@ class ServerRemoteStore:
             raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
         except ValueError as exc:
             raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
+
+    def refreshed_bytes(self):
+        """Build a fresh cold descriptor before replacing the hosted reference."""
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "refreshed.b2z"
+            with self.open() as runtime:
+                runtime.refresh()
+                runtime.save(artifact, include_cache=False)
+            manifest = dict(
+                inspect(artifact),
+                cache_policy=self.manifest["cache_policy"],
+                max_cache_bytes=self.manifest["max_cache_bytes"],
+            )
+            validate_manifest(manifest)
+            output = io.BytesIO()
+            cold_export(manifest, output)
+            return output.getvalue()
 
     def _key(self, key):
         relative = key.strip("/")
