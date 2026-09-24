@@ -1,0 +1,301 @@
+# Full RemoteCTable integration
+
+## Scope and baseline
+
+Extend the RemoteArray/RemoteStore integration described in
+[remote-store.md](remote-store.md) to support read-only RemoteCTable datasets
+through Caterva2's existing table API, browser, and Python client. Cover both
+standalone references and tables inside stores, including all column formats
+and remote index reads supported by the installed python-blosc2.
+
+Baseline inspected on 2026-09-24:
+
+- Caterva2 commit `501c108` already serves HDF5 table members using
+  `ServerStoreTable`, with a regression test for native index reuse.
+- The local python-blosc2 checkout is at `286b7da9`, the merge of
+  [PR #725](https://github.com/Blosc/python-blosc2/pull/725). The `blosc2`
+  conda environment imports that checkout and reports `4.13.2.dev0`.
+- Inspection used the installed source and tests; the GitHub PR page/API was
+  unavailable during planning.
+- A local memory-filesystem probe created and saved a RemoteCTable, then
+  confirmed that Caterva2 currently reports it as `Directory` and opens it
+  through `ServerRemoteStore`.
+
+Full support means parity with Caterva2's existing CTable read operations and
+preservation of upstream remote semantics. Source writes and remote index
+creation are not supported by RemoteCTable. Query results remain materialized
+CTable cframes; physical downloads remain portable remote-reference artifacts.
+Arbitrary upstream Python methods do not each need a new HTTP endpoint.
+
+## Upstream changes and release target
+
+RemoteCTable has not been released. Its first release will be python-blosc2
+**4.14.0**; the inspected `4.13.2.dev0` version is a development identifier,
+not the intended release version.
+
+Improve python-blosc2 directly in `/Users/faltet/blosc/python-blosc2` wherever
+its API or implementation prevents this integration. Fix the underlying
+behavior and add suitable server-facing APIs before integrating them into
+Caterva2. Do not introduce Caterva2 monkey patches, copied upstream internals,
+parallel cache/query implementations, or compatibility workarounds for the
+unreleased RemoteCTable API. Adjust that API as needed before 4.14.0.
+
+During implementation, make focused commits in python-blosc2 as appropriate,
+with regression tests and documentation for each upstream change. This is
+authorized as part of the integration work. Follow that repository's agent
+instructions and use the `blosc2` conda environment. Keep upstream and
+Caterva2 commits separate and record the upstream commits required by the
+integration. Develop against the editable checkout; require `blosc2>=4.14.0`
+for the released Caterva2 integration.
+
+The following upstream gaps were identified by source inspection. Begin with
+reproducing tests, then implement and verify the fixes:
+
+1. **RemoteArray-backed table columns:**
+   `RemoteArray._from_carrier_with_owner()` opens the secondary source without
+   forwarding the owner's authorized filesystem or invoking its source
+   validator. Add authorization/transport selection before source I/O and
+   preserve geometry/resource validation.
+2. **Linked RemoteStores:** deferred linked-store opening does not propagate
+   the parent's filesystem and validation hooks, including shared-cache and
+   artifact restoration paths. Provide authorization for each destination;
+   cross-host references need separately authorized transports, not blind
+   reuse of the parent's host-pinned filesystem. Preserve these hooks through
+   refresh and nested references.
+3. **Batch resource validation:** `open_ctable_batch()` has no equivalent of
+   the array source-validation hook. Add validation suitable for batch-backed
+   columns and related payloads, early enough to enforce limits before payload
+   reads or unbounded allocation. Define the hook contract upstream.
+4. **Cached-only table operations:** add a supported operation covering a
+   table query's columns, masks, batches, dictionaries, and indexes. Return a
+   clear cache miss without fetching missing data; coordinate the check/read
+   with shared-cache locking and generation changes. Caterva2 can then serve
+   warm queries under quota pressure and apply its normal fallback on a miss.
+
+Also improve upstream inspection, attachment, cold-export, or lifecycle APIs
+if implementation reveals that Caterva2 would otherwise need to manipulate
+private owner state or reproduce format logic. Keep deployment policy, HTTP
+responses, browser integration, and customer-quota decisions in Caterva2;
+keep source resolution, storage formats, and cache correctness in python-blosc2.
+
+## Existing machinery and concrete gaps
+
+RemoteCTable inherits from CTable and uses the RemoteStore owner, manifest,
+transport, and aggregate cache. Saved references carry `b2remote_store` and
+`b2remote_manifest`; the selected root node has kind `ctable`. There is no
+separate persisted table marker to invent.
+
+Reuse `services/remote_store.py`, `ServerStoreTable`, the `store_operation`
+quota path, and existing CTable metadata/client/rendering conventions. Keep
+one generation per hosted reference, with table members sharing their store's
+generation and budget.
+
+Observed gaps:
+
+1. `open_b2`, `open_container`, and `read_metadata` classify every remote-store
+   artifact as a directory. Directory counts include only array nodes, and
+   live recursive discovery also omits table leaves.
+2. The non-DISK constructor does not allow a table root. Its post-operation
+   validation also replaces CTable metadata with `None`, which the current
+   upstream manifest validator rejects.
+3. `ServerStoreTable` implements metadata and basic fetch only. Standalone
+   filtering, browser paging/sorting, and generic table dispatch do not share
+   that operation-scoped path.
+4. Field fetch uses `blosc2.asarray(view[field][...])`; this requires a format
+   audit for nullable, variable-length, nested, and dictionary columns.
+5. Cold export and warm-carrier cleanup consider only `caches`. Current
+   manifests also contain `batch_caches` and nested `linked` artifacts.
+6. Array geometry validation does not by itself cover table batch sources,
+   dictionary vocabularies, index payloads, or secondary remote references.
+7. The upstream cached-only `RemoteStore.read_cached` primitive addresses
+   array leaves. Table fetch has no equivalent callback before quota admission.
+
+## 1. Recognize and open table references safely
+
+Add one shared dispatch decision based on the validated manifest root:
+`manifest['nodes'][manifest['source'].get('dataset', '')][0]`.
+
+- A table root returns the operation-scoped table adapter at relative key `''`.
+  A group root returns the existing store adapter. Keep root-array handling
+  explicit and consistent with RemoteArray behavior.
+- Apply the decision to metadata, fetch/filter, mountability, browser opening,
+  downloads/publication, and embedded-reference checks. A standalone table
+  appears as a table leaf; internal column/index files are not browsable datasets.
+- Count and discover both array and table leaves in group listings. Support a
+  reference selecting a nested table, not just a source whose table is at root.
+- Preserve table and linked-reference metadata when validating runtime state.
+- Use a supported upstream attachment/operation interface for standalone and
+  nested tables, reusing the common RemoteStore cache machinery. Improve that
+  interface upstream where necessary so Caterva2 does not need private root
+  flags or additional private-owner manipulation to treat a table as a store.
+  Finalize the interface with the upstream changes before wiring dispatch.
+- Verify NONE and effective no-retention MEMORY as well as managed DISK.
+  Keep table/column/view lifetimes inside each operation and materialize the
+  response before closing them. Never cache live remote views in web state.
+
+Primary files: `remote_store.py`, `srv_utils.py`, `server.py`, `sparse_cache.py`.
+
+## 2. Complete the policy boundary for all table data
+
+Perform this alongside dispatch, before enabling additional source paths.
+Keep outbound access disabled by default and reuse `[server.remote_proxy]`.
+
+- Audit transport creation for B2Z tables, PyTables/HDF5 tables, column
+  RemoteArray carriers, linked remote references, indexes, dictionaries,
+  validity/deletion masks, and any HDF5 metadata sidecars. Every destination
+  must pass the allowlist, public-address validation, pinning, redirect,
+  timeout, and credential rules before I/O, including refresh and restoration.
+- Use the upstream authorization/transport hooks completed above for secondary
+  sources. Do not allow an unrestricted fallback to `blosc2.open` or fsspec.
+- Validate schemas, member paths, companions, index descriptors, archive
+  entries, nested manifests, and warm-cache geometry before using uploaded
+  state. Bound nested metadata in aggregate and guard reference cycles/depth.
+  Preserve upstream rejection of unsafe object serializers.
+- Extend resource validation to table row/column counts and non-array payload
+  units. Keep existing array limits on physical column components and bound
+  batch/index metadata before allocation. Choose documented defaults from
+  representative supported fixtures, with explicit oversized-unit behavior.
+- Apply server concurrency limits to the table itself. Upstream defaults are
+  8 concurrent reads, an 8 MiB metadata buffer, and a 64 MiB row buffer; those
+  buffers are transport batching targets, not hard process-memory limits.
+- Inspect persisted schema/discovery without outbound access where available;
+  fetching missing metadata still requires authorization. Policy failures must
+  produce consistent client errors through every entry point.
+
+Primary files: `remote_store.py`, `remote_proxy.py`, policy documentation/tests;
+upstream `remote_store.py`, `remote_array.py`, `remote_ctable.py`,
+`ctable_storage.py`, and `remote_batch.py` for the required policy hooks.
+
+## 3. Integrate complete table reads
+
+Use a single table operation to apply the query, select the requested row
+window/columns, materialize, and serialize while its owner is alive.
+
+- Serve schema, row/column counts, attributes, user metadata, sizes, and
+  compression information using `CTableMetadata`, without downloading columns
+  just to identify the dataset. Define unavailable size values consistently.
+- Match local CTable slicing, integer/negative/clipped/empty windows, filtering,
+  and supported field selection. Apply filters before selecting the result
+  window. Preserve the API's existing parameter validation.
+- Exercise fixed-width scalars/vectors, fixed strings, nullable columns, UTF-8,
+  batch strings/lists, nested lists, structs/objects with safe serializers,
+  dictionaries, and deleted rows. Preserve schema and null semantics in cframes.
+- Keep the existing NDArray field-response contract where representable. For
+  columns that cannot preserve their type/null semantics in an NDArray, define
+  an explicit one-column CTable response and update client decoding together;
+  do not silently coerce values through NumPy. Verify the corresponding local
+  CTable behavior so local and remote tables agree.
+- Delegate filtering/index selection to upstream, including summary, ordered,
+  positional, membership, and imported PyTables indexes where supported.
+  Verify selective queries avoid unrelated payload reads and warm queries
+  reuse retained index data. Do not implement a second query engine.
+- Return a clear unsupported-operation response for table-level compressed
+  chunk requests. A table is not one chunked array; only explicitly supported
+  physical array-column operations may use the array chunk contract.
+- Map missing fields, invalid filters, unsupported column layouts, stale
+  generations, and source failures to existing API error conventions.
+
+Primary files: `remote_store.py`, fetch/filter/chunk routes in `server.py`,
+`srv_utils.py`, and `client.py` where response decoding needs adjustment.
+
+## 4. Complete cache, quota, and artifact lifecycle
+
+Keep the existing per-store serialization, ledger, generation locks, recovery,
+and export ownership. Extend concrete assumptions instead of adding another
+cache manager or a separate table ledger kind.
+
+- Account for all retained column chunks, batch payloads, dictionary/index
+  data, HDF5 shared-record/source caches, and linked payloads under one owner
+  budget. Charge metadata and allocated filesystem storage to customer quota.
+- Use the new upstream table cached-only operation so a warm table read
+  can succeed without reserving space for another fill. It must cover the
+  query's index, masks, and payload dependencies atomically. On a genuine miss
+  and denied retention, use the established no-retention fallback.
+- Normalize cold manifests completely: clear array caches, batch caches, and
+  retained linked artifacts while keeping enough discovery/reference metadata
+  to reopen. Test a batch-only warm artifact explicitly.
+- Restore validated warm state once, then remove its retained payload from the
+  portable carrier using the existing publication protocol. Do not repeatedly
+  resurrect evicted batch, index, or linked caches from that carrier.
+- Verify trimming/recovery recognizes every table storage component and can
+  operate without network access. Exercise concurrent workers, interrupted
+  fills/exports, replacement/deletion, and restart reconciliation.
+- Preserve source snapshots until explicit replacement/refresh. Integrate
+  table refresh with generation retirement; old views must become stale and
+  failed refresh must preserve the previous usable generation. First establish
+  the server refresh entry point, which is not currently exposed by these
+  routes, rather than accidentally refreshing on normal reads.
+- Export warm/cold table references through the existing download/publication
+  lifecycle, including staging admission, response cleanup, metadata, and
+  mutability flags. Reopening must return RemoteCTable and expose neither
+  private runtime paths nor credentials.
+
+Primary files: `sparse_cache.py`, `remote_store.py`, `storage_quota.py` only if
+needed, and download/publication routes in `server.py`.
+
+## 5. Browser, Python client, and peer compatibility
+
+- Route both standalone and nested remote tables through the existing CTable
+  grid: selected columns, row paging, ascending/descending sort, and the
+  existing table filter behavior. Execute remote work in the thread pool and
+  materialize only the displayed result window. Sorting/filtering may still
+  need wider upstream reads; avoid promising constant-cost queries.
+- Extend the table adapter's operation interface for browser needs rather than
+  pretending it is a live CTable outside the owner lock.
+- Ensure metadata selects `caterva2.Table`, and verify `slice`, `where`,
+  `rows`, `head`, and downloads for standalone and container-member paths.
+- Verify peers consume the same table metadata and cframes, including formats
+  already handled by their pass-through path. Reuse existing peer caching;
+  this work does not replace the peer transport with RemoteCTable.
+- Document reference creation/upload, supported B2Z and PyTables/HDF5 sources,
+  policy configuration, cache behavior, indexes, refresh, and warm/cold
+  downloads. Zarr remains a store/array source unless upstream adds tables.
+- Set the release dependency floor to `blosc2>=4.14.0`; the current
+  `>=4.13.0.dev0` does not guarantee RemoteCTable or the required improvements.
+
+## Verification and delivery
+
+Extend existing pytest suites and fixtures; no new framework. Use the Python
+executable in the `blosc2` conda environment. `conda run` currently emits an
+activation error in this shell, while the environment's Python works directly.
+
+| Area | Required evidence |
+| --- | --- |
+| Dispatch | Standalone root and selected nested-table references report `ctable`; group listings include tables and hide internals. |
+| Read parity | Local and remote table values, schemas, nulls, deleted rows, slices, filters, projections, and browser sorting agree. |
+| Sources | B2Z root/nested tables and HDF5/PyTables tables; mixed array/table stores. |
+| Policies | DISK plus effective no-retention NONE/MEMORY, including quota fallback. |
+| Security | No unauthorized I/O through discovery, secondary carriers, indexes, linked references, restoration, or refresh. |
+| Cache | Count upstream requests/bytes, verify index reuse and cross-process hits, and enforce one aggregate budget. |
+| Lifecycle | Batch-only and mixed warm exports, cold reopen, trim, process death, replacement, refresh failure, and cleanup retain consistent accounting. |
+| User surfaces | API, Python Table client, browser, and existing peer paths work for standalone and nested tables. |
+
+Start with `test_remote_store.py`, `test_remote_proxy.py`, `test_sparse_cache.py`,
+`test_storage_quota.py`, `test_storage_quota_api.py`, and `test_ctable.py`; add
+targeted peer cases in `test_peers.py`. Use upstream RemoteCTable fixtures as
+references without duplicating its entire test suite. Run applicable pre-commit
+hooks and the broader regression suite once integration is complete.
+
+Upstream acceptance must include denied secondary destinations with zero
+unauthorized requests, hook propagation through restoration/refresh, batch
+limit rejection, and cached-only hits/misses for indexed and batch-backed
+queries across processes. Commit these regressions with their python-blosc2
+fixes and run the relevant upstream remote-array/store/table suites before
+depending on the changes in Caterva2.
+
+Delivery order:
+
+1. Reproduce and fix the four upstream gaps, finalize supported integration
+   APIs, and commit the python-blosc2 changes with tests and documentation for
+   4.14.0. Resolve further upstream gaps there as they are discovered.
+2. Add Caterva2 regressions for dispatch, no-retention validation, and batch
+   cold export; fix those paths using the improved upstream APIs.
+3. Complete table read/serialization semantics and metadata for all column types.
+4. Complete quota, cached-only reads, warm/cold lifecycle, and refresh behavior.
+5. Wire browser/client/peer parity, documentation, and the 4.14.0 dependency floor.
+6. Run end-to-end and multiprocessing acceptance tests. Measure cold/warm
+   paging and indexed queries, upstream traffic, retained storage, and competing
+   workers. Change lock granularity only if these measurements justify it.
+
+Done means the matrix above passes for standalone and nested tables, with no
+RemoteArray/RemoteStore regressions. Recognition alone is not completion.

@@ -101,10 +101,15 @@ proxy. Logical `api/fetch` requests continue to return array data.
 ### RemoteStore references
 
 Caterva2 also accepts portable `blosc2.RemoteStore.save()` archives (`.b2z`)
-for B2Z, HDF5, and Zarr sources. They are browsable containers: for example,
+for B2Z, HDF5, and Zarr sources, plus `blosc2.RemoteCTable.save()` archives
+for B2Z and PyTables/HDF5 tables. Store archives are browsable containers: for example,
 `@public/store.b2z/group/array` supports metadata, sliced fetches, and compressed
 chunk reads. Known names and attributes can be inspected without contacting the
 source; undiscovered metadata and array geometry require authorized discovery.
+Table roots and table leaves report `ctable` metadata and support row slices,
+filters, selected fields, and the existing table browser. A table has no
+table-level compressed-chunk endpoint. Its columns, masks, batches, and indexes
+share the enclosing reference's cache allowance.
 The same `[server.remote_proxy]` HTTPS policy applies to discovery and leaf reads.
 `max_metadata_bytes` (default 16 MiB) and `max_nodes` (default 100,000) bound
 discovery in addition to the existing per-array geometry limits.
@@ -117,8 +122,8 @@ The SQLite ledger charges allocated storage, including manifests and directories
 Requested MEMORY/NONE stores execute without retained payload. A denied cache
 fill falls back to a read without retention; existing warm hits remain usable.
 
-Uploaded warm leaves are imported once and the public archive is replaced with
-a cold descriptor. Downloads include private warm cache data by default;
+Uploaded warm leaves, table batches, and linked references are imported once,
+then the public archive is replaced with a cold descriptor. Downloads include private warm cache data by default;
 `include_cache=false` produces a cold archive without network access. Export
 staging is reserved until the response completes. Interrupted disposable
 generations are retired by maintenance without resolving their sources.
@@ -129,8 +134,7 @@ as a replacement. Replacement/deletion retires the previous private generation.
 Restart workers together when upgrading: storage schema version 3 adds store
 generation accounting and prevents workers from using a partly initialized ledger.
 
-This support requires the current Python-Blosc2 4.13 development APIs (and their
-forthcoming release). Use `RemoteStore.with_sparse_cache()` for standalone
+This support requires Python-Blosc2 4.14.0. Use `RemoteStore.with_sparse_cache()` for standalone
 shared runtime access; the ordinary upstream `cache_dir` constructor retains
 its exclusive-owner semantics.
 

@@ -371,7 +371,8 @@ def open_b2(abspath, path):
 
     manifest = remote_store.inspect(abspath)
     if manifest is not None:
-        return remote_store.ServerRemoteStore(abspath, manifest)
+        store = remote_store.ServerRemoteStore(abspath, manifest)
+        return store.get("") if remote_store.root_kind(manifest) == "ctable" else store
     reference = remote_proxy.inspect(abspath)
     if reference is not None:
         carrier, payload = reference
@@ -1222,7 +1223,7 @@ async def fetch_data(
                     lambda: srv_utils.open_container_member(abspath, inner_key)
                 )
                 if inner_key is not None
-                else None
+                else await concurrency.run_in_threadpool(lambda: open_b2(abspath, path))
             )
             if isinstance(container, ServerStoreTable):
                 store_table_filter = filter
@@ -1655,7 +1656,9 @@ async def get_chunk(
             container = open_b2(abspath, path)
         else:
             container = open_member(abspath, inner_key, abspath.stat().st_mtime)
-        if isinstance(container, blosc2.CTable):
+        from caterva2.services.remote_store import ServerStoreTable
+
+        if isinstance(container, blosc2.CTable | ServerStoreTable):
             srv_utils.raise_bad_request(
                 f"{path} is a CTable, which is a set of columns rather than one chunked array; "
                 "fetch it with the slice_ parameter instead"
@@ -3493,7 +3496,9 @@ def _filtered_array(abspath, path, filter, sortby, mtime, inner_key):
         # HDF5Proxy supports slicing only; no string-indexed LazyExpr yet.
         raise ValueError("Filtering is not supported for HDF5-backed datasets")
 
-    if isinstance(arr, blosc2.CTable):
+    from caterva2.services.remote_store import ServerStoreTable
+
+    if isinstance(arr, blosc2.CTable | ServerStoreTable):
         if filter:
             arr = arr.where(filter)
         if sortby:
@@ -3539,7 +3544,9 @@ def _desc_window(total, start, size):
 def _is_ctable_like(arr):
     """True for real CTables and provider-backed views that render through
     the CTable grid (ViewHandle.array is duck-typed by design)."""
-    return isinstance(arr, blosc2.CTable) or (
+    from caterva2.services.remote_store import ServerStoreTable
+
+    return isinstance(arr, blosc2.CTable | ServerStoreTable) or (
         hasattr(arr, "nrows") and hasattr(arr, "schema_dict") and hasattr(arr, "slice")
     )
 
@@ -3618,7 +3625,9 @@ async def htmx_path_view(
         elif filter or sortby:
             try:
                 mtime = abspath.stat().st_mtime
-                arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
+                arr, idx = await concurrency.run_in_threadpool(
+                    lambda: get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
+                )
             except TypeError as exc:
                 return htmx_error(request, f"Error in filter: {exc}")
             except NameError as exc:
@@ -3642,7 +3651,7 @@ async def htmx_path_view(
                 )
         else:
             try:
-                arr = open_b2(abspath, path)
+                arr = await concurrency.run_in_threadpool(lambda: open_b2(abspath, path))
             except ValueError:
                 return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
             idx = None
@@ -3688,9 +3697,9 @@ async def htmx_path_view(
             if sort_desc:
                 # arr is ascending-sorted; read its tail and reverse for descending order.
                 lo, hi = _desc_window(nrows, start, size)
-                window = list(arr.slice(lo, hi))[::-1]
+                window = await concurrency.run_in_threadpool(lambda: list(arr.slice(lo, hi))[::-1])
             else:
-                window = arr.slice(start, stop)
+                window = await concurrency.run_in_threadpool(lambda: arr.slice(start, stop))
             rows = [fields] + [[cell(row[f]) for f in fields] for row in window]
             context = {
                 "view_url": make_url(request, "htmx_path_view", path=path),

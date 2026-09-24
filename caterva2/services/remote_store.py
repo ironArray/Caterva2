@@ -49,8 +49,14 @@ def validate_manifest(manifest):
         raise remote_proxy.RemoteArrayDenied("RemoteStore source contains unsupported fields")
     if len(msgpack_packb(manifest)) > remote_proxy.policy.max_metadata_bytes:
         raise remote_proxy.RemoteArrayDenied("RemoteStore metadata exceeds the configured limit")
-    if len(manifest["nodes"]) > remote_proxy.policy.max_nodes:
-        raise remote_proxy.RemoteArrayDenied("RemoteStore node count exceeds the configured limit")
+    pending = [manifest]
+    nodes = 0
+    while pending:
+        current = pending.pop()
+        nodes += len(current["nodes"])
+        if nodes > remote_proxy.policy.max_nodes:
+            raise remote_proxy.RemoteArrayDenied("RemoteStore node count exceeds the configured limit")
+        pending.extend(entry["manifest"] for entry in current.get("linked", {}).values())
     # Reuse array policy validation, including the strict cache-policy schema.
     policy = manifest.get("cache_policy", "none")
     limit = manifest.get("max_cache_bytes")
@@ -81,8 +87,28 @@ def source_url(manifest):
     )
 
 
-def filesystem(manifest):
-    parsed = urlsplit(source_url(manifest))
+def root_kind(manifest):
+    root = manifest["source"].get("dataset", "")
+    return manifest["nodes"][root][0]
+
+
+def filesystem_for_url(url):
+    parsed = urlsplit(
+        remote_proxy._validated_source(
+            {
+                "kind": "remote_array",
+                "version": 1,
+                "source": {
+                    "kind": "fsspec",
+                    "version": 1,
+                    "urlpath": url,
+                    "assume_immutable": True,
+                },
+                "cache_policy": "none",
+                "max_cache_bytes": None,
+            }
+        )
+    )
     host = parsed.hostname.encode("idna").decode("ascii").lower()
     addresses = remote_proxy._public_addresses(host, parsed.port or 443)
     return remote_proxy._https_filesystem(host, addresses)
@@ -90,7 +116,7 @@ def filesystem(manifest):
 
 def cold_export(manifest, destination):
     """Write a descriptor-only archive without resolving its source."""
-    manifest = dict(manifest, caches=[])
+    manifest = dict(manifest, caches=[], batch_caches=[], linked={})
     storage = blosc2.Storage(contiguous=True)
     storage.meta = {"b2tree": {"version": 1}, "b2remote_store": {"version": 1}}
     embed = blosc2.SChunk(chunksize=8192, data=None, storage=storage)
@@ -111,11 +137,20 @@ class ServerRemoteStore:
 
     @contextmanager
     def open(self, runtime=None):
-        fs = filesystem(self.manifest)
+        filesystems = []
+
+        def authorized_filesystem(url):
+            fs = filesystem_for_url(url)
+            filesystems.append(fs)
+            return fs
+
         source = self.manifest["source"]
+        fs = authorized_filesystem(source["urlpath"])
         options = {
             "_filesystem": fs,
+            "_filesystem_resolver": authorized_filesystem,
             "_source_validator": validate_array,
+            "_batch_validator": validate_batch,
             "_manifest_validator": validate_manifest,
             "_max_nodes": remote_proxy.policy.max_nodes,
         }
@@ -135,15 +170,17 @@ class ServerRemoteStore:
                     source["urlpath"],
                     dataset=source.get("dataset"),
                     cache_policy=blosc2.CachePolicy.NONE,
-                    _manifest=dict(copy.deepcopy(self.manifest), caches=[]),
+                    _manifest=dict(copy.deepcopy(self.manifest), caches=[], batch_caches=[], linked={}),
+                    allow_table_root=True,
                     **options,
                 )
             with store:
                 yield store
         finally:
-            session = getattr(fs, "_session", None)
-            if session is not None:
-                fs.close_session(fs.loop, session)
+            for source_fs in filesystems:
+                session = getattr(source_fs, "_session", None)
+                if session is not None:
+                    source_fs.close_session(source_fs.loop, session)
 
     def operation(self, callback, *, cached=None):
         from caterva2.services.server import quota_coordinator
@@ -169,7 +206,8 @@ class ServerRemoteStore:
         except ValueError:
             return []
         listed = self.manifest["listed"]
-        if self.manifest["source"]["kind"] in {"b2z", "hdf5"} or full in listed:
+        has_links = any(kind == "remote_store" for kind, _ in self.manifest["nodes"].values())
+        if (self.manifest["source"]["kind"] in {"b2z", "hdf5"} or full in listed) and not has_links:
             # Use known discovery offline only when all descendant groups are listed.
             complete = self.manifest["source"]["kind"] in {"b2z", "hdf5"} or all(
                 key in listed
@@ -189,11 +227,14 @@ class ServerRemoteStore:
             while pending:
                 key = pending.pop()
                 node = store.get_info(key)
-                if node.kind == "ndarray":
+                if node.kind in {"ndarray", "ctable"}:
                     result.append("/" + key)
-                elif node.kind == "group":
+                elif node.kind in {"group", "remote_store"}:
                     with store[key] as group:
-                        pending.extend("/".join(p for p in (key, child) if p) for child in group)
+                        if node.kind == "remote_store" and group.kind("") == "ctable":
+                            result.append("/" + key)
+                        else:
+                            pending.extend("/".join(p for p in (key, child) if p) for child in group)
                 if len(result) + len(pending) > remote_proxy.policy.max_nodes:
                     raise remote_proxy.RemoteArrayDenied("RemoteStore listing exceeds the node limit")
             return sorted(result)
@@ -204,11 +245,23 @@ class ServerRemoteStore:
         from caterva2.services.srv_utils import GROUP
 
         try:
-            known = self.manifest["nodes"].get(self._key(key))
-            if known is None and self.manifest["source"]["kind"] in {"b2z", "hdf5"}:
+            full = self._key(key)
+            known = self.manifest["nodes"].get(full)
+            linked = any(
+                kind == "remote_store" and full.startswith(path + "/")
+                for path, (kind, _) in self.manifest["nodes"].items()
+            )
+            if known is None and self.manifest["source"]["kind"] in {"b2z", "hdf5"} and not linked:
                 return None
             kind = known[0] if known else self.operation(lambda store: store.kind(key.strip("/")))
-            if kind == "group":
+            if kind == "remote_store":
+
+                def linked_kind(store):
+                    with store[key.strip("/")] as linked_store:
+                        return "ctable" if linked_store.kind("") == "ctable" else "remote_store"
+
+                kind = self.operation(linked_kind)
+            if kind in {"group", "remote_store"}:
                 return GROUP
             if kind == "ndarray":
                 return ServerStoreArray(self, key.strip("/"))
@@ -284,11 +337,16 @@ class ServerStoreArray(remote_proxy.ServerRemoteArray):
 class ServerStoreTable:
     """Operation-scoped view of a CTable inside a portable RemoteStore."""
 
-    def __init__(self, store, key):
+    def __init__(self, store, key, *, filter=None, sortby=None):
         self.store, self.key, self.path = store, key, store.path
+        self.filter, self.sortby = filter, sortby
 
         def metadata(runtime):
-            with runtime[key] as table:
+            with self._open_table(runtime) as table:
+                if filter:
+                    table = table.where(filter)
+                if sortby:
+                    table = table.sort_by(sortby, view=True)
                 schema = table.schema_dict()
                 nbytes, cbytes = table.nbytes, table.cbytes
                 return {
@@ -308,18 +366,56 @@ class ServerStoreTable:
         self.metadata = store.operation(metadata)
         self.nrows = self.metadata["nrows"]
 
+    @contextmanager
+    def _open_table(self, runtime):
+        with runtime[self.key] as node:
+            if isinstance(node, blosc2.RemoteStore):
+                with node[""] as table:
+                    yield table
+            else:
+                yield node
+
+    def schema_dict(self):
+        return self.metadata["schema_dict"]
+
+    def where(self, expression):
+        return type(self)(self.store, self.key, filter=expression, sortby=self.sortby)
+
+    def sort_by(self, column, *, view=False):
+        return type(self)(self.store, self.key, filter=self.filter, sortby=column)
+
+    def slice(self, start, stop):
+        def read(runtime):
+            with self._open_table(runtime) as table:
+                if self.filter:
+                    table = table.where(self.filter)
+                if self.sortby:
+                    table = table.sort_by(self.sortby, view=True)
+                return table.slice(start, stop)
+
+        return self.store.operation(read, cached=lambda runtime: runtime.read_cached_table(read))
+
     def fetch(self, slice_=None, *, filter=None, field=None):
         from caterva2.services.srv_utils import ctable_row_range
 
+        if field is not None and field not in self.metadata["columns"]:
+            raise fastapi.HTTPException(status_code=400, detail=f"Unknown table field: {field}")
+
         def read(runtime):
-            with runtime[self.key] as table:
-                view = table.where(filter) if filter else table
+            with self._open_table(runtime) as table:
+                expression = filter or self.filter
+                try:
+                    view = table.where(expression) if expression else table
+                except (NameError, SyntaxError) as exc:
+                    raise ValueError(f"Invalid table filter: {exc}") from exc
+                if self.sortby:
+                    view = view.sort_by(self.sortby, view=True)
                 start, stop = ctable_row_range(slice_, view.nrows)
                 if field is not None:
-                    return blosc2.asarray(view[field][start:stop]).to_cframe()
+                    return view.select([field]).slice(start, stop).to_cframe()
                 return view.slice(start, stop).to_cframe()
 
-        return self.store.operation(read)
+        return self.store.operation(read, cached=lambda runtime: runtime.read_cached_table(read))
 
 
 def validate_array(array):
@@ -336,3 +432,13 @@ def validate_array(array):
         > policy.max_chunks
     ):
         raise remote_proxy.RemoteArrayDenied("RemoteStore leaf exceeds the chunk limit")
+
+
+def validate_batch(batch):
+    policy = remote_proxy.policy
+    if (
+        len(batch.offsets) > policy.max_chunks
+        or batch.member_length > policy.max_nbytes
+        or len(msgpack_packb((batch.meta, batch.vlmeta))) > policy.max_metadata_bytes
+    ):
+        raise remote_proxy.RemoteArrayDenied("RemoteStore batch exceeds resource limits")

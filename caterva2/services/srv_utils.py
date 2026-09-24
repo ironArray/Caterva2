@@ -308,6 +308,8 @@ def open_container(abspath):
 
         manifest = remote_store.inspect(abspath)
         if manifest is not None:
+            if remote_store.root_kind(manifest) != "group":
+                return None
             return remote_store.ServerRemoteStore(abspath, manifest)
         try:
             store = blosc2.open(abspath)
@@ -488,10 +490,13 @@ def read_metadata(obj, mtime=None):
         manifest = remote_store.inspect(obj)
         if manifest is not None:
             path = pathlib.Path(obj)
+            if remote_store.root_kind(manifest) == "ctable":
+                store = remote_store.ServerRemoteStore(path, manifest)
+                return read_metadata(store.get(""), mtime=path.stat().st_mtime)
             return models.Directory(
                 mtime=path.stat().st_mtime,
                 size=path.stat().st_size,
-                nfiles=sum(kind == "ndarray" for kind, _ in manifest["nodes"].values()),
+                nfiles=sum(kind in {"ndarray", "ctable"} for kind, _ in manifest["nodes"].values()),
             )
     if isinstance(obj, pathlib.Path):
         path = obj

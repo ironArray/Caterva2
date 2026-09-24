@@ -385,7 +385,7 @@ class SparseCache:
                     remote_store.validate_manifest(manifest)
                 else:
                     nodes = {
-                        key: (kind, value if kind == "unsupported" else None)
+                        key: (kind, value if kind in {"ctable", "remote_store", "unsupported"} else None)
                         for key, (kind, value) in runtime._owner.nodes.items()
                     }
                     remote_store.validate_manifest(dict(store.manifest, nodes=nodes))
@@ -474,14 +474,18 @@ class SparseCache:
                     assembled = True
                     sync_tree(path)
                     self._finish(gid, path, payload)
-                    if store.manifest["caches"]:
+                    if (
+                        store.manifest["caches"]
+                        or store.manifest.get("batch_caches")
+                        or store.manifest.get("linked")
+                    ):
                         self._intent(gid, "coldify")
                         cold = io.BytesIO()
                         remote_store.cold_export(store.manifest, cold)
                         new_sig = self.q.publish_locked(
                             rel, cold.getvalue(), expected=sig, preserve_remote=True
                         )
-                        store.manifest = dict(store.manifest, caches=[])
+                        store.manifest = dict(store.manifest, caches=[], batch_caches=[], linked={})
                         store.carrier_generation = new_sig
                         spec = hashlib.sha256(msgpack_packb(store.manifest)).hexdigest()
                         with self.q.transaction() as db:
@@ -558,9 +562,7 @@ class SparseCache:
                         )
                     runtime = self._attach(proxy, path)
                     try:
-                        with destination.open("xb"):
-                            pass
-                        runtime.save(destination, mode="w")
+                        runtime.save(destination)
                     finally:
                         del runtime
                     exported = remote_proxy.raw_carrier(destination, mode="a")
@@ -717,6 +719,8 @@ class SparseCache:
                         os.replace(path, trash)
                         sync_directory(path.parent)
                         sync_directory(self.trash)
+                    # Upstream sparse attachment leaves a sibling initialization lock.
+                    path.with_name(path.name + ".init.lock").unlink(missing_ok=True)
                     with self.q.transaction() as db:
                         db.execute(
                             "UPDATE remote_generations SET relpath=? WHERE generation_id=?",

@@ -1,5 +1,6 @@
 """Remote-store policy, sparse retention, and existing container API integration."""
 
+import dataclasses
 import io
 
 import blosc2
@@ -9,6 +10,202 @@ import numpy as np
 import pytest
 
 from caterva2.services import remote_proxy, remote_store, sparse_cache, srv_utils, storage_quota
+
+
+@pytest.fixture
+def table_runtime(tmp_path, monkeypatch):
+    monkeypatch.setenv("CATERVA2_SECRET", "test-secret")
+    from caterva2.services import server
+
+    @dataclasses.dataclass
+    class Row:
+        x: int = blosc2.field(blosc2.int64())
+        text: str = blosc2.field(blosc2.vlstring(batch_rows=2))
+
+    source = tmp_path / "table.b2z"
+    blosc2.CTable(Row, [(1, "one"), (2, "two")], create_summary_index=False).to_b2z(source)
+    fs = fsspec.filesystem("memory")
+    url = "https://data.example/table.b2z"
+    fs.pipe_file(url, source.read_bytes())
+    root = tmp_path / "state"
+    (root / "public").mkdir(parents=True)
+    path = root / "public/table-reference.b2z"
+    with blosc2.RemoteCTable(url, cache_policy=blosc2.CachePolicy.NONE, _filesystem=fs) as table:
+        table.save(path, include_cache=False)
+    q = storage_quota.StorageQuota(root, 0, cache_backend="sparse")
+    monkeypatch.setattr(server, "quota_coordinator", lambda: q)
+    monkeypatch.setattr(
+        remote_proxy, "policy", remote_proxy.Policy(enabled=True, allowed_hosts=("data.example",))
+    )
+    monkeypatch.setattr(remote_proxy, "_public_addresses", lambda *args: ("93.184.216.34",))
+    monkeypatch.setattr(remote_proxy, "_https_filesystem", lambda *args: fs)
+    return path
+
+
+def test_standalone_remote_ctable_dispatch(table_runtime):
+    from caterva2.services import server
+
+    path = table_runtime
+    assert remote_store.root_kind(remote_store.inspect(path)) == "ctable"
+    assert not srv_utils.is_container_file(path)
+    assert srv_utils.read_metadata(path).kind == "ctable"
+    table = server.open_b2(path, "@public/table-reference.b2z")
+    result = blosc2.ctable_from_cframe(table.fetch())
+    assert list(result.x[:]) == [1, 2]
+    assert list(result.text[:]) == ["one", "two"]
+
+
+def test_standalone_remote_ctable_disk_cache(table_runtime, monkeypatch):
+    from caterva2.services import server
+
+    path = table_runtime.with_name("cached-table.b2z")
+    manifest = remote_store.inspect(table_runtime)
+    manifest = dict(manifest, cache_policy="disk", max_cache_bytes=1 << 20)
+    remote_store.cold_export(manifest, path)
+    table = server.open_b2(path, "@public/cached-table.b2z")
+    assert list(blosc2.ctable_from_cframe(table.fetch()).text[:]) == ["one", "two"]
+    from blosc2.b2z_source import B2ZBatchSource
+
+    def no_fetch(*args, **kwargs):
+        raise AssertionError("warm batch fetched upstream payload")
+
+    monkeypatch.setattr(B2ZBatchSource, "get_chunk", no_fetch)
+    assert list(blosc2.ctable_from_cframe(table.fetch()).text[:]) == ["one", "two"]
+
+
+def test_standalone_remote_ctable_warm_batch_seed(table_runtime, tmp_path, monkeypatch):
+    from blosc2.b2z_source import B2ZBatchSource
+
+    path = table_runtime
+    manifest = remote_store.inspect(path)
+    warm = tmp_path / "warm-table.b2z"
+    with blosc2.RemoteCTable(
+        manifest["source"]["urlpath"],
+        cache_dir=tmp_path / "creator",
+        _filesystem=fsspec.filesystem("memory"),
+    ) as table:
+        assert list(table.text[:]) == ["one", "two"]
+        table.save(warm)
+    assert remote_store.inspect(warm)["batch_caches"]
+    from caterva2.services import server
+
+    q = server.quota_coordinator()
+    q.publish(path, warm.read_bytes(), expected=storage_quota.signature(path))
+    table = server.open_b2(path, "@public/table-reference.b2z")
+    assert remote_store.inspect(path)["batch_caches"] == []
+
+    def no_fetch(*args, **kwargs):
+        raise AssertionError("warm batch seed fetched upstream payload")
+
+    monkeypatch.setattr(B2ZBatchSource, "get_chunk", no_fetch)
+    assert list(blosc2.ctable_from_cframe(table.fetch()).text[:]) == ["one", "two"]
+
+
+def test_standalone_remote_ctable_warm_hit_under_quota(table_runtime, monkeypatch):
+    from blosc2.b2z_source import B2ZBatchSource
+
+    from caterva2.services import server
+
+    path = table_runtime.with_name("cached-table.b2z")
+    manifest = dict(remote_store.inspect(table_runtime), cache_policy="disk", max_cache_bytes=1 << 20)
+    remote_store.cold_export(manifest, path)
+    table = server.open_b2(path, "@public/cached-table.b2z")
+    assert list(blosc2.ctable_from_cframe(table.fetch()).text[:]) == ["one", "two"]
+    q = server.quota_coordinator()
+    used = q.usage()["used"]
+    with q.transaction() as db:
+        db.execute("UPDATE account SET cache_fill_suspended=1,quota=?", (used,))
+    monkeypatch.setattr(
+        B2ZBatchSource,
+        "get_chunk",
+        lambda *args: pytest.fail("warm hit fetched upstream payload"),
+    )
+    assert list(blosc2.ctable_from_cframe(table.fetch()).text[:]) == ["one", "two"]
+
+
+def test_standalone_remote_ctable_nested_columns(table_runtime, tmp_path):
+    from caterva2.services import server
+
+    @dataclasses.dataclass
+    class RichRow:
+        text: str = blosc2.field(blosc2.vlstring(nullable=True, batch_rows=2))
+        tags: list[int] = blosc2.field(  # noqa: RUF009
+            blosc2.list(blosc2.int64(), nullable=True, batch_rows=2)
+        )
+        category: str = blosc2.field(blosc2.dictionary(nullable=True))
+
+    source = tmp_path / "rich.b2z"
+    blosc2.CTable(
+        RichRow,
+        [("one", [1, 2], "a"), (None, None, None), ("three", [3], "b")],
+        create_summary_index=False,
+    ).to_b2z(source)
+    url = "https://data.example/rich.b2z"
+    fs = fsspec.filesystem("memory")
+    fs.pipe_file(url, source.read_bytes())
+    path = table_runtime.with_name("rich.b2z")
+    with blosc2.RemoteCTable(url, cache_policy=blosc2.CachePolicy.NONE, _filesystem=fs) as remote:
+        remote.save(path, include_cache=False)
+    table = server.open_b2(path, "@public/rich.b2z")
+    result = blosc2.ctable_from_cframe(table.fetch())
+    assert list(result.text[:]) == ["one", None, "three"]
+    assert list(result.tags[:]) == [[1, 2], None, [3]]
+    assert list(result.category[:]) == ["a", None, "b"]
+    projected = table.fetch(field="text")
+    assert list(blosc2.ctable_from_cframe(projected).text[:]) == ["one", None, "three"]
+
+
+@pytest.mark.asyncio
+async def test_standalone_remote_ctable_api(table_runtime, monkeypatch):
+    import httpx
+
+    from caterva2.services import server
+
+    path = table_runtime
+    monkeypatch.setattr(server.settings, "statedir", path.parents[1])
+    monkeypatch.setattr(server.settings, "public", path.parent)
+    monkeypatch.setattr(server.settings, "shared", path.parents[1] / "shared")
+    monkeypatch.setattr(server.settings, "personal", path.parents[1] / "personal")
+    overrides = dict(server.app.dependency_overrides)
+    server.app.dependency_overrides[server.optional_user] = lambda: None
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+        ) as client:
+            endpoint = "/api/info/@public/table-reference.b2z"
+            response = await client.get(endpoint)
+            assert response.status_code == 200, response.text
+            assert response.json()["kind"] == "ctable"
+            response = await client.get("/api/fetch/@public/table-reference.b2z", params={"filter": "x > 1"})
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).x[:]) == [2]
+            response = await client.get("/api/fetch/@public/table-reference.b2z", params={"field": "text"})
+            assert response.status_code == 200, response.text
+            assert list(blosc2.ctable_from_cframe(response.content).text[:]) == ["one", "two"]
+            response = await client.get(
+                "/api/fetch/@public/table-reference.b2z", params={"field": "missing"}
+            )
+            assert response.status_code == 400, response.text
+            response = await client.get(
+                "/api/fetch/@public/table-reference.b2z", params={"filter": "missing > 1"}
+            )
+            assert response.status_code == 400, response.text
+            response = await client.post("/htmx/path-view/@public/table-reference.b2z", data={"sortby": "x"})
+            assert response.status_code == 200, response.text
+            assert "one" in response.text
+            assert "two" in response.text
+            response = await client.get(
+                "/api/download/@public/table-reference.b2z", params={"include_cache": "false"}
+            )
+            assert response.status_code == 200, response.text
+            downloaded = path.with_name("downloaded-reference.b2z")
+            downloaded.write_bytes(response.content)
+            assert remote_store.root_kind(remote_store.inspect(downloaded)) == "ctable"
+            response = await client.get("/api/chunk/@public/table-reference.b2z", params={"nchunk": 0})
+            assert response.status_code == 400
+    finally:
+        server.app.dependency_overrides.clear()
+        server.app.dependency_overrides.update(overrides)
 
 
 @pytest.fixture
@@ -122,6 +319,119 @@ def test_store_policy_inspection_and_shared_retention(store_runtime, monkeypatch
     assert srv_utils.open_container(path).leaves() == ["/g/a", "/g/b"]
     with pytest.raises(Exception, match=r"403|disabled"):
         first[:1]
+
+
+def test_linked_remote_store_tables_and_arrays(store_runtime, tmp_path):
+    _, path, data = store_runtime
+    fs = fsspec.filesystem("memory")
+    source = remote_store.inspect(path)["source"]["urlpath"]
+    host = tmp_path / "host.b2z"
+    with (
+        blosc2.RemoteStore(source, dataset="g", _filesystem=fs) as linked,
+        blosc2.TreeStore(host, mode="w") as tree,
+    ):
+        tree["linked"] = linked
+    host_url = "https://data.example/host.b2z"
+    fs.pipe_file(host_url, host.read_bytes())
+    artifact = path.with_name("linked-store.b2z")
+    with blosc2.RemoteStore(host_url, _filesystem=fs) as store:
+        store.save(artifact, include_cache=False)
+
+    adapter = srv_utils.open_container(artifact)
+    assert adapter.leaves() == ["/linked/a", "/linked/b"]
+    np.testing.assert_array_equal(adapter.get("linked/a")[:5000], data[:5000])
+
+
+def test_linked_remote_store_warm_seed(store_runtime, tmp_path, monkeypatch):
+    q, path, data = store_runtime
+    fs = fsspec.filesystem("memory")
+    source = remote_store.inspect(path)["source"]["urlpath"]
+    host = tmp_path / "warm-linked-host.b2z"
+    with (
+        blosc2.RemoteStore(source, dataset="g", _filesystem=fs) as linked,
+        blosc2.TreeStore(host, mode="w") as tree,
+    ):
+        tree["linked"] = linked
+    host_url = "https://data.example/warm-linked-host.b2z"
+    fs.pipe_file(host_url, host.read_bytes())
+    warm = tmp_path / "warm-linked.b2z"
+    with blosc2.RemoteStore(
+        host_url,
+        cache_dir=tmp_path / "creator-linked",
+        _filesystem=fs,
+        _filesystem_resolver=lambda url: fs,
+    ) as store:
+        with store["linked/a"] as array:
+            np.testing.assert_array_equal(array[:5000], data[:5000])
+        store.save(warm)
+    artifact = path.with_name("warm-linked-reference.b2z")
+    q.publish(artifact, warm.read_bytes(), expected=None)
+    leaf = srv_utils.open_container(artifact).get("linked/a")
+    assert remote_store.inspect(artifact)["linked"] == {}
+    monkeypatch.setattr(
+        blosc2.B2ZNDSource,
+        "get_chunk",
+        lambda *args: pytest.fail("warm linked leaf fetched upstream payload"),
+    )
+    np.testing.assert_array_equal(leaf[:5000], data[:5000])
+    assert q.usage()["remote_cache_used"] > 0
+    with q.connect() as db:
+        private, source_stamp = db.execute(
+            "SELECT g.relpath,g.source_stamp FROM remote_generations g "
+            "JOIN remote_objects o ON g.object_id=o.object_id WHERE o.path=?",
+            ("public/warm-linked-reference.b2z",),
+        ).fetchone()
+    import json
+
+    removed, remaining = blosc2.RemoteStore.trim_sparse_cache(q.root / private, json.loads(source_stamp), 0)
+    assert removed
+    assert remaining == 0
+
+
+def test_linked_remote_store_ctable(table_runtime, tmp_path):
+    fs = fsspec.filesystem("memory")
+    table_url = remote_store.inspect(table_runtime)["source"]["urlpath"]
+    host = tmp_path / "host-table.b2z"
+    with (
+        blosc2.RemoteStore(table_url, allow_table_root=True, _filesystem=fs) as linked,
+        blosc2.TreeStore(host, mode="w") as tree,
+    ):
+        tree["linked"] = linked
+    host_url = "https://data.example/host-table.b2z"
+    fs.pipe_file(host_url, host.read_bytes())
+    artifact = table_runtime.with_name("linked-table.b2z")
+    with blosc2.RemoteStore(host_url, _filesystem=fs) as store:
+        store.save(artifact, include_cache=False)
+
+    adapter = srv_utils.open_container(artifact)
+    assert adapter.leaves() == ["/linked"]
+    table = adapter.get("linked")
+    assert list(blosc2.ctable_from_cframe(table.fetch()).text[:]) == ["one", "two"]
+
+
+def test_linked_remote_store_denied_destination(store_runtime, tmp_path):
+    from fastapi import HTTPException
+
+    _, path, _ = store_runtime
+    fs = fsspec.filesystem("memory")
+    original = remote_store.inspect(path)["source"]["urlpath"]
+    blocked = "https://blocked.example/source.b2z"
+    fs.pipe_file(blocked, fs.cat_file(original))
+    host = tmp_path / "host.b2z"
+    with (
+        blosc2.RemoteStore(blocked, dataset="g", _filesystem=fs) as linked,
+        blosc2.TreeStore(host, mode="w") as tree,
+    ):
+        tree["linked"] = linked
+    host_url = "https://data.example/host-with-blocked-link.b2z"
+    fs.pipe_file(host_url, host.read_bytes())
+    artifact = path.with_name("blocked-link.b2z")
+    with blosc2.RemoteStore(host_url, _filesystem=fs) as store:
+        store.save(artifact, include_cache=False)
+
+    adapter = srv_utils.open_container(artifact)
+    with pytest.raises(HTTPException, match=r"blocked\.example"):
+        adapter.leaves()
 
 
 def test_store_retirement_and_offline_pruning(store_runtime, monkeypatch):

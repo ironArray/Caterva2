@@ -601,6 +601,6 @@ def export_cframe(carrier, payload, *, include_cache: bool) -> bytes:
     """Snapshot a warm or cold carrier while excluding concurrent mutations."""
     path = carrier.schunk.urlpath
     with carrier_thread_lock(path), carrier.schunk.holding_lock():
-        if include_cache:
+        if include_cache or payload["cache_policy"] != "disk":
             return carrier.to_cframe()
         return cold_cframe(carrier, payload)
