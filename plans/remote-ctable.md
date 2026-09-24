@@ -1,5 +1,145 @@
 # Full RemoteCTable integration
 
+## Implementation status and API consistency review (2026-09-24)
+
+The first implementation is committed in Caterva2 as `dfd5528` and `4be107c`,
+with python-blosc2 improvements in `5f92a80d` and `d6554ad5`. It covers root,
+nested, and linked tables, table browsing and queries, secondary-source policy
+hooks, batch/linked cache migration and trimming, and explicit reference refresh.
+The dependency floor is now `blosc2>=4.14.0`.
+
+The last implementation runs reported 437 passed / 173 skipped in Caterva2 and
+487 passed / 5 skipped in the relevant upstream suites, with pre-commit passing.
+These are historical results, not a fresh run for this documentation review.
+They establish a useful integration baseline, but do not establish every item
+in the original acceptance matrix. The implementation needs the following
+follow-up work before claiming complete API parity or release readiness.
+
+The findings below come from current source inspection and small local probes.
+The original sections below remain the implementation specification; the
+decisions here supersede conflicting field-response guidance there.
+
+### P0: Make refresh authorization and replacement consistent with other writers
+
+**Observed:** `server.current_active_user` becomes a dependency returning `None`
+when login is disabled. Upload and remove explicitly reject a missing user;
+`refresh_remote_reference()` does not. `get_writable_path()` permits the public
+root with that value, so refresh can proceed anonymously in this configuration.
+
+- Add the same explicit authentication guard used by existing writers, before
+  inspecting the artifact or performing outbound I/O. Test both enabled and
+  disabled login configurations and assert denied calls leave source traffic,
+  carrier bytes, and quota state unchanged.
+- Capture the inspected descriptor and its replacement signature from the same
+  snapshot. Currently inspection happens before `replace()` obtains a new
+  signature; a replacement in between can let stale discovery overwrite the
+  newer reference. Reuse `StorageQuota.snapshot()` and the existing publication
+  comparison rather than introducing another locking protocol. A racing write
+  must result in the existing 409 response and preserve the winner's bytes.
+- Keep successful refresh atomic and preserve the existing reference on failed
+  discovery, policy denial, quota denial, or publication conflict. The current
+  failure test checks carrier bytes; also check generation and accounting state.
+
+### P1: Define one table projection and decoding contract
+
+**Observed:** `ServerStoreTable.fetch(field=...)` always returns a one-column
+CTable. Local table field requests instead execute `container[field]` and enter
+the general array/SChunk dispatch. A fixed-width local field is a `Column`, not
+an NDArray, SChunk, or CTable, so that route is not equivalent to remote fetch.
+The client also chooses its decoder from a `Table` instance or a `.b2z` suffix;
+a string such as `store.b2z/table` selects the array decoder.
+
+- Make every table fetch, including a single-column projection, return a CTable
+  cframe for local and remote tables. This preserves nulls, dictionaries, nested
+  values, and schema, and avoids a dtype-dependent response type. Structured
+  NDArray field fetches keep their NDArray contract. Document the correction to
+  the previous local-table behavior rather than claiming backward compatibility.
+- Resolve the response kind from dataset metadata for string paths; reuse
+  metadata already held by `Table` objects. Remove suffix-based table guessing.
+  Do not try unrelated binary decoders until one happens to succeed.
+- Fix `Client.get_slice(..., key=..., field=...)`: it currently sends only
+  `field`, dropping `key` (also described as ignored in its docstring). Table
+  projection must preserve the requested row window; update documentation and
+  test bounded transfers through the real Python client.
+- Allow table filtering, row windows, and projection together, in that order.
+  The HTTP route currently rejects `filter` plus `field`, although the remote
+  adapter can apply both. Use the same table pipeline for GET and POST fetch,
+  local and remote sources. Keep unrelated array rules explicit.
+- Validate with standalone and nested paths, both `Table` objects and strings,
+  fixed-width and nullable/batch/dictionary columns, and empty projections by
+  row range. Assert decoded type, schema, nulls, and values, not only HTTP 200.
+
+### P1: Normalize table input validation and error responses
+
+**Observed:** `parse_segment()` accepts slice steps, but `ctable_row_range()`
+ignores them and ignores extra tuple dimensions. The Python client rejects
+non-unit steps, so raw HTTP and client calls disagree. Error handling also
+differs: the remote adapter translates some filter errors and missing fields,
+while local fields and filters take other branches; source errors are mapped
+to 502 in refresh but not consistently in table fetch.
+
+- For this release, reject non-unit steps (including zero and reverse steps)
+  and extra table dimensions with 400 in the shared row-range helper. Preserve
+  the established negative-index and clipped-window behavior. Full stride
+  support can be a separate feature; do not silently widen selections.
+- Validate field names, filter expressions, and sort columns through the same
+  table operation path. Return 400 for invalid query parameters, 404 for a
+  missing dataset/member, 403 for policy denial, 409 for generation/publication
+  conflicts, and 502 for recognized upstream transport or malformed-source
+  failures. Preserve existing quota/database handlers. Do not turn arbitrary
+  programming exceptions into client errors.
+- Add parity cases for GET/POST fetch and browser rendering, including unknown
+  fields, malformed filters, unsupported selections, unavailable sources, and
+  stale references. Browser errors should remain understandable HTML responses.
+
+### P2: Complete refresh and query semantics in the client and adapter
+
+- Add `Client.refresh(path)` for the existing reference-refresh endpoint and
+  document that it accepts a hosted RemoteStore/RemoteCTable carrier. A path
+  inside a store must explicitly identify the owning carrier to refresh; do not
+  silently refresh siblings. RemoteArray refresh is not implemented by this
+  endpoint and must receive a clear unsupported-target response. A missing
+  path should receive 404, rather than the current generic 400.
+- Define how callers reload cached `Table`/`Group` metadata after refresh; return
+  the refreshed dataset object from the convenience method or explicitly reload
+  its metadata. Avoid leaving `nrows` and schema silently stale.
+- The internal adapter's `where()` replaces any previous filter, and
+  `sort_by(..., view=False)` ignores `view`. Either implement the semantics of
+  the CTable methods it imitates or narrow the internal interface to the browser
+  operations actually needed. Do not expose misleading method compatibility.
+- Avoid repeated execution: adapter construction reads metadata, `where()` and
+  `sort_by()` execute queries to obtain metadata, and `slice()` executes them
+  again. Reuse one operation to obtain the requested page and required counts.
+  Move all blocking remote opens in fetch to the thread pool; currently the
+  ordinary unfiltered root/member branches can still open on the event loop.
+
+### P2: Finish the upstream integration contract and acceptance evidence
+
+- Before 4.14.0, finalize supported python-blosc2 APIs for source authorization,
+  batch/manifest validation, operation locking, and cold descriptor export.
+  Caterva2 still uses underscored hooks, `runtime._owner`, and manifest/ZIP
+  construction. Improve upstream APIs directly and then remove that dependency
+  on private state; do not add Caterva2 compatibility wrappers around it.
+- Audit the table-level concurrency limit, including batches and index reads;
+  setting `max_concurrency` on physical array sources alone does not prove the
+  whole table obeys server policy.
+- Reproduce the exploratory HDF5 indexed-query case that refetched data after
+  quota admission was suspended, even following warm reads. That assertion was
+  not retained in the final suite. Determine whether the probe misses retained
+  dependencies or the warm-up never retained them; count actual source bytes
+  and bulk reads as well as `get_chunk()` calls. Fix cache behavior upstream if
+  needed, and retain a regression for an established fully cached indexed query.
+- Complete explicit remote-table Python-client and peer cases, process-shared
+  indexed/batch cached-only reads, and interrupted refresh/export recovery.
+  Record which skip conditions leave acceptance items untested. Measure cold
+  and warm paging/query traffic and retained storage with competing workers
+  before considering changes to lock granularity.
+
+Implement P0 first, then projection/decoding and validation together, followed
+by client conveniences and the remaining upstream/acceptance work. Extend the
+existing tests; keep fixes in the repository that owns the behavior. This
+review updates the plan only and does not implement these follow-up changes.
+
 ## Scope and baseline
 
 Extend the RemoteArray/RemoteStore integration described in
