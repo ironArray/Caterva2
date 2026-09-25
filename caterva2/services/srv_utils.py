@@ -40,6 +40,8 @@ BLOSC2_FRAME_SUFFIXES = {".b2"}
 BLOSC2_NATIVE_SUFFIXES = BLOSC2_ARRAY_SUFFIXES | BLOSC2_TABLE_SUFFIXES | BLOSC2_FRAME_SUFFIXES
 
 HDF5_SUFFIXES = {".h5", ".hdf5"}
+# Preserve these formats byte-for-byte when storing uploaded files.
+NO_COMPRESSION_SUFFIXES = BLOSC2_NATIVE_SUFFIXES | HDF5_SUFFIXES | {".parquet"}
 
 # Container suffixes whose paths may descend into internal (virtual) members.
 BLOSC2_CONTAINER_SUFFIXES = {".b2z"} | HDF5_SUFFIXES
@@ -523,6 +525,9 @@ def read_metadata(obj, mtime=None):
                 return models.Directory(mtime=mtime, size=size, nfiles=len(container.leaves("/")))
             finally:
                 container.close()
+
+        if path.suffix == ".parquet":
+            return models.File(mtime=mtime, size=size)
 
         assert path.suffix in BLOSC2_NATIVE_SUFFIXES
         try:

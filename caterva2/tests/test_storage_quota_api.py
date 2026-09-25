@@ -4,6 +4,7 @@ import io
 import pathlib
 import types
 import uuid
+import zipfile
 
 import blosc2
 import fsspec
@@ -49,6 +50,69 @@ def assert_usage(server):
     measured = sum(row[1] for row in quota.inventory()) + quota.usage()["remote_cache_used"]
     assert quota.usage()["used"] == measured <= quota.usage()["quota"]
     assert quota.usage()["reserved"] == quota.usage()["working"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("upload", ["api", "web", "zip", "url"])
+async def test_parquet_upload_preserves_bytes_and_serves_ranges(quota_api, monkeypatch, upload):
+    pa = pytest.importorskip("pyarrow")
+    pq = pytest.importorskip("pyarrow.parquet")
+    server, client, _ = quota_api
+    buffer = io.BytesIO()
+    pq.write_table(pa.table({"value": [1, 2, 3]}), buffer)
+    data = buffer.getvalue()
+    if upload == "url":
+        async_client = httpx.AsyncClient
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                server.httpx,
+                "AsyncClient",
+                lambda **kwargs: async_client(
+                    **kwargs,
+                    transport=httpx.MockTransport(lambda request: httpx.Response(200, content=data)),
+                ),
+            )
+            response = await client.post(
+                "/api/load_from_url/@public/data.parquet",
+                data={"remote_url": "https://example.org/data.parquet"},
+            )
+    else:
+        filename, body = "data.parquet", data
+        if upload == "zip":
+            archive = io.BytesIO()
+            with zipfile.ZipFile(archive, "w") as file:
+                file.writestr(filename, data)
+            filename, body = "data.zip", archive.getvalue()
+        route = "/api/upload/@public/data.parquet" if upload == "api" else "/htmx/upload/@public"
+        response = await client.post(route, files={"file": (filename, body)})
+    assert response.status_code == 200, response.text
+    path = server.settings.public / "data.parquet"
+    assert path.read_bytes() == data
+    assert not path.with_suffix(".parquet.b2").exists()
+    response = await client.get("/api/info/@public/data.parquet")
+    assert response.status_code == 200, response.text
+    assert response.json()["size"] == len(data)
+    url = "/api/download/@public/data.parquet"
+    response = await client.get(url)
+    assert response.status_code == 200
+    assert response.content == data
+    response = await client.head(url)
+    assert response.status_code == 200
+    assert int(response.headers["content-length"]) == len(data)
+    assert response.headers["accept-ranges"] == "bytes"
+    assert not response.content
+    response = await client.get(url, headers={"Range": "bytes=-8"})
+    assert response.status_code == 206
+    assert response.content == data[-8:]
+    assert response.headers["content-range"] == f"bytes {len(data) - 8}-{len(data) - 1}/{len(data)}"
+    response = await client.get(url, headers={"Range": f"bytes={len(data)}-"})
+    assert response.status_code == 416
+    assert path.read_bytes() == data
+    assert_usage(server)
+    response = await client.delete("/htmx/delete/@public/data.parquet")
+    assert response.status_code == 200, response.text
+    assert not path.exists()
+    assert_usage(server)
 
 
 @pytest.mark.asyncio

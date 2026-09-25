@@ -102,7 +102,7 @@ proxy. Logical `api/fetch` requests continue to return array data.
 
 Caterva2 also accepts portable `blosc2.RemoteStore.save()` archives (`.b2z`)
 for B2Z, HDF5, and Zarr sources, plus `blosc2.RemoteCTable.save()` archives
-for B2Z and PyTables/HDF5 tables. Store archives are browsable containers: for example,
+for B2Z, PyTables/HDF5, and Parquet tables. Store archives are browsable containers: for example,
 `@public/store.b2z/group/array` supports metadata, sliced fetches, and compressed
 chunk reads. Known names and attributes can be inspected without contacting the
 source; undiscovered metadata and array geometry require authorized discovery.
@@ -110,6 +110,13 @@ Table roots and table leaves report `ctable` metadata and support row slices,
 filters, selected fields, and the existing table browser. A table has no
 table-level compressed-chunk endpoint. Its columns, masks, batches, and indexes
 share the enclosing reference's cache allowance.
+Parquet references use the same RemoteStore runtime path and the cache
+policy saved in the archive. Save a `RemoteCTable` for a Parquet URL as `.b2z`
+and upload it like any other table reference. To retain converted row groups
+across requests, save with a DISK cache policy. Uploaded warm groups seed the
+private cache and count against its allowance; subsequent cached-only reads can
+serve them without fetching payload. A changed source requires refreshing the
+hosted reference. The server does not check its version on every warm read.
 The same `[server.remote_proxy]` HTTPS policy applies to discovery and leaf reads.
 `max_metadata_bytes` (default 16 MiB) and `max_nodes` (default 100,000) bound
 discovery in addition to the existing per-array geometry limits.
@@ -122,7 +129,7 @@ The SQLite ledger charges allocated storage, including manifests and directories
 Requested MEMORY/NONE stores execute without retained payload. A denied cache
 fill falls back to a read without retention; existing warm hits remain usable.
 
-Uploaded warm leaves, table batches, and linked references are imported once,
+Uploaded warm leaves, table batches, Parquet row groups, and linked references are imported once,
 then the public archive is replaced with a cold descriptor. Downloads include private warm cache data by default;
 `include_cache=false` produces a cold archive without network access. Export
 staging is reserved until the response completes. Interrupted disposable
@@ -139,6 +146,16 @@ generation accounting and prevents workers from using a partly initialized ledge
 This support requires Python-Blosc2 4.14.0. Use `RemoteStore.with_sparse_cache()` for standalone
 shared runtime access; the ordinary upstream `cache_dir` constructor retains
 its exclusive-owner semantics.
+Parquet hosting requires a python-blosc2 build with native Parquet
+RemoteStore support. Caterva2 supplies its authorized filesystem to discovery,
+deferred row-group reads, and refresh.
+
+Raw `.parquet` files uploaded through the API or web interface (including archive
+uploads and URL imports) are stored unchanged, without a `.b2` wrapper. Download
+them through `/api/download/@public/example.parquet` (or the corresponding shared
+or personal path). This endpoint supports GET, HEAD, and HTTP byte ranges, so
+remote Parquet readers can fetch only the bytes they need. Raw uploads appear as
+files; use a saved `RemoteCTable` reference for Caterva2's table views.
 
 ### Admission and recovery
 

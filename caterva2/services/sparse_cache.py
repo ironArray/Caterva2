@@ -478,6 +478,7 @@ class SparseCache:
                         store.manifest["caches"]
                         or store.manifest.get("batch_caches")
                         or store.manifest.get("linked")
+                        or store.manifest.get("parquet_caches")
                     ):
                         self._intent(gid, "coldify")
                         cold = io.BytesIO()
@@ -485,7 +486,9 @@ class SparseCache:
                         new_sig = self.q.publish_locked(
                             rel, cold.getvalue(), expected=sig, preserve_remote=True
                         )
-                        store.manifest = dict(store.manifest, caches=[], batch_caches=[], linked={})
+                        store.manifest = dict(
+                            store.manifest, caches=[], batch_caches=[], parquet_caches=[], linked={}
+                        )
                         store.carrier_generation = new_sig
                         spec = hashlib.sha256(msgpack_packb(store.manifest)).hexdigest()
                         with self.q.transaction() as db:

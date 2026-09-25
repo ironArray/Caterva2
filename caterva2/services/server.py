@@ -957,11 +957,15 @@ def get_abspath(
     elif (cachedir / filepath).is_dir():
         return cachedir / filepath
 
-    # HDF5 files cannot be compressed, as they are supported natively
-    if (
-        filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | srv_utils.HDF5_SUFFIXES
-        and not may_not_exist
-    ):
+    # Preserve access to Parquet files uploaded before the compression exemption.
+    if filepath.suffix == ".parquet" and not filepath.exists() and not may_not_exist:
+        compressed = filepath.with_suffix(".parquet.b2")
+        if compressed.is_file():
+            filepath = compressed
+
+    # HDF5 files cannot be compressed, as they are supported natively.
+    # Parquet also needs its original bytes for HTTP range reads.
+    if filepath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES and not may_not_exist:
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
@@ -1533,7 +1537,7 @@ class RemoteCacheFileResponse(responses.FileResponse):
                 await concurrency.run_in_threadpool(self.cleanup)
 
 
-@app.get("/api/download/{path:path}")
+@app.api_route("/api/download/{path:path}", methods=["GET", "HEAD"])
 async def download_data(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
@@ -1541,8 +1545,8 @@ async def download_data(
     accept_encoding: str | None = fastapi.Header(None),
     range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
-    # This one always streams, decompressing on the way out more often than not,
-    # so it never serves ranges; api/fetch on a stored dataset is what does.  The
+    # Regular files stream, often decompressing on the way out, and refuse ranges.
+    # Stored Parquet files use FileResponse below to support range reads. The
     # refusal comes after the path is resolved, so a path that does not exist is
     # still a 404 rather than a 416 about a file nobody has.
     provider = providers.provider_for(path.parts[0])
@@ -1570,6 +1574,13 @@ async def download_data(
     from caterva2.services import remote_store
 
     abspath = get_abspath(path, user)
+    if abspath.suffix == ".parquet":
+        return FileResponse(
+            abspath,
+            filename=path.name,
+            media_type="application/vnd.apache.parquet",
+            headers=with_etag(abspath),
+        )
     manifest = remote_store.inspect(abspath)
     if manifest is not None and (remote_proxy.policy.enabled or not include_cache):
         artifact, etag, cleanup = await concurrency.run_in_threadpool(
@@ -2588,13 +2599,11 @@ async def upload_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
-        schunk = blosc2.SChunk(data=data)
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
-        data = schunk.to_cframe()
+    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
+        data = blosc2.SChunk(data=data).to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
@@ -2687,13 +2696,10 @@ async def load_from_url(
         response.raise_for_status()
     data = response.content
 
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
-        schunk = blosc2.SChunk(data=data)
-
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
-        data = schunk.to_cframe()
+    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
+        data = blosc2.SChunk(data=data).to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
@@ -3362,7 +3368,7 @@ async def htmx_path_list(
                 else:
                     relpath = pathlib.Path(*segments[2:])
                     abspath = rootdir / relpath
-                    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
                         abspath = pathlib.Path(f"{abspath}.b2")
 
                 with contextlib.suppress(FileNotFoundError, NotADirectoryError):
@@ -4225,7 +4231,7 @@ async def htmx_upload(
                     raise ValueError("archive member escapes its destination")
                 if any(p.startswith((".", "__MACOSX")) for p in member.parts):
                     return
-                if member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                if member.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
                     body = blosc2.SChunk(data=body).to_cframe()
                     member = member.with_suffix(member.suffix + ".b2")
                 write_dataset(path / member, body)
@@ -4282,19 +4288,17 @@ async def htmx_upload(
         new_members = [
             member
             for member in members
-            if not (path / member).is_dir() and member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES
+            if not (path / member).is_dir() and member.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES
         ]
         for member in new_members:
             srv_utils.compress_file(path / member)
 
         # We are done, redirect to home, and show the new files, starting with the first one
-        first_member = next((m for m in new_members), None)
+        first_member = next((m for m in members if (path / m).is_file() or m in new_members), None)
         path = f"{name}/{first_member}"
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
-    if suffix in [".h5", ".hdf5"]:
-        pass
-    elif filename.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+    if filename.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f"{filename}.b2"
@@ -4338,9 +4342,7 @@ async def htmx_delete(
         abspath = settings.public / path
 
     # Remove
-    if abspath.suffix in [".h5", ".hdf5"]:
-        pass
-    elif abspath.suffix not in {".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
         if not abspath.exists():
             return fastapi.HTTPException(status_code=404)

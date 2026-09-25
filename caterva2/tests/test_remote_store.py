@@ -202,6 +202,141 @@ def test_standalone_remote_ctable_nested_columns(table_runtime, tmp_path):
     assert list(blosc2.ctable_from_cframe(projected).text[:]) == ["one", None, "three"]
 
 
+@pytest.fixture(params=["taxi.parquet", "taxi-data"])
+def parquet_runtime(table_runtime, tmp_path, request):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    fs = fsspec.filesystem("memory")
+    url = f"https://data.example/{request.param}"
+    source = tmp_path / "taxi.parquet"
+    pq.write_table(pa.table({"fare": [10, 20, 30], "cab": ["a", "b", "c"]}), source, row_group_size=2)
+    fs.pipe_file(url, source.read_bytes())
+    path = table_runtime.with_name("parquet-reference.b2z")
+    with blosc2.RemoteCTable(
+        url,
+        source_format="parquet",
+        _filesystem=fs,
+        cache_dir=tmp_path / "parquet-cache",
+        columns=["fare", "cab"],
+        blosc2_batch_size=2,
+    ) as remote:
+        assert list(remote.slice(0, 2).fare[:]) == [10, 20]
+        remote.save(path)
+    return path
+
+
+def test_remote_parquet_reference(parquet_runtime, tmp_path, monkeypatch):
+    import blosc2.remote_parquet as parquet
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from caterva2.services import server
+
+    path = parquet_runtime
+    manifest = remote_store.inspect(path)
+    assert manifest["parquet_caches"]
+    assert remote_store.root_kind(manifest) == "ctable"
+    q = server.quota_coordinator()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            parquet, "_open_source_handle", lambda *args, **kwargs: pytest.fail("warm Parquet row fetched")
+        )
+        assert srv_utils.read_metadata(path).kind == "ctable"
+        table = server.open_b2(path, "@public/parquet-reference.b2z")
+        assert table.nrows == 3
+        assert list(blosc2.ctable_from_cframe(table.fetch(slice_=slice(0, 2))).fare[:]) == [10, 20]
+        assert q.usage()["remote_cache_used"] > 0
+        assert remote_store.inspect(path)["parquet_caches"] == []
+        used = q.usage()["used"]
+        with q.transaction() as db:
+            db.execute("UPDATE account SET cache_fill_suspended=1,quota=?", (used,))
+        assert list(blosc2.ctable_from_cframe(table.fetch(slice_=slice(0, 2))).fare[:]) == [10, 20]
+        with q.transaction() as db:
+            db.execute("UPDATE account SET cache_fill_suspended=0,quota=0")
+    for include_cache in (True, False):
+        export, _, cleanup = q.remote.export_store(table.store, include_cache=include_cache)
+        try:
+            exported = remote_store.inspect(export)
+            assert exported["source"] == manifest["source"]
+            assert bool(exported["parquet_caches"]) == include_cache
+        finally:
+            cleanup()
+
+    source = tmp_path / "taxi.parquet"
+    pq.write_table(pa.table({"fare": [40, 50, 60, 70], "cab": ["d", "e", "f", "g"]}), source)
+    fsspec.filesystem("memory").pipe_file(manifest["source"]["urlpath"], source.read_bytes())
+    assert list(blosc2.ctable_from_cframe(table.fetch(slice_=slice(0, 2))).fare[:]) == [10, 20]
+    path.write_bytes(table.store.refreshed_bytes())
+    updated = server.open_b2(path, "@public/parquet-reference.b2z")
+    assert list(blosc2.ctable_from_cframe(updated.fetch(slice_=slice(0, 2))).fare[:]) == [40, 50]
+
+
+@pytest.mark.parametrize("policy", ["none", "memory"])
+def test_remote_parquet_without_retention(parquet_runtime, policy):
+    from caterva2.services import server
+
+    manifest = dict(
+        remote_store.inspect(parquet_runtime),
+        cache_policy=policy,
+        max_cache_bytes=None if policy == "none" else 1 << 20,
+    )
+    path = parquet_runtime.with_name("uncached.b2z")
+    remote_store.cold_export(manifest, path)
+    table = server.open_b2(path, "@public/uncached.b2z")
+    result = blosc2.ctable_from_cframe(table.fetch(slice_=slice(1, 3), field="cab"))
+    assert list(result.cab[:]) == ["b", "c"]
+    assert server.quota_coordinator().usage()["remote_cache_used"] == 0
+    path.write_bytes(table.store.refreshed_bytes())
+    assert remote_store.inspect(path)["cache_policy"] == policy
+
+
+@pytest.mark.asyncio
+async def test_remote_parquet_api(parquet_runtime, monkeypatch):
+    import httpx
+
+    from caterva2.services import server
+
+    path = parquet_runtime
+    monkeypatch.setattr(server.settings, "statedir", path.parents[1])
+    monkeypatch.setattr(server.settings, "public", path.parent)
+    monkeypatch.setitem(server.app.dependency_overrides, server.optional_user, lambda: None)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/info/@public/parquet-reference.b2z")
+        assert response.status_code == 200, response.text
+        assert response.json()["kind"] == "ctable"
+        response = await client.get(
+            "/api/fetch/@public/parquet-reference.b2z",
+            params={"filter": "fare >= 20", "field": "cab", "slice_": "0:1"},
+        )
+        assert response.status_code == 200, response.text
+        assert list(blosc2.ctable_from_cframe(response.content).cab[:]) == ["b"]
+        response = await client.post(
+            "/htmx/path-view/@public/parquet-reference.b2z", data={"sortby": "fare"}
+        )
+        assert response.status_code == 200, response.text
+        response = await client.get(
+            "/api/download/@public/parquet-reference.b2z", params={"include_cache": "false"}
+        )
+        assert response.status_code == 200, response.text
+        exported = path.with_name("downloaded.b2z")
+        exported.write_bytes(response.content)
+        assert remote_store.inspect(exported)["parquet_caches"] == []
+
+
+def test_remote_parquet_resource_limit(parquet_runtime, monkeypatch):
+    import fastapi
+
+    from caterva2.services import server
+
+    monkeypatch.setattr(remote_proxy, "policy", dataclasses.replace(remote_proxy.policy, max_nbytes=1))
+    with pytest.raises(fastapi.HTTPException) as exc:
+        server.open_b2(parquet_runtime, "@public/parquet-reference.b2z")
+    assert exc.value.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_standalone_remote_ctable_api(table_runtime, monkeypatch):
     import httpx

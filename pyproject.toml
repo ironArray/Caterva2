@@ -62,7 +62,7 @@ server = [
     "aiohttp",
     "aiosqlite",
     "caterva2[base-services]",
-    "caterva2[hdf5]",
+    "caterva2[hdf5,pyarrow]",
     "fastapi-mail",
     # Not optional: `count_written` reads a frame's offsets through
     # `blosc2.FsspecNDSource`, which is the whole of how a chunk fill reports
@@ -77,7 +77,6 @@ server = [
     "nbconvert",
     "nbformat",
     "pillow",
-    "pyarrow",
     "pygments",
     "python-dotenv",
     "python-multipart",
@@ -110,6 +109,9 @@ hdf5 = [
     "b2h5py>=0.5.1",
     "hdf5plugin",
     "msgpack",
+]
+pyarrow = [
+    "pyarrow",
 ]
 clients = [
     "rich",

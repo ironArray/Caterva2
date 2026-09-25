@@ -47,7 +47,12 @@ def inspect(path):
 
 def validate_manifest(manifest):
     blosc2.RemoteStore._validate_artifact_manifest(manifest)
-    if set(manifest["source"]) != {"urlpath", "dataset", "kind"}:
+    allowed_source = (
+        {"urlpath", "dataset", "kind", "options"}
+        if manifest["source"]["kind"] == "parquet"
+        else {"urlpath", "dataset", "kind"}
+    )
+    if set(manifest["source"]) != allowed_source:
         raise remote_proxy.RemoteArrayDenied("RemoteStore source contains unsupported fields")
     if len(msgpack_packb(manifest)) > remote_proxy.policy.max_metadata_bytes:
         raise remote_proxy.RemoteArrayDenied("RemoteStore metadata exceeds the configured limit")
@@ -118,7 +123,7 @@ def filesystem_for_url(url):
 
 def cold_export(manifest, destination):
     """Write a descriptor-only archive without resolving its source."""
-    manifest = dict(manifest, caches=[], batch_caches=[], linked={})
+    manifest = dict(manifest, caches=[], batch_caches=[], parquet_caches=[], linked={})
     storage = blosc2.Storage(contiguous=True)
     storage.meta = {"b2tree": {"version": 1}, "b2remote_store": {"version": 1}}
     embed = blosc2.SChunk(chunksize=8192, data=None, storage=storage)
@@ -149,6 +154,7 @@ class ServerRemoteStore:
         source = self.manifest["source"]
         fs = authorized_filesystem(source["urlpath"])
         options = {
+            "_source_format": source["kind"],
             "_filesystem": fs,
             "_filesystem_resolver": authorized_filesystem,
             "_source_validator": validate_array,
@@ -156,6 +162,16 @@ class ServerRemoteStore:
             "_manifest_validator": validate_manifest,
             "_max_nodes": remote_proxy.policy.max_nodes,
         }
+        if source["kind"] == "parquet":
+            from blosc2.ctable import NullPolicy
+            from blosc2.remote_parquet import _restore_compression_options
+
+            conversion = dict(self.manifest["metadata"]["parquet"]["conversion"])
+            conversion["_effective_null_policy"] = NullPolicy(
+                **self.manifest["metadata"]["parquet"]["discovery"]["options"]["null_policy"]
+            )
+            _restore_compression_options(conversion)
+            options["_parquet_conversion"] = conversion
         try:
             if runtime is not None:
                 store = blosc2.RemoteStore.with_sparse_cache(
@@ -172,7 +188,13 @@ class ServerRemoteStore:
                     source["urlpath"],
                     dataset=source.get("dataset"),
                     cache_policy=blosc2.CachePolicy.NONE,
-                    _manifest=dict(copy.deepcopy(self.manifest), caches=[], batch_caches=[], linked={}),
+                    _manifest=dict(
+                        copy.deepcopy(self.manifest),
+                        caches=[],
+                        batch_caches=[],
+                        parquet_caches=[],
+                        linked={},
+                    ),
                     allow_table_root=True,
                     **options,
                 )
@@ -192,7 +214,7 @@ class ServerRemoteStore:
             return quota_coordinator().remote.store_operation(self, callback, cached=cached)
         except remote_proxy.RemoteArrayDenied as exc:
             raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
-        except ValueError as exc:
+        except (KeyError, TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
         except (OSError, zipfile.BadZipFile) as exc:
             raise fastapi.HTTPException(status_code=502, detail=str(exc)) from exc
