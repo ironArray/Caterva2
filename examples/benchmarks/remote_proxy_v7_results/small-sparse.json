@@ -1,0 +1,233 @@
+{
+  "backend": "sparse",
+  "chunk_size": 262144,
+  "nchunks": 32,
+  "cache_chunks": 4,
+  "source": "in-memory range transport; real ASGI routes",
+  "results": {
+    "cold": {
+      "median_seconds": 0.3775228329759557,
+      "samples": [
+        {
+          "seconds": 0.38301454100292176,
+          "requests": 32,
+          "median_ms": 11.360541509930044,
+          "p95_ms": 12.926716300717088,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 0.3775228329759557,
+          "requests": 32,
+          "median_ms": 11.365937505615875,
+          "p95_ms": 12.147625148645602,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 0.3711140830127988,
+          "requests": 32,
+          "median_ms": 11.244020992307924,
+          "p95_ms": 12.172150299011264,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        }
+      ]
+    },
+    "warm": {
+      "median_seconds": 0.37866308400407434,
+      "samples": [
+        {
+          "seconds": 0.37866308400407434,
+          "requests": 96,
+          "median_ms": 3.918457994586788,
+          "p95_ms": 4.255770494637545,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 0.37584758299635723,
+          "requests": 96,
+          "median_ms": 3.8801875052740797,
+          "p95_ms": 4.21906298288377,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 0.385695749981096,
+          "requests": 96,
+          "median_ms": 3.9368959987768903,
+          "p95_ms": 4.3533642528927885,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        }
+      ]
+    },
+    "churn": {
+      "median_seconds": 1.301555375015596,
+      "samples": [
+        {
+          "seconds": 1.3065834580047522,
+          "requests": 96,
+          "median_ms": 13.58535401232075,
+          "p95_ms": 14.256333495723084,
+          "private_entries": 9,
+          "usage": {
+            "used": 1073620,
+            "dataset_used": 468,
+            "remote_cache_used": 1073152,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 1.2991834589920472,
+          "requests": 96,
+          "median_ms": 13.525312504498288,
+          "p95_ms": 14.072707745071966,
+          "private_entries": 9,
+          "usage": {
+            "used": 1073620,
+            "dataset_used": 468,
+            "remote_cache_used": 1073152,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 1.301555375015596,
+          "requests": 96,
+          "median_ms": 13.53947950701695,
+          "p95_ms": 14.202301994373556,
+          "private_entries": 9,
+          "usage": {
+            "used": 1073620,
+            "dataset_used": 468,
+            "remote_cache_used": 1073152,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        }
+      ]
+    },
+    "partial": {
+      "median_seconds": 1.2956712499726564,
+      "samples": [
+        {
+          "seconds": 1.2955502080149017,
+          "requests": 256,
+          "median_ms": 4.080937505932525,
+          "p95_ms": 11.657999762974214,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 1.2956712499726564,
+          "requests": 256,
+          "median_ms": 4.08633348706644,
+          "p95_ms": 11.630125496594701,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        },
+        {
+          "seconds": 1.308848874992691,
+          "requests": 256,
+          "median_ms": 4.083624997292645,
+          "p95_ms": 11.554166754649486,
+          "private_entries": 37,
+          "usage": {
+            "used": 8528336,
+            "dataset_used": 464,
+            "remote_cache_used": 8527872,
+            "reserved": 0,
+            "working": 0,
+            "quota": 1073741824,
+            "work_bytes": 1073741824,
+            "cache_fill_suspended": false
+          }
+        }
+      ]
+    }
+  }
+}

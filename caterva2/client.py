@@ -300,7 +300,7 @@ class _FileOpsMixin:
             raise ValueError(f"Not supported for a member inside a container file: {self.path}")
         return self.path
 
-    def download(self, localpath=None):
+    def download(self, localpath=None, *, include_cache=True):
         """
         Downloads the file to storage.
 
@@ -309,6 +309,9 @@ class _FileOpsMixin:
         localpath : Path, optional
             The destination path for the downloaded file.  If not specified, the file will
             be downloaded to the current working directory.
+        include_cache : bool, optional
+            For a RemoteArray carrier, include its valid warm cache data.
+            Pass false to download a cold proxy without changing the server copy.
 
         Returns
         -------
@@ -329,6 +332,7 @@ class _FileOpsMixin:
         return self.client.download(
             self._toplevel_path(),
             localpath=localpath,
+            include_cache=include_cache,
         )
 
     def unfold(self):
@@ -528,9 +532,21 @@ class File(_FileOpsMixin):
         schunk_meta = self.meta.get("schunk", self.meta)
         return schunk_meta.get("vlmeta", {})
 
-    def get_download_url(self):
+    @property
+    def attrs(self):
+        """User attributes from cached metadata; changing them does not update the server.
+
+        Older servers without an ``attrs`` field fall back to :attr:`vlmeta`.
+        """
+        attrs = self.meta.get("attrs")
+        return self.vlmeta if attrs is None else attrs
+
+    def get_download_url(self, *, include_cache=True):
         """
         Retrieves the download URL for the file.
+
+        ``include_cache=False`` requests a cold RemoteArray carrier. It has no
+        effect on other file types.
 
         Returns
         -------
@@ -546,7 +562,7 @@ class File(_FileOpsMixin):
         >>> file.get_download_url()
         'https://cat2.cloud/demo/api/fetch/example/ds-1d.b2nd'
         """
-        return api_utils.get_download_url(self.path, self.urlbase)
+        return api_utils.get_download_url(self.path, self.urlbase, include_cache=include_cache)
 
     def __getitem__(self, item):
         """
@@ -577,14 +593,13 @@ class File(_FileOpsMixin):
             provided, each slice will be applied to the corresponding
             dimension.
         as_blosc2 : bool
-            If True (default), the result will be returned as a Blosc2 object
-            (either a `SChunk` or `NDArray`).  If False, it will be returned
-            as a NumPy array (equivalent to `self[key]`).
+            If True (default), return a Blosc2 object, including a CTable for
+            table requests. If False, return NumPy data or table row tuples.
 
         Returns
         -------
-        NDArray or SChunk or numpy.ndarray
-            A new Blosc2 object containing the requested slice.
+        NDArray or SChunk or CTable or numpy.ndarray or list
+            The requested slice; table requests return a CTable or row tuples.
 
         Examples
         --------
@@ -1337,10 +1352,10 @@ class Client:
             dimension. If str, is interpreted as filter.
         as_blosc2 : bool
             If True (default), the result will be returned as a Blosc2 object
-            (either a `SChunk` or `NDArray`).  If False, it will be returned
-            as a NumPy array (equivalent to `self[key]`).
+            (including a CTable for table requests). If False, table rows are
+            returned as tuples, and other datasets as NumPy data.
         field: str
-            Shortcut to access a field in a structured array. If provided, `key` is ignored.
+            Select one field or table column after applying `key`.
         ndim: int
             How many dimensions the dataset has, where the caller knows.  Only an
             `Ellipsis` in the key needs it, and only one that is not its last
@@ -1348,8 +1363,8 @@ class Client:
 
         Returns
         -------
-        NDArray or SChunk or numpy.ndarray
-            A new Blosc2 object containing the requested slice.
+        NDArray or SChunk or CTable or numpy.ndarray or list
+            The requested slice or table rows.
 
         Examples
         --------
@@ -1369,35 +1384,16 @@ class Client:
         if isinstance(path, Table):
             kind = "ctable"
         elif isinstance(path, File):
-            kind = None
+            kind = path.meta.get("kind")
         else:
             path_str = path.as_posix() if hasattr(path, "as_posix") else str(path)
-            kind = "ctable" if path_str.endswith(".b2z") else None
+            kind = self.get_info(path_str).get("kind")
         if isinstance(path, File):
             path = path.path
         urlbase, path = _format_paths(self.urlbase, path)
-        if field:  # blosc2 doesn't support indexing of multiple fields
-            return self._fetch_data(
-                path,
-                urlbase,
-                {"field": field},
-                auth_cookie=self.cookie,
-                as_blosc2=as_blosc2,
-                timeout=self.timeout,
-                kind=kind,
-            )
         if isinstance(key, str):
             # The key can still be a slice expression in string format (like for CLI utils)
             params = {"slice_": key} if _looks_like_slice(key) else {"filter": key}
-            return self._fetch_data(
-                path,
-                urlbase,
-                params=params,
-                auth_cookie=self.cookie,
-                as_blosc2=as_blosc2,
-                timeout=self.timeout,
-                kind=kind,
-            )
         else:
             # Coordinates go over as `indices` and are gathered by the server;
             # a plain box is a `slice_`, which says the same thing more cheaply
@@ -1405,16 +1401,19 @@ class Client:
             params = (
                 {"slice_": api_utils.slice_to_string(key, ndim)} if indices is None else {"indices": indices}
             )
-            # Fetch and return the data as a Blosc2 object / NumPy array
-            return self._fetch_data(
-                path,
-                urlbase,
-                params,
-                auth_cookie=self.cookie,
-                as_blosc2=as_blosc2,
-                timeout=self.timeout,
-                kind=kind,
-            )
+        if field is not None:
+            if "indices" in params:
+                raise IndexError("field cannot be combined with coordinate indices")
+            params["field"] = field
+        return self._fetch_data(
+            path,
+            urlbase,
+            params,
+            auth_cookie=self.cookie,
+            as_blosc2=as_blosc2,
+            timeout=self.timeout,
+            kind=kind,
+        )
 
     def get_chunk(self, path, nchunk):
         """
@@ -1489,7 +1488,7 @@ class Client:
 
         return localpath
 
-    def download(self, dataset, localpath=None):
+    def download(self, dataset, localpath=None, *, include_cache=True):
         """
         Downloads a dataset to local storage.
 
@@ -1504,6 +1503,9 @@ class Client:
         localpath : Path, optional
             Local path to save the downloaded dataset. Defaults to the current
             working directory if not specified.
+        include_cache : bool, optional
+            For a RemoteArray carrier, include its valid warm cache data.
+            Pass false to download a cold proxy without changing the server copy.
 
         Returns
         -------
@@ -1519,7 +1521,7 @@ class Client:
         PosixPath('example/ds-2d-fields.b2nd')
         """
         urlbase, dataset = _format_paths(self.urlbase, dataset)
-        url = api_utils.get_download_url(dataset, urlbase)
+        url = api_utils.get_download_url(dataset, urlbase, include_cache=include_cache)
         localpath = pathlib.Path(localpath) if localpath else None
         if localpath is None:
             path = "." / pathlib.Path(dataset)
@@ -1912,6 +1914,20 @@ class Client:
             f"{self.urlbase}/api/unfold/{path}", auth_cookie=self.cookie, timeout=self.timeout
         )
         return PurePosixPath(result)  # return path to top directory of dset
+
+    def refresh(self, path):
+        """Refresh a hosted RemoteStore or RemoteCTable carrier and return a fresh object.
+
+        Pass the carrier's ``.b2z`` path, including for a table inside a store.
+        This endpoint does not refresh RemoteArray references.
+        """
+        if isinstance(path, File):
+            path = path.path
+        _, formatted = _format_paths(self.urlbase, path)
+        if pathlib.PurePosixPath(formatted).suffix != ".b2z":
+            raise ValueError("Refresh requires a hosted RemoteStore or RemoteCTable .b2z carrier")
+        self._post(f"{self.urlbase}/api/refresh/{formatted}", auth_cookie=self.cookie, timeout=self.timeout)
+        return self.get(formatted)
 
     def remove(self, path):
         """

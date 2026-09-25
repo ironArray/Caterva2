@@ -139,7 +139,7 @@ def test_server_source_has_no_c2cache_coupling():
     src = (
         __import__("pathlib").Path(__file__).resolve().parent.parent / "services" / "server.py"
     ).read_text()
-    leak = re.compile(r"\b(c2cache|peers_mod|peercache|remote\.)\b")
+    leak = re.compile(r"\b(c2cache|peers_mod|peercache)\b|(?<![\w.])remote\.")
     matches = leak.findall(src)
     assert not matches, f"server.py references c2cache internals directly: {matches}"
 

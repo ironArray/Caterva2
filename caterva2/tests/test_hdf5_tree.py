@@ -9,6 +9,7 @@ import httpx
 import numpy as np
 import pytest
 
+from caterva2 import hdf5
 from caterva2.services import srv_utils
 
 from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
@@ -16,7 +17,9 @@ from .services import TEST_CATERVA2_ROOT, TEST_STATE_DIR
 
 def _make_h5(path):
     with h5py.File(str(path), "w") as f:
-        f.create_dataset("/g/a", data=np.arange(6, dtype="i4").reshape(2, 3))
+        ds = f.create_dataset("/g/a", data=np.arange(6, dtype="i4").reshape(2, 3))
+        ds.attrs["author"] = "researcher"
+        ds.attrs["_user_key"] = 42
         f.create_dataset("/g/b", data=np.arange(4, dtype="i4"))
         f.create_dataset("/h/c", data=np.arange(10, dtype="i4"))
         # Structured leaf for sort tests
@@ -63,6 +66,10 @@ def test_info_leaf(fill_h5_public, client):
     info = client.get_info(f"{root.name}/{fname}/g/a")
     assert tuple(info["shape"]) == (2, 3)
     assert info["dtype"] == "int32"
+    assert info["attrs"] == {"author": "researcher", "_user_key": 42}
+    assert info["schunk"]["vlmeta"]["author"] == "researcher"
+    remote = blosc2.RemoteArray(blosc2.URLPath(f"{root.name}/{fname}/g/a", urlbase=client.urlbase))
+    assert remote.attrs == info["attrs"]
     # A leaf has no file of its own; it inherits the container's mtime.
     assert info["mtime"] is not None
 
@@ -350,3 +357,15 @@ def test_chunk_of_an_hdf5_leaf_is_refused(fill_h5_public, client):
         response = httpx.get(f"{client.urlbase}/api/chunk/{TEST_CATERVA2_ROOT}/{path}?nchunk=0")
         assert response.status_code == 400
         assert "slice_" in response.json()["detail"]
+
+
+def test_legacy_hdf5_proxy_attrs(tmp_path):
+    path = tmp_path / "legacy.h5"
+    with h5py.File(path, "w") as f:
+        ds = f.create_dataset("g/a", data=np.arange(6, dtype="i4"))
+        ds.attrs["_user_key"] = "user value"
+        proxy = hdf5.HDF5Proxy(None, f, "g/a")
+        meta = srv_utils.read_metadata(proxy.b2arr)
+        assert meta.attrs == {"_user_key": "user value"}
+        assert meta.schunk.vlmeta["_ftype"] == "hdf5"
+        assert meta.schunk.vlmeta["_dsetname"] == "g/a"

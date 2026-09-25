@@ -313,11 +313,16 @@ def test_a_filled_array_is_published_by_itself(presized):
     assert answer["written"] == NCHUNKS
     assert answer["state"] == "publishing"
 
+    nonce = presized.vlmeta["fill_nonce"]
     for _ in range(100):  # the upload runs after the response
         published = _published("run.b2nd")
         if published is not None:
-            break
+            frame = blosc2.open(str(published))
+            if frame.schunk.vlmeta.get("fill_nonce") == nonce:
+                break
         time.sleep(0.05)
+    else:
+        pytest.fail("the current fill was not published before the deadline")
     assert published is not None
     assert published.is_file()
 

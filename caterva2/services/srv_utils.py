@@ -25,12 +25,13 @@ import blosc2
 import fastapi
 import h5py
 import safer
+from blosc2.b2objects import read_b2object_user_vlmeta
 from fastapi_users.exceptions import UserNotExists
 from sqlalchemy.future import select
 
 # Project
 from caterva2 import hdf5, models
-from caterva2.services import db, schemas, settings, users
+from caterva2.services import db, remote_proxy, schemas, settings, users
 
 # Shared suffix constants
 BLOSC2_ARRAY_SUFFIXES = {".b2nd", ".b2frame"}
@@ -39,6 +40,8 @@ BLOSC2_FRAME_SUFFIXES = {".b2"}
 BLOSC2_NATIVE_SUFFIXES = BLOSC2_ARRAY_SUFFIXES | BLOSC2_TABLE_SUFFIXES | BLOSC2_FRAME_SUFFIXES
 
 HDF5_SUFFIXES = {".h5", ".hdf5"}
+# Preserve these formats byte-for-byte when storing uploaded files.
+NO_COMPRESSION_SUFFIXES = BLOSC2_NATIVE_SUFFIXES | HDF5_SUFFIXES | {".parquet"}
 
 # Container suffixes whose paths may descend into internal (virtual) members.
 BLOSC2_CONTAINER_SUFFIXES = {".b2z"} | HDF5_SUFFIXES
@@ -62,13 +65,19 @@ def split_container_path(path):
 
 def ctable_row_range(slice_, nrows):
     """Normalize an ``api/fetch`` ``slice_`` into a CTable row range
-    ``(start, stop)``: take the first (row) component, apply None defaults,
+    ``(start, stop)``: validate the row component, apply None defaults,
     negative wrap, and clamp to ``[0, nrows]``. Used by the local fetch
     branch and by peer providers, so both clamp identically."""
     # slice_ is a single slice/int/tuple; extract row start/stop.
     # Use `is None` (not truthiness) so that stop == 0 stays 0.
-    sl0 = slice_[0] if isinstance(slice_, tuple) and len(slice_) > 0 else slice_
+    if isinstance(slice_, tuple):
+        if len(slice_) > 1:
+            raise ValueError("CTable selections must have one row dimension")
+        slice_ = slice_[0] if slice_ else None
+    sl0 = slice_
     if isinstance(sl0, slice):
+        if sl0.step not in (None, 1):
+            raise ValueError("CTable row slices support only step=1")
         row_start = 0 if sl0.start is None else sl0.start
         row_stop = nrows if sl0.stop is None else sl0.stop
         if row_start < 0:
@@ -303,6 +312,13 @@ def open_container(abspath):
     is not one (single-array .b2z, corrupt/non-container file, wrong suffix)."""
     suffix = abspath.suffix
     if suffix == ".b2z":
+        from caterva2.services import remote_store
+
+        manifest = remote_store.inspect(abspath)
+        if manifest is not None:
+            if remote_store.root_kind(manifest) != "group":
+                return None
+            return remote_store.ServerRemoteStore(abspath, manifest)
         try:
             store = blosc2.open(abspath)
         except Exception:
@@ -450,10 +466,46 @@ def is_hdf5_proxy_meta(meta):
     return vlmeta.get("_ftype") == "hdf5"
 
 
+def user_attrs(obj):
+    """Read user attributes without resolving a saved remote source."""
+    schunk = getattr(obj, "schunk", obj)
+    marker = getattr(schunk, "meta", {}).get("b2o", {})
+    if isinstance(marker, dict) and marker.get("kind") == "remote_array":
+        return read_b2object_user_vlmeta(obj)
+    vlmeta = schunk.vlmeta
+    internal = {"fill_nonce", "fill_state", "published_url"}
+    if vlmeta.get("_ftype") == "hdf5":
+        internal.update({"_ftype", "_dsetname"})
+    return {key: vlmeta[key] for key in vlmeta if key not in internal}
+
+
 def read_metadata(obj, mtime=None):
     # `mtime` is used when `obj` is an already-opened object (e.g. a container
     # leaf) with no file of its own; callers pass the container's mtime.
     # Open dataset
+    from caterva2.services import remote_store
+
+    if isinstance(obj, remote_store.ServerStoreTable):
+        return models.CTableMetadata(mtime=mtime, **obj.metadata)
+    if isinstance(obj, remote_store.ServerStoreArray):
+        empty = blosc2.empty(obj.shape, obj.dtype, chunks=obj.chunks, blocks=obj.blocks, cparams=obj.cparams)
+        result = read_metadata(empty, mtime=mtime)
+        result.attrs = result.schunk.attrs = obj.attrs
+        result.schunk.vlmeta = obj.attrs
+        result.accept_ranges = "none"
+        return result
+    if isinstance(obj, str | pathlib.Path):
+        manifest = remote_store.inspect(obj)
+        if manifest is not None:
+            path = pathlib.Path(obj)
+            if remote_store.root_kind(manifest) == "ctable":
+                store = remote_store.ServerRemoteStore(path, manifest)
+                return read_metadata(store.get(""), mtime=path.stat().st_mtime)
+            return models.Directory(
+                mtime=path.stat().st_mtime,
+                size=path.stat().st_size,
+                nfiles=sum(kind in {"ndarray", "ctable"} for kind, _ in manifest["nodes"].values()),
+            )
     if isinstance(obj, pathlib.Path):
         path = obj
         if not path.is_file():
@@ -474,9 +526,17 @@ def read_metadata(obj, mtime=None):
             finally:
                 container.close()
 
+        if path.suffix == ".parquet":
+            return models.File(mtime=mtime, size=size)
+
         assert path.suffix in BLOSC2_NATIVE_SUFFIXES
         try:
-            obj = blosc2.open(path)
+            reference = remote_proxy.inspect(path)
+            if reference is not None:
+                obj = reference[0]
+            else:
+                remote_proxy.guard_embedded(path)
+                obj = blosc2.open(path)
         except blosc2.exceptions.MissingOperands as exc:
             error = "Lazy expression with missing operands"
             missing_ops = {k: get_relpath(v) for k, v in exc.missing_ops.items()}
@@ -510,22 +570,33 @@ def read_metadata(obj, mtime=None):
         schunk = get_model_from_obj(proxy.b2arr.schunk, models.SChunk, cparams=cparams)
         schunk.cratio = proxy.cratio
         schunk.cbytes = proxy.cbytes
-        return get_model_from_obj(proxy, models.Metadata, schunk=schunk, mtime=mtime)
+        return get_model_from_obj(
+            proxy, models.Metadata, schunk=schunk, mtime=mtime, attrs=user_attrs(proxy.b2arr)
+        )
     elif isinstance(obj, blosc2.ndarray.NDArray):
         array = obj
         cparams = get_model_from_obj(array.schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
         schunk = get_model_from_obj(array.schunk, models.SChunk, cparams=cparams)
+        if array.schunk.meta.get("b2o", {}).get("kind") == "remote_array":
+            from blosc2.proxy import _RESERVED_VLMETA
+
+            schunk.attrs = user_attrs(array)
+            schunk.vlmeta = {
+                key: value for key, value in schunk.vlmeta.items() if key not in _RESERVED_VLMETA
+            }
         if "_ftype" in schunk.vlmeta and schunk.vlmeta["_ftype"] == "hdf5":
             array = hdf5.HDF5Proxy(array)
             schunk.cratio = array.cratio  # overwrite cratio (which will be 0) with HDF5Proxy value
             schunk.cbytes = array.cbytes
-        return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime)
+        return get_model_from_obj(array, models.Metadata, schunk=schunk, mtime=mtime, attrs=user_attrs(obj))
     elif isinstance(obj, blosc2.schunk.SChunk):
         schunk = obj
         cparams = get_model_from_obj(schunk.cparams, models.CParams)
         cparams = reformat_cparams(cparams)
-        return get_model_from_obj(schunk, models.SChunk, cparams=cparams, mtime=mtime)
+        return get_model_from_obj(
+            schunk, models.SChunk, cparams=cparams, mtime=mtime, attrs=user_attrs(schunk)
+        )
     elif isinstance(obj, blosc2.LazyArray):
         # overwrite operands and expression with _tosave versions for metadata display
         if isinstance(obj, blosc2.LazyExpr):
@@ -556,6 +627,7 @@ def read_metadata(obj, mtime=None):
             cbytes=obj.cbytes,
             cratio=obj.cratio,
             vlmeta=dict(obj.vlmeta[:]) if obj.vlmeta[:] else {},
+            attrs=user_attrs(obj),
             mtime=mtime,
         )
     else:
@@ -625,7 +697,7 @@ def iterdir(root):
         yield path, relpath
 
 
-def walk_files(root, exclude=None):
+def walk_files(root, exclude=None, *, include_internal=False):
     if exclude is None:
         exclude = set()
 
@@ -633,8 +705,16 @@ def walk_files(root, exclude=None):
         for path in root.glob("**/*"):
             if path.is_file():
                 relpath = path.relative_to(root)
+                if not include_internal and path.name.endswith(".b2lock"):
+                    continue
                 if str(relpath) not in exclude:
                     yield path, relpath
+
+
+def unlink_with_b2lock(path):
+    """Remove a file and the advisory lock sidecar belonging to it."""
+    path.unlink()
+    path.with_name(path.name + ".b2lock").unlink(missing_ok=True)
 
 
 #

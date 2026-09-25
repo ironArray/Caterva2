@@ -12,6 +12,11 @@ import json
 import os
 import subprocess
 import sys
+from types import SimpleNamespace
+
+import pytest
+
+from caterva2.clients.cli import cmd_info
 
 from .services import TEST_CATERVA2_ROOT
 
@@ -43,3 +48,26 @@ def test_url(services, sub_user):
     urlbase = services.get_urlbase()
     out = cli(["url", f"{TEST_CATERVA2_ROOT}/ds-1d.b2nd"], sub_user=sub_user)
     assert out == f"{urlbase}/api/download/{TEST_CATERVA2_ROOT}/ds-1d.b2nd"
+
+
+@pytest.mark.parametrize("kind", ["array", "frame", "ctable"])
+@pytest.mark.parametrize("public", ["absent", None, {}, {"experiment": {"tags": ["óptica", "v2"]}}])
+def test_info_attrs(kind, public, capsys):
+    storage = {"cparams": {}, "vlmeta": {"legacy": 42}}
+    data = {"schunk": storage} if kind == "array" else storage.copy()
+    if kind == "ctable":
+        data["kind"] = kind
+    if public != "absent":
+        data["attrs"] = public
+    client = SimpleNamespace(get_info=lambda path: data)
+    args = SimpleNamespace(dataset="@public/test", json=False)
+    cmd_info(client, args, "http://unused")
+    out = capsys.readouterr().out
+    expected = storage["vlmeta"] if public is None or public == "absent" else public
+    assert json.loads(out.split("attrs: ", 1)[1]) == expected
+    if "experiment" in expected:
+        assert "óptica" in out
+
+    args.json = True
+    cmd_info(client, args, "http://unused")
+    assert json.loads(capsys.readouterr().out.splitlines()[-1]) == data

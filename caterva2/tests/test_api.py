@@ -12,6 +12,7 @@ import os
 import pathlib
 
 import blosc2
+import fsspec
 import httpx
 import numexpr as ne
 import numpy as np
@@ -130,6 +131,253 @@ def test_dataset_info(client, fill_public):
             assert data.shape == tuple(info["shape"])
             assert data.blocks == tuple(info["blocks"])
             assert data.chunks == tuple(info["chunks"])
+
+
+@pytest.mark.parametrize(
+    ("cache_policy", "max_cache_bytes"),
+    [
+        (blosc2.CachePolicy.NONE, None),
+        (blosc2.CachePolicy.MEMORY, 1_000_000),
+        (blosc2.CachePolicy.DISK, 1_000_000),
+        (blosc2.CachePolicy.DISK, None),
+    ],
+)
+def test_remote_proxy_is_discovered_but_resolution_is_disabled(
+    client, cache_policy, max_cache_bytes, tmp_path
+):
+    tag = f"{cache_policy.value}-{'unlimited' if max_cache_bytes is None else 'bounded'}"
+    source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    source.vlmeta["experiment"] = {"id": 42, "tags": ["optical", "v2"]}
+    source.vlmeta["b2o"] = "user attribute"
+    name = f"caterva2-disabled-reference-{tag}.b2nd"
+    fsspec.filesystem("memory").pipe_file(name, source.to_cframe())
+    carrier_path = tmp_path / f"carrier-{tag}.b2nd" if cache_policy == blosc2.CachePolicy.DISK else None
+    kwargs = {}
+    if cache_policy is not blosc2.CachePolicy.NONE and max_cache_bytes is not None:
+        kwargs["max_cache_bytes"] = max_cache_bytes
+    elif cache_policy is blosc2.CachePolicy.DISK and max_cache_bytes is None:
+        kwargs["max_cache_bytes"] = None
+    reference = blosc2.RemoteArray(
+        f"memory://{name}",
+        cache_policy=cache_policy,
+        cache_path=carrier_path,
+        **kwargs,
+    )
+    path = pathlib.Path(TEST_STATE_DIR) / f"server/public/disabled-reference-{tag}.b2nd"
+    reference.save(path)
+    before = path.read_bytes()
+
+    try:
+        response = httpx.get(f"{client.urlbase}/api/info/@public/{path.name}")
+        response.raise_for_status()
+        info = response.json()
+        assert info["shape"] == [20]
+        assert info["chunks"] == [10]
+        assert info["blocks"] == [5]
+        assert info["accept_ranges"] == "none"
+        assert info["schunk"]["vlmeta"]["b2o"]["cache_policy"] == cache_policy.value
+        assert info["schunk"]["vlmeta"]["b2o"]["max_cache_bytes"] == max_cache_bytes
+        assert set(info["schunk"]["vlmeta"]) == {"b2o"}
+        assert info["attrs"] == dict(source.vlmeta)
+        dataset = client.get("@public")[path.name]
+        assert dataset.attrs == info["attrs"]
+        remote = blosc2.RemoteArray(blosc2.URLPath(f"@public/{path.name}", urlbase=client.urlbase))
+        assert remote.attrs == info["attrs"]
+        assert remote.attrs is remote.vlmeta
+        panel = httpx.get(
+            f"{client.urlbase}/htmx/path-info/@public/{path.name}",
+            headers={"HX-Trigger": "meta", "HX-Current-URL": str(client.urlbase)},
+        )
+        panel.raise_for_status()
+        assert "optical" in panel.text
+        assert "_b2o_user_vlmeta" not in panel.text
+        assert "proxy-cache-sizes" not in panel.text
+
+        response = httpx.get(f"{client.urlbase}/api/fetch/@public/{path.name}", params={"slice_": "0:2"})
+        assert response.status_code == 403
+        assert response.json()["detail"] == "RemoteArray resolution is disabled by server policy"
+        assert path.read_bytes() == before
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize("cache_policy", [blosc2.CachePolicy.DISK, blosc2.CachePolicy.MEMORY])
+def test_remote_proxy_download_can_omit_cache(client, tmp_path, cache_policy):
+    source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    name = f"caterva2-download-reference-{cache_policy.value}.b2nd"
+    fsspec.filesystem("memory").pipe_file(name, source.to_cframe())
+    carrier_path = (
+        tmp_path / f"warm-reference-{cache_policy.value}.b2nd"
+        if cache_policy == blosc2.CachePolicy.DISK
+        else None
+    )
+    reference = blosc2.RemoteArray(
+        f"memory://{name}",
+        cache_policy=cache_policy,
+        cache_path=carrier_path,
+        max_cache_bytes=1_000_000,
+    )
+    if cache_policy == blosc2.CachePolicy.DISK:
+        np.testing.assert_array_equal(reference[:10], np.arange(10, dtype=np.int32))
+    path = pathlib.Path(TEST_STATE_DIR) / f"server/public/download-reference-{cache_policy.value}.b2nd"
+    reference.save(path)
+
+    try:
+        dataset = client.get(f"@public/{path.name}")
+        warm_url = dataset.get_download_url()
+        cold_url = dataset.get_download_url(include_cache=False)
+        assert warm_url == f"{client.urlbase}/api/download/@public/{path.name}"
+        assert cold_url == f"{warm_url}?include_cache=false"
+
+        warm_response = httpx.get(warm_url)
+        cold_response = httpx.get(cold_url)
+        warm_response.raise_for_status()
+        cold_response.raise_for_status()
+        warm = blosc2.ndarray_from_cframe(warm_response.content)
+        cold = blosc2.ndarray_from_cframe(cold_response.content)
+        if cache_policy == blosc2.CachePolicy.DISK:
+            assert warm.schunk.vlmeta.get("proxy-cache-sizes")
+            assert not cold.schunk.vlmeta.get("proxy-cache-sizes", {})
+            assert len(cold_response.content) < len(warm_response.content)
+        else:
+            assert not warm.schunk.vlmeta.get("proxy-cache-sizes", {})
+            assert not cold.schunk.vlmeta.get("proxy-cache-sizes", {})
+            assert warm.to_cframe() == cold.to_cframe()
+        assert cold.schunk.vlmeta["b2o"] == warm.schunk.vlmeta["b2o"]
+        assert cold.schunk.vlmeta["b2o"]["cache_policy"] == cache_policy.value
+        assert cold.schunk.vlmeta["b2o"]["max_cache_bytes"] == 1_000_000
+        assert not any(name.endswith(".b2lock") for name in client.get_list("@public"))
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_remote_proxy_memory_enabled_resolution_fetch_and_chunk(tmp_path, monkeypatch):
+    monkeypatch.setenv("CATERVA2_SECRET", "test-secret")
+    from caterva2.services import remote_proxy, server
+
+    class _Conf:
+        def __init__(self, values):
+            self.values = values
+
+        def get(self, key, default=None):
+            return self.values.get(key, default)
+
+    monkeypatch.setattr(server.settings, "statedir", tmp_path / "statedir")
+    monkeypatch.setattr(server.settings, "public", server.settings.statedir / "public")
+    server.settings.public.mkdir(parents=True, exist_ok=True)
+
+    data = np.arange(40, dtype=np.int32)
+    source = blosc2.asarray(data, chunks=(10,), blocks=(5,))
+    url = "https://data.example/api-mem-source.b2nd"
+    mem_fs = fsspec.filesystem("memory")
+    mem_fs.pipe_file(url, source.to_cframe())
+    mem_fs.pipe_file("dummy.b2nd", source.to_cframe())
+
+    dummy_proxy = blosc2.RemoteArray(
+        "memory://dummy.b2nd",
+        cache_policy=blosc2.CachePolicy.MEMORY,
+        max_cache_bytes=500_000,
+    )
+    carrier_path = server.settings.public / "api-mem.b2nd"
+    dummy_proxy.save(carrier_path)
+
+    carrier = remote_proxy.raw_carrier(carrier_path, mode="a")
+    payload = dict(carrier.schunk.vlmeta["b2o"])
+    payload["source"] = dict(payload["source"])
+    payload["source"]["urlpath"] = url
+    carrier.schunk.vlmeta["b2o"] = payload
+
+    monkeypatch.setattr(remote_proxy, "policy", remote_proxy.policy)
+    remote_proxy.configure(
+        _Conf(
+            {
+                ".remote_proxy.enabled": True,
+                ".remote_proxy.allowed_hosts": ["data.example"],
+            }
+        )
+    )
+
+    before_bytes = carrier_path.read_bytes()
+    before_size = carrier_path.stat().st_size
+    before_mtime = carrier_path.stat().st_mtime_ns
+
+    # Instrument upstream filesystem calls
+    upstream_reads = []
+    orig_cat_file = mem_fs.cat_file
+
+    def traced_cat_file(path, *args, **kwargs):
+        upstream_reads.append(path)
+        return orig_cat_file(path, *args, **kwargs)
+
+    monkeypatch.setattr(mem_fs, "cat_file", traced_cat_file)
+
+    monkeypatch.setattr(remote_proxy, "_public_addresses", lambda host, port: ("93.184.216.34",))
+    monkeypatch.setattr(remote_proxy, "_https_filesystem", lambda host, addr: mem_fs)
+
+    async with (
+        server.app.router.lifespan_context(server.app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+        ) as api_client,
+    ):
+        # 1. api/info
+        info_resp = await api_client.get("/api/info/@public/api-mem.b2nd")
+        assert info_resp.status_code == 200
+        info = info_resp.json()
+        assert info["accept_ranges"] == "none"
+        assert info["schunk"]["vlmeta"]["b2o"]["cache_policy"] == "memory"
+        assert info["schunk"]["vlmeta"]["b2o"]["max_cache_bytes"] == 500_000
+
+        # 2. First fetch of slice
+        fetch_resp1 = await api_client.get("/api/fetch/@public/api-mem.b2nd", params={"slice_": "0:10"})
+        assert fetch_resp1.status_code == 200
+        arr1 = blosc2.ndarray_from_cframe(fetch_resp1.content)
+        np.testing.assert_array_equal(arr1[:], data[:10])
+        reads_after_first = len(upstream_reads)
+        assert reads_after_first > 0
+
+        # 3. Second fetch of slice: must perform repeated upstream reads
+        fetch_resp2 = await api_client.get("/api/fetch/@public/api-mem.b2nd", params={"slice_": "0:10"})
+        assert fetch_resp2.status_code == 200
+        arr2 = blosc2.ndarray_from_cframe(fetch_resp2.content)
+        np.testing.assert_array_equal(arr2[:], data[:10])
+        assert len(upstream_reads) > reads_after_first
+
+        # 4. Fetch chunk
+        reads_before_chunk = len(upstream_reads)
+        chunk_resp1 = await api_client.get("/api/chunk/@public/api-mem.b2nd", params={"nchunk": 0})
+        assert chunk_resp1.status_code == 200
+        chunk_decomp = np.frombuffer(blosc2.decompress(chunk_resp1.content), dtype=data.dtype)
+        np.testing.assert_array_equal(chunk_decomp, data[:10])
+        assert len(upstream_reads) > reads_before_chunk
+
+        # 5. Second fetch of chunk: must perform repeated upstream reads
+        reads_after_chunk1 = len(upstream_reads)
+        chunk_resp2 = await api_client.get("/api/chunk/@public/api-mem.b2nd", params={"nchunk": 0})
+        assert chunk_resp2.status_code == 200
+        assert len(upstream_reads) > reads_after_chunk1
+
+        # 6. Verify carrier file was not modified
+        assert carrier_path.read_bytes() == before_bytes
+        assert carrier_path.stat().st_size == before_size
+        assert carrier_path.stat().st_mtime_ns == before_mtime
+
+
+def test_remote_proxy_hidden_in_expression_is_denied_before_open(client):
+    source = blosc2.arange(20, dtype=np.int32, chunks=(10,), blocks=(5,))
+    fsspec.filesystem("memory").pipe_file("caterva2-embedded-reference.b2nd", source.to_cframe())
+    reference = blosc2.RemoteArray("memory://caterva2-embedded-reference.b2nd")
+    expression = blosc2.lazyexpr("a + 1", operands={"a": reference})
+    path = pathlib.Path(TEST_STATE_DIR) / "server/public/embedded-reference.b2nd"
+    expression.save(path)
+
+    try:
+        response = httpx.get(f"{client.urlbase}/api/info/@public/{path.name}")
+        assert response.status_code == 403
+        assert "embedded" in response.json()["detail"]
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @pytest.mark.parametrize("dirpath", [None, "dir1", "dir2", "dir2/dir3/dir4"])
@@ -977,17 +1225,19 @@ def test_upload_public_unauthorized(client, auth_client, examples_dir, tmp_path)
 
 
 @pytest.mark.parametrize("name", ["ds-1d.b2nd", "ds-hello.b2frame", "README.md"])
-def test_vlmeta(client, name):
+def test_vlmeta(client, name, fill_public):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot[name]
     schunk_meta = ds.meta.get("schunk", ds.meta)
     assert ds.vlmeta is schunk_meta["vlmeta"]
 
 
-def test_vlmeta_data(client):
+def test_vlmeta_data(client, fill_public):
     myroot = client.get(TEST_CATERVA2_ROOT)
     ds = myroot["ds-sc-attr.b2nd"]
     assert ds.vlmeta == {"a": 1, "b": "foo", "c": 123.456}
+    assert ds.attrs == ds.vlmeta
+    assert ds.attrs is ds.meta["attrs"]
 
 
 ### Lazy expressions

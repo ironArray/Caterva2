@@ -152,7 +152,8 @@ def two_servers(tmp_path_factory):
     pub = bdir / "public"
     pub.mkdir()
     data = np.random.default_rng(0).random((4, 100_000))
-    blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    arr = blosc2.asarray(data, chunks=(1, 100_000), urlpath=str(pub / "mc.b2nd"))
+    arr.vlmeta["experiment"] = {"id": 42, "tags": ["optical", "v2"]}
     # a nested dataset, to exercise path-relative listing
     (pub / "dir1").mkdir()
     blosc2.asarray(np.arange(10), urlpath=str(pub / "dir1" / "small.b2nd"))
@@ -182,6 +183,13 @@ def test_list_and_info(two_servers):
     assert "mc.b2nd" in listing
     info = httpx.get(f"{urlbase}/api/info/@labb/mc.b2nd", timeout=5).json()
     assert tuple(info["shape"]) == (4, 100_000)
+    assert info["attrs"] == {"experiment": {"id": 42, "tags": ["optical", "v2"]}}
+    panel = httpx.get(
+        f"{urlbase}/htmx/path-info/@labb/mc.b2nd",
+        headers={"HX-Trigger": "meta", "HX-Current-URL": urlbase},
+    )
+    panel.raise_for_status()
+    assert "optical" in panel.text
 
 
 def test_list_is_path_relative(two_servers):

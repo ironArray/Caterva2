@@ -21,8 +21,10 @@ import mimetypes
 import os
 import pathlib
 import shutil
+import sqlite3
 import string
 import tarfile
+import tempfile
 import threading
 import time
 import traceback
@@ -50,6 +52,7 @@ import pydantic
 import pygments
 import uvicorn
 from blosc2 import linalg_funcs_list as linalg_funcs
+from blosc2.lazyexpr import LazyArrayEnum
 
 # FastAPI
 from fastapi import Depends, FastAPI, Form, Request, Response, UploadFile, concurrency, responses
@@ -61,7 +64,7 @@ from starlette.datastructures import MutableHeaders
 
 # Project
 from caterva2 import hdf5, models, utils
-from caterva2.services import db, providers, schemas, settings, srv_utils, users
+from caterva2.services import db, providers, remote_proxy, schemas, settings, srv_utils, storage_quota, users
 from caterva2.services.notebook import inject_pyodide_bootstrap_cell
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
@@ -136,8 +139,13 @@ def guess_type(path):
 
 
 def get_disk_usage():
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        return quota_coordinator().usage()["used"]
     exclude = {"db.json", "db.sqlite"}
-    return sum(path.stat().st_size for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude))
+    return sum(
+        path.stat().st_size
+        for path, _ in srv_utils.walk_files(settings.statedir, exclude=exclude, include_internal=True)
+    )
 
 
 DISK_USAGE_TTL = 10.0
@@ -170,6 +178,170 @@ def get_disk_usage_written(pending: int) -> int:
 def account_chunk_written(nbytes: int) -> None:
     """Count a chunk just written against the kept walk; see `get_disk_usage_written`."""
     _disk_usage["written"] += nbytes
+
+
+_quota_instances = {}
+
+
+def quota_coordinator():
+    """Independent of authentication; one connection is opened per DB operation."""
+    if not settings.quota and remote_proxy.policy.cache_backend != "sparse":
+        return None
+    work_bytes = settings.parse_size(settings.conf.get(".quota_work_bytes", "1G"))
+    key = (str(settings.statedir), settings.quota, work_bytes, remote_proxy.policy.cache_backend)
+    coordinator = _quota_instances.get(key)
+    if coordinator is None:
+        coordinator = storage_quota.StorageQuota(
+            settings.statedir,
+            settings.quota,
+            work_bytes=work_bytes,
+            cache_backend=remote_proxy.policy.cache_backend,
+        )
+        _quota_instances[key] = coordinator
+    return coordinator
+
+
+def write_dataset(path, data, *, expected=None, compare=False):
+    """Store final encoded bytes, comparing the expected generation when requested."""
+    path = pathlib.Path(path)
+    quota = quota_coordinator()
+    if quota is not None:
+        if not compare:
+            expected = storage_quota.signature(path)
+        quota.publish(path, data, expected=expected)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not compare:
+            path.write_bytes(data)
+        else:
+            with dataset_thread_lock(path):
+                if storage_quota.signature(path) != expected:
+                    raise storage_quota.StorageBusy("dataset changed while preparing its replacement")
+                candidate = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        dir=path.parent, prefix=f".{path.name}.", delete=False
+                    ) as file:
+                        candidate = pathlib.Path(file.name)
+                        file.write(data)
+                        file.flush()
+                        os.fsync(file.fileno())
+                    os.replace(candidate, path)
+                    storage_quota.sync_directory(path.parent)
+                finally:
+                    if candidate is not None:
+                        candidate.unlink(missing_ok=True)
+
+
+def remove_dataset(path):
+    """Account deletions file-by-file; directory removal is not an atomic batch."""
+    path = pathlib.Path(path)
+    quota = quota_coordinator()
+    if quota is None:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            srv_utils.unlink_with_b2lock(path)
+        return
+    if path.is_dir():
+        for entry in list(path.iterdir()):
+            remove_dataset(entry)
+        with contextlib.suppress(OSError):
+            path.rmdir()
+    elif path.name.endswith(".b2lock"):
+        return  # Stable locks are operational storage, not deletable dataset bytes.
+    else:
+        generation = storage_quota.signature(path)
+        if generation is None:
+            raise FileNotFoundError(path)
+        quota.publish(path, None, expected=generation, prune=False)
+
+
+def copy_dataset(source, destination):
+    source, destination = pathlib.Path(source), pathlib.Path(destination)
+    if source.resolve() == destination.resolve():
+        return
+    if source.is_dir() and source.resolve() in destination.resolve().parents:
+        raise ValueError("cannot copy a directory into itself")
+    if source.is_dir():
+        destination.mkdir(parents=True, exist_ok=True)
+        for entry in source.iterdir():
+            if not entry.name.endswith(".b2lock"):
+                copy_dataset(entry, destination / entry.name)
+    else:
+        data = source.read_bytes()
+        if remote_proxy.policy.cache_backend == "sparse":
+            reference = remote_proxy.inspect(source)
+            if reference is not None:
+                data = remote_proxy.cold_cframe(*reference)
+        write_dataset(destination, data)
+
+
+def move_dataset(source, destination):
+    """Copy then delete only the source generation that was actually copied."""
+    source, destination = pathlib.Path(source), pathlib.Path(destination)
+    if source.resolve() == destination.resolve():
+        return
+    if source.is_dir():
+        if source.resolve() in destination.resolve().parents:
+            raise ValueError("cannot move a directory into itself")
+        destination.mkdir(parents=True, exist_ok=True)
+        for entry in list(source.iterdir()):
+            if not entry.name.endswith(".b2lock"):
+                move_dataset(entry, destination / entry.name)
+        with contextlib.suppress(OSError):
+            source.rmdir()
+    else:
+        quota = quota_coordinator()
+        data, generation = quota.snapshot(source)
+        if generation is None:
+            raise storage_quota.StorageBusy("move source was removed")
+        if remote_proxy.policy.cache_backend == "sparse" and source.suffix in {".b2nd", ".b2frame"}:
+            schunk = blosc2.schunk_from_cframe(data)
+            if schunk.meta.get("b2o", {}).get("kind") == "remote_array":
+                carrier = blosc2.ndarray_from_cframe(data)
+                data = remote_proxy.cold_cframe(carrier, carrier.schunk.vlmeta["b2o"])
+        write_dataset(destination, data)
+        quota.publish(source, None, expected=generation, prune=False)
+
+
+def quota_proxy_operation(proxy, item=(), *, nchunk=None):
+    try:
+        quota = quota_coordinator()
+    except (OSError, sqlite3.Error):
+        quota = None
+    if quota is None:
+        return proxy.read(item, cache_limit=0) if nchunk is None else proxy.get_chunk(nchunk, cache_limit=0)
+    return proxy.quota_read(quota, item, nchunk=nchunk)
+
+
+def remote_proxy_cache_limit(proxy: remote_proxy.ServerRemoteArray) -> int | None:
+    """Return the allowance for the legacy, in-place cache path.
+
+    Payload limits cannot reserve physical metadata growth, and per-dataset locks
+    do not coordinate other carriers, uploads, or workers. Quota-enabled requests
+    use quota_proxy_operation instead; the in-place fallback must remain read-only.
+    Zero still permits reuse of warm carrier data.
+    """
+    if proxy.cache_policy != "disk":
+        return 0
+    if not settings.quota:
+        return proxy.max_cache_bytes
+    return 0
+
+
+async def read_remote_proxy(proxy, item, abspath):
+    """Read one remote selection while serializing and accounting cache mutation."""
+    lock = dataset_lock(abspath)
+    async with lock:
+        if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+            return await concurrency.run_in_threadpool(
+                lambda: blosc2.asarray(quota_proxy_operation(proxy, item)).to_cframe()
+            )
+        cache_limit = remote_proxy_cache_limit(proxy)
+        return await concurrency.run_in_threadpool(
+            lambda: blosc2.asarray(proxy.read(item, cache_limit=cache_limit)).to_cframe()
+        )
 
 
 def truncate_path(path, size=35):
@@ -215,6 +387,24 @@ def open_b2(abspath, path):
     if root not in {"@personal", "@shared", "@public"}:
         raise ValueError(f"Unexpected root={root}")
 
+    from caterva2.services import remote_store
+
+    manifest = remote_store.inspect(abspath)
+    if manifest is not None:
+        store = remote_store.ServerRemoteStore(abspath, manifest)
+        return store.get("") if remote_store.root_kind(manifest) == "ctable" else store
+    reference = remote_proxy.inspect(abspath)
+    if reference is not None:
+        carrier, payload = reference
+        try:
+            return remote_proxy.resolve(carrier, payload)
+        except remote_proxy.RemoteArrayDenied as exc:
+            raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
+
+    try:
+        remote_proxy.guard_embedded(abspath)
+    except remote_proxy.RemoteArrayDenied as exc:
+        raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
     container = blosc2.open(abspath)
     # CTable has its own storage and no table-level cparams/dparams; return early.
     if isinstance(container, blosc2.CTable):
@@ -322,6 +512,8 @@ _setup_plugin_globals()
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        await concurrency.run_in_threadpool(quota_coordinator)
     # Initialize the (users) database
     if user_login_enabled():
         await db.create_db_and_tables(settings.statedir)
@@ -335,7 +527,24 @@ async def lifespan(app: FastAPI):
     for p in providers.active:
         await p.startup()
 
-    yield
+    async def cache_maintenance():
+        while True:
+            await asyncio.sleep(remote_proxy.policy.cache_maintenance_seconds)
+            try:
+                await concurrency.run_in_threadpool(quota_coordinator().remote.maintain)
+            except (OSError, sqlite3.Error, ValueError):
+                remote_proxy.log.exception("Sparse cache maintenance deferred")
+
+    maintenance = (
+        asyncio.create_task(cache_maintenance()) if remote_proxy.policy.cache_backend == "sparse" else None
+    )
+    try:
+        yield
+    finally:
+        if maintenance is not None:
+            maintenance.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await maintenance
 
     for p in providers.active:
         await p.shutdown()
@@ -357,6 +566,28 @@ def custom_filesizeformat(value):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(remote_proxy.RemoteArrayDenied)
+async def remote_reference_denied(request, exc):
+    return responses.JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
+@app.exception_handler(storage_quota.QuotaExceeded)
+async def quota_exceeded(request, exc):
+    return responses.JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(storage_quota.StorageBusy)
+async def storage_busy(request, exc):
+    return responses.JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(sqlite3.Error)
+async def storage_unavailable(request, exc):
+    return responses.JSONResponse(status_code=503, content={"detail": "storage admission is unavailable"})
+
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # TODO: Support user verification
@@ -584,7 +815,10 @@ async def get_info(
     etag = dataset_etag(abspath)
     if etag:
         response.headers["ETag"] = etag
-    meta = srv_utils.read_metadata(abspath)
+    try:
+        meta = srv_utils.read_metadata(abspath)
+    except remote_proxy.RemoteArrayDenied as exc:
+        raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
     # A dataset with a file of its own is served by `FileResponse`, which honours
     # a range.  Only said where it is certain: a directory or a lazy expression
     # is not a stored frame, and a container member depends on whether its leaf
@@ -597,8 +831,15 @@ async def get_info(
     # the file on disk is a proxy's chunks, not the array's.  It 416s a range,
     # and a client that took "bytes" on trust would find that out on its first
     # block read rather than on a probe it could have made
-    if isinstance(meta, models.Metadata) and not srv_utils.is_hdf5_proxy_meta(meta):
-        meta.accept_ranges = "bytes"
+    if isinstance(meta, models.Metadata):
+        if remote_proxy.is_metadata(meta):
+            meta.accept_ranges = "none"
+            # Cache bookkeeping contains binary bitmaps and source stamps that
+            # are neither JSON metadata nor part of the public proxy contract.
+            # Expose only the portable descriptor through api/info.
+            meta.schunk.vlmeta = {"b2o": meta.schunk.vlmeta["b2o"]}
+        elif not srv_utils.is_hdf5_proxy_meta(meta):
+            meta.accept_ranges = "bytes"
     return meta
 
 
@@ -644,6 +885,10 @@ def member_window(abspath, inner_key, mtime):
     window handed out that would decode to nonsense.
     """
     if abspath.suffix != ".b2z":
+        return None
+    from caterva2.services import remote_store
+
+    if remote_store.inspect(abspath) is not None:
         return None
     try:
         store = blosc2.open(abspath)
@@ -712,11 +957,15 @@ def get_abspath(
     elif (cachedir / filepath).is_dir():
         return cachedir / filepath
 
-    # HDF5 files cannot be compressed, as they are supported natively
-    if (
-        filepath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | srv_utils.HDF5_SUFFIXES
-        and not may_not_exist
-    ):
+    # Preserve access to Parquet files uploaded before the compression exemption.
+    if filepath.suffix == ".parquet" and not filepath.exists() and not may_not_exist:
+        compressed = filepath.with_suffix(".parquet.b2")
+        if compressed.is_file():
+            filepath = compressed
+
+    # HDF5 files cannot be compressed, as they are supported natively.
+    # Parquet also needs its original bytes for HTTP range reads.
+    if filepath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES and not may_not_exist:
         if filepath.is_file():
             srv_utils.compress_file(filepath)
         filepath = f"{filepath}.b2"
@@ -895,8 +1144,8 @@ async def fetch_data(
     field : str
         The desired field of dataset.
 
-    The field and filter parameters are incompatible, if both are giving the API will
-    return a "400 Bad Request" error response.
+    For CTables, filtering is applied before a row slice and field projection.
+    Other dataset types may reject a combination of field and filter.
 
     Returns
     -------
@@ -985,35 +1234,57 @@ async def fetch_data(
 
     window = None  # where a container leaf's frame lies, when it has one
     filter = filter.strip() if filter else filter
+    store_table_filter = None
     if filter:
-        if field:
-            srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
         mtime = abspath.stat().st_mtime
         try:
-            container, _ = await concurrency.run_in_threadpool(
-                lambda: get_filtered_array(
-                    abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+            from caterva2.services.remote_store import ServerStoreTable
+
+            container = (
+                await concurrency.run_in_threadpool(
+                    lambda: srv_utils.open_container_member(abspath, inner_key)
                 )
+                if inner_key is not None
+                else await concurrency.run_in_threadpool(lambda: open_b2(abspath, path))
             )
+            if isinstance(container, ServerStoreTable):
+                store_table_filter = filter
+            else:
+                container, _ = await concurrency.run_in_threadpool(
+                    lambda: get_filtered_array(
+                        abspath, path, filter, sortby=None, mtime=mtime, inner_key=inner_key
+                    )
+                )
         except ValueError as exc:
             srv_utils.raise_bad_request(str(exc))
+        if field and not isinstance(container, blosc2.CTable | ServerStoreTable):
+            srv_utils.raise_bad_request("Cannot handle both field and filter parameters at the same time")
     elif inner_key is not None:
         # A member inside a container (e.g. a TreeStore .b2z or .h5 leaf).
         # A leaf that is a whole frame inside the container can be served in
         # ranges, by seeking to it -- what a stored dataset gets from
         # FileResponse, and what lets a client read its blocks.  Not when a
         # field is projected out of it: that is computed, not stored.
-        window = member_window(abspath, inner_key, abspath.stat().st_mtime)
-        container = srv_utils.open_container_member(abspath, inner_key)
+        window, container = await concurrency.run_in_threadpool(
+            lambda: (
+                member_window(abspath, inner_key, abspath.stat().st_mtime),
+                srv_utils.open_container_member(abspath, inner_key),
+            )
+        )
         if container is None:
             srv_utils.raise_not_found()
     else:
-        container = open_b2(abspath, path)
+        container = await concurrency.run_in_threadpool(lambda: open_b2(abspath, path))
 
-    if field:
+    from caterva2.services.remote_store import ServerStoreTable
+
+    store_table_field = field if isinstance(container, ServerStoreTable) else None
+    if field and not isinstance(container, blosc2.CTable | ServerStoreTable):
         container = container[field]
 
-    if isinstance(container, blosc2.DictStore):
+    from caterva2.services.remote_store import ServerRemoteStore
+
+    if isinstance(container, blosc2.DictStore | ServerRemoteStore):
         # A container is a file of leaves rather than an array: its stored image
         # is the file, which is what a client opening it as a store expects --
         # and what the type ladder below used to die on, asking a TreeStore for
@@ -1034,12 +1305,15 @@ async def fetch_data(
             headers=with_etag(abspath),
         )
 
-    if isinstance(container, (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField)):
+    if isinstance(
+        container,
+        (blosc2.NDArray, blosc2.LazyArray, hdf5.HDF5Proxy, blosc2.NDField, remote_proxy.ServerRemoteArray),
+    ):
         array = container
         schunk = getattr(array, "schunk", None)  # not really needed
         typesize = array.dtype.itemsize
         shape = array.shape
-    elif isinstance(container, blosc2.CTable):
+    elif isinstance(container, blosc2.CTable | ServerStoreTable):
         array = container
         schunk = None
         typesize = 1  # not used for CTable
@@ -1066,7 +1340,17 @@ async def fetch_data(
 
     if (
         whole
-        and (not isinstance(array, blosc2.LazyArray | hdf5.HDF5Proxy | blosc2.NDField | blosc2.CTable))
+        and (
+            not isinstance(
+                array,
+                blosc2.LazyArray
+                | hdf5.HDF5Proxy
+                | blosc2.NDField
+                | blosc2.CTable
+                | ServerStoreTable
+                | remote_proxy.ServerRemoteArray,
+            )
+        )
         and (not filter)
     ):
         if inner_key is None:
@@ -1095,7 +1379,7 @@ async def fetch_data(
     srv_utils.refuse_range(range_header, path)
 
     if indices is not None:
-        if not isinstance(array, blosc2.NDArray):
+        if not isinstance(array, blosc2.NDArray | remote_proxy.ServerRemoteArray):
             srv_utils.raise_bad_request(f"{path} is not an array that can be indexed by coordinates")
         try:
             # `NDArray` reads scattered coordinates through its own sparse gather,
@@ -1103,13 +1387,33 @@ async def fetch_data(
             # Off the event loop: bounded by `MAX_FETCH_COORDS` but not small, and
             # a gather that ran here would stall every other request for its
             # duration -- it reads, materializes and serializes, all blocking
-            data = await concurrency.run_in_threadpool(lambda: blosc2.asarray(array[indices]).to_cframe())
+            if isinstance(array, remote_proxy.ServerRemoteArray):
+                data = await read_remote_proxy(array, indices, abspath)
+            else:
+                data = await concurrency.run_in_threadpool(
+                    lambda: blosc2.asarray(array[indices]).to_cframe()
+                )
         except (IndexError, ValueError) as exc:
             srv_utils.raise_bad_request(str(exc))
+    elif isinstance(array, ServerStoreTable):
+        data = await concurrency.run_in_threadpool(
+            lambda: array.fetch(slice_, filter=store_table_filter, field=store_table_field)
+        )
     elif isinstance(array, blosc2.CTable):
-        row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
-        view = array.slice(row_start, row_stop)
-        data = await concurrency.run_in_threadpool(view.to_cframe)
+
+        def fetch_table():
+            if field is not None and field not in {
+                column["name"] for column in array.schema_dict()["columns"]
+            }:
+                raise ValueError(f"Unknown table field: {field}")
+            row_start, row_stop = srv_utils.ctable_row_range(slice_, array.nrows)
+            view = array.select([field]) if field is not None else array
+            return view.slice(row_start, row_stop).to_cframe()
+
+        try:
+            data = await concurrency.run_in_threadpool(fetch_table)
+        except (ValueError, NameError, SyntaxError) as exc:
+            srv_utils.raise_bad_request(str(exc))
     elif isinstance(array, hdf5.HDF5Proxy):
         data = array.to_cframe(() if slice_ is None else slice_)
     elif isinstance(array, blosc2.LazyArray):
@@ -1120,6 +1424,8 @@ async def fetch_data(
         data = array[() if slice_ is None else slice_]
         data = blosc2.asarray(data)
         data = data.to_cframe()
+    elif isinstance(array, remote_proxy.ServerRemoteArray):
+        data = await read_remote_proxy(array, () if slice_ is None else slice_, abspath)
     elif isinstance(array, blosc2.NDArray):
         # Using NDArray.slice() allows a fast path when it is aligned with the chunks
         # As we are going to serialize the slice right away, it is not clear in which
@@ -1214,15 +1520,33 @@ async def post_fetch_data(
     )
 
 
-@app.get("/api/download/{path:path}")
+class RemoteCacheFileResponse(responses.FileResponse):
+    """Release artifact ownership even if streaming disconnects or fails."""
+
+    def __init__(self, path, *, cleanup, **kwargs):
+        super().__init__(path, **kwargs)
+        self.cleanup = cleanup
+
+    async def __call__(self, scope, receive, send):
+        try:
+            return await super().__call__(scope, receive, send)
+        finally:
+            import anyio
+
+            with anyio.CancelScope(shield=True):
+                await concurrency.run_in_threadpool(self.cleanup)
+
+
+@app.api_route("/api/download/{path:path}", methods=["GET", "HEAD"])
 async def download_data(
     path: pathlib.Path,
     user: db.User = Depends(optional_user),
+    include_cache: bool = True,
     accept_encoding: str | None = fastapi.Header(None),
     range_header: str | None = fastapi.Header(None, alias="Range"),
 ):
-    # This one always streams, decompressing on the way out more often than not,
-    # so it never serves ranges; api/fetch on a stored dataset is what does.  The
+    # Regular files stream, often decompressing on the way out, and refuse ranges.
+    # Stored Parquet files use FileResponse below to support range reads. The
     # refusal comes after the path is resolved, so a path that does not exist is
     # still a 404 rather than a 416 about a file nobody has.
     provider = providers.provider_for(path.parts[0])
@@ -1247,10 +1571,48 @@ async def download_data(
         headers.update(srv_utils.NO_RANGES)
         return responses.StreamingResponse(body, media_type=media_type, headers=headers)
 
+    from caterva2.services import remote_store
+
+    abspath = get_abspath(path, user)
+    if abspath.suffix == ".parquet":
+        return FileResponse(
+            abspath,
+            filename=path.name,
+            media_type="application/vnd.apache.parquet",
+            headers=with_etag(abspath),
+        )
+    manifest = remote_store.inspect(abspath)
+    if manifest is not None and (remote_proxy.policy.enabled or not include_cache):
+        artifact, etag, cleanup = await concurrency.run_in_threadpool(
+            lambda: quota_coordinator().remote.export_store(
+                remote_store.ServerRemoteStore(abspath, manifest),
+                include_cache=include_cache,
+            )
+        )
+        return RemoteCacheFileResponse(
+            artifact,
+            cleanup=cleanup,
+            filename=path.name,
+            headers={"ETag": f'"{etag}"'},
+        )
+
+    if remote_proxy.policy.enabled and remote_proxy.policy.cache_backend == "sparse" and include_cache:
+        abspath = get_abspath(path, user)
+        reference = remote_proxy.inspect(abspath) if abspath.suffix in {".b2nd", ".b2frame"} else None
+        if reference is not None and reference[1]["cache_policy"] == "disk":
+            proxy = await concurrency.run_in_threadpool(lambda: remote_proxy.resolve(*reference))
+            if proxy.src.stamp is not None:
+                artifact, etag, cleanup = await concurrency.run_in_threadpool(
+                    lambda: quota_coordinator().remote.export(proxy)
+                )
+                return RemoteCacheFileResponse(
+                    artifact, cleanup=cleanup, filename=path.name, headers={"ETag": f'"{etag}"'}
+                )
+
     decompress = accept_encoding != "blosc2"
     # Read before creating the response: a bad path must 404 up front, not
     # abort the stream after the 200 headers already went out.
-    content = await get_file_content(path, user, decompress=decompress)
+    content = await get_file_content(path, user, decompress=decompress, include_cache=include_cache)
     srv_utils.refuse_range(range_header, path)
 
     async def downloader():
@@ -1340,7 +1702,9 @@ async def get_chunk(
             container = open_b2(abspath, path)
         else:
             container = open_member(abspath, inner_key, abspath.stat().st_mtime)
-        if isinstance(container, blosc2.CTable):
+        from caterva2.services.remote_store import ServerStoreTable
+
+        if isinstance(container, blosc2.CTable | ServerStoreTable):
             srv_utils.raise_bad_request(
                 f"{path} is a CTable, which is a set of columns rather than one chunked array; "
                 "fetch it with the slice_ parameter instead"
@@ -1348,6 +1712,13 @@ async def get_chunk(
         if isinstance(container, blosc2.LazyArray):
             # In case we do, this would have to be changed.
             chunk = container.get_chunk(nchunk)
+        elif isinstance(container, remote_proxy.ServerRemoteArray):
+            if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+                chunk = await concurrency.run_in_threadpool(
+                    lambda: quota_proxy_operation(container, nchunk=nchunk)
+                )
+            else:
+                chunk = await concurrency.run_in_threadpool(container.get_chunk, nchunk)
         else:
             schunk = getattr(container, "schunk", container)
             chunk = schunk.get_chunk(nchunk)
@@ -1546,6 +1917,18 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         srv_utils.raise_bad_request("publishing needs fsspec, which is not installed here")
     destination = publish_destination(path)
     fs, target = fsspec.url_to_fs(destination)
+    if (settings.quota or remote_proxy.policy.cache_backend == "sparse") and isinstance(
+        fs, fsspec.implementations.local.LocalFileSystem
+    ):
+        target_path = pathlib.Path(target).resolve()
+        state = pathlib.Path(settings.statedir).resolve()
+        if target_path == state or state in target_path.parents:
+            srv_utils.raise_bad_request("local publish_root must be outside the server state directory")
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        quota = quota_coordinator()
+        frame, generation = quota.snapshot(abspath)
+        if generation is None:
+            raise storage_quota.StorageBusy("publish source was removed")
     # Published under a name of its own and moved into place, so that what
     # appears at the destination is a whole frame or nothing.  A reader that
     # polls for the array would otherwise open it mid-copy: the file exists from
@@ -1565,7 +1948,10 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
     if parent != target:
         fs.makedirs(parent, exist_ok=True)
     try:
-        with open(abspath, "rb") as source, fs.open(staging, "wb") as target_file:
+        with (
+            io.BytesIO(frame) if quota_coordinator() is not None else open(abspath, "rb") as source,
+            fs.open(staging, "wb") as target_file,
+        ):
             shutil.copyfileobj(source, target_file)
         fs.mv(staging, target)
     except BaseException:
@@ -1574,6 +1960,20 @@ def publish_dataset(abspath: pathlib.Path, path: pathlib.Path) -> str:
         with contextlib.suppress(Exception):
             fs.rm(staging)
         raise
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        array = blosc2.ndarray_from_cframe(frame, copy=True)
+        array.schunk.vlmeta[PUBLISHED_URL] = destination
+        array.schunk.vlmeta[FILL_STATE] = PUBLISHED
+        published_frame = array.to_cframe()
+        try:
+            quota.publish(abspath, published_frame, expected=generation)
+        except storage_quota.StorageBusy:
+            # Concurrent publishers of the identical snapshot are idempotent.
+            # Do not bless another upload/fill merely because its URL matches.
+            current, _ = quota.snapshot(abspath)
+            if current != published_frame:
+                raise
+        return destination
     with dataset_thread_lock(abspath):
         array = blosc2.open(abspath, mode="a", locking=True)
         with array.schunk.holding_lock():
@@ -1594,6 +1994,49 @@ def store_chunk(abspath: pathlib.Path, nchunk: int, chunk: bytes) -> dict:
     both find the slot free would otherwise both write it, and the second would
     move every chunk that came after the first.
     """
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        quota = quota_coordinator()
+        frame, generation = quota.snapshot(abspath)
+        try:
+            array = blosc2.ndarray_from_cframe(frame, copy=True)
+        except (TypeError, ValueError, RuntimeError) as exc:
+            srv_utils.raise_bad_request(f"{abspath.name} is not a stored NDArray: {exc}")
+        schunk = array.schunk
+        if "b2o" in schunk.meta or "proxy-source" in schunk.meta:
+            srv_utils.raise_bad_request("chunk writes require an ordinary stored NDArray")
+        if not 0 <= nchunk < schunk.nchunks:
+            srv_utils.raise_not_found(f"{abspath.name} has no chunk {nchunk}")
+        try:
+            nbytes, _, blocksize = blosc2.get_cbuffer_sizes(chunk)
+            typesize = chunk_typesize(chunk)
+        except Exception:
+            srv_utils.raise_bad_request("the body is not a Blosc2 chunk")
+        if (nbytes, blocksize, typesize) != (
+            schunk.chunksize,
+            schunk.blocksize,
+            filter_typesize(schunk.typesize),
+        ):
+            srv_utils.raise_bad_request("the chunk geometry does not match the array")
+        if not chunk_is_unwritten(schunk, nchunk):
+            raise fastapi.HTTPException(status_code=409, detail=f"chunk {nchunk} was already written")
+        schunk.update_chunk(nchunk, chunk)
+        if FILL_NONCE not in schunk.vlmeta:
+            schunk.vlmeta[FILL_NONCE] = uuid.uuid4().hex
+            schunk.vlmeta[FILL_STATE] = FILLING
+        written = sum(not chunk_is_unwritten(schunk, i) for i in range(schunk.nchunks))
+        state = schunk.vlmeta.get(FILL_STATE, FILLING)
+        publish = written == schunk.nchunks and state == FILLING and bool(settings.publish_root)
+        if written == schunk.nchunks and state == FILLING:
+            state = PUBLISHING if publish else COMPLETE
+            schunk.vlmeta[FILL_STATE] = state
+        quota.publish(abspath, array.to_cframe(), expected=generation)
+        return {
+            "nchunk": nchunk,
+            "written": written,
+            "nchunks": schunk.nchunks,
+            "state": state,
+            "publish": publish,
+        }
     with dataset_thread_lock(abspath):
         try:
             array = blosc2.open(abspath, mode="a", locking=True)
@@ -1726,23 +2169,12 @@ async def write_chunk(
     chunk = await request.body()
     if not chunk:
         srv_utils.raise_bad_request("no chunk was sent")
-    if settings.quota:
-        # The array was laid out empty, so its slots were never charged for: what
-        # a fill costs arrives a chunk at a time, and is checked the same way --
-        # off a kept walk of the state directory rather than a fresh one, since
-        # this runs once per chunk (see `get_disk_usage_written`)
-        total_size = get_disk_usage_written(len(chunk))
-        if total_size > settings.quota:
-            srv_utils.raise_bad_request("Write failed because quota limit has been exceeded.")
 
     # One lock per dataset in this process, and the frame's own lock across
     # processes: the write below blocks, so it cannot hold the event loop
     lock = dataset_lock(abspath)
     async with lock:
         answer = await concurrency.run_in_threadpool(store_chunk, abspath, nchunk, chunk)
-    if settings.quota:
-        # Counted only where it is checked, so the two stay paired
-        account_chunk_written(len(chunk))
     if answer.pop("publish"):
         # After the response, and outside the lock: the writer that finished the
         # fill should not wait for the upload, and no other writer should either
@@ -1886,7 +2318,34 @@ def make_expr(
 
     abspath.mkdir(exist_ok=True, parents=True)
 
-    if compute:
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        # Serialize before admission: metadata and compression determine the charge.
+        result = arr.compute() if compute else arr
+        try:
+            frame = result.to_cframe()
+        except (TypeError, ValueError):
+            if compute or func is None:
+                raise
+            # LazyUDF.save supports legacy Python UDFs that to_cframe cannot
+            # encode as b2objects. Build that same metadata carrier in memory.
+            carrier = blosc2.empty(
+                result.shape,
+                dtype=result.dtype,
+                chunks=result.chunks,
+                blocks=result.blocks,
+                meta={"LazyArray": LazyArrayEnum.UDF.value},
+            )
+            carrier.schunk.vlmeta["_LazyArray"] = {
+                "UDF": func,
+                "operands": {
+                    f"o{i}": str(get_writable_path(pathlib.Path(vars[f"o{i}"]), user))
+                    for i in range(len(var_dict))
+                },
+                "name": result.func.__name__,
+            }
+            frame = carrier.to_cframe()
+        write_dataset(urlpath, frame)
+    elif compute:
         arr.compute(urlpath=urlpath, mode="w")
     else:
         arr.save(urlpath=urlpath, mode="w")
@@ -2003,7 +2462,12 @@ async def move(
 
     # Make sure the destination directory exists
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    abspath.rename(dest_abspath)
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        # Reserve the copy before removing the source. No fictitious free-space
+        # credit; directory operations retain their existing non-atomic semantics.
+        move_dataset(abspath, dest_abspath)
+    else:
+        abspath.rename(dest_abspath)
 
     return str(destpath)
 
@@ -2057,7 +2521,9 @@ async def copy(
     #     raise fastapi.HTTPException(status_code=409, detail="The new path already exists")
 
     dest_abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.is_dir():
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        copy_dataset(abspath, dest_abspath)
+    elif abspath.is_dir():
         shutil.copytree(abspath, dest_abspath)
     else:
         shutil.copy(abspath, dest_abspath)
@@ -2133,34 +2599,62 @@ async def upload_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
-        schunk = blosc2.SChunk(data=data)
-        newsize = schunk.nbytes
-    else:
-        newsize = len(data)
-
-    if settings.quota:
-        try:
-            oldsize = abspath.stat().st_size
-        except FileNotFoundError:
-            oldsize = 0
-
-        total_size = get_disk_usage() - oldsize + newsize
-        if total_size > settings.quota:
-            detail = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
-        data = schunk.to_cframe()
+    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
+        data = blosc2.SChunk(data=data).to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
-    with open(abspath, "wb") as f:
-        f.write(data)
+    await concurrency.run_in_threadpool(write_dataset, abspath, data)
 
     # Return the urlpath
+    return str(path)
+
+
+@app.post("/api/refresh/{path:path}")
+async def refresh_remote_reference(
+    path: pathlib.Path,
+    user: db.User = Depends(current_active_user),
+):
+    """Replace a RemoteStore or RemoteCTable reference with fresh source discovery."""
+    from caterva2.services import remote_store
+
+    if not user:
+        raise srv_utils.raise_unauthorized("Refreshing files requires authentication")
+    abspath = get_writable_path(path, user)
+
+    def replace():
+        quota = quota_coordinator()
+        if quota is not None:
+            snapshot, expected = quota.snapshot(abspath)
+        else:
+            with dataset_thread_lock(abspath):
+                expected = storage_quota.signature(abspath)
+                snapshot = abspath.read_bytes() if expected is not None else None
+        if snapshot is None:
+            srv_utils.raise_not_found()
+        with tempfile.TemporaryDirectory() as directory:
+            carrier = pathlib.Path(directory) / "reference.b2z"
+            carrier.write_bytes(snapshot)
+            manifest = remote_store.inspect(carrier)
+        if manifest is None:
+            if remote_proxy.inspect(abspath) is not None:
+                srv_utils.raise_bad_request("RemoteArray refresh is not supported")
+            srv_utils.raise_bad_request("The path is not a RemoteStore reference")
+        store = remote_store.ServerRemoteStore(abspath, manifest)
+        try:
+            data = store.refreshed_bytes()
+        except remote_proxy.RemoteArrayDenied as exc:
+            raise fastapi.HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            srv_utils.raise_bad_request(str(exc))
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise fastapi.HTTPException(status_code=502, detail=str(exc)) from exc
+        write_dataset(abspath, data, expected=expected, compare=True)
+
+    await concurrency.run_in_threadpool(replace)
     return str(path)
 
 
@@ -2202,32 +2696,14 @@ async def load_from_url(
         response.raise_for_status()
     data = response.content
 
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
-        schunk = blosc2.SChunk(data=data)
-        newsize = schunk.nbytes
-    else:
-        newsize = len(data)
-
-    if settings.quota:
-        try:
-            oldsize = abspath.stat().st_size
-        except FileNotFoundError:
-            oldsize = 0
-
-        total_size = get_disk_usage() - oldsize + newsize
-        if total_size > settings.quota:
-            detail = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
-
     # If regular file, compress it
     abspath.parent.mkdir(exist_ok=True, parents=True)
-    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES | {".h5", ".hdf5"}:
-        data = schunk.to_cframe()
+    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
+        data = blosc2.SChunk(data=data).to_cframe()
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
 
     # Write the file
-    with open(abspath, "wb") as f:
-        f.write(data)
+    await concurrency.run_in_threadpool(write_dataset, abspath, data)
 
     # Return the urlpath
     return str(path)
@@ -2272,19 +2748,16 @@ async def append_file(
     # Check quota
     # TODO To be fair we should check quota later (after compression, zip unpacking etc.)
     data = await file.read()
-    newsize = len(data)
-
-    if settings.quota:
-        oldsize = abspath.stat().st_size
-
-        total_size = get_disk_usage() + oldsize + newsize
-        if total_size > settings.quota:
-            detail = "Upload failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Append the data
     # The original dataset (open in append mode so it can be resized/written)
-    orig = blosc2.open(abspath, mode="a")
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        frame, generation = quota_coordinator().snapshot(abspath)
+        orig = blosc2.ndarray_from_cframe(frame, copy=True)
+        if "b2o" in orig.schunk.meta or "proxy-source" in orig.schunk.meta:
+            srv_utils.raise_bad_request("append requires an ordinary stored NDArray")
+    else:
+        orig = blosc2.open(abspath, mode="a")
     # The data to append is a cframe
     new = blosc2.ndarray_from_cframe(data)
     # Check that the shapes are compatible
@@ -2300,6 +2773,8 @@ async def append_file(
     orig.resize(result_shape)
     # Append the new data to orig along the first axis
     orig[orig.shape[0] - new_len :] = new_data
+    if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+        quota_coordinator().publish(abspath, orig.to_cframe(), expected=generation)
 
     # Return the new shape
     return result_shape
@@ -2337,32 +2812,21 @@ async def unfold_file(
         raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Unfold the container
-    dirname = None
     if abspath.suffix in {".h5", ".hdf5"}:
         # Create proxies for each dataset in HDF5 file
-        all_dsets = list(hdf5.create_hdf5_proxies(abspath))
+        all_dsets = list(
+            hdf5.create_hdf5_proxies(
+                abspath, writer=write_dataset if quota_coordinator() is not None else None
+            )
+        )
         if len(all_dsets) == 0:
             detail = "No arrays found in HDF5 file"
             raise fastapi.HTTPException(detail=detail, status_code=400)
-        dirname = abspath.with_suffix("")
     else:
         detail = "Target file must be a zip, tar or hdf5 container"
         raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Check quota
-    if settings.quota:
-        # Get the size of the datasets (proxies) in new directory
-        newsize = 0
-        if os.path.exists(dirname):
-            # Traverse the directory and get the size for all files
-            for abspath, _ in srv_utils.walk_files(dirname):
-                newsize += os.path.getsize(abspath)
-        total_size = get_disk_usage() + newsize
-        if total_size > settings.quota:
-            # Remove the directory if it exists
-            shutil.rmtree(dirname)
-            detail = "Unfold failed because quota limit has been exceeded."
-            raise fastapi.HTTPException(detail=detail, status_code=400)
 
     # Return the new directory name
     return path.stem
@@ -2395,17 +2859,17 @@ async def remove(
 
     # If abspath is a directory, remove the contents of the directory
     if abspath.is_dir():
-        shutil.rmtree(abspath)
+        remove_dataset(abspath)
     else:
         # Try to unlink the file. NotADirectoryError: a path descending into a
         # container file (e.g. foo.h5/g) names no real file of its own.
         try:
-            abspath.unlink()
+            remove_dataset(abspath)
         except (FileNotFoundError, NotADirectoryError):
             # Try adding a .b2 extension
             abspath = abspath.with_suffix(abspath.suffix + ".b2")
             try:
-                abspath.unlink()
+                remove_dataset(abspath)
             except (FileNotFoundError, NotADirectoryError) as exc:
                 raise fastapi.HTTPException(
                     status_code=404,  # not found
@@ -2456,7 +2920,7 @@ async def add_notebook(
     file = io.StringIO()
     nbformat.write(nb, file)
     data = file.getvalue().encode()
-    srv_utils.compress(data, dst=abspath)
+    write_dataset(abspath, srv_utils.compress(data).to_cframe())
 
     return path
 
@@ -2579,7 +3043,8 @@ if user_login_enabled():
         # Remove the personal directory of the user
         userid = str(users[0]["id"])
         print(f"User {username} with id {userid} has been deleted")
-        shutil.rmtree(settings.personal / userid, ignore_errors=True)
+        if (settings.personal / userid).exists():
+            remove_dataset(settings.personal / userid)
         return f"User deleted: {username}"
 
     @app.get("/api/listusers/")
@@ -2903,7 +3368,7 @@ async def htmx_path_list(
                 else:
                     relpath = pathlib.Path(*segments[2:])
                     abspath = rootdir / relpath
-                    if abspath.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+                    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
                         abspath = pathlib.Path(f"{abspath}.b2")
 
                 with contextlib.suppress(FileNotFoundError, NotADirectoryError):
@@ -3117,7 +3582,9 @@ def _filtered_array(abspath, path, filter, sortby, mtime, inner_key):
         # HDF5Proxy supports slicing only; no string-indexed LazyExpr yet.
         raise ValueError("Filtering is not supported for HDF5-backed datasets")
 
-    if isinstance(arr, blosc2.CTable):
+    from caterva2.services.remote_store import ServerStoreTable
+
+    if isinstance(arr, blosc2.CTable | ServerStoreTable):
         if filter:
             arr = arr.where(filter)
         if sortby:
@@ -3163,7 +3630,9 @@ def _desc_window(total, start, size):
 def _is_ctable_like(arr):
     """True for real CTables and provider-backed views that render through
     the CTable grid (ViewHandle.array is duck-typed by design)."""
-    return isinstance(arr, blosc2.CTable) or (
+    from caterva2.services.remote_store import ServerStoreTable
+
+    return isinstance(arr, blosc2.CTable | ServerStoreTable) or (
         hasattr(arr, "nrows") and hasattr(arr, "schema_dict") and hasattr(arr, "slice")
     )
 
@@ -3242,7 +3711,9 @@ async def htmx_path_view(
         elif filter or sortby:
             try:
                 mtime = abspath.stat().st_mtime
-                arr, idx = get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
+                arr, idx = await concurrency.run_in_threadpool(
+                    lambda: get_filtered_array(abspath, path, filter, sortby, mtime, inner_key)
+                )
             except TypeError as exc:
                 return htmx_error(request, f"Error in filter: {exc}")
             except NameError as exc:
@@ -3266,7 +3737,7 @@ async def htmx_path_view(
                 )
         else:
             try:
-                arr = open_b2(abspath, path)
+                arr = await concurrency.run_in_threadpool(lambda: open_b2(abspath, path))
             except ValueError:
                 return htmx_error(request, "Cannot open array; missing operand?, unknown data source?")
             idx = None
@@ -3312,9 +3783,9 @@ async def htmx_path_view(
             if sort_desc:
                 # arr is ascending-sorted; read its tail and reverse for descending order.
                 lo, hi = _desc_window(nrows, start, size)
-                window = list(arr.slice(lo, hi))[::-1]
+                window = await concurrency.run_in_threadpool(lambda: list(arr.slice(lo, hi))[::-1])
             else:
-                window = arr.slice(start, stop)
+                window = await concurrency.run_in_threadpool(lambda: arr.slice(start, stop))
             rows = [fields] + [[cell(row[f]) for f in fields] for row in window]
             context = {
                 "view_url": make_url(request, "htmx_path_view", path=path),
@@ -3739,11 +4210,6 @@ async def htmx_upload(
 
     # Read the file and check quota
     data = await file.read()
-    if settings.quota:
-        total_size = get_disk_usage() + len(data)
-        if total_size > settings.quota:
-            error = "Upload failed because quota limit has been exceeded."
-            return htmx_error(request, error)
 
     path.mkdir(exist_ok=True, parents=True)
     filename = pathlib.Path(file.filename)
@@ -3753,6 +4219,42 @@ async def htmx_upload(
     suffix = filename.suffix
     suffixes = filename.suffixes[-2:]
     if suffix in [".tar", ".tgz", ".zip"] or suffixes == [".tar", ".gz"]:
+        if settings.quota or remote_proxy.policy.cache_backend == "sparse":
+            # Admit encoded members independently. Never extract an archive into
+            # managed storage before measuring its final serialized files.
+            first = None
+
+            def store_member(name, body):
+                nonlocal first
+                member = pathlib.Path(name)
+                if member.is_absolute() or ".." in member.parts:
+                    raise ValueError("archive member escapes its destination")
+                if any(p.startswith((".", "__MACOSX")) for p in member.parts):
+                    return
+                if member.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
+                    body = blosc2.SChunk(data=body).to_cframe()
+                    member = member.with_suffix(member.suffix + ".b2")
+                write_dataset(path / member, body)
+                first = member if first is None else first
+
+            if suffix == ".zip":
+                with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                    for member in archive.infolist():
+                        if not member.is_dir():
+                            if member.file_size > quota_coordinator().work_bytes:
+                                raise storage_quota.QuotaExceeded("archive member exceeds staging budget")
+                            store_member(member.filename, archive.read(member))
+            else:
+                with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as archive:
+                    for member in archive:
+                        if member.isfile():
+                            if member.size > quota_coordinator().work_bytes:
+                                raise storage_quota.QuotaExceeded("archive member exceeds staging budget")
+                            store_member(member.name, archive.extractfile(member).read())
+                        elif not member.isdir():
+                            raise ValueError("archive links are not supported")
+            target = name if first is None else f"{name}/{first}"
+            return htmx_redirect(hx_current_url, make_url(request, "html_home", path=target), root=name)
         file.file.seek(0)  # Reset file pointer
         if suffix == ".zip":
             with zipfile.ZipFile(file.file, "r") as archive:
@@ -3786,26 +4288,23 @@ async def htmx_upload(
         new_members = [
             member
             for member in members
-            if not (path / member).is_dir() and member.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES
+            if not (path / member).is_dir() and member.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES
         ]
         for member in new_members:
             srv_utils.compress_file(path / member)
 
         # We are done, redirect to home, and show the new files, starting with the first one
-        first_member = next((m for m in new_members), None)
+        first_member = next((m for m in members if (path / m).is_file() or m in new_members), None)
         path = f"{name}/{first_member}"
         return htmx_redirect(hx_current_url, make_url(request, "html_home", path=path), root=name)
 
-    if suffix in [".h5", ".hdf5"]:
-        pass
-    elif filename.suffix not in srv_utils.BLOSC2_NATIVE_SUFFIXES:
+    if filename.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
         schunk = blosc2.SChunk(data=data)
         data = schunk.to_cframe()
         filename = f"{filename}.b2"
 
     # Save file
-    with open(path / filename, "wb") as dst:
-        dst.write(data)
+    await concurrency.run_in_threadpool(write_dataset, path / filename, data)
 
     # Redirect to display new dataset
     path = f"{name}/{filename}"
@@ -3843,14 +4342,12 @@ async def htmx_delete(
         abspath = settings.public / path
 
     # Remove
-    if abspath.suffix in [".h5", ".hdf5"]:
-        pass
-    elif abspath.suffix not in {".b2frame", ".b2nd"}:
+    if abspath.suffix not in srv_utils.NO_COMPRESSION_SUFFIXES:
         abspath = abspath.with_suffix(abspath.suffix + ".b2")
         if not abspath.exists():
             return fastapi.HTTPException(status_code=404)
 
-    abspath.unlink()
+    remove_dataset(abspath)
 
     # Redirect to home
     url = make_url(request, "html_home")
@@ -3862,7 +4359,7 @@ async def get_container(path, user):
     return open_b2(abspath, path)
 
 
-async def get_file_content(path, user, decompress=True):
+async def get_file_content(path, user, decompress=True, include_cache=True):
     """
     This helper function returns the contents of the file at the given path, as a byte
     string (if the given user has acces to it).
@@ -3881,6 +4378,51 @@ async def get_file_content(path, user, decompress=True):
     """
     abspath = get_abspath(path, user)
     suffix = abspath.suffix
+
+    from caterva2.services import remote_store
+
+    manifest = remote_store.inspect(abspath)
+    if manifest is not None and (remote_proxy.policy.enabled or not include_cache):
+
+        def snapshot_store():
+            artifact, _, cleanup = quota_coordinator().remote.export_store(
+                remote_store.ServerRemoteStore(abspath, manifest),
+                include_cache=include_cache,
+            )
+            try:
+                return artifact.read_bytes()
+            finally:
+                cleanup()
+
+        return await concurrency.run_in_threadpool(snapshot_store)
+
+    if suffix in {".b2frame", ".b2nd"}:
+        reference = remote_proxy.inspect(abspath)
+        if reference is not None:
+            lock = dataset_lock(abspath)
+            async with lock:
+                carrier, payload = remote_proxy.inspect(abspath)
+                if (
+                    remote_proxy.policy.cache_backend == "sparse"
+                    and remote_proxy.policy.enabled
+                    and include_cache
+                    and payload["cache_policy"] == "disk"
+                ):
+
+                    def snapshot_sparse():
+                        proxy = remote_proxy.resolve(carrier, payload)
+                        if proxy.src.stamp is None:
+                            return remote_proxy.cold_cframe(carrier, payload)
+                        artifact, _, cleanup = quota_coordinator().remote.export(proxy)
+                        try:
+                            return artifact.read_bytes()
+                        finally:
+                            cleanup()
+
+                    return await concurrency.run_in_threadpool(snapshot_sparse)
+                return await concurrency.run_in_threadpool(
+                    lambda: remote_proxy.export_cframe(carrier, payload, include_cache=include_cache)
+                )
 
     if suffix == ".b2":
         # Blosc2 compressed files are decompressed
@@ -4139,6 +4681,7 @@ def main():
     args = parser.parse_args()
     conf = utils.get_server_conf(args.conf)
     utils.config_log(args, conf)
+    remote_proxy.configure(conf)
 
     # Directories
     statedir = args.statedir or pathlib.Path(conf.get(".statedir", "_caterva2/state"))
